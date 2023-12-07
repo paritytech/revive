@@ -49,6 +49,14 @@ impl BasicBlock {
                     writeln!(&mut acc, "{:?}", opcode.instruction).unwrap();
                     acc
                 }),
+            BasicBlockFormatOption::Ir => {
+                self.instructions
+                    .iter()
+                    .fold(String::new(), |mut acc, instruction| {
+                        writeln!(&mut acc, "{instruction}").unwrap();
+                        acc
+                    })
+            }
             _ => String::new(),
         };
 

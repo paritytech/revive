@@ -1,5 +1,6 @@
 use evmil::bytecode::Instruction as EvmInstruction;
 use primitive_types::U256;
+use std::fmt::Write;
 
 use crate::symbol::{Global, Symbol, SymbolTable, Type};
 
@@ -16,8 +17,8 @@ pub enum Instruction {
     /// `x = op y`
     UnaryAssign {
         x: Symbol,
-        y: Symbol,
         operator: Operator,
+        y: Symbol,
     },
 
     /// `branch target`
@@ -36,7 +37,7 @@ pub enum Instruction {
     Function {
         symbol: Global,
         x: Symbol,
-        args: Vec<Symbol>,
+        parameters: Vec<Symbol>,
     },
 
     /// `x = y`
@@ -47,6 +48,61 @@ pub enum Instruction {
 
     /// `x = y[index]`
     IndexedCopy { x: Symbol, y: Symbol, index: Symbol },
+}
+
+impl Instruction {
+    fn target_address(&self) -> Symbol {
+        match self {
+            Instruction::Copy { x, .. } => *x,
+            Instruction::IndexedAssign { x, .. } => *x,
+            Instruction::IndexedCopy { x, .. } => *x,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl std::fmt::Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BinaryAssign { x, y, operator, z } => write!(f, "{x} = {y} {operator:?} {z}"),
+
+            Self::UnaryAssign { x, operator, y } => write!(f, "{x} = {operator:?} {y} "),
+
+            Self::UncoditionalBranch { target } => write!(f, "branch {target}"),
+
+            Self::ConditionalBranch { condition, target } => {
+                write!(f, "if {condition} branch {target}")
+            }
+
+            Self::Procedure { symbol, parameters } => write!(
+                f,
+                "{symbol:?}({})",
+                parameters.iter().fold(String::new(), |mut acc, p| {
+                    write!(&mut acc, "{p}, ").unwrap();
+                    acc
+                })
+            ),
+
+            Self::Function {
+                symbol,
+                x,
+                parameters: args,
+            } => write!(
+                f,
+                "{x} = {symbol:?}({})",
+                args.iter().fold(String::new(), |mut acc, p| {
+                    write!(&mut acc, "{p}, ").unwrap();
+                    acc
+                })
+            ),
+
+            Self::Copy { x, y } => write!(f, "{x} = {y}"),
+
+            Self::IndexedAssign { x, index, y } => write!(f, "{x}[{index}] = {y}"),
+
+            Self::IndexedCopy { x, y, index } => write!(f, "{x} = {y}[{index}]"),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -136,17 +192,6 @@ fn increment_stack_height(symbol_table: &mut SymbolTable) -> Instruction {
         y: symbol_table.global(Global::StackHeight),
         operator: Operator::Add,
         z: symbol_table.constant(U256::one(), Some(Type::Int(4))),
-    }
-}
-
-impl Instruction {
-    fn target_address(&self) -> Symbol {
-        match self {
-            Instruction::Copy { x, .. } => *x,
-            Instruction::IndexedAssign { x, .. } => *x,
-            Instruction::IndexedCopy { x, .. } => *x,
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -272,7 +317,7 @@ mod tests {
 
     use crate::{
         instruction::Operator,
-        symbol::{Global, Kind, Symbol, Type},
+        symbol::{Address, Global, Kind, Symbol, Type},
     };
 
     use super::Instruction;
@@ -287,31 +332,37 @@ mod tests {
         let expected = vec![
             Instruction::IndexedAssign {
                 x: Symbol {
-                    kind: Kind::Label(Global::Stack),
+                    address: Address::Label(Global::Stack),
                     type_hint: Type::Word,
+                    kind: Global::Stack.kind(),
                 },
                 index: Symbol {
-                    kind: Kind::Label(Global::StackHeight),
+                    address: Address::Label(Global::StackHeight),
                     type_hint: Type::Int(4),
+                    kind: Global::StackHeight.kind(),
                 },
                 y: Symbol {
-                    kind: Kind::Constant(U256::one()),
+                    address: Address::Constant(U256::one()),
                     type_hint: Type::Bytes(1),
+                    kind: Kind::Value,
                 },
             },
             Instruction::BinaryAssign {
                 x: Symbol {
-                    kind: Kind::Label(Global::StackHeight),
+                    address: Address::Label(Global::StackHeight),
                     type_hint: Type::Int(4),
+                    kind: Global::StackHeight.kind(),
                 },
                 y: Symbol {
-                    kind: Kind::Label(Global::StackHeight),
+                    address: Address::Label(Global::StackHeight),
                     type_hint: Type::Int(4),
+                    kind: Global::StackHeight.kind(),
                 },
                 operator: Operator::Add,
                 z: Symbol {
-                    kind: Kind::Constant(U256::one()),
+                    address: Address::Constant(U256::one()),
                     type_hint: Type::Int(4),
+                    kind: Kind::Value,
                 },
             },
         ];

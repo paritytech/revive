@@ -2,13 +2,23 @@ use indexmap::IndexSet;
 use primitive_types::U256;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum Kind {
+pub enum Address {
     Constant(U256),
     Temporary(usize),
     Label(Global),
 }
 
-impl Kind {
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Constant(value) => write!(f, "{value:02x}"),
+            Self::Temporary(n) => write!(f, "tmp_{n}"),
+            Self::Label(label) => write!(f, "{label:?}"),
+        }
+    }
+}
+
+impl Address {
     pub fn from_be_bytes(bytes: &[u8]) -> Self {
         Self::Constant(U256::from_big_endian(bytes))
     }
@@ -16,8 +26,15 @@ impl Kind {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Symbol {
-    pub kind: Kind,
+    pub address: Address,
     pub type_hint: Type,
+    pub kind: Kind,
+}
+
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}) {}", self.type_hint, self.address)
+    }
 }
 
 impl Symbol {
@@ -27,11 +44,15 @@ impl Symbol {
             _ => Default::default(),
         };
 
-        Self::new(Kind::Label(symbol), type_hint)
+        Self::new(Address::Label(symbol), type_hint, symbol.kind())
     }
 
-    fn new(kind: Kind, type_hint: Type) -> Self {
-        Self { kind, type_hint }
+    fn new(address: Address, type_hint: Type, kind: Kind) -> Self {
+        Self {
+            address,
+            type_hint,
+            kind,
+        }
     }
 }
 
@@ -44,6 +65,17 @@ pub enum Type {
     Bool,
 }
 
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Word => write!(f, "word"),
+            Self::Int(size) => write!(f, "int{}", size * 8),
+            Self::Bytes(size) => write!(f, "bytes{size}"),
+            Self::Bool => write!(f, "bool"),
+        }
+    }
+}
+
 impl Type {
     pub fn pointer() -> Self {
         Self::Int(4)
@@ -51,23 +83,24 @@ impl Type {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum Kind {
+    Pointer,
+    Value,
+    Function,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Global {
-    /// Pointer
     Stack,
-    /// Stack height variable
     StackHeight,
 
-    /// Pointer
     CallData,
-    /// Pointer
     Memory,
-    /// Pointer
     ReturnData,
 
-    /// Low level `memcpy` like function
     MemoryCopy,
 
-    // EVM
+    // EVM runtime environment
     Sha3,
     Address,
     CallDataLoad,
@@ -106,6 +139,16 @@ pub enum Global {
     Event,
 }
 
+impl Global {
+    pub fn kind(&self) -> Kind {
+        match self {
+            Self::Stack | Self::CallData | Self::Memory | Self::ReturnData => Kind::Pointer,
+            Self::StackHeight => Kind::Value,
+            _ => Kind::Function,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct SymbolTable {
     symbols: IndexSet<Symbol>,
@@ -121,14 +164,22 @@ impl SymbolTable {
 
     pub fn temporary(&mut self, type_hint: Option<Type>) -> Symbol {
         let id = self.next();
-        let symbol = Symbol::new(Kind::Temporary(id), type_hint.unwrap_or_default());
+        let symbol = Symbol::new(
+            Address::Temporary(id),
+            type_hint.unwrap_or_default(),
+            Kind::Value,
+        );
         assert!(self.symbols.insert(symbol));
 
         symbol
     }
 
     pub fn constant(&mut self, value: U256, type_hint: Option<Type>) -> Symbol {
-        let symbol = Symbol::new(Kind::Constant(value), type_hint.unwrap_or_default());
+        let symbol = Symbol::new(
+            Address::Constant(value),
+            type_hint.unwrap_or_default(),
+            Kind::Value,
+        );
         self.symbols.insert(symbol);
 
         symbol

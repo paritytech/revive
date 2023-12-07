@@ -6,9 +6,5 @@ fn main() {
     let bytecode = hex::decode(hexcode.trim()).unwrap();
     let instructions = bytecode.disassemble();
 
-    //for instruction in instructions.iter() {
-    //    println!("{instruction:?}");
-    //}
-
-    Program::new(instructions).dot(BasicBlockFormatOption::ByteCode);
+    Program::new(instructions).dot(BasicBlockFormatOption::Ir);
 }

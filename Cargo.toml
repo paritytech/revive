@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/ir-tac",
+    "crates/cli",
+]
+
+[workspace.dependencies]
+evmil = "0.4"
+hex = "0.4"
+petgraph = "0.6"
+primitive-types = "0.12"
+indexmap = "2.1.0"

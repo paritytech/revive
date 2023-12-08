@@ -2,7 +2,10 @@ use evmil::bytecode::Instruction as EvmInstruction;
 use primitive_types::U256;
 use std::fmt::Write;
 
-use crate::symbol::{Global, Symbol, SymbolTable, Type};
+use crate::{
+    symbol::{Global, Symbol, SymbolTable, Type},
+    POINTER_SIZE,
+};
 
 #[derive(PartialEq, Debug)]
 pub enum Instruction {
@@ -162,7 +165,7 @@ fn decrement_stack_height(symbol_table: &mut SymbolTable) -> Instruction {
         x: symbol_table.global(Global::StackHeight),
         y: symbol_table.global(Global::StackHeight),
         operator: Operator::Sub,
-        z: symbol_table.constant(U256::one(), Some(Type::Int(4))),
+        z: symbol_table.constant(U256::one(), Some(Global::StackHeight.typ())),
     }
 }
 
@@ -191,7 +194,7 @@ fn increment_stack_height(symbol_table: &mut SymbolTable) -> Instruction {
         x: symbol_table.global(Global::StackHeight),
         y: symbol_table.global(Global::StackHeight),
         operator: Operator::Add,
-        z: symbol_table.constant(U256::one(), Some(Type::Int(4))),
+        z: symbol_table.constant(U256::one(), Some(Global::StackHeight.typ())),
     }
 }
 
@@ -305,6 +308,41 @@ pub fn translate(opcode: &EvmInstruction, symbol_table: &mut SymbolTable) -> Vec
             ]
         }
 
+        STOP => {
+            vec![Instruction::Procedure {
+                symbol: Global::Stop,
+                parameters: Default::default(),
+            }]
+        }
+
+        INVALID => {
+            let offset = symbol_table.constant(U256::zero(), Some(Type::Int(POINTER_SIZE)));
+            let size = symbol_table.constant(U256::zero(), Some(Type::Int(POINTER_SIZE)));
+
+            vec![Instruction::Procedure {
+                symbol: Global::Revert,
+                parameters: vec![offset, size],
+            }]
+        }
+
+        REVERT => {
+            let offset = stack_pop(symbol_table);
+            let size = stack_pop(symbol_table);
+
+            let procedure = Instruction::Procedure {
+                symbol: Global::Revert,
+                parameters: vec![offset.load.target_address(), size.load.target_address()],
+            };
+
+            vec![
+                offset.decrement,
+                offset.load,
+                size.decrement,
+                size.load,
+                procedure,
+            ]
+        }
+
         //_ => todo!("{opcode}"),
         _ => Vec::new(),
     }
@@ -333,12 +371,12 @@ mod tests {
             Instruction::IndexedAssign {
                 x: Symbol {
                     address: Address::Label(Global::Stack),
-                    type_hint: Type::Word,
+                    type_hint: Global::Stack.typ(),
                     kind: Global::Stack.kind(),
                 },
                 index: Symbol {
                     address: Address::Label(Global::StackHeight),
-                    type_hint: Type::Int(4),
+                    type_hint: Global::StackHeight.typ(),
                     kind: Global::StackHeight.kind(),
                 },
                 y: Symbol {
@@ -350,18 +388,18 @@ mod tests {
             Instruction::BinaryAssign {
                 x: Symbol {
                     address: Address::Label(Global::StackHeight),
-                    type_hint: Type::Int(4),
+                    type_hint: Global::StackHeight.typ(),
                     kind: Global::StackHeight.kind(),
                 },
                 y: Symbol {
                     address: Address::Label(Global::StackHeight),
-                    type_hint: Type::Int(4),
+                    type_hint: Global::StackHeight.typ(),
                     kind: Global::StackHeight.kind(),
                 },
                 operator: Operator::Add,
                 z: Symbol {
                     address: Address::Constant(U256::one()),
-                    type_hint: Type::Int(4),
+                    type_hint: Global::StackHeight.typ(),
                     kind: Kind::Value,
                 },
             },

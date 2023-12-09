@@ -1,5 +1,5 @@
 use evmil::bytecode::Disassemble;
-use ir_tac::cfg::{BasicBlockFormatOption, Program};
+use revive_ir::cfg::{BasicBlockFormatOption, Program};
 
 fn main() {
     let hexcode = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();

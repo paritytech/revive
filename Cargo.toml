@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-
-members = [
-    "crates/ir-tac",
-    "crates/cli",
-]
+members = ["crates/*"]
 
 [workspace.dependencies]
 evmil = "0.4"
@@ -12,3 +8,6 @@ hex = "0.4"
 petgraph = "0.6"
 primitive-types = "0.12"
 indexmap = "2.1.0"
+inkwell = { version = "0.2.0", features = ["target-riscv", "no-libffi-linking", "llvm16-0"] }
+cc = "1.0"
+libc = "0.2"

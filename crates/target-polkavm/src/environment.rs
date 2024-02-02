@@ -1,35 +1,32 @@
 use inkwell::{builder::Builder, context::Context, module::Module, values::FunctionValue};
 use polkavm_common::elf::FnMetadata;
 
-use revive_compilation_target::environment::Environment;
-use revive_compilation_target::target::Target;
+pub fn call_start<'ctx>(
+    context: &'ctx Context,
+    builder: &Builder<'ctx>,
+    start: FunctionValue<'ctx>,
+) -> Module<'ctx> {
+    let module = context.create_module("entrypoint");
 
-use crate::PolkaVm;
+    let (call, deploy) = pvm_exports(context);
+    module.link_in_module(call).unwrap();
+    module.link_in_module(deploy).unwrap();
 
-impl<'ctx> Environment<'ctx> for PolkaVm {
-    fn call_start(&'ctx self, builder: &Builder<'ctx>, start: FunctionValue<'ctx>) -> Module<'ctx> {
-        let module = self.context().create_module("entrypoint");
+    let function_type = context.void_type().fn_type(&[], false);
 
-        let (call, deploy) = pvm_exports(&self.0);
-        module.link_in_module(call).unwrap();
-        module.link_in_module(deploy).unwrap();
+    let call = module.add_function("call", function_type, None);
+    call.set_section(Some(".text.polkavm_export"));
+    builder.position_at_end(context.append_basic_block(call, "entry"));
+    builder.build_call(start, &[], "call_start");
+    builder.build_return(None);
 
-        let function_type = self.context().void_type().fn_type(&[], false);
+    let deploy = module.add_function("deploy", function_type, None);
+    deploy.set_section(Some(".text.polkavm_export"));
+    builder.position_at_end(context.append_basic_block(deploy, "entry"));
+    builder.build_unreachable();
+    builder.build_return(None);
 
-        let call = module.add_function("call", function_type, None);
-        call.set_section(Some(".text.polkavm_export"));
-        builder.position_at_end(self.context().append_basic_block(call, "entry"));
-        builder.build_call(start, &[], "call_start");
-        builder.build_return(None);
-
-        let deploy = module.add_function("deploy", function_type, None);
-        deploy.set_section(Some(".text.polkavm_export"));
-        builder.position_at_end(self.context().append_basic_block(deploy, "entry"));
-        builder.build_unreachable();
-        builder.build_return(None);
-
-        module
-    }
+    module
 }
 
 pub(super) fn pvm_exports(context: &Context) -> (Module, Module) {

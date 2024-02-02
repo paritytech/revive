@@ -12,7 +12,5 @@ polkavm-linker = { workspace = true }
 polkavm-common = { workspace = true }
 libc = { workspace = true }
 
-revive-codegen = { path = "../codegen" }
-revive-compilation-target = { path = "../compilation-target" }
 revive-builtins = { path = "../builtins" }
 lld-sys = { path = "../lld-sys" }

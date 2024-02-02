@@ -10,3 +10,5 @@ evmil = { workspace = true }
 petgraph = { workspace = true }
 primitive-types = { workspace = true }
 indexmap = { workspace = true }
+
+revive-compilation-target = { path = "../compilation-target" }

@@ -8,4 +8,7 @@ edition = "2021"
 [dependencies]
 hex = { workspace = true }
 evmil = { workspace = true }
+
 revive-ir = { path = "../ir" }
+revive-codegen = { path = "../codegen" }
+revive-target-polkavm = { path = "../target-polkavm" }

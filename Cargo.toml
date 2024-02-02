@@ -11,3 +11,6 @@ indexmap = "2.1.0"
 inkwell = { version = "0.2.0", features = ["target-riscv", "no-libffi-linking", "llvm16-0"] }
 cc = "1.0"
 libc = "0.2"
+tempfile = "3.8"
+polkavm-common = { git = "https://github.com/koute/polkavm.git", rev = "3552524a248a025de8e608394fcf9eb7c528eb11" }
+polkavm-linker = { git = "https://github.com/koute/polkavm.git", rev = "3552524a248a025de8e608394fcf9eb7c528eb11" }

@@ -30,13 +30,13 @@ impl Address {
 
 #[derive(Clone, Copy)]
 pub enum Type {
-    Int { size: u8 },
+    Int { size: u16 },
     Bytes { size: u8 },
     Bool,
 }
 
 impl Type {
-    pub fn int(size: u8) -> Self {
+    pub fn int(size: u16) -> Self {
         Self::Int { size }
     }
 
@@ -47,7 +47,7 @@ impl Type {
 
 impl Default for Type {
     fn default() -> Self {
-        Type::Int { size: 32 }
+        Type::Bytes { size: 32 }
     }
 }
 

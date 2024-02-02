@@ -16,7 +16,7 @@ fn main() {
     let lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
         .join("linux")
         .join(lib);
-    let archive = fs::read(lib_path).expect("clang builtins for riscv32 not fonud");
+    let archive = fs::read(lib_path).expect("clang builtins for riscv32 not found");
 
     let out_dir = env::var_os("OUT_DIR").expect("has OUT_DIR");
     let archive_path = Path::new(&out_dir).join(lib);

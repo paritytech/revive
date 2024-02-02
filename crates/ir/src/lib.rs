@@ -1,5 +1,7 @@
+pub mod analysis;
 pub mod cfg;
 pub mod instruction;
+pub mod pass;
 pub mod symbol;
 
 pub static POINTER_SIZE: usize = 32;

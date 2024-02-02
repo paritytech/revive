@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-
 #include "lld/Common/Driver.h"
 #include "lld/Common/CommonLinkerContext.h"
 #include "llvm/Support/CrashRecoveryContext.h"

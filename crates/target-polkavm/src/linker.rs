@@ -5,7 +5,7 @@ use revive_builtins::COMPILER_RT;
 
 const LINKER_SCRIPT: &str = r#"
 SECTIONS {
-    .text : { KEEP(*(.text.polkavm_export)) }
+    .text : { KEEP(*(.text.polkavm_export)) *(.text .text.*) }
 }"#;
 
 fn invoke_lld(cmd_args: &[&str]) -> bool {
@@ -29,7 +29,7 @@ fn polkavm_linker(code: &[u8]) -> Vec<u8> {
     }
 }
 
-pub(crate) fn link(input: &[u8]) -> Vec<u8> {
+pub fn link(input: &[u8]) -> Vec<u8> {
     let dir = tempfile::tempdir().expect("failed to create temp directory for linking");
     let output_path = dir.path().join("out.so");
     let object_path = dir.path().join("out.o");

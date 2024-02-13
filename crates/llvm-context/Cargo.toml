@@ -1,0 +1,32 @@
+[package]
+name = "era-compiler-llvm-context"
+version = "1.4.1"
+authors = [
+    "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
+]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+description = "Shared front end code of the EraVM compilers"
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = { workspace = true }
+semver = { workspace = true }
+itertools = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+regex = { workspace = true }
+once_cell = { workspace = true }
+num = { workspace = true }
+hex = { workspace = true }
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+md5 = { workspace = true }
+inkwell = { workspace = true }
+
+zkevm_opcode_defs = { git = "https://github.com/matter-labs/era-zkevm_opcode_defs", branch = "v1.4.1" }
+era-compiler-common = { git = "https://github.com/matter-labs/era-compiler-common", branch = "main" }
+
+pallet-contracts-pvm-llapi = { git = "https://github.com/xermicus/pallet-contracts-pvm-llapi" }
+revive-linker = { path = "../linker" }

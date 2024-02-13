@@ -3,7 +3,6 @@
 //!
 
 use inkwell::values::BasicValue;
-use num::ToPrimitive;
 
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::argument::Argument;
@@ -21,21 +20,23 @@ use crate::eravm::Dependency;
 ///
 #[allow(clippy::too_many_arguments)]
 pub fn default<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    function: FunctionDeclaration<'ctx>,
-    gas: inkwell::values::IntValue<'ctx>,
-    address: inkwell::values::IntValue<'ctx>,
-    value: Option<inkwell::values::IntValue<'ctx>>,
-    input_offset: inkwell::values::IntValue<'ctx>,
-    input_length: inkwell::values::IntValue<'ctx>,
-    output_offset: inkwell::values::IntValue<'ctx>,
-    output_length: inkwell::values::IntValue<'ctx>,
-    mut constants: Vec<Option<num::BigUint>>,
+    _context: &mut Context<'ctx, D>,
+    _function: FunctionDeclaration<'ctx>,
+    _gas: inkwell::values::IntValue<'ctx>,
+    _address: inkwell::values::IntValue<'ctx>,
+    _value: Option<inkwell::values::IntValue<'ctx>>,
+    _input_offset: inkwell::values::IntValue<'ctx>,
+    _input_length: inkwell::values::IntValue<'ctx>,
+    _output_offset: inkwell::values::IntValue<'ctx>,
+    _output_length: inkwell::values::IntValue<'ctx>,
+    _constants: Vec<Option<num::BigUint>>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
     todo!();
+
+    /*
     if context.is_system_mode() {
         let simulation_address = constants
             .get_mut(1)
@@ -564,6 +565,7 @@ where
     context.set_basic_block(join_block);
     let result = context.build_load(result_pointer, "contract_call_result");
     Ok(result)
+    */
 }
 
 ///
@@ -638,7 +640,7 @@ where
 /// is not zero.
 ///
 #[allow(clippy::too_many_arguments)]
-fn default_wrapped<'ctx, D>(
+fn _default_wrapped<'ctx, D>(
     context: &mut Context<'ctx, D>,
     function: FunctionDeclaration<'ctx>,
     gas: inkwell::values::IntValue<'ctx>,
@@ -719,7 +721,7 @@ where
 ///
 /// Generates a memory copy loop repeating the behavior of the EVM `Identity` precompile.
 ///
-fn identity<'ctx, D>(
+fn _identity<'ctx, D>(
     context: &mut Context<'ctx, D>,
     destination: inkwell::values::IntValue<'ctx>,
     source: inkwell::values::IntValue<'ctx>,

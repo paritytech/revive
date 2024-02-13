@@ -22,12 +22,10 @@ mod tests;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::Path;
 use std::rc::Rc;
 
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
-use inkwell::values::CallSiteValue;
 
 use crate::eravm::DebugConfig;
 use crate::eravm::Dependency;
@@ -37,12 +35,10 @@ use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 
 use self::address_space::AddressSpace;
-use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
 // use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
-use self::function::declaration;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
 use self::function::llvm_runtime::LLVMRuntime;
@@ -348,7 +344,11 @@ where
         &self.llvm_runtime
     }
 
-    pub fn declare_function(&mut self, name: &str) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
+    /// Declare a function already existing in the module.
+    pub fn declare_extern_function(
+        &mut self,
+        name: &str,
+    ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let function = self.module().get_function(name).ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
@@ -837,9 +837,9 @@ where
     ///
     pub fn build_invoke_near_call_abi(
         &self,
-        function: FunctionDeclaration<'ctx>,
-        arguments: Vec<inkwell::values::BasicValueEnum<'ctx>>,
-        name: &str,
+        _function: FunctionDeclaration<'ctx>,
+        _arguments: Vec<inkwell::values::BasicValueEnum<'ctx>>,
+        _name: &str,
     ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
         unimplemented!()
     }
@@ -974,17 +974,17 @@ where
     ///
     pub fn build_exit(
         &self,
-        return_function: FunctionDeclaration<'ctx>,
-        offset: inkwell::values::IntValue<'ctx>,
-        length: inkwell::values::IntValue<'ctx>,
+        _return_function: FunctionDeclaration<'ctx>,
+        _offset: inkwell::values::IntValue<'ctx>,
+        _length: inkwell::values::IntValue<'ctx>,
     ) {
-        let return_forward_mode = if self.code_type() == Some(CodeType::Deploy)
-            && return_function == self.llvm_runtime().r#return
-        {
-            zkevm_opcode_defs::RetForwardPageType::UseAuxHeap
-        } else {
-            zkevm_opcode_defs::RetForwardPageType::UseHeap
-        };
+        //let return_forward_mode = if self.code_type() == Some(CodeType::Deploy)
+        //    && return_function == self.llvm_runtime().r#return
+        //{
+        //    zkevm_opcode_defs::RetForwardPageType::UseAuxHeap
+        //} else {
+        //    zkevm_opcode_defs::RetForwardPageType::UseHeap
+        //};
 
         self.builder()
             .build_call(

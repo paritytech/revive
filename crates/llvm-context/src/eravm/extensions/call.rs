@@ -96,12 +96,12 @@ where
 /// Such calls can accept extra ABI arguments passed via the virtual machine registers.
 ///
 pub fn raw_far<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    function: FunctionDeclaration<'ctx>,
-    address: inkwell::values::IntValue<'ctx>,
-    abi_data: inkwell::values::BasicValueEnum<'ctx>,
-    output_offset: inkwell::values::IntValue<'ctx>,
-    output_length: inkwell::values::IntValue<'ctx>,
+    _context: &mut Context<'ctx, D>,
+    _function: FunctionDeclaration<'ctx>,
+    _address: inkwell::values::IntValue<'ctx>,
+    _abi_data: inkwell::values::BasicValueEnum<'ctx>,
+    _output_offset: inkwell::values::IntValue<'ctx>,
+    _output_length: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,

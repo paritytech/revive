@@ -107,8 +107,8 @@ where
 /// Shrinks the active pointer by the specified `offset`.
 ///
 pub fn active_ptr_shrink_assign<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    offset: inkwell::values::IntValue<'ctx>,
+    _context: &mut Context<'ctx, D>,
+    _offset: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
@@ -120,8 +120,8 @@ where
 /// Writes the specified `data` into the upper 128 bits of the active pointer.
 ///
 pub fn active_ptr_pack_assign<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    data: inkwell::values::IntValue<'ctx>,
+    _context: &mut Context<'ctx, D>,
+    _data: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,

@@ -108,8 +108,8 @@ where
             Some(inkwell::module::Linkage::External),
         )?;
 
-        context.declare_function("deploy")?;
-        context.declare_function("call")?;
+        context.declare_extern_function("deploy")?;
+        context.declare_extern_function("call")?;
 
         Ok(())
     }

@@ -12,7 +12,7 @@ use crate::eravm::Dependency;
 ///
 /// Declares a constant array in the code section.
 ///
-pub fn declare<'ctx, D>(
+pub fn _declare<'ctx, D>(
     context: &mut Context<'ctx, D>,
     index: u8,
     size: u16,
@@ -28,7 +28,7 @@ where
 ///
 /// Sets a value in a constant array in the code section.
 ///
-pub fn set<'ctx, D>(
+pub fn _set<'ctx, D>(
     context: &mut Context<'ctx, D>,
     index: u8,
     offset: u16,
@@ -46,7 +46,7 @@ where
 /// Finalizes a constant array in the code section, by extracting it from
 /// the temporary compile-time storage, and initializing it in LLVM IR.
 ///
-pub fn finalize<'ctx, D>(
+pub fn _finalize<'ctx, D>(
     context: &mut Context<'ctx, D>,
     index: u8,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -81,7 +81,7 @@ where
 ///
 /// Gets a value from a constant array in the code section.
 ///
-pub fn get<'ctx, D>(
+pub fn _get<'ctx, D>(
     context: &mut Context<'ctx, D>,
     index: u8,
     offset: inkwell::values::IntValue<'ctx>,

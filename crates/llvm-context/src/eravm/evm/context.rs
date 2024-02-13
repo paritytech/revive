@@ -2,8 +2,6 @@
 //! Translates the context getter instructions.
 //!
 
-use inkwell::values::BasicValue;
-
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
@@ -182,7 +180,7 @@ where
 /// Translates the `msize` instruction.
 ///
 pub fn msize<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+    _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,

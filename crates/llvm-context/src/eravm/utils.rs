@@ -69,10 +69,10 @@ where
 /// Performs the extra ABI data padding and adds the mimic call extra argument.
 ///
 pub fn external_call_arguments<'ctx, D>(
-    context: &Context<'ctx, D>,
+    _context: &Context<'ctx, D>,
     abi_data: inkwell::values::BasicValueEnum<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
-    extra_abi_data: Vec<inkwell::values::IntValue<'ctx>>,
+    _extra_abi_data: Vec<inkwell::values::IntValue<'ctx>>,
     mimic: Option<inkwell::values::IntValue<'ctx>>,
 ) -> Vec<inkwell::values::BasicValueEnum<'ctx>>
 where

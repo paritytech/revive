@@ -67,7 +67,7 @@ where
     let join_block =
         context.append_basic_block(format!("conditional_{block_key}_join_block").as_str());
 
-    context.build_conditional_branch(condition, then_block.inner(), join_block);
+    context.build_conditional_branch(condition, then_block.inner(), join_block)?;
 
     context.set_basic_block(join_block);
 

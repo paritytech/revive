@@ -102,7 +102,7 @@ where
             context.field_const(0),
             "for_condition_compared",
         )?;
-        context.build_conditional_branch(condition, body_block, join_block);
+        context.build_conditional_branch(condition, body_block, join_block)?;
 
         context.push_loop(body_block, increment_block, join_block);
 

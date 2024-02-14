@@ -215,7 +215,7 @@ where
             context.field_const(0),
             "deployer_call_is_value_zero",
         )?;
-        context.build_conditional_branch(is_value_zero, value_zero_block, value_non_zero_block);
+        context.build_conditional_branch(is_value_zero, value_zero_block, value_non_zero_block)?;
 
         context.set_basic_block(value_zero_block);
         let deployer_call_result = context
@@ -293,7 +293,7 @@ where
             )
             .into_int_value();
 
-        context.build_conditional_branch(result_status_code_boolean, success_block, error_block);
+        context.build_conditional_branch(result_status_code_boolean, success_block, error_block)?;
 
         context.set_basic_block(success_block);
         let result_abi_data_pointer = Pointer::new(

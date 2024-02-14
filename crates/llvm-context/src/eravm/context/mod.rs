@@ -134,7 +134,7 @@ where
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
         module
             .link_in_module(pallet_contracts_pvm_llapi::module(llvm, "polkavm_guest").unwrap())
-            .unwrap();
+            .expect("the PolkaVM guest API module should be linkable");
 
         let call_function = module.get_function("call").unwrap();
         assert!(call_function.get_first_basic_block().is_none());
@@ -684,14 +684,15 @@ where
         comparison: inkwell::values::IntValue<'ctx>,
         then_block: inkwell::basic_block::BasicBlock<'ctx>,
         else_block: inkwell::basic_block::BasicBlock<'ctx>,
-    ) {
+    ) -> anyhow::Result<()> {
         if self.basic_block().get_terminator().is_some() {
-            return;
+            return Ok(());
         }
 
         self.builder
-            .build_conditional_branch(comparison, then_block, else_block)
-            .unwrap();
+            .build_conditional_branch(comparison, then_block, else_block)?;
+
+        Ok(())
     }
 
     ///
@@ -1025,7 +1026,8 @@ where
     ///
     /// Writes the ABI data size to the global variable.
     ///
-    pub fn write_abi_data_size(&mut self, pointer: Pointer<'ctx>, global_name: &str) {
+    pub fn write_abi_data_size(&mut self, _pointer: Pointer<'ctx>, _global_name: &str) {
+        /*
         let abi_pointer_value = self
             .builder()
             .build_ptr_to_int(pointer.value, self.field_type(), "abi_pointer_value")
@@ -1053,6 +1055,7 @@ where
             AddressSpace::Stack,
             abi_length_value,
         );
+        */
     }
 
     ///

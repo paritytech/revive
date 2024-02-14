@@ -51,7 +51,7 @@ where
         return_data_size,
         "return_data_copy_is_out_of_bounds",
     )?;
-    context.build_conditional_branch(is_copy_out_of_bounds, error_block, join_block);
+    context.build_conditional_branch(is_copy_out_of_bounds, error_block, join_block)?;
 
     context.set_basic_block(error_block);
     crate::eravm::evm::r#return::revert(context, context.field_const(0), context.field_const(0))?;

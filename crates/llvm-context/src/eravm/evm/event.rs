@@ -69,7 +69,7 @@ where
         result_status_code_boolean.into_int_value(),
         join_block,
         failure_block,
-    );
+    )?;
 
     context.set_basic_block(failure_block);
     crate::eravm::evm::r#return::revert(context, context.field_const(0), context.field_const(0))?;

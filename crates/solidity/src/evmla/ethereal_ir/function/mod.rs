@@ -1284,7 +1284,7 @@ where
                     is_deploy_code_flag,
                     deploy_code_block.inner(),
                     runtime_code_block.inner(),
-                );
+                )?;
             }
             Type::Recursive { ref block_key, .. } => {
                 let initial_block = context

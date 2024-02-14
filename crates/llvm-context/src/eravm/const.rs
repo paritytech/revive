@@ -12,9 +12,12 @@ pub const ZKEVM_VERSION: semver::Version = semver::Version::new(1, 3, 2);
 pub static GLOBAL_HEAP_MEMORY_POINTER: &str = "memory_pointer";
 
 /// The calldata pointer global variable name.
+pub static GLOBAL_CALLDATA: &str = "calldata";
+
+/// The calldata pointer global variable name.
 pub static GLOBAL_CALLDATA_POINTER: &str = "ptr_calldata";
 
-/// The calldata size pointer global variable name.
+/// The calldata size global variable name.
 pub static GLOBAL_CALLDATA_SIZE: &str = "calldatasize";
 
 /// The return data pointer global variable name.

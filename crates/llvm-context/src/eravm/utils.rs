@@ -33,7 +33,7 @@ where
         max_value,
         format!("{name}_is_in_bounds").as_str(),
     )?;
-    context.build_conditional_branch(is_in_bounds, in_bounds_block, join_block);
+    context.build_conditional_branch(is_in_bounds, in_bounds_block, join_block)?;
 
     context.set_basic_block(in_bounds_block);
     context.build_store(pointer, value);

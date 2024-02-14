@@ -220,8 +220,9 @@ where
         Ok(())
     }
 
-    /// `call` and `deploy` call `entry`, signaling deploy if the first arg is `1`.
-    /// `entry` loads calldata, sets globals and calls the runtime or deploy code.
+    /// Instead of a single entrypoint, the runtime expects two exports: `call ` and `deploy`.
+    /// `call` and `deploy` directly call `entry`, signaling a deploy if the first arg is `1`.
+    /// The `entry` function loads calldata, sets globals and calls the runtime or deploy code.
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry = context
             .get_function(Runtime::FUNCTION_ENTRY)
@@ -231,136 +232,34 @@ where
 
         context.set_current_function("deploy")?;
         context.set_basic_block(context.current_function().borrow().entry_block());
+
         assert!(context
             .build_invoke(entry, &[context.bool_const(true).into()], "entry_deploy")
             .is_none());
+
         context.set_basic_block(context.current_function().borrow().return_block);
         context.build_return(None);
 
         context.set_current_function("call")?;
         context.set_basic_block(context.current_function().borrow().entry_block());
+
         assert!(context
             .build_invoke(entry, &[context.bool_const(false).into()], "entry_call")
             .is_none());
+
         context.set_basic_block(context.current_function().borrow().return_block);
         context.build_return(None);
 
         context.set_current_function(Runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
+
         Self::initialize_globals(context);
         Self::load_calldata(context)?;
         Self::leave_entry(context)?;
+
         context.build_unconditional_branch(context.current_function().borrow().return_block());
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_return(None);
-
-        /*
-        let deploy_code_call_block = context.append_basic_block("deploy_code_call_block");
-        let runtime_code_call_block = context.append_basic_block("runtime_code_call_block");
-
-        let deploy_code = context
-            .functions
-            .get(Runtime::FUNCTION_DEPLOY_CODE)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Contract deploy code not found"))?;
-        let runtime_code = context
-            .functions
-            .get(Runtime::FUNCTION_RUNTIME_CODE)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Contract runtime code not found"))?;
-
-        context.set_basic_block(context.current_function().borrow().entry_block());
-        Self::initialize_globals(context)?;
-
-        let calldata_abi = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_CALLDATA_ABI);
-        let calldata_abi_pointer = Pointer::new(
-            context.byte_type(),
-            AddressSpace::Generic,
-            calldata_abi.into_pointer_value(),
-        );
-        context.write_abi_pointer(calldata_abi_pointer, crate::eravm::GLOBAL_CALLDATA_POINTER);
-        context.write_abi_data_size(calldata_abi_pointer, crate::eravm::GLOBAL_CALLDATA_SIZE);
-        let calldata_length = context.get_global_value(crate::eravm::GLOBAL_CALLDATA_SIZE)?;
-        let calldata_end_pointer = context.build_gep(
-            calldata_abi_pointer,
-            &[calldata_length.into_int_value()],
-            context
-                .byte_type()
-                .ptr_type(AddressSpace::Generic.into())
-                .as_basic_type_enum(),
-            "return_data_abi_initializer",
-        );
-        context.write_abi_pointer(
-            calldata_end_pointer,
-            crate::eravm::GLOBAL_RETURN_DATA_POINTER,
-        );
-        context.write_abi_pointer(calldata_end_pointer, crate::eravm::GLOBAL_ACTIVE_POINTER);
-
-        let call_flags = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_CALL_FLAGS);
-        context.set_global(
-            crate::eravm::GLOBAL_CALL_FLAGS,
-            call_flags.get_type(),
-            AddressSpace::Stack,
-            call_flags.into_int_value(),
-        );
-
-        let extra_abi_data_global = context.get_global(crate::eravm::GLOBAL_EXTRA_ABI_DATA)?;
-        for (array_index, argument_index) in (Self::MANDATORY_ARGUMENTS_COUNT
-            ..Self::MANDATORY_ARGUMENTS_COUNT + crate::eravm::EXTRA_ABI_DATA_SIZE)
-            .enumerate()
-        {
-            let array_element_pointer = context.build_gep(
-                extra_abi_data_global.into(),
-                &[
-                    context.field_const(0),
-                    context
-                        .integer_type(era_compiler_common::BIT_LENGTH_X32)
-                        .const_int(array_index as u64, false),
-                ],
-                context.field_type().as_basic_type_enum(),
-                "extra_abi_data_array_element_pointer",
-            );
-            let argument_value = context
-                .current_function()
-                .borrow()
-                .get_nth_param(argument_index)
-                .into_int_value();
-            context.build_store(array_element_pointer, argument_value);
-        }
-
-        let is_deploy_call_flag_truncated = context.builder().build_and(
-            call_flags.into_int_value(),
-            context.field_const(1),
-            "is_deploy_code_call_flag_truncated",
-        )?;
-        let is_deploy_code_call_flag = context.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
-            is_deploy_call_flag_truncated,
-            context.field_const(1),
-            "is_deploy_code_call_flag",
-        )?;
-        context.build_conditional_branch(
-            is_deploy_code_call_flag,
-            deploy_code_call_block,
-            runtime_code_call_block,
-        );
-
-        gontext.set_basic_block(deploy_code_call_block);
-        context.build_invoke(deploy_code.borrow().declaration, &[], "deploy_code_call");
-        context.build_unconditional_branch(context.current_function().borrow().return_block());
-
-        context.set_basic_block(runtime_code_call_block);
-        context.build_invoke(runtime_code.borrow().declaration, &[], "runtime_code_call");
-        context.build_unconditional_branch(context.current_function().borrow().return_block());
-        context.set_basic_block(context.current_function().borrow().return_block());
-        context.build_return(Some(&context.field_const(0)));
-        */
 
         Ok(())
     }

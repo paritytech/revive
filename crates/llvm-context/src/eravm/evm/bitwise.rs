@@ -70,15 +70,9 @@ where
     D: Dependency + Clone,
 {
     Ok(context
-        .build_call(
-            context.llvm_runtime().shl,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-            ],
-            "shl_call",
-        )
-        .expect("Always exists"))
+        .builder()
+        .build_left_shift(operand_1, operand_2, "shl")?
+        .into())
 }
 
 ///
@@ -93,15 +87,9 @@ where
     D: Dependency + Clone,
 {
     Ok(context
-        .build_call(
-            context.llvm_runtime().shr,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-            ],
-            "shr_call",
-        )
-        .expect("Always exists"))
+        .builder()
+        .build_right_shift(operand_1, operand_2, false, "shr")?
+        .into())
 }
 
 ///
@@ -116,15 +104,9 @@ where
     D: Dependency + Clone,
 {
     Ok(context
-        .build_call(
-            context.llvm_runtime().sar,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-            ],
-            "sar_call",
-        )
-        .expect("Always exists"))
+        .builder()
+        .build_right_shift(operand_1, operand_2, true, "ashr")?
+        .into())
 }
 
 ///

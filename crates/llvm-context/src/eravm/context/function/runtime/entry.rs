@@ -178,7 +178,8 @@ impl Entry {
 
         context.build_conditional_branch(
             is_deploy.into_int_value(),
-            deploy_code_call_block,
+            //deploy_code_call_block,
+            runtime_code_call_block,
             runtime_code_call_block,
         )?;
 

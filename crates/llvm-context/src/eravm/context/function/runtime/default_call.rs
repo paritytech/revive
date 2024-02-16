@@ -122,42 +122,45 @@ where
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
         context.set_current_function(self.name.as_str())?;
 
-        let gas = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_GAS)
-            .into_int_value();
-        let address = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_ADDRESS)
-            .into_int_value();
-        let input_offset = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_INPUT_OFFSET)
-            .into_int_value();
-        let input_length = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_INPUT_LENGTH)
-            .into_int_value();
-        let output_offset = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_OUTPUT_OFFSET)
-            .into_int_value();
-        let output_length = context
-            .current_function()
-            .borrow()
-            .get_nth_param(Self::ARGUMENT_INDEX_OUTPUT_LENGTH)
-            .into_int_value();
-
+        /*
+               let gas = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_GAS)
+                   .into_int_value();
+               let address = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_ADDRESS)
+                   .into_int_value();
+               let input_offset = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_INPUT_OFFSET)
+                   .into_int_value();
+               let input_length = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_INPUT_LENGTH)
+                   .into_int_value();
+               let output_offset = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_OUTPUT_OFFSET)
+                   .into_int_value();
+               let output_length = context
+                   .current_function()
+                   .borrow()
+                   .get_nth_param(Self::ARGUMENT_INDEX_OUTPUT_LENGTH)
+                   .into_int_value();
+        */
         context.set_basic_block(context.current_function().borrow().entry_block());
+
         let status_code_result_pointer = context.build_alloca(
             context.field_type(),
             "contract_call_result_status_code_pointer",
         );
+        /*
         context.build_store(status_code_result_pointer, context.field_const(0));
 
         let abi_data = crate::eravm::utils::abi_data(
@@ -241,6 +244,7 @@ where
             result_abi_data_pointer,
             crate::eravm::GLOBAL_RETURN_DATA_SIZE,
         );
+        */
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
         context.set_basic_block(context.current_function().borrow().return_block());

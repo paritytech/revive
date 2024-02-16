@@ -70,15 +70,9 @@ where
     D: Dependency + Clone,
 {
     Ok(context
-        .build_call(
-            context.llvm_runtime().div,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-            ],
-            "add_mod_call",
-        )
-        .expect("Always exists"))
+        .builder()
+        .build_int_unsigned_div(operand_1, operand_2, "udiv")?
+        .into())
 }
 
 ///

@@ -30,3 +30,4 @@ era-compiler-common = { git = "https://github.com/matter-labs/era-compiler-commo
 
 pallet-contracts-pvm-llapi = { git = "https://github.com/xermicus/pallet-contracts-pvm-llapi" }
 revive-linker = { path = "../linker" }
+revive-builtins = { path = "../builtins" }

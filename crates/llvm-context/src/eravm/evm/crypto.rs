@@ -20,6 +20,8 @@ pub fn sha3<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    Ok(offset.into())
+    /*
     let offset_pointer = context.builder().build_int_to_ptr(
         offset,
         context.byte_type().ptr_type(AddressSpace::Heap.into()),
@@ -43,4 +45,5 @@ where
             "sha3_call",
         )
         .expect("Always exists"))
+    */
 }

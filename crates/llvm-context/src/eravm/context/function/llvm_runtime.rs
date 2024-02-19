@@ -483,7 +483,8 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_attributes(
             llvm,
             sha3,
-            vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
+            //vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
+            vec![],
             false,
         );
 
@@ -516,7 +517,8 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_attributes(
             llvm,
             system_request,
-            vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
+            //vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
+            vec![],
             false,
         );
 

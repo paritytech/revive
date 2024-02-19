@@ -139,13 +139,11 @@ impl<'ctx> Function<'ctx> {
     /// Sets the memory writer function attributes.
     ///
     pub fn set_attributes(
-        _llvm: &'ctx inkwell::context::Context,
-        _declaration: Declaration<'ctx>,
-        _attributes: Vec<Attribute>,
-        _force: bool,
+        llvm: &'ctx inkwell::context::Context,
+        declaration: Declaration<'ctx>,
+        attributes: Vec<Attribute>,
+        force: bool,
     ) {
-        // FIXME: This invalides the module
-        /*
         for attribute_kind in attributes.into_iter() {
             match attribute_kind {
                 attribute_kind @ Attribute::AlwaysInline if force => {
@@ -183,7 +181,6 @@ impl<'ctx> Function<'ctx> {
                 ),
             }
         }
-        */
     }
 
     ///
@@ -261,7 +258,8 @@ impl<'ctx> Function<'ctx> {
             vec![
                 Attribute::MustProgress,
                 Attribute::NoUnwind,
-                Attribute::ReadNone,
+                // FIXME: LLVM complains about ReadNone being not valid for fns
+                // Attribute::ReadNone,
                 Attribute::WillReturn,
             ],
             false,

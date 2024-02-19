@@ -125,6 +125,5 @@ where
         context.field_const(0),
     )?;
     context.build_call(context.intrinsics().trap, &[], "invalid_trap");
-    context.build_unreachable();
     Ok(())
 }

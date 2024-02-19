@@ -35,6 +35,7 @@ use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 
 use self::address_space::AddressSpace;
+use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
 // use self::debug_info::DebugInfo;
@@ -1255,12 +1256,10 @@ where
     ///
     pub fn modify_call_site_value(
         &self,
-        _arguments: &[inkwell::values::BasicValueEnum<'ctx>],
-        _call_site_value: inkwell::values::CallSiteValue<'ctx>,
-        _function: FunctionDeclaration<'ctx>,
+        arguments: &[inkwell::values::BasicValueEnum<'ctx>],
+        call_site_value: inkwell::values::CallSiteValue<'ctx>,
+        function: FunctionDeclaration<'ctx>,
     ) {
-        // FIXME: This invalides the module
-        /*
         for (index, argument) in arguments.iter().enumerate() {
             if argument.is_pointer_value() {
                 call_site_value.set_alignment_attribute(
@@ -1365,7 +1364,6 @@ where
                     .create_enum_attribute(Attribute::NoUndef as u32, 0),
             );
         }
-        */
     }
 
     ///

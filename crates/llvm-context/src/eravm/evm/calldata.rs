@@ -89,7 +89,7 @@ where
         source,
         size,
         "calldata_copy_memcpy_from_child",
-    );
+    )?;
 
     Ok(())
 }

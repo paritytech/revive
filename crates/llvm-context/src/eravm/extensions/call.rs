@@ -269,7 +269,7 @@ where
         source,
         output_length,
         "system_far_call_memcpy_from_child",
-    );
+    )?;
 
     context.write_abi_pointer(
         result_abi_data_pointer,

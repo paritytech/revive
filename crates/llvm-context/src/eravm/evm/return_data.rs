@@ -87,7 +87,7 @@ where
         source,
         size,
         "return_data_copy_memcpy_from_return_data",
-    );
+    )?;
 
     Ok(())
 }

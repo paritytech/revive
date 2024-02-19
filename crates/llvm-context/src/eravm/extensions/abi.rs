@@ -221,7 +221,7 @@ where
         source,
         size,
         "active_pointer_data_copy_memcpy_from_child",
-    );
+    )?;
 
     Ok(context.field_const(1).as_basic_value_enum())
 }

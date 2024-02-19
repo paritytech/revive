@@ -751,7 +751,7 @@ where
         source,
         size,
         "contract_call_memcpy_to_child",
-    );
+    )?;
 
     Ok(context.field_const(1).as_basic_value_enum())
 }

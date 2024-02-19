@@ -725,7 +725,7 @@ where
                     source,
                     arguments[2].into_int_value(),
                     "mcopy_size",
-                );
+                )?;
                 Ok(None)
             }
 

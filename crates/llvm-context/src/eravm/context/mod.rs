@@ -852,29 +852,17 @@ where
     ///
     pub fn build_memcpy(
         &self,
-        function: FunctionDeclaration<'ctx>,
+        _function: FunctionDeclaration<'ctx>,
         destination: Pointer<'ctx>,
         source: Pointer<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
-        name: &str,
-    ) {
-        let call_site_value = self
-            .builder
-            .build_indirect_call(
-                function.r#type,
-                function.value.as_global_value().as_pointer_value(),
-                &[
-                    destination.value.as_basic_value_enum().into(),
-                    source.value.as_basic_value_enum().into(),
-                    size.as_basic_value_enum().into(),
-                    self.bool_type().const_zero().as_basic_value_enum().into(),
-                ],
-                name,
-            )
-            .unwrap();
+        _name: &str,
+    ) -> anyhow::Result<()> {
+        let _ = self
+            .builder()
+            .build_memcpy(destination.value, 1, source.value, 1, size)?;
 
-        call_site_value.set_alignment_attribute(inkwell::attributes::AttributeLoc::Param(0), 1);
-        call_site_value.set_alignment_attribute(inkwell::attributes::AttributeLoc::Param(1), 1);
+        Ok(())
     }
 
     ///
@@ -890,41 +878,29 @@ where
         source: Pointer<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
         name: &str,
-    ) {
-        let pointer_casted = self
-            .builder
-            .build_ptr_to_int(
-                source.value,
-                self.field_type(),
-                format!("{name}_pointer_casted").as_str(),
-            )
-            .unwrap();
-        let return_data_size_shifted = self
-            .builder
-            .build_right_shift(
-                pointer_casted,
-                self.field_const((era_compiler_common::BIT_LENGTH_X32 * 3) as u64),
-                false,
-                format!("{name}_return_data_size_shifted").as_str(),
-            )
-            .unwrap();
-        let return_data_size_truncated = self
-            .builder
-            .build_and(
-                return_data_size_shifted,
-                self.field_const(u32::MAX as u64),
-                format!("{name}_return_data_size_truncated").as_str(),
-            )
-            .unwrap();
-        let is_return_data_size_lesser = self
-            .builder
-            .build_int_compare(
-                inkwell::IntPredicate::ULT,
-                return_data_size_truncated,
-                size,
-                format!("{name}_is_return_data_size_lesser").as_str(),
-            )
-            .unwrap();
+    ) -> anyhow::Result<()> {
+        let pointer_casted = self.builder.build_ptr_to_int(
+            source.value,
+            self.field_type(),
+            format!("{name}_pointer_casted").as_str(),
+        )?;
+        let return_data_size_shifted = self.builder.build_right_shift(
+            pointer_casted,
+            self.field_const((era_compiler_common::BIT_LENGTH_X32 * 3) as u64),
+            false,
+            format!("{name}_return_data_size_shifted").as_str(),
+        )?;
+        let return_data_size_truncated = self.builder.build_and(
+            return_data_size_shifted,
+            self.field_const(u32::MAX as u64),
+            format!("{name}_return_data_size_truncated").as_str(),
+        )?;
+        let is_return_data_size_lesser = self.builder.build_int_compare(
+            inkwell::IntPredicate::ULT,
+            return_data_size_truncated,
+            size,
+            format!("{name}_is_return_data_size_lesser").as_str(),
+        )?;
         let min_size = self
             .builder
             .build_select(
@@ -932,11 +908,12 @@ where
                 return_data_size_truncated,
                 size,
                 format!("{name}_min_size").as_str(),
-            )
-            .unwrap()
+            )?
             .into_int_value();
 
-        self.build_memcpy(function, destination, source, min_size, name)
+        self.build_memcpy(function, destination, source, min_size, name)?;
+
+        Ok(())
     }
 
     ///
@@ -975,10 +952,11 @@ where
     ///
     pub fn build_exit(
         &self,
-        _return_function: FunctionDeclaration<'ctx>,
-        _offset: inkwell::values::IntValue<'ctx>,
-        _length: inkwell::values::IntValue<'ctx>,
-    ) {
+        flags: inkwell::values::IntValue<'ctx>,
+        offset: inkwell::values::IntValue<'ctx>,
+        length: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<()> {
+        // TODO:
         //let return_forward_mode = if self.code_type() == Some(CodeType::Deploy)
         //    && return_function == self.llvm_runtime().r#return
         //{
@@ -987,20 +965,56 @@ where
         //    zkevm_opcode_defs::RetForwardPageType::UseHeap
         //};
 
-        self.builder()
-            .build_call(
-                self.module().get_function("seal_return").unwrap(),
-                &[
-                    self.integer_const(32, 0).into(),
-                    self.integer_const(32, 0).into(),
-                    self.integer_const(32, 0).into(),
-                ],
-                "seal_return",
-            )
-            .unwrap();
+        let offset = self.safe_truncate_int_to_i32(offset)?;
+        let length = self.safe_truncate_int_to_i32(length)?;
 
-        self.build_return(None);
-        //self.builder.build_unreachable().unwrap();
+        self.builder().build_call(
+            self.module().get_function("seal_return").unwrap(),
+            &[flags.into(), offset.into(), length.into()],
+            "seal_return",
+        )?;
+
+        self.build_unconditional_branch(self.current_function().borrow().return_block());
+
+        Ok(())
+    }
+
+    /// Truncate a memory offset into 32 bits, trapping if it doesn't fit.
+    ///
+    /// Pointers are represented as opaque 256 bit integer values in EVM.
+    /// In practice, they should never exceed a 32 bit value. However, we
+    /// still protect against this possibility here.
+    pub fn safe_truncate_int_to_i32(
+        &self,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let truncated = self.builder().build_int_truncate_or_bit_cast(
+            value,
+            self.integer_type(32),
+            "offset_truncated",
+        )?;
+        let extended = self.builder().build_int_z_extend_or_bit_cast(
+            truncated,
+            self.field_type(),
+            "offset_extended",
+        )?;
+        let is_overflow = self.builder().build_int_compare(
+            inkwell::IntPredicate::NE,
+            truncated,
+            extended,
+            "compare_truncated_extended",
+        )?;
+
+        let continue_block = self.append_basic_block("offset_pointer_ok");
+        let trap_block = self.append_basic_block("offset_pointer_overflow");
+        self.build_conditional_branch(is_overflow, trap_block, continue_block)?;
+
+        self.set_basic_block(trap_block);
+        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
+        self.build_unreachable();
+
+        self.set_basic_block(continue_block);
+        Ok(truncated)
     }
 
     ///

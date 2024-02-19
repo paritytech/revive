@@ -67,13 +67,13 @@ where
             )?;
 
             context.build_exit(
-                context.llvm_runtime().r#return,
+                context.integer_const(32, 0),
                 context.field_const(crate::eravm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
                 return_data_length,
-            );
+            )?;
         }
         Some(CodeType::Runtime) => {
-            context.build_exit(context.llvm_runtime().r#return, offset, length);
+            context.build_exit(context.integer_const(32, 0), offset, length)?;
         }
     }
 
@@ -91,8 +91,7 @@ pub fn revert<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_exit(context.llvm_runtime().revert, offset, length);
-    Ok(())
+    context.build_exit(context.integer_const(32, 1), offset, length)
 }
 
 ///
@@ -104,7 +103,11 @@ pub fn stop<D>(context: &mut Context<D>) -> anyhow::Result<()>
 where
     D: Dependency + Clone,
 {
-    r#return(context, context.field_const(0), context.field_const(0))
+    r#return(
+        context,
+        context.integer_const(32, 0),
+        context.integer_const(32, 0),
+    )
 }
 
 ///

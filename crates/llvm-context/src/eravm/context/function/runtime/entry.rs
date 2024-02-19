@@ -100,13 +100,13 @@ impl Entry {
         let input_pointer_casted = context.builder.build_ptr_to_int(
             input_pointer,
             context.integer_type(32),
-            format!("arg_pointer_casted").as_str(),
+            "arg_pointer_casted",
         )?;
         let input_length_pointer = context.build_alloca(context.integer_type(32), "len_ptr");
         let length_pointer_casted = context.builder.build_ptr_to_int(
             input_length_pointer.value,
             context.integer_type(32),
-            format!("arg_pointer_casted").as_str(),
+            "arg_pointer_casted",
         )?;
         let arguments = &[input_pointer_casted.into(), length_pointer_casted.into()];
         context
@@ -178,8 +178,7 @@ impl Entry {
 
         context.build_conditional_branch(
             is_deploy.into_int_value(),
-            //deploy_code_call_block,
-            runtime_code_call_block,
+            deploy_code_call_block,
             runtime_code_call_block,
         )?;
 

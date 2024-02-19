@@ -309,6 +309,7 @@ dependencies = [
  "once_cell",
  "pallet-contracts-pvm-llapi",
  "regex",
+ "revive-builtins",
  "revive-linker",
  "semver",
  "serde",

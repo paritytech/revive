@@ -30,7 +30,7 @@ where
         context.field_type(),
         "mimic_call_result_status_code_pointer",
     );
-    context.build_store(status_code_result_pointer, context.field_const(0));
+    context.build_store(status_code_result_pointer, context.field_const(0))?;
 
     let far_call_result = context
         .build_call(
@@ -74,7 +74,7 @@ where
         context.field_type(),
         "mimic_call_external_result_status_code",
     )?;
-    context.build_store(status_code_result_pointer, result_status_code);
+    context.build_store(status_code_result_pointer, result_status_code)?;
 
     context.write_abi_pointer(
         result_abi_data_pointer,
@@ -207,7 +207,7 @@ where
         context.field_type(),
         "system_far_call_result_status_code_pointer",
     );
-    context.build_store(status_code_result_pointer, context.field_const(0));
+    context.build_store(status_code_result_pointer, context.field_const(0))?;
 
     let far_call_result = context
         .build_call(
@@ -251,7 +251,7 @@ where
         context.field_type(),
         "system_far_call_external_result_status_code",
     )?;
-    context.build_store(status_code_result_pointer, result_status_code);
+    context.build_store(status_code_result_pointer, result_status_code)?;
 
     let source = result_abi_data_pointer;
 

@@ -619,7 +619,7 @@ where
             context.field_type(),
             "system_request_calldata_array_pointer",
         );
-        context.build_store(argument_pointer, argument);
+        context.build_store(argument_pointer, argument)?;
     }
     Ok(context
         .build_invoke(
@@ -660,7 +660,7 @@ where
 
     let result_pointer =
         context.build_alloca(context.field_type(), "contract_call_address_result_pointer");
-    context.build_store(result_pointer, context.field_const(0));
+    context.build_store(result_pointer, context.field_const(0))?;
     let is_value_zero = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         value,
@@ -691,7 +691,7 @@ where
             context.field_const(u64::from(crate::eravm::r#const::NO_SYSTEM_CALL_BIT)),
         ],
     )?;
-    context.build_store(result_pointer, result);
+    context.build_store(result_pointer, result)?;
     context.build_unconditional_branch(value_join_block);
 
     context.set_basic_block(value_zero_block);
@@ -710,7 +710,7 @@ where
             "default_call",
         )
         .expect("Always exists");
-    context.build_store(result_pointer, result);
+    context.build_store(result_pointer, result)?;
     context.build_unconditional_branch(value_join_block);
 
     context.set_basic_block(value_join_block);

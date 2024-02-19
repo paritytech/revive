@@ -52,7 +52,7 @@ where
         offset,
         "memory_store_pointer",
     );
-    context.build_store(pointer, value);
+    context.build_store(pointer, value)?;
     Ok(())
 }
 

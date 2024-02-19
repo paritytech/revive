@@ -323,7 +323,7 @@ where
         match self.globals.get(name) {
             Some(global) => {
                 let global = *global;
-                self.build_store(global.into(), value);
+                self.build_store(global.into(), value).unwrap();
             }
             None => {
                 let global = Global::new(self, r#type, address_space, value, name);
@@ -638,7 +638,7 @@ where
     ///
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
     ///
-    pub fn build_store<V>(&self, pointer: Pointer<'ctx>, value: V)
+    pub fn build_store<V>(&self, pointer: Pointer<'ctx>, value: V) -> anyhow::Result<()>
     where
         V: BasicValue<'ctx>,
     {
@@ -674,9 +674,55 @@ where
                     .set_alignment(era_compiler_common::BYTE_LENGTH_FIELD as u32)
                     .expect("Alignment is valid");
             }
-            AddressSpace::TransientStorage => unimplemented!(),
+            AddressSpace::TransientStorage => todo!(),
+            AddressSpace::Storage => {
+                // TODO: Tests, factor out into dedicated functions
+
+                let runtime_api = self
+                    .module()
+                    .get_function("set_storage")
+                    .expect("should be declared");
+
+                let storage_key_value = self.builder().build_ptr_to_int(
+                    pointer.value,
+                    self.field_type(),
+                    "storage_ptr_to_int",
+                )?;
+                let storage_key_pointer =
+                    self.build_alloca(storage_key_value.get_type(), "storage_key");
+                self.builder
+                    .build_store(storage_key_pointer.value, storage_key_value)?;
+
+                let storage_value_value = value.as_basic_value_enum().into_int_value();
+                let storage_value_pointer =
+                    self.build_alloca(storage_value_value.get_type(), "storage_value");
+                self.builder
+                    .build_store(storage_value_pointer.value, storage_value_value)?;
+
+                let storage_key_pointer_casted = self.builder.build_ptr_to_int(
+                    storage_key_pointer.value,
+                    self.integer_type(32),
+                    "storage_key_pointer_casted",
+                )?;
+                let storage_value_pointer_casted = self.builder.build_ptr_to_int(
+                    storage_value_pointer.value,
+                    self.integer_type(32),
+                    "storage_value_pointer_casted",
+                )?;
+
+                let arguments = &[
+                    storage_key_pointer_casted.into(),
+                    self.integer_const(32, 32).into(),
+                    storage_value_pointer_casted.into(),
+                    self.integer_const(32, 32).into(),
+                ];
+                self.builder()
+                    .build_call(runtime_api, arguments, "call_seal_set_storage")?;
+            }
             _ => {}
         };
+
+        Ok(())
         // let instruction = self.builder.build_store(pointer.value, value).unwrap();
 
         // let alignment = if AddressSpace::Stack == pointer.address_space {
@@ -799,7 +845,7 @@ where
 
         let return_pointer = if let Some(r#type) = function.r#type.get_return_type() {
             let pointer = self.build_alloca(r#type, "invoke_return_pointer");
-            self.build_store(pointer, r#type.const_zero());
+            self.build_store(pointer, r#type.const_zero()).unwrap();
             Some(pointer)
         } else {
             None
@@ -863,7 +909,7 @@ where
                         .as_basic_value_enum();
                 }
             }
-            self.build_store(return_pointer, return_value);
+            self.build_store(return_pointer, return_value).unwrap();
         }
         return_pointer.map(|pointer| self.build_load(pointer, "invoke_result"))
     }
@@ -1079,8 +1125,8 @@ where
             .unwrap();
         let abi_pointer_value_shifted = self
             .builder()
-            .build_right_shift(
-                abi_pointer_value,
+        .build_right_shift(
+            abi_pointer_value,
                 self.field_const((era_compiler_common::BIT_LENGTH_X32 * 3) as u64),
                 false,
                 "abi_pointer_value_shifted",

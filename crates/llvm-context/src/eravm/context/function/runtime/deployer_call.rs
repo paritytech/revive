@@ -137,7 +137,7 @@ where
             input_offset,
             "deployer_call_signature_pointer",
         );
-        context.build_store(signature_pointer, signature_hash);
+        context.build_store(signature_pointer, signature_hash)?;
 
         let salt_offset = context.builder().build_int_add(
             input_offset,
@@ -151,7 +151,7 @@ where
             salt_offset,
             "deployer_call_salt_pointer",
         );
-        context.build_store(salt_pointer, salt);
+        context.build_store(salt_pointer, salt)?;
 
         let arguments_offset_offset = context.builder().build_int_add(
             salt_offset,
@@ -172,7 +172,7 @@ where
                     - (era_compiler_common::BYTE_LENGTH_X32
                         + era_compiler_common::BYTE_LENGTH_FIELD)) as u64,
             ),
-        );
+        )?;
 
         let arguments_length_offset = context.builder().build_int_add(
             arguments_offset_offset,
@@ -191,11 +191,11 @@ where
             context.field_const(crate::eravm::DEPLOYER_CALL_HEADER_SIZE as u64),
             "deployer_call_arguments_length",
         )?;
-        context.build_store(arguments_length_pointer, arguments_length_value);
+        context.build_store(arguments_length_pointer, arguments_length_value)?;
 
         let result_pointer =
             context.build_alloca(context.field_type(), "deployer_call_result_pointer");
-        context.build_store(result_pointer, context.field_const(0));
+        context.build_store(result_pointer, context.field_const(0))?;
         let deployer_call_result_type = context.structure_type(&[
             context
                 .byte_type()
@@ -208,7 +208,7 @@ where
         context.build_store(
             deployer_call_result_pointer,
             deployer_call_result_type.const_zero(),
-        );
+        )?;
         let is_value_zero = context.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             value,
@@ -232,7 +232,7 @@ where
                 "deployer_call_ordinary",
             )
             .expect("Always returns a value");
-        context.build_store(deployer_call_result_pointer, deployer_call_result);
+        context.build_store(deployer_call_result_pointer, deployer_call_result)?;
         context.build_unconditional_branch(value_join_block);
 
         context.set_basic_block(value_non_zero_block);
@@ -254,7 +254,7 @@ where
                 "deployer_call_system",
             )
             .expect("Always returns a value");
-        context.build_store(deployer_call_result_pointer, deployer_call_result);
+        context.build_store(deployer_call_result_pointer, deployer_call_result)?;
         context.build_unconditional_branch(value_join_block);
 
         context.set_basic_block(value_join_block);
@@ -305,7 +305,7 @@ where
             result_abi_data_pointer,
             "deployer_call_address_or_status_code",
         );
-        context.build_store(result_pointer, address_or_status_code);
+        context.build_store(result_pointer, address_or_status_code)?;
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
         context.set_basic_block(error_block);

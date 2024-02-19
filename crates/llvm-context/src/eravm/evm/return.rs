@@ -36,7 +36,7 @@ where
             context.build_store(
                 immutables_offset_pointer,
                 context.field_const(era_compiler_common::BYTE_LENGTH_FIELD as u64),
-            );
+            )?;
 
             let immutables_number_pointer = Pointer::new_with_offset(
                 context,
@@ -54,7 +54,7 @@ where
                 context.field_const(
                     (immutable_values_size / era_compiler_common::BYTE_LENGTH_FIELD) as u64,
                 ),
-            );
+            )?;
             let immutables_size = context.builder().build_int_mul(
                 context.field_const(immutable_values_size as u64),
                 context.field_const(2),

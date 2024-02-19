@@ -1257,7 +1257,7 @@ where
                                 context, pointer,
                             ),
                             value,
-                        );
+                        )?;
                     }
                     Some(value) if value.is_struct_value() => {
                         let return_value = value.into_struct_value();
@@ -1278,7 +1278,7 @@ where
                                     .to_llvm()
                                     .into_pointer_value(),
                             );
-                            context.build_store(pointer, value);
+                            context.build_store(pointer, value)?;
                         }
                     }
                     Some(_) => {
@@ -1304,7 +1304,7 @@ where
                     era_compiler_llvm_context::EraVMFunctionReturn::None => {}
                     era_compiler_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
                         assert_eq!(arguments.len(), 1);
-                        context.build_store(pointer, arguments.remove(0));
+                        context.build_store(pointer, arguments.remove(0))?;
                     }
                     era_compiler_llvm_context::EraVMFunctionReturn::Compound {
                         pointer, ..
@@ -1322,7 +1322,7 @@ where
                                 context.field_type(),
                                 format!("return_value_pointer_element_{}", index).as_str(),
                             );
-                            context.build_store(element_pointer, argument);
+                            context.build_store(element_pointer, argument)?;
                         }
                     }
                 }
@@ -1340,7 +1340,7 @@ where
             context.build_store(
                 era_compiler_llvm_context::EraVMPointer::new_stack_field(context, pointer),
                 result,
-            );
+            )?;
             context.evmla_mut().stack[self.stack.elements.len() - 1].original = original;
         }
 

@@ -81,7 +81,7 @@ where
                     context.field_const(offset as u64),
                     "immutable_index_initializer",
                 );
-                context.build_store(pointer, context.field_const(value as u64));
+                context.build_store(pointer, context.field_const(value as u64))?;
             }
         }
 

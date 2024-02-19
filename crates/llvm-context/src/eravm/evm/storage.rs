@@ -46,7 +46,7 @@ where
         position,
         "storage_store_position_pointer",
     );
-    context.build_store(position_pointer, value);
+    context.build_store(position_pointer, value)?;
     Ok(())
 }
 
@@ -89,6 +89,6 @@ where
         position,
         "transient_storage_store_position_pointer",
     );
-    context.build_store(position_pointer, value);
+    context.build_store(position_pointer, value)?;
     Ok(())
 }

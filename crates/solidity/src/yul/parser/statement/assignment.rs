@@ -141,13 +141,13 @@ where
                         identifier.inner,
                     )
                 })?;
-            context.build_store(pointer, value.to_llvm());
+            context.build_store(pointer, value.to_llvm())?;
             return Ok(());
         }
 
         let llvm_type = value.to_llvm().into_struct_value().get_type();
         let tuple_pointer = context.build_alloca(llvm_type, "assignment_pointer");
-        context.build_store(tuple_pointer, value.to_llvm());
+        context.build_store(tuple_pointer, value.to_llvm())?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {
             let field_pointer = context.build_gep(
@@ -177,7 +177,7 @@ where
                 field_pointer,
                 format!("assignment_binding_{index}_value").as_str(),
             );
-            context.build_store(binding_pointer, value);
+            context.build_store(binding_pointer, value)?;
         }
 
         Ok(())

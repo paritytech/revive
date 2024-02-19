@@ -96,8 +96,8 @@ where
     context.evmla_mut().stack[height - 1].original = swap_element.original.to_owned();
     context.evmla_mut().stack[height - offset - 1].original = top_element.original.to_owned();
 
-    context.build_store(top_pointer, swap_value);
-    context.build_store(swap_pointer, top_value);
+    context.build_store(top_pointer, swap_value)?;
+    context.build_store(swap_pointer, top_value)?;
 
     Ok(())
 }

@@ -96,7 +96,7 @@ where
                 index_offset_absolute,
                 "immutable_index_pointer",
             );
-            context.build_store(index_offset_pointer, index);
+            context.build_store(index_offset_pointer, index)?;
 
             let value_offset_absolute = context.builder().build_int_add(
                 index_offset_absolute,
@@ -110,7 +110,7 @@ where
                 value_offset_absolute,
                 "immutable_value_pointer",
             );
-            context.build_store(value_offset_pointer, value);
+            context.build_store(value_offset_pointer, value)?;
 
             Ok(())
         }

@@ -283,7 +283,7 @@ where
             era_compiler_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
                 let identifier = self.result.pop().expect("Always exists");
                 let r#type = identifier.r#type.unwrap_or_default();
-                context.build_store(pointer, r#type.into_llvm(context).const_zero());
+                context.build_store(pointer, r#type.into_llvm(context).const_zero())?;
                 context
                     .current_function()
                     .borrow_mut()
@@ -303,7 +303,7 @@ where
                         context.field_type(),
                         format!("return_{index}_gep_pointer").as_str(),
                     );
-                    context.build_store(pointer, r#type.const_zero());
+                    context.build_store(pointer, r#type.const_zero())?;
                     context
                         .current_function()
                         .borrow_mut()
@@ -340,7 +340,7 @@ where
             context.build_store(
                 pointer,
                 context.current_function().borrow().get_nth_param(index),
-            );
+            )?;
         }
 
         self.body.into_llvm(context)?;

@@ -25,7 +25,7 @@ where
     let join_block = context.append_basic_block(format!("{name}_join_block").as_str());
 
     let pointer = context.build_alloca(context.field_type(), format!("{name}_pointer").as_str());
-    context.build_store(pointer, max_value);
+    context.build_store(pointer, max_value)?;
 
     let is_in_bounds = context.builder().build_int_compare(
         inkwell::IntPredicate::ULE,
@@ -36,7 +36,7 @@ where
     context.build_conditional_branch(is_in_bounds, in_bounds_block, join_block)?;
 
     context.set_basic_block(in_bounds_block);
-    context.build_store(pointer, value);
+    context.build_store(pointer, value)?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(join_block);

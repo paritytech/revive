@@ -1252,7 +1252,7 @@ where
                 }
                 _ => context.field_const(0).as_basic_value_enum(),
             };
-            context.build_store(pointer, value);
+            context.build_store(pointer, value)?;
             stack_variables.push(era_compiler_llvm_context::EraVMArgument::new(
                 pointer.value.as_basic_value_enum(),
             ));

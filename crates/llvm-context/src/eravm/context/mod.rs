@@ -222,6 +222,7 @@ where
                 )
             })?;
 
+        std::fs::write("/tmp/out.pvm", &buffer).unwrap();
         let assembly_text = String::from_utf8_lossy(buffer.as_slice()).to_string();
 
         let build = match crate::eravm::build_assembly_text(
@@ -640,17 +641,52 @@ where
     where
         V: BasicValue<'ctx>,
     {
-        let instruction = self.builder.build_store(pointer.value, value).unwrap();
+        match pointer.address_space {
+            AddressSpace::Heap => {
+                let heap_pointer = self
+                    .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)
+                    .unwrap();
 
-        let alignment = if AddressSpace::Stack == pointer.address_space {
-            era_compiler_common::BYTE_LENGTH_FIELD
-        } else {
-            era_compiler_common::BYTE_LENGTH_BYTE
+                // TODO: Ensure safe casts somehow
+                let offset = self
+                    .builder()
+                    .build_ptr_to_int(pointer.value, self.integer_type(32), "offset_ptrtoint")
+                    .unwrap();
+                let pointer_value = unsafe {
+                    self.builder
+                        .build_gep(
+                            heap_pointer.r#type,
+                            heap_pointer.value.as_pointer_value(),
+                            &[offset],
+                            "heap_offset_via_gep",
+                        )
+                        .unwrap()
+                };
+                let instruction = self.builder.build_store(pointer_value, value).unwrap();
+                instruction
+                    .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
+                    .expect("Alignment is valid");
+            }
+            AddressSpace::Stack => {
+                let instruction = self.builder.build_store(pointer.value, value).unwrap();
+                instruction
+                    .set_alignment(era_compiler_common::BYTE_LENGTH_FIELD as u32)
+                    .expect("Alignment is valid");
+            }
+            AddressSpace::TransientStorage => unimplemented!(),
+            _ => {}
         };
+        // let instruction = self.builder.build_store(pointer.value, value).unwrap();
 
-        instruction
-            .set_alignment(alignment as u32)
-            .expect("Alignment is valid");
+        // let alignment = if AddressSpace::Stack == pointer.address_space {
+        //     era_compiler_common::BYTE_LENGTH_FIELD
+        // } else {
+        //     era_compiler_common::BYTE_LENGTH_BYTE
+        // };
+
+        // instruction
+        //     .set_alignment(alignment as u32)
+        //     .expect("Alignment is valid");
     }
 
     ///
@@ -666,6 +702,8 @@ where
     where
         T: BasicType<'ctx>,
     {
+        assert_ne!(pointer.address_space, AddressSpace::Storage);
+
         let value = unsafe {
             self.builder
                 .build_gep(pointer.r#type, pointer.value, indexes, name)
@@ -1000,7 +1038,7 @@ where
         )?;
         let is_overflow = self.builder().build_int_compare(
             inkwell::IntPredicate::NE,
-            truncated,
+            value,
             extended,
             "compare_truncated_extended",
         )?;

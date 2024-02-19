@@ -212,12 +212,7 @@ impl<'ctx> Function<'ctx> {
             );
         }
 
-        Self::set_attributes(
-            llvm,
-            declaration,
-            vec![Attribute::NoFree, Attribute::NullPointerIsValid],
-            false,
-        );
+        Self::set_attributes(llvm, declaration, vec![Attribute::NoFree], false);
     }
 
     ///

@@ -145,7 +145,7 @@ impl Expression {
                     .yul()
                     .get_constant(identifier.inner.as_str());
 
-                let value = context.build_load(pointer, identifier.inner.as_str());
+                let value = context.build_load(pointer, identifier.inner.as_str())?;
 
                 match constant {
                     Some(constant) => Ok(Some(

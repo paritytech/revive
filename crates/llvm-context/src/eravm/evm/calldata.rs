@@ -20,7 +20,7 @@ where
 {
     let calldata_pointer_global = context.get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?;
     let calldata_pointer_pointer = calldata_pointer_global.into();
-    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer");
+    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer")?;
     let calldata_pointer = context.build_gep(
         Pointer::new(
             context.byte_type(),
@@ -31,8 +31,7 @@ where
         context.field_type().as_basic_type_enum(),
         "calldata_pointer_with_offset",
     );
-    let value = context.build_load(calldata_pointer, "calldata_value");
-    Ok(value)
+    context.build_load(calldata_pointer, "calldata_value")
 }
 
 ///
@@ -71,7 +70,7 @@ where
 
     let calldata_pointer_global = context.get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?;
     let calldata_pointer_pointer = calldata_pointer_global.into();
-    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer");
+    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer")?;
     let source = context.build_gep(
         Pointer::new(
             context.byte_type(),

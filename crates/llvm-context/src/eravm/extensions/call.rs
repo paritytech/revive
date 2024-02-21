@@ -85,9 +85,7 @@ where
         crate::eravm::GLOBAL_RETURN_DATA_SIZE,
     );
 
-    let status_code_result =
-        context.build_load(status_code_result_pointer, "mimic_call_status_code");
-    Ok(status_code_result)
+    context.build_load(status_code_result_pointer, "mimic_call_status_code")
 }
 
 ///
@@ -280,9 +278,7 @@ where
         crate::eravm::GLOBAL_RETURN_DATA_SIZE,
     );
 
-    let status_code_result =
-        context.build_load(status_code_result_pointer, "system_call_status_code");
-    Ok(status_code_result)
+    context.build_load(status_code_result_pointer, "system_call_status_code")
 }
 
 ///

@@ -273,7 +273,7 @@ where
             "deployer_call_result_abi_data_pointer",
         );
         let result_abi_data =
-            context.build_load(result_abi_data_pointer, "deployer_call_result_abi_data");
+            context.build_load(result_abi_data_pointer, "deployer_call_result_abi_data")?;
 
         let result_status_code_pointer = context.build_gep(
             deployer_call_result_pointer,
@@ -290,7 +290,7 @@ where
             .build_load(
                 result_status_code_pointer,
                 "contract_call_external_result_status_code_boolean",
-            )
+            )?
             .into_int_value();
 
         context.build_conditional_branch(result_status_code_boolean, success_block, error_block)?;
@@ -304,7 +304,7 @@ where
         let address_or_status_code = context.build_load(
             result_abi_data_pointer,
             "deployer_call_address_or_status_code",
-        );
+        )?;
         context.build_store(result_pointer, address_or_status_code)?;
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
@@ -325,7 +325,7 @@ where
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
         context.set_basic_block(context.current_function().borrow().return_block());
-        let result = context.build_load(result_pointer, "deployer_call_result");
+        let result = context.build_load(result_pointer, "deployer_call_result")?;
         context.build_return(Some(&result));
 
         Ok(())

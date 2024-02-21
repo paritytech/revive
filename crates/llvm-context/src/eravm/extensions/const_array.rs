@@ -103,7 +103,5 @@ where
         context.field_type().as_basic_type_enum(),
         format!("{}_pointer", identifier).as_str(),
     );
-    let value = context.build_load(pointer, format!("{}_value", identifier).as_str());
-
-    Ok(value)
+    context.build_load(pointer, format!("{}_value", identifier).as_str())
 }

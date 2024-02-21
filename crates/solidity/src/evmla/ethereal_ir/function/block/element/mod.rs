@@ -65,10 +65,12 @@ impl Element {
                 [self.stack.elements.len() + input_size - output_size - 1 - index]
                 .to_llvm()
                 .into_pointer_value();
-            let value = context.build_load(
-                era_compiler_llvm_context::EraVMPointer::new_stack_field(context, pointer),
-                format!("argument_{index}").as_str(),
-            );
+            let value = context
+                .build_load(
+                    era_compiler_llvm_context::EraVMPointer::new_stack_field(context, pointer),
+                    format!("argument_{index}").as_str(),
+                )
+                .unwrap();
             arguments.push(value);
         }
         arguments

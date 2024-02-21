@@ -40,7 +40,7 @@ where
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(join_block);
-    let result = context.build_load(pointer, name);
+    let result = context.build_load(pointer, name)?;
     Ok(result.into_int_value())
 }
 

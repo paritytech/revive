@@ -1325,11 +1325,11 @@ where
                 context.build_return(None);
             }
             era_compiler_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
-                let return_value = context.build_load(pointer, "return_value");
+                let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
             era_compiler_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
-                let return_value = context.build_load(pointer, "return_value");
+                let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
         }

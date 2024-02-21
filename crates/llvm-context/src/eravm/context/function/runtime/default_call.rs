@@ -249,7 +249,7 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         let status_code_result =
-            context.build_load(status_code_result_pointer, "contract_call_status_code");
+            context.build_load(status_code_result_pointer, "contract_call_status_code")?;
         context.build_return(Some(&status_code_result));
 
         Ok(())

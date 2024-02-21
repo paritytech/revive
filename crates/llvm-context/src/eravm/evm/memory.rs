@@ -28,8 +28,7 @@ where
         offset,
         "memory_load_pointer",
     );
-    let result = context.build_load(pointer, "memory_load_result");
-    Ok(result)
+    context.build_load(pointer, "memory_load_result")
 }
 
 ///

@@ -202,7 +202,7 @@ where
                 format!("binding_{index}_gep_pointer").as_str(),
             );
 
-            let value = context.build_load(pointer, format!("binding_{index}_value").as_str());
+            let value = context.build_load(pointer, format!("binding_{index}_value").as_str())?;
             let pointer = context
                 .current_function()
                 .borrow_mut()

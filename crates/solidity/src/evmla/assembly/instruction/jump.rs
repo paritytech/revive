@@ -51,7 +51,7 @@ where
     let condition = context.build_load(
         era_compiler_llvm_context::EraVMPointer::new_stack_field(context, condition_pointer),
         format!("conditional_{block_key}_condition").as_str(),
-    );
+    )?;
     let condition = context.builder().build_int_compare(
         inkwell::IntPredicate::NE,
         condition.into_int_value(),

@@ -24,8 +24,7 @@ where
         position,
         "storage_load_position_pointer",
     );
-    let value = context.build_load(position_pointer, "storage_load_value");
-    Ok(value)
+    context.build_load(position_pointer, "storage_load_value")
 }
 
 ///
@@ -67,8 +66,7 @@ where
         position,
         "transient_storage_load_position_pointer",
     );
-    let value = context.build_load(position_pointer, "transient_storage_load_value");
-    Ok(value)
+    context.build_load(position_pointer, "transient_storage_load_value")
 }
 
 ///

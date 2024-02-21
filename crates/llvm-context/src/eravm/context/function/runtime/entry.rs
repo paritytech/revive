@@ -124,7 +124,7 @@ impl Entry {
         // Store the calldata size
         let calldata_size_casted = context.builder().build_int_z_extend(
             context
-                .build_load(input_length_pointer, "input_size")
+                .build_load(input_length_pointer, "input_size")?
                 .into_int_value(),
             context.field_type(),
             "zext_input_len",

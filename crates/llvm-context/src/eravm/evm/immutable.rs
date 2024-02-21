@@ -46,8 +46,7 @@ where
                 offset_absolute,
                 "immutable_pointer",
             );
-            let immutable_value = context.build_load(immutable_pointer, "immutable_value");
-            Ok(immutable_value)
+            context.build_load(immutable_pointer, "immutable_value")
         }
         Some(CodeType::Runtime) => {
             todo!()

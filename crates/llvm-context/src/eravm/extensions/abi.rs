@@ -28,11 +28,10 @@ where
         context.field_type().as_basic_type_enum(),
         "extra_active_data_element_pointer",
     );
-    let extra_active_data_element = context.build_load(
+    context.build_load(
         extra_active_data_element_pointer,
         "extra_active_data_element_value",
-    );
-    Ok(extra_active_data_element)
+    )
 }
 
 ///
@@ -150,8 +149,7 @@ where
         context.field_type().as_basic_type_enum(),
         "active_pointer_with_offset",
     );
-    let value = context.build_load(active_pointer, "active_pointer_value");
-    Ok(value)
+    context.build_load(active_pointer, "active_pointer_value")
 }
 
 ///

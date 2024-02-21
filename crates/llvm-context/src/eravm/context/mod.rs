@@ -309,7 +309,7 @@ where
         name: &str,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         let global = self.get_global(name)?;
-        Ok(self.build_load(global.into(), name))
+        self.build_load(global.into(), name)
     }
 
     ///
@@ -613,24 +613,104 @@ where
         &self,
         pointer: Pointer<'ctx>,
         name: &str,
-    ) -> inkwell::values::BasicValueEnum<'ctx> {
-        let value = self
-            .builder
-            .build_load(pointer.r#type, pointer.value, name)
-            .unwrap();
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        match pointer.address_space {
+            AddressSpace::Heap => {
+                let heap_pointer = self.get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?;
 
-        let alignment = if AddressSpace::Stack == pointer.address_space {
-            era_compiler_common::BYTE_LENGTH_FIELD
-        } else {
-            era_compiler_common::BYTE_LENGTH_BYTE
-        };
+                // TODO: Ensure safe casts somehow
+                let offset = self.builder().build_ptr_to_int(
+                    pointer.value,
+                    self.integer_type(32),
+                    "offset_ptrtoint",
+                )?;
+                let pointer_value = unsafe {
+                    self.builder
+                        .build_gep(
+                            heap_pointer.r#type,
+                            heap_pointer.value.as_pointer_value(),
+                            &[offset],
+                            "heap_offset_via_gep",
+                        )
+                        .unwrap()
+                };
+                let value = self
+                    .builder()
+                    .build_load(pointer.r#type, pointer_value, name)?;
+                self.basic_block()
+                    .get_last_instruction()
+                    .expect("Always exists")
+                    .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
+                    .expect("Alignment is valid");
+                Ok(value)
+            }
+            AddressSpace::TransientStorage => todo!(),
+            AddressSpace::Storage => {
+                let runtime_api = self
+                    .module()
+                    .get_function("get_storage")
+                    .expect("should be declared");
 
-        self.basic_block()
-            .get_last_instruction()
-            .expect("Always exists")
-            .set_alignment(alignment as u32)
-            .expect("Alignment is valid");
-        value
+                let storage_key_value = self.builder().build_ptr_to_int(
+                    pointer.value,
+                    self.field_type(),
+                    "storage_ptr_to_int",
+                )?;
+                let storage_key_pointer =
+                    self.build_alloca(storage_key_value.get_type(), "storage_key");
+                self.builder()
+                    .build_store(storage_key_pointer.value, storage_key_value)?;
+
+                let storage_value_pointer = self.build_alloca(self.field_type(), "storage_value");
+
+                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
+                    storage_key_pointer.value,
+                    self.integer_type(32),
+                    "storage_key_pointer_casted",
+                )?;
+                let storage_value_pointer_casted = self.builder().build_ptr_to_int(
+                    storage_value_pointer.value,
+                    self.integer_type(32),
+                    "storage_value_pointer_casted",
+                )?;
+
+                let arguments = &[
+                    storage_key_pointer_casted.into(),
+                    self.integer_const(32, 32).into(),
+                    storage_value_pointer_casted.into(),
+                    self.integer_const(32, 32).into(),
+                ];
+                // TODO check return value
+                let _ = self
+                    .builder()
+                    .build_call(runtime_api, arguments, "call_seal_get_storage")?
+                    .try_as_basic_value()
+                    .left()
+                    .expect("should not be a void function type");
+
+                self.build_load(storage_value_pointer, "storage_value_load")
+            }
+            AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
+            _ => {
+                let value = self
+                    .builder()
+                    .build_load(pointer.r#type, pointer.value, name)
+                    .unwrap();
+
+                let alignment = if AddressSpace::Stack == pointer.address_space {
+                    era_compiler_common::BYTE_LENGTH_FIELD
+                } else {
+                    era_compiler_common::BYTE_LENGTH_BYTE
+                };
+
+                self.basic_block()
+                    .get_last_instruction()
+                    .expect("Always exists")
+                    .set_alignment(alignment as u32)
+                    .expect("Alignment is valid");
+                Ok(value)
+            }
+        }
     }
 
     ///
@@ -649,12 +729,13 @@ where
                     .unwrap();
 
                 // TODO: Ensure safe casts somehow
-                let offset = self
-                    .builder()
-                    .build_ptr_to_int(pointer.value, self.integer_type(32), "offset_ptrtoint")
-                    .unwrap();
+                let offset = self.builder().build_ptr_to_int(
+                    pointer.value,
+                    self.integer_type(32),
+                    "offset_ptrtoint",
+                )?;
                 let pointer_value = unsafe {
-                    self.builder
+                    self.builder()
                         .build_gep(
                             heap_pointer.r#type,
                             heap_pointer.value.as_pointer_value(),
@@ -666,12 +747,6 @@ where
                 let instruction = self.builder.build_store(pointer_value, value).unwrap();
                 instruction
                     .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
-                    .expect("Alignment is valid");
-            }
-            AddressSpace::Stack => {
-                let instruction = self.builder.build_store(pointer.value, value).unwrap();
-                instruction
-                    .set_alignment(era_compiler_common::BYTE_LENGTH_FIELD as u32)
                     .expect("Alignment is valid");
             }
             AddressSpace::TransientStorage => todo!(),
@@ -690,21 +765,21 @@ where
                 )?;
                 let storage_key_pointer =
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
-                self.builder
+                self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
 
                 let storage_value_value = value.as_basic_value_enum().into_int_value();
                 let storage_value_pointer =
                     self.build_alloca(storage_value_value.get_type(), "storage_value");
-                self.builder
+                self.builder()
                     .build_store(storage_value_pointer.value, storage_value_value)?;
 
-                let storage_key_pointer_casted = self.builder.build_ptr_to_int(
+                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
                     self.integer_type(32),
                     "storage_key_pointer_casted",
                 )?;
-                let storage_value_pointer_casted = self.builder.build_ptr_to_int(
+                let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
                     self.integer_type(32),
                     "storage_value_pointer_casted",
@@ -719,7 +794,13 @@ where
                 self.builder()
                     .build_call(runtime_api, arguments, "call_seal_set_storage")?;
             }
-            _ => {}
+            AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
+            _ => {
+                let instruction = self.builder.build_store(pointer.value, value).unwrap();
+                instruction
+                    .set_alignment(era_compiler_common::BYTE_LENGTH_FIELD as u32)
+                    .expect("Alignment is valid");
+            }
         };
 
         Ok(())
@@ -911,7 +992,7 @@ where
             }
             self.build_store(return_pointer, return_value).unwrap();
         }
-        return_pointer.map(|pointer| self.build_load(pointer, "invoke_result"))
+        return_pointer.map(|pointer| self.build_load(pointer, "invoke_result").unwrap())
     }
 
     ///

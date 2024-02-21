@@ -69,7 +69,7 @@ where
         context.get_global(crate::eravm::GLOBAL_RETURN_DATA_POINTER)?;
     let return_data_pointer_pointer = return_data_pointer_global.into();
     let return_data_pointer =
-        context.build_load(return_data_pointer_pointer, "return_data_pointer");
+        context.build_load(return_data_pointer_pointer, "return_data_pointer")?;
     let source = context.build_gep(
         Pointer::new(
             context.byte_type(),

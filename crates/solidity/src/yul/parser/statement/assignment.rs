@@ -176,7 +176,7 @@ where
             let value = context.build_load(
                 field_pointer,
                 format!("assignment_binding_{index}_value").as_str(),
-            );
+            )?;
             context.build_store(binding_pointer, value)?;
         }
 

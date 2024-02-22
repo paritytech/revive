@@ -102,6 +102,28 @@ impl<'ctx> Pointer<'ctx> {
             value: self.value,
         }
     }
+
+    pub fn address_space_cast<D>(
+        self,
+        context: &Context<'ctx, D>,
+        address_space: AddressSpace,
+        name: &str,
+    ) -> anyhow::Result<Self>
+    where
+        D: Dependency + Clone,
+    {
+        let value = context.builder().build_address_space_cast(
+            self.value,
+            self.r#type.ptr_type(address_space.into()),
+            name,
+        )?;
+
+        Ok(Self {
+            address_space,
+            value,
+            ..self
+        })
+    }
 }
 
 impl<'ctx> From<Global<'ctx>> for Pointer<'ctx> {

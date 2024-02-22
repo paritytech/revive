@@ -691,7 +691,11 @@ where
                 self.build_load(storage_value_pointer, "storage_value_load")
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
-            _ => {
+            AddressSpace::Generic => self.build_load(
+                pointer.address_space_cast(self, AddressSpace::Stack, &format!("{}_cast", name))?,
+                name,
+            ),
+            AddressSpace::Stack => {
                 let value = self
                     .builder()
                     .build_load(pointer.r#type, pointer.value, name)
@@ -795,7 +799,11 @@ where
                     .build_call(runtime_api, arguments, "call_seal_set_storage")?;
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
-            _ => {
+            AddressSpace::Generic => self.build_store(
+                pointer.address_space_cast(self, AddressSpace::Stack, "cast")?,
+                value,
+            )?,
+            AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
                 instruction
                     .set_alignment(era_compiler_common::BYTE_LENGTH_FIELD as u32)
@@ -831,6 +839,10 @@ where
         T: BasicType<'ctx>,
     {
         assert_ne!(pointer.address_space, AddressSpace::Storage);
+        assert_ne!(pointer.address_space, AddressSpace::Heap);
+        assert_ne!(pointer.address_space, AddressSpace::HeapAuxiliary);
+        assert_ne!(pointer.address_space, AddressSpace::TransientStorage);
+        assert_ne!(pointer.address_space, AddressSpace::Code);
 
         let value = unsafe {
             self.builder

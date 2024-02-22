@@ -34,9 +34,9 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
-        let calldata_type = context.array_type(context.byte_type(), 1024 * 1024);
+        let calldata_type = context.byte_type().ptr_type(AddressSpace::Generic.into());
         context.set_global(
-            crate::eravm::GLOBAL_CALLDATA,
+            crate::eravm::GLOBAL_CALLDATA_POINTER,
             calldata_type,
             AddressSpace::Stack,
             calldata_type.get_undef(),
@@ -93,8 +93,7 @@ impl Entry {
             .get_function("input")
             .expect("should be declared");
         let input_pointer = context
-            .get_global(crate::eravm::GLOBAL_CALLDATA)
-            .unwrap()
+            .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
             .value
             .as_pointer_value();
         let input_pointer_casted = context.builder.build_ptr_to_int(

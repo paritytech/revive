@@ -72,7 +72,6 @@ impl TargetMachine {
             .to_str()
             .expect("datalayout sting should be valid")
             .to_owned();
-        dbg!(&data_layout);
 
         module.set_data_layout(&self.target_machine.get_target_data().get_data_layout());
     }

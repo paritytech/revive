@@ -63,15 +63,15 @@ where
 ///
 pub fn shift_left<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    operand_1: inkwell::values::IntValue<'ctx>,
-    operand_2: inkwell::values::IntValue<'ctx>,
+    shift: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
     Ok(context
         .builder()
-        .build_left_shift(operand_1, operand_2, "shl")?
+        .build_left_shift(value, shift, "shl")?
         .into())
 }
 
@@ -80,15 +80,15 @@ where
 ///
 pub fn shift_right<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    operand_1: inkwell::values::IntValue<'ctx>,
-    operand_2: inkwell::values::IntValue<'ctx>,
+    shift: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
     Ok(context
         .builder()
-        .build_right_shift(operand_1, operand_2, false, "shr")?
+        .build_right_shift(value, shift, false, "shr")?
         .into())
 }
 
@@ -97,15 +97,15 @@ where
 ///
 pub fn shift_right_arithmetic<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    operand_1: inkwell::values::IntValue<'ctx>,
-    operand_2: inkwell::values::IntValue<'ctx>,
+    shift: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
     Ok(context
         .builder()
-        .build_right_shift(operand_1, operand_2, true, "ashr")?
+        .build_right_shift(value, shift, true, "ashr")?
         .into())
 }
 

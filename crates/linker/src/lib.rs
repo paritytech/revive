@@ -71,10 +71,3 @@ pub fn link(input: &[u8]) -> Vec<u8> {
     let blob = fs::read(&output_path).expect("ld.lld should produce output");
     polkavm_linker(&blob)
 }
-
-pub fn libraries(context: &Context) -> Vec<Module<'_>> {
-    let guest_bitcode = include_bytes!("../polkavm_guest.bc");
-    let imports = MemoryBuffer::create_from_memory_range(guest_bitcode, "guest_bc");
-
-    vec![Module::parse_bitcode_from_buffer(&imports, context).unwrap()]
-}

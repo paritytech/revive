@@ -34,10 +34,10 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
-        let calldata_type = context.byte_type().ptr_type(AddressSpace::Generic.into());
+        let calldata_type = context.array_type(context.byte_type(), 1024);
         context.set_global(
             crate::eravm::GLOBAL_CALLDATA_POINTER,
-            calldata_type,
+            calldata_type.ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
             calldata_type.get_undef(),
         );

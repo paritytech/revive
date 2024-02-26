@@ -761,6 +761,8 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
+                todo!()
+                /*
                 era_compiler_llvm_context::eravm_evm_call::default(
                     context,
                     context.llvm_runtime().far_call,
@@ -774,6 +776,7 @@ impl FunctionCall {
                     simulation_address,
                 )
                 .map(Some)
+                */
             }
             Name::StaticCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
@@ -1153,18 +1156,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::ZkRawCall => {
-                let [address, abi_data, output_offset, output_length] =
-                    self.pop_arguments_llvm::<D, 4>(context)?;
-
-                era_compiler_llvm_context::eravm_call::raw_far(
-                    context,
-                    context.llvm_runtime().far_call,
-                    address.into_int_value(),
-                    abi_data.as_basic_value_enum(),
-                    output_offset.into_int_value(),
-                    output_length.into_int_value(),
-                )
-                .map(Some)
+                unimplemented!()
             }
             Name::ZkRawCallByRef => {
                 let [address, output_offset, output_length] =
@@ -1184,24 +1176,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::ZkSystemCall => {
-                let [address, abi_data, extra_value_1, extra_value_2, extra_value_3, extra_value_4] =
-                    self.pop_arguments_llvm::<D, 6>(context)?;
-
-                era_compiler_llvm_context::eravm_call::system(
-                    context,
-                    context.llvm_runtime().far_call,
-                    address.into_int_value(),
-                    abi_data,
-                    context.field_const(0),
-                    context.field_const(0),
-                    vec![
-                        extra_value_1.into_int_value(),
-                        extra_value_2.into_int_value(),
-                        extra_value_3.into_int_value(),
-                        extra_value_4.into_int_value(),
-                    ],
-                )
-                .map(Some)
+                unimplemented!()
             }
             Name::ZkSystemCallByRef => {
                 let [address, extra_value_1, extra_value_2, extra_value_3, extra_value_4] =

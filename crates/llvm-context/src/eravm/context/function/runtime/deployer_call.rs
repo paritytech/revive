@@ -74,7 +74,7 @@ where
             Self::FUNCTION_NAME,
             function_type,
             1,
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
         )?;
         Function::set_frontend_runtime_attributes(
             context.llvm,
@@ -218,43 +218,43 @@ where
         context.build_conditional_branch(is_value_zero, value_zero_block, value_non_zero_block)?;
 
         context.set_basic_block(value_zero_block);
-        let deployer_call_result = context
-            .build_call(
-                context.llvm_runtime().far_call,
-                crate::eravm::utils::external_call_arguments(
-                    context,
-                    abi_data,
-                    context.field_const(zkevm_opcode_defs::ADDRESS_CONTRACT_DEPLOYER.into()),
-                    vec![],
-                    None,
-                )
-                .as_slice(),
-                "deployer_call_ordinary",
-            )
-            .expect("Always returns a value");
-        context.build_store(deployer_call_result_pointer, deployer_call_result)?;
+        //let deployer_call_result = context
+        //    .build_call(
+        //        context.llvm_runtime().far_call,
+        //        crate::eravm::utils::external_call_arguments(
+        //            context,
+        //            abi_data,
+        //            context.field_const(zkevm_opcode_defs::ADDRESS_CONTRACT_DEPLOYER.into()),
+        //            vec![],
+        //            None,
+        //        )
+        //        .as_slice(),
+        //        "deployer_call_ordinary",
+        //    )
+        //    .expect("Always returns a value");
+        //context.build_store(deployer_call_result_pointer, deployer_call_result)?;
         context.build_unconditional_branch(value_join_block);
 
         context.set_basic_block(value_non_zero_block);
-        let deployer_call_result = context
-            .build_call(
-                context.llvm_runtime().far_call,
-                crate::eravm::utils::external_call_arguments(
-                    context,
-                    abi_data.as_basic_value_enum(),
-                    context.field_const(zkevm_opcode_defs::ADDRESS_MSG_VALUE.into()),
-                    vec![
-                        value,
-                        context.field_const(zkevm_opcode_defs::ADDRESS_CONTRACT_DEPLOYER.into()),
-                        context.field_const(u64::from(crate::eravm::r#const::SYSTEM_CALL_BIT)),
-                    ],
-                    None,
-                )
-                .as_slice(),
-                "deployer_call_system",
-            )
-            .expect("Always returns a value");
-        context.build_store(deployer_call_result_pointer, deployer_call_result)?;
+        //let deployer_call_result = context
+        //    .build_call(
+        //        context.llvm_runtime().far_call,
+        //        crate::eravm::utils::external_call_arguments(
+        //            context,
+        //            abi_data.as_basic_value_enum(),
+        //            context.field_const(zkevm_opcode_defs::ADDRESS_MSG_VALUE.into()),
+        //            vec![
+        //                value,
+        //                context.field_const(zkevm_opcode_defs::ADDRESS_CONTRACT_DEPLOYER.into()),
+        //                context.field_const(u64::from(crate::eravm::r#const::SYSTEM_CALL_BIT)),
+        //            ],
+        //            None,
+        //        )
+        //        .as_slice(),
+        //        "deployer_call_system",
+        //    )
+        //    .expect("Always returns a value");
+        //context.build_store(deployer_call_result_pointer, deployer_call_result)?;
         context.build_unconditional_branch(value_join_block);
 
         context.set_basic_block(value_join_block);

@@ -219,15 +219,16 @@ where
             }
 
             let arguments = call.pop_arguments_llvm::<D, ARGUMENTS_COUNT>(context)?;
-            era_compiler_llvm_context::eravm_call::raw_far(
-                context,
-                context.llvm_runtime().far_call,
-                arguments[0].into_int_value(),
-                arguments[1],
-                arguments[2].into_int_value(),
-                arguments[3].into_int_value(),
-            )
-            .map(Some)
+            todo!()
+            //era_compiler_llvm_context::eravm_call::raw_far(
+            //    context,
+            //    context.llvm_runtime().far_call,
+            //    arguments[0].into_int_value(),
+            //    arguments[1],
+            //    arguments[2].into_int_value(),
+            //    arguments[3].into_int_value(),
+            //)
+            //.map(Some)
         }
         identifier @ "raw_call_byref" => {
             const ARGUMENTS_COUNT: usize = 3;
@@ -255,33 +256,7 @@ where
             .map(Some)
         }
         identifier @ "system_call" => {
-            const ARGUMENTS_COUNT: usize = 6;
-            if input_size != ARGUMENTS_COUNT {
-                anyhow::bail!(
-                    "{} Internal function `{}` expected {} arguments, found {}",
-                    call.location,
-                    identifier,
-                    ARGUMENTS_COUNT,
-                    input_size
-                );
-            }
-
-            let arguments = call.pop_arguments_llvm::<D, ARGUMENTS_COUNT>(context)?;
-            era_compiler_llvm_context::eravm_call::system(
-                context,
-                context.llvm_runtime().far_call,
-                arguments[0].into_int_value(),
-                arguments[1],
-                context.field_const(0),
-                context.field_const(0),
-                vec![
-                    arguments[2].into_int_value(),
-                    arguments[3].into_int_value(),
-                    arguments[4].into_int_value(),
-                    arguments[5].into_int_value(),
-                ],
-            )
-            .map(Some)
+            unimplemented!()
         }
         identifier @ "system_call_byref" => {
             const ARGUMENTS_COUNT: usize = 5;

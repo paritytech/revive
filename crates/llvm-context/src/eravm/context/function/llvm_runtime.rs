@@ -59,7 +59,7 @@ pub struct LLVMRuntime<'ctx> {
     pub system_request: FunctionDeclaration<'ctx>,
 
     /// The corresponding LLVM runtime function.
-    pub far_call: FunctionDeclaration<'ctx>,
+    //pub far_call: FunctionDeclaration<'ctx>,
     /// The corresponding LLVM runtime function.
     pub far_call_byref: FunctionDeclaration<'ctx>,
 
@@ -572,13 +572,13 @@ impl<'ctx> LLVMRuntime<'ctx> {
             )
             .as_basic_type_enum();
 
-        let far_call = Self::declare(
-            module,
-            Self::FUNCTION_FARCALL,
-            external_call_result_type.fn_type(external_call_arguments.as_slice(), false),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, far_call, optimizer);
+        //let far_call = Self::declare(
+        //    module,
+        //    Self::FUNCTION_FARCALL,
+        //    external_call_result_type.fn_type(external_call_arguments.as_slice(), false),
+        //    Some(inkwell::module::Linkage::External),
+        //);
+        //Function::set_default_attributes(llvm, far_call, optimizer);
         let static_call = Self::declare(
             module,
             Self::FUNCTION_STATICCALL,
@@ -688,7 +688,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
 
             system_request,
 
-            far_call,
+            //far_call,
             static_call,
             delegate_call,
             mimic_call,
@@ -724,12 +724,14 @@ impl<'ctx> LLVMRuntime<'ctx> {
         function: FunctionDeclaration<'ctx>,
         is_byref: bool,
     ) -> anyhow::Result<FunctionDeclaration<'ctx>> {
-        let modified = if function == self.far_call {
+        let modified = if
+        /*function == self.far_call {
             match is_byref {
                 false => self.far_call,
                 true => self.far_call_byref,
             }
-        } else if function == self.static_call {
+        } else if */
+        function == self.static_call {
             match is_byref {
                 false => self.static_call,
                 true => self.static_call_byref,

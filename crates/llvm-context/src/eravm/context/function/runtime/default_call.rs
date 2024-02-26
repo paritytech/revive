@@ -77,7 +77,7 @@ impl DefaultCall {
         D: Dependency + Clone,
     {
         match self.inner_name.as_str() {
-            name if name == LLVMRuntime::FUNCTION_FARCALL => context.llvm_runtime().far_call,
+            //name if name == LLVMRuntime::FUNCTION_FARCALL => context.llvm_runtime().far_call,
             name if name == LLVMRuntime::FUNCTION_STATICCALL => context.llvm_runtime().static_call,
             name if name == LLVMRuntime::FUNCTION_DELEGATECALL => {
                 context.llvm_runtime().delegate_call

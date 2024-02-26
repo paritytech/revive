@@ -119,6 +119,45 @@ where
     /// The loop stack default capacity.
     const LOOP_STACK_INITIAL_CAPACITY: usize = 16;
 
+    /// Link in the PolkaVM guest module, containing imported and exported functions,
+    /// and marking them as external (they need to be relocatable as too).
+    /// Also, PolkaVM wants a PIE; we set this flag on the module here.
+    fn link_polkavm_guest_module(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module
+            .link_in_module(pallet_contracts_pvm_llapi::module(llvm, "polkavm_guest").unwrap())
+            .expect("the PolkaVM guest API module should be linkable");
+
+        let call_function = module.get_function("call").unwrap();
+        assert!(call_function.get_first_basic_block().is_none());
+
+        let deploy_function = module.get_function("deploy").unwrap();
+        assert!(deploy_function.get_first_basic_block().is_none());
+
+        // TODO: Factor out a list and forbid these function names in the frontend
+        // Also should be prefixed by double underscores
+        for name in ["seal_return", "input", "set_storage", "get_storage"] {
+            module
+                .get_function(name)
+                .expect("should be declared")
+                .set_linkage(inkwell::module::Linkage::External);
+        }
+    }
+
+    /// PolkaVM wants PIE code; we set this flag on the module here.
+    fn set_module_flags(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module.add_basic_value_flag(
+            "PIE Level",
+            inkwell::module::FlagBehavior::Override,
+            llvm.i32_type().const_int(2, false),
+        );
+    }
+
     ///
     /// Initializes a new LLVM context.
     ///
@@ -133,15 +172,9 @@ where
         let builder = llvm.create_builder();
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
-        module
-            .link_in_module(pallet_contracts_pvm_llapi::module(llvm, "polkavm_guest").unwrap())
-            .expect("the PolkaVM guest API module should be linkable");
 
-        let call_function = module.get_function("call").unwrap();
-        assert!(call_function.get_first_basic_block().is_none());
-
-        let deploy_function = module.get_function("deploy").unwrap();
-        assert!(deploy_function.get_first_basic_block().is_none());
+        Self::link_polkavm_guest_module(llvm, &module);
+        Self::set_module_flags(llvm, &module);
 
         Self {
             llvm,

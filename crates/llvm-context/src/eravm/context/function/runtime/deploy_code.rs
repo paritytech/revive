@@ -57,7 +57,7 @@ where
             Runtime::FUNCTION_DEPLOY_CODE,
             function_type,
             0,
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
         )?;
 
         self.inner.declare(context)

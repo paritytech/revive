@@ -1049,6 +1049,8 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
+                todo!()
+                /*
                 era_compiler_llvm_context::eravm_evm_call::default(
                     context,
                     context.llvm_runtime().far_call,
@@ -1062,6 +1064,7 @@ where
                     vec![],
                 )
                 .map(Some)
+                */
             }
             InstructionName::STATICCALL => {
                 let mut arguments = self.pop_arguments_llvm(context);

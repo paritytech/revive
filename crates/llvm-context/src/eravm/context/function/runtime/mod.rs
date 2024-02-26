@@ -81,7 +81,7 @@ where
     D: Dependency + Clone,
 {
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        DefaultCall::new(context.llvm_runtime().far_call).declare(context)?;
+        //DefaultCall::new(context.llvm_runtime().far_call).declare(context)?;
         DefaultCall::new(context.llvm_runtime().static_call).declare(context)?;
         DefaultCall::new(context.llvm_runtime().delegate_call).declare(context)?;
         DeployerCall::new(self.address_space).declare(context)?;
@@ -90,7 +90,7 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        DefaultCall::new(context.llvm_runtime().far_call).into_llvm(context)?;
+        //DefaultCall::new(context.llvm_runtime().far_call).into_llvm(context)?;
         DefaultCall::new(context.llvm_runtime().static_call).into_llvm(context)?;
         DefaultCall::new(context.llvm_runtime().delegate_call).into_llvm(context)?;
         DeployerCall::new(self.address_space).into_llvm(context)?;

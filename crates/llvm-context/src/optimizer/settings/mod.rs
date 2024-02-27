@@ -16,12 +16,10 @@ use self::size_level::SizeLevel;
 ///
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]
 pub struct Settings {
-    #[serde(skip)]
     /// The middle-end optimization level.
     pub level_middle_end: inkwell::OptimizationLevel,
     /// The middle-end size optimization level.
     pub level_middle_end_size: SizeLevel,
-    #[serde(skip)]
     /// The back-end optimization level.
     pub level_back_end: inkwell::OptimizationLevel,
 

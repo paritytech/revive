@@ -37,7 +37,12 @@ pub fn build_assembly_text(
         debug_config.dump_assembly(contract_path, assembly_text)?;
     }
 
-    todo!("compile bitcode");
+    Ok(Build::new(
+        assembly_text.to_owned(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    ))
     /*
     let mut assembly =
         zkevm_assembly::Assembly::from_string(assembly_text.to_owned(), metadata_hash).map_err(

@@ -28,6 +28,6 @@ inkwell = { workspace = true }
 zkevm_opcode_defs = { git = "https://github.com/matter-labs/era-zkevm_opcode_defs", branch = "v1.4.1" }
 era-compiler-common = { git = "https://github.com/matter-labs/era-compiler-common", branch = "main" }
 
-pallet-contracts-pvm-llapi = { git = "https://github.com/xermicus/pallet-contracts-pvm-llapi" }
+pallet-contracts-pvm-llapi = { path = "../pallet-contracts-pvm-llapi" }
 revive-linker = { path = "../linker" }
 revive-builtins = { path = "../builtins" }

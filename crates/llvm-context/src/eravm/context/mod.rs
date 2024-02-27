@@ -121,7 +121,6 @@ where
 
     /// Link in the PolkaVM guest module, containing imported and exported functions,
     /// and marking them as external (they need to be relocatable as too).
-    /// Also, PolkaVM wants a PIE; we set this flag on the module here.
     fn link_polkavm_guest_module(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -169,16 +168,15 @@ where
         include_metadata_hash: bool,
         debug_config: Option<DebugConfig>,
     ) -> Self {
-        let builder = llvm.create_builder();
-        let intrinsics = Intrinsics::new(llvm, &module);
-        let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
-
         Self::link_polkavm_guest_module(llvm, &module);
         Self::set_module_flags(llvm, &module);
 
+        let intrinsics = Intrinsics::new(llvm, &module);
+        let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
+
         Self {
             llvm,
-            builder,
+            builder: llvm.create_builder(),
             optimizer,
             module,
             code_type: None,

@@ -2,3 +2,5 @@
 *.dot
 .vscode/
 .DS_Store
+/*.sol
+/*.yul

@@ -9,3 +9,5 @@ edition = "2021"
 primitive-types = { workspace = true, features = ["codec"] }
 polkavm = { workspace = true }
 parity-scale-codec = { workspace = true }
+revive-solidity = { path = "../solidity" }
+era-compiler-llvm-context = { path = "../llvm-context" }

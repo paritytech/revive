@@ -1044,9 +1044,11 @@ version = "0.1.0"
 name = "revive-integration"
 version = "0.1.0"
 dependencies = [
+ "era-compiler-llvm-context",
  "parity-scale-codec",
  "polkavm",
  "primitive-types",
+ "revive-solidity",
 ]
 
 [[package]]

@@ -42,7 +42,7 @@ pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler as SolcCompiler;
 pub use self::warning::Warning;
 
-mod tests;
+pub mod tests;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;

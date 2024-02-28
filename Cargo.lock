@@ -807,10 +807,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "polkavm"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42e765e91f5dc522be41639e803c980cbea2d3585c8698cba66d44134bf9a773"
+dependencies = [
+ "libc",
+ "log",
+ "polkavm-assembler",
+ "polkavm-common",
+ "polkavm-linux-raw",
+]
+
+[[package]]
+name = "polkavm-assembler"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bd423e4d78b916afde0e088863525e6ff8edf7804d0809d47622ac89035ec66"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "polkavm-common"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92c99f7eee94e7be43ba37eef65ad0ee8cbaf89b7c00001c3f6d2be985cb1817"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "polkavm-linker"
@@ -826,6 +851,12 @@ dependencies = [
  "regalloc2",
  "rustc-demangle",
 ]
+
+[[package]]
+name = "polkavm-linux-raw"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fafe52ef2fa9a0bbf98f90648996f84099208da64715ce7080229987e9981814"
 
 [[package]]
 name = "ppv-lite86"
@@ -1008,6 +1039,15 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 [[package]]
 name = "revive-builtins"
 version = "0.1.0"
+
+[[package]]
+name = "revive-integration"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "polkavm",
+ "primitive-types",
+]
 
 [[package]]
 name = "revive-linker"

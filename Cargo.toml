@@ -30,3 +30,6 @@ structopt = { version = "0.3", default-features = false }
 polkavm-common = "0.8"
 polkavm-linker = "0.8"
 rand = "0.8"
+primitive-types = { version = "0.12", features = ["codec"] }
+polkavm = "0.8"
+parity-scale-codec = "3.6"

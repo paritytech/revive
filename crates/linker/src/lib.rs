@@ -1,6 +1,5 @@
 use std::{ffi::CString, fs};
 
-use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module};
 use lld_sys::LLDELFLink;
 use revive_builtins::COMPILER_RT;
 

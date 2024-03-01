@@ -42,4 +42,6 @@ fn main() {
     fs::write(src_path, src).expect("should be able to write in $OUT_DIR");
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/polkavm_guest.c");
+    println!("cargo:rerun-if-changed=src/polkavm_guest.h");
 }

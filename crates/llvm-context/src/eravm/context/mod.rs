@@ -673,7 +673,8 @@ where
                     .expect("Always exists")
                     .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
-                Ok(value)
+
+                Ok(self.build_byte_swap(value))
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
@@ -719,13 +720,14 @@ where
                     .left()
                     .expect("should not be a void function type");
 
-                self.build_load(storage_value_pointer, "storage_value_load")
+                let value = self.build_load(storage_value_pointer, "storage_value_load")?;
+                Ok(self.build_byte_swap(value))
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
-            AddressSpace::Generic => self.build_load(
+            AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
                 pointer.address_space_cast(self, AddressSpace::Stack, &format!("{}_cast", name))?,
                 name,
-            ),
+            )?)),
             AddressSpace::Stack => {
                 let value = self
                     .builder()
@@ -779,6 +781,8 @@ where
                         )
                         .unwrap()
                 };
+                let value = self.build_byte_swap(value.as_basic_value_enum());
+
                 let instruction = self.builder.build_store(pointer_value, value).unwrap();
                 instruction
                     .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
@@ -803,7 +807,9 @@ where
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
 
-                let storage_value_value = value.as_basic_value_enum().into_int_value();
+                let storage_value_value = self
+                    .build_byte_swap(value.as_basic_value_enum())
+                    .into_int_value();
                 let storage_value_pointer =
                     self.build_alloca(storage_value_value.get_type(), "storage_value");
                 self.builder()
@@ -832,7 +838,7 @@ where
             AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
             AddressSpace::Generic => self.build_store(
                 pointer.address_space_cast(self, AddressSpace::Stack, "cast")?,
-                value,
+                self.build_byte_swap(value.as_basic_value_enum()),
             )?,
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
@@ -854,6 +860,15 @@ where
         // instruction
         //     .set_alignment(alignment as u32)
         //     .expect("Alignment is valid");
+    }
+
+    /// Swap the endianness of an intvalue
+    fn build_byte_swap(
+        &self,
+        value: inkwell::values::BasicValueEnum<'ctx>,
+    ) -> inkwell::values::BasicValueEnum<'ctx> {
+        self.build_call(self.intrinsics().byte_swap, &[value], "call_byte_swap")
+            .expect("byte_swap should return a value")
     }
 
     ///

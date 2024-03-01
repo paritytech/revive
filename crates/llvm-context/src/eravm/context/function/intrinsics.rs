@@ -20,6 +20,8 @@ pub struct Intrinsics<'ctx> {
     pub memory_copy: FunctionDeclaration<'ctx>,
     /// The memory copy from a generic page.
     pub memory_copy_from_generic: FunctionDeclaration<'ctx>,
+    /// Performs endianness swaps on i256 values
+    pub byte_swap: FunctionDeclaration<'ctx>,
 }
 
 impl<'ctx> Intrinsics<'ctx> {
@@ -31,6 +33,9 @@ impl<'ctx> Intrinsics<'ctx> {
 
     /// The corresponding intrinsic function name.
     pub const FUNCTION_MEMORY_COPY_FROM_GENERIC: &'static str = "llvm.memcpy.p3.p1.i256";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_BYTE_SWAP: &'static str = "llvm.bswap.i256";
 
     ///
     /// A shortcut constructor.
@@ -81,11 +86,18 @@ impl<'ctx> Intrinsics<'ctx> {
                 false,
             ),
         );
+        let byte_swap = Self::declare(
+            llvm,
+            module,
+            Self::FUNCTION_BYTE_SWAP,
+            field_type.fn_type(&[field_type.as_basic_type_enum().into()], false),
+        );
 
         Self {
             trap,
             memory_copy,
             memory_copy_from_generic,
+            byte_swap,
         }
     }
 
@@ -135,6 +147,7 @@ impl<'ctx> Intrinsics<'ctx> {
                     .as_basic_type_enum(),
                 field_type.as_basic_type_enum(),
             ],
+            name if name == Self::FUNCTION_BYTE_SWAP => vec![field_type.as_basic_type_enum()],
             _ => vec![],
         }
     }

@@ -14,6 +14,8 @@ mod tests {
         let mut sources = BTreeMap::new();
         sources.insert("flipper.sol".to_owned(), source.to_owned());
 
+        // TODO this is apparently not possible, so need to
+        // factor out the helpers into this crate
         revive_solidity::tests::build_solidity(
             sources,
             BTreeMap::new(),

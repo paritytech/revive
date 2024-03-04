@@ -138,10 +138,9 @@ where
         // TODO: Factor out a list and forbid these function names in the frontend
         // Also should be prefixed by double underscores
         for name in ["seal_return", "input", "set_storage", "get_storage"] {
-            module
-                .get_function(name)
-                .expect("should be declared")
-                .set_linkage(inkwell::module::Linkage::External);
+            let runtime_api_function = module.get_function(name).expect("should be declared");
+            dbg!(runtime_api_function.get_section());
+            runtime_api_function.set_linkage(inkwell::module::Linkage::External);
         }
     }
 

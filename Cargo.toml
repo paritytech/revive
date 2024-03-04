@@ -27,9 +27,9 @@ which = "5.0"
 path-slash = "0.2"
 rayon = "1.8"
 structopt = { version = "0.3", default-features = false }
-polkavm-common = "0.9"
-polkavm-linker = "0.9"
 rand = "0.8"
 primitive-types = { version = "0.12", features = ["codec"] }
-polkavm = "0.8"
+polkavm-common = { git = "https://github.com/koute/polkavm.git" } 
+polkavm-linker = { git = "https://github.com/koute/polkavm.git" } 
+polkavm = { git = "https://github.com/koute/polkavm.git" } 
 parity-scale-codec = "3.6"

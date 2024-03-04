@@ -815,7 +815,7 @@ dependencies = [
  "libc",
  "log",
  "polkavm-assembler",
- "polkavm-common",
+ "polkavm-common 0.8.0",
  "polkavm-linux-raw",
 ]
 
@@ -838,16 +838,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "polkavm-linker"
-version = "0.8.2"
+name = "polkavm-common"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdec1451cb18261d5d01de82acc15305e417fb59588cdcb3127d3dcc9672b925"
+checksum = "1d9428a5cfcc85c5d7b9fc4b6a18c4b802d0173d768182a51cc7751640f08b92"
+
+[[package]]
+name = "polkavm-linker"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b952ae5085ed6011a989a257a88505301bae0153fc389528134038c2e346b93d"
 dependencies = [
  "gimli",
  "hashbrown 0.14.3",
  "log",
  "object",
- "polkavm-common",
+ "polkavm-common 0.9.0",
  "regalloc2",
  "rustc-demangle",
 ]
@@ -1058,7 +1064,7 @@ dependencies = [
  "inkwell",
  "libc",
  "lld-sys",
- "polkavm-common",
+ "polkavm-common 0.9.0",
  "polkavm-linker",
  "revive-builtins",
  "tempfile",

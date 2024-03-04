@@ -233,7 +233,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context
-            .build_invoke(entry, &[context.bool_const(true).into()], "entry_deploy")
+            .build_call(entry, &[context.bool_const(true).into()], "entry_deploy")
             .is_none());
 
         context.set_basic_block(context.current_function().borrow().return_block);
@@ -243,7 +243,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context
-            .build_invoke(entry, &[context.bool_const(false).into()], "entry_call")
+            .build_call(entry, &[context.bool_const(false).into()], "entry_call")
             .is_none());
 
         context.set_basic_block(context.current_function().borrow().return_block);

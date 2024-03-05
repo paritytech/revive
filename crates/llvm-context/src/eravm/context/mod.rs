@@ -130,9 +130,17 @@ where
             .expect("the PolkaVM guest API module should be linkable");
 
         let call_function = module.get_function("call").unwrap();
+        call_function.add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
+        );
         assert!(call_function.get_first_basic_block().is_none());
 
         let deploy_function = module.get_function("deploy").unwrap();
+        deploy_function.add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
+        );
         assert!(deploy_function.get_first_basic_block().is_none());
 
         // TODO: Factor out a list and forbid these function names in the frontend
@@ -719,8 +727,8 @@ where
                     .left()
                     .expect("should not be a void function type");
 
-                let value = self.build_load(storage_value_pointer, "storage_value_load")?;
-                Ok(self.build_byte_swap(value))
+                self.build_load(storage_value_pointer, "storage_value_load")
+                    .map(|value| self.build_byte_swap(value))
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
             AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
@@ -862,7 +870,7 @@ where
     }
 
     /// Swap the endianness of an intvalue
-    fn build_byte_swap(
+    pub fn build_byte_swap(
         &self,
         value: inkwell::values::BasicValueEnum<'ctx>,
     ) -> inkwell::values::BasicValueEnum<'ctx> {
@@ -1196,8 +1204,7 @@ where
             &[flags.into(), offset.into(), length.into()],
             "seal_return",
         )?;
-
-        self.build_unconditional_branch(self.current_function().borrow().return_block());
+        self.build_unreachable();
 
         Ok(())
     }

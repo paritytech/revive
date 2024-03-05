@@ -31,7 +31,9 @@ where
         context.field_type().as_basic_type_enum(),
         "calldata_pointer_with_offset",
     );
-    context.build_load(calldata_pointer, "calldata_value")
+    context
+        .build_load(calldata_pointer, "calldata_value")
+        .map(|value| context.build_byte_swap(value))
 }
 
 ///

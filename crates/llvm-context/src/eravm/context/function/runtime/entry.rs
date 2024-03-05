@@ -228,6 +228,12 @@ where
             .expect("the entry function should already be declared")
             .borrow()
             .declaration;
+        crate::EraVMFunction::set_attributes(
+            context.llvm(),
+            entry,
+            vec![crate::EraVMAttribute::NoReturn],
+            true,
+        );
 
         context.set_current_function("deploy")?;
         context.set_basic_block(context.current_function().borrow().entry_block());
@@ -237,7 +243,7 @@ where
             .is_none());
 
         context.set_basic_block(context.current_function().borrow().return_block);
-        context.build_return(None);
+        context.build_unreachable();
 
         context.set_current_function("call")?;
         context.set_basic_block(context.current_function().borrow().entry_block());
@@ -247,7 +253,7 @@ where
             .is_none());
 
         context.set_basic_block(context.current_function().borrow().return_block);
-        context.build_return(None);
+        context.build_unreachable();
 
         context.set_current_function(Runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
@@ -258,7 +264,7 @@ where
 
         context.build_unconditional_branch(context.current_function().borrow().return_block());
         context.set_basic_block(context.current_function().borrow().return_block());
-        context.build_return(None);
+        context.build_unreachable();
 
         Ok(())
     }

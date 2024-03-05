@@ -79,7 +79,7 @@ where
         }
 
         context.set_basic_block(context.current_function().borrow().return_block());
-        context.build_return(None);
+        context.build_unreachable();
 
         Ok(())
     }

@@ -29,9 +29,16 @@ mod tests {
     fn it_works() {
         let input = 0xcde4efa9u32.to_be_bytes().to_vec();
         let code = include_bytes!("/tmp/out.pvm");
+
         let (state, instance, export) =
+            crate::polkavm::prepare(code, input.clone(), polkavm::BackendKind::Interpreter);
+        let state = crate::polkavm::call(state, instance, export);
+        dbg!(&state);
+
+        let code = include_bytes!("/tmp/out.pvm");
+        let (_, instance, export) =
             crate::polkavm::prepare(code, input, polkavm::BackendKind::Interpreter);
         let state = crate::polkavm::call(state, instance, export);
-        dbg!(state);
+        dbg!(&state);
     }
 }

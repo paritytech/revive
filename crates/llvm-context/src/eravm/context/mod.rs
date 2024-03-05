@@ -664,7 +664,7 @@ where
                 let pointer_value = unsafe {
                     self.builder
                         .build_gep(
-                            heap_pointer.r#type,
+                            self.byte_type(),
                             heap_pointer.value.as_pointer_value(),
                             &[offset],
                             "heap_offset_via_gep",
@@ -684,11 +684,6 @@ where
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
-                let runtime_api = self
-                    .module()
-                    .get_function("get_storage")
-                    .expect("should be declared");
-
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
                     self.field_type(),
@@ -696,35 +691,51 @@ where
                 )?;
                 let storage_key_pointer =
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
-
-                let storage_value_pointer = self.build_alloca(self.field_type(), "storage_value");
-
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
                     self.integer_type(32),
                     "storage_key_pointer_casted",
                 )?;
+
+                let storage_value_pointer = self.build_alloca(self.field_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
                     self.integer_type(32),
                     "storage_value_pointer_casted",
                 )?;
 
+                let storage_value_length_pointer =
+                    self.build_alloca(self.integer_type(32), "out_len_ptr");
+                let storage_value_length_pointer_casted = self.builder().build_ptr_to_int(
+                    storage_value_length_pointer.value,
+                    self.integer_type(32),
+                    "storage_value_length_pointer_cast",
+                )?;
+
+                self.builder()
+                    .build_store(storage_key_pointer.value, storage_key_value)?;
+                self.builder().build_store(
+                    storage_value_length_pointer.value,
+                    self.integer_const(32, era_compiler_common::BIT_LENGTH_FIELD as u64),
+                )?;
+
+                let runtime_api = self
+                    .module()
+                    .get_function("get_storage")
+                    .expect("should be declared");
                 let arguments = &[
                     storage_key_pointer_casted.into(),
                     self.integer_const(32, 32).into(),
                     storage_value_pointer_casted.into(),
-                    self.integer_const(32, 32).into(),
+                    storage_value_length_pointer_casted.into(),
                 ];
-                // TODO check return value
                 let _ = self
                     .builder()
                     .build_call(runtime_api, arguments, "call_seal_get_storage")?
                     .try_as_basic_value()
                     .left()
                     .expect("should not be a void function type");
+                // TODO check return value
 
                 self.build_load(storage_value_pointer, "storage_value_load")
                     .map(|value| self.build_byte_swap(value))
@@ -737,8 +748,7 @@ where
             AddressSpace::Stack => {
                 let value = self
                     .builder()
-                    .build_load(pointer.r#type, pointer.value, name)
-                    .unwrap();
+                    .build_load(pointer.r#type, pointer.value, name)?;
 
                 let alignment = if AddressSpace::Stack == pointer.address_space {
                     era_compiler_common::BYTE_LENGTH_FIELD
@@ -780,7 +790,7 @@ where
                 let pointer_value = unsafe {
                     self.builder()
                         .build_gep(
-                            heap_pointer.r#type,
+                            self.byte_type(),
                             heap_pointer.value.as_pointer_value(),
                             &[offset],
                             "heap_offset_via_gep",
@@ -798,11 +808,6 @@ where
             AddressSpace::Storage => {
                 // TODO: Tests, factor out into dedicated functions
 
-                let runtime_api = self
-                    .module()
-                    .get_function("set_storage")
-                    .expect("should be declared");
-
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
                     self.field_type(),
@@ -810,16 +815,12 @@ where
                 )?;
                 let storage_key_pointer =
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
 
                 let storage_value_value = self
                     .build_byte_swap(value.as_basic_value_enum())
                     .into_int_value();
                 let storage_value_pointer =
                     self.build_alloca(storage_value_value.get_type(), "storage_value");
-                self.builder()
-                    .build_store(storage_value_pointer.value, storage_value_value)?;
 
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
@@ -832,6 +833,15 @@ where
                     "storage_value_pointer_casted",
                 )?;
 
+                self.builder()
+                    .build_store(storage_key_pointer.value, storage_key_value)?;
+                self.builder()
+                    .build_store(storage_value_pointer.value, storage_value_value)?;
+
+                let runtime_api = self
+                    .module()
+                    .get_function("set_storage")
+                    .expect("should be declared");
                 let arguments = &[
                     storage_key_pointer_casted.into(),
                     self.integer_const(32, 32).into(),

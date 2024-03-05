@@ -37,16 +37,17 @@ impl Entry {
         let calldata_type = context.array_type(context.byte_type(), 1024);
         context.set_global(
             crate::eravm::GLOBAL_CALLDATA_POINTER,
-            calldata_type.ptr_type(AddressSpace::Generic.into()),
+            calldata_type,
             AddressSpace::Stack,
             calldata_type.get_undef(),
         );
 
+        let heap_memory_type = context.array_type(context.byte_type(), 1024 * 1024);
         context.set_global(
             crate::eravm::GLOBAL_HEAP_MEMORY_POINTER,
-            context.field_type(),
+            heap_memory_type,
             AddressSpace::Stack,
-            context.field_const(0),
+            heap_memory_type.get_undef(),
         );
 
         context.set_global(
@@ -81,17 +82,12 @@ impl Entry {
         );
     }
 
-    /// Load the calldata via seal `input` and initialize the calldata, calldata end
+    /// Load the calldata via seal `input` and initialize the calldata end
     /// and calldata size globals.
     pub fn load_calldata<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
-        // Call the input runtime API
-        let input_function = context
-            .module()
-            .get_function("input")
-            .expect("should be declared");
         let input_pointer = context
             .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
             .value
@@ -99,32 +95,29 @@ impl Entry {
         let input_pointer_casted = context.builder.build_ptr_to_int(
             input_pointer,
             context.integer_type(32),
-            "arg_pointer_casted",
+            "input_pointer_casted",
         )?;
-        let input_length_pointer = context.build_alloca(context.integer_type(32), "len_ptr");
-        let length_pointer_casted = context.builder.build_ptr_to_int(
-            input_length_pointer.value,
-            context.integer_type(32),
-            "arg_pointer_casted",
-        )?;
-        let arguments = &[input_pointer_casted.into(), length_pointer_casted.into()];
-        context
-            .builder()
-            .build_call(input_function, arguments, "call_seal_input")?;
 
-        // Store calldata pointer
-        let input_pointer = Pointer::new(
-            input_pointer.get_type(),
-            AddressSpace::Generic,
-            input_pointer,
-        );
-        context.write_abi_pointer(input_pointer, crate::eravm::GLOBAL_CALLDATA_POINTER);
+        let length_pointer = context.build_alloca(context.integer_type(32), "len_ptr");
+        let length_pointer_casted = context.builder.build_ptr_to_int(
+            length_pointer.value,
+            context.integer_type(32),
+            "length_pointer_casted",
+        )?;
+
+        context.build_store(length_pointer, context.integer_const(32, 1024))?;
+        context.builder().build_call(
+            context.module().get_function("input").expect("is declared"),
+            &[input_pointer_casted.into(), length_pointer_casted.into()],
+            "call_seal_input",
+        )?;
 
         // Store the calldata size
+        let calldata_size = context
+            .build_load(length_pointer, "input_size")?
+            .into_int_value();
         let calldata_size_casted = context.builder().build_int_z_extend(
-            context
-                .build_load(input_length_pointer, "input_size")?
-                .into_int_value(),
+            calldata_size,
             context.field_type(),
             "zext_input_len",
         )?;
@@ -136,6 +129,11 @@ impl Entry {
         );
 
         // Store calldata end pointer
+        let input_pointer = Pointer::new(
+            input_pointer.get_type(),
+            AddressSpace::Generic,
+            input_pointer,
+        );
         let calldata_end_pointer = context.build_gep(
             input_pointer,
             &[calldata_size_casted],

@@ -18,21 +18,18 @@ pub fn load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let calldata_pointer_global = context.get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?;
-    let calldata_pointer_pointer = calldata_pointer_global.into();
-    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer")?;
-    let calldata_pointer = context.build_gep(
-        Pointer::new(
-            context.byte_type(),
-            calldata_pointer_pointer.address_space,
-            calldata_pointer.into_pointer_value(),
-        ),
+    let calldata_pointer = context
+        .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
+        .value
+        .as_pointer_value();
+    let offset = context.build_gep(
+        Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
         &[offset],
         context.field_type().as_basic_type_enum(),
         "calldata_pointer_with_offset",
     );
     context
-        .build_load(calldata_pointer, "calldata_value")
+        .build_load(offset, "calldata_value")
         .map(|value| context.build_byte_swap(value))
 }
 
@@ -62,6 +59,7 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    // TODO: Untested
     let destination = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
@@ -69,19 +67,15 @@ where
         destination_offset,
         "calldata_copy_destination_pointer",
     );
-
-    let calldata_pointer_global = context.get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?;
-    let calldata_pointer_pointer = calldata_pointer_global.into();
-    let calldata_pointer = context.build_load(calldata_pointer_pointer, "calldata_pointer")?;
+    let calldata_pointer = context
+        .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
+        .value
+        .as_pointer_value();
     let source = context.build_gep(
-        Pointer::new(
-            context.byte_type(),
-            calldata_pointer_pointer.address_space,
-            calldata_pointer.into_pointer_value(),
-        ),
+        Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
         &[source_offset],
-        context.byte_type().as_basic_type_enum(),
-        "calldata_source_pointer",
+        context.field_type().as_basic_type_enum(),
+        "calldata_pointer_with_offset",
     );
 
     context.build_memcpy(
@@ -90,7 +84,5 @@ where
         source,
         size,
         "calldata_copy_memcpy_from_child",
-    )?;
-
-    Ok(())
+    )
 }

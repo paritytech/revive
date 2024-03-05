@@ -147,7 +147,6 @@ where
         // Also should be prefixed by double underscores
         for name in ["seal_return", "input", "set_storage", "get_storage"] {
             let runtime_api_function = module.get_function(name).expect("should be declared");
-            dbg!(runtime_api_function.get_section());
             runtime_api_function.set_linkage(inkwell::module::Linkage::External);
         }
     }
@@ -1196,12 +1195,27 @@ where
         //    zkevm_opcode_defs::RetForwardPageType::UseHeap
         //};
 
-        let offset = self.safe_truncate_int_to_i32(offset)?;
-        let length = self.safe_truncate_int_to_i32(length)?;
+        let heap_pointer = self.get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?;
+        let offset_truncated = self.safe_truncate_int_to_i32(offset)?;
+        let offset_into_heap = unsafe {
+            self.builder().build_gep(
+                heap_pointer.r#type,
+                heap_pointer.value.as_pointer_value(),
+                &[offset_truncated],
+                "heap_offset_via_gep",
+            )
+        }?;
+
+        let length_pointer = self.safe_truncate_int_to_i32(length)?;
+        let offset_pointer = self.builder().build_ptr_to_int(
+            offset_into_heap,
+            self.integer_type(32),
+            "return_data_ptr_to_int",
+        )?;
 
         self.builder().build_call(
             self.module().get_function("seal_return").unwrap(),
-            &[flags.into(), offset.into(), length.into()],
+            &[flags.into(), offset_pointer.into(), length_pointer.into()],
             "seal_return",
         )?;
         self.build_unreachable();

@@ -1,5 +1,17 @@
+#include <stddef.h>
 #include <stdint.h>
+
 #include "polkavm_guest.h"
+
+
+// Missing builtins
+
+void * memset(void *b, int c, size_t len) {
+    uint8_t *dest = b;
+    while (len-- > 0) *dest++ = c;
+    return b;
+}
+
 
 // Exports
 

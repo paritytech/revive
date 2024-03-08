@@ -37,12 +37,6 @@ pub fn build_assembly_text(
         debug_config.dump_assembly(contract_path, assembly_text)?;
     }
 
-    Ok(Build::new(
-        assembly_text.to_owned(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    ))
     /*
     let mut assembly =
         zkevm_assembly::Assembly::from_string(assembly_text.to_owned(), metadata_hash).map_err(
@@ -87,14 +81,14 @@ pub fn build_assembly_text(
     })?;
 
     let bytecode = bytecode_words.into_iter().flatten().collect();
+    */
 
     Ok(Build::new(
         assembly_text.to_owned(),
-        metadata_hash,
-        bytecode,
-        bytecode_hash,
+        Default::default(),
+        hex::decode(assembly_text).unwrap(),
+        Default::default(),
     ))
-    */
 }
 
 ///

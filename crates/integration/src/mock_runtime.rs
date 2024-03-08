@@ -12,9 +12,32 @@ use primitive_types::U256;
 #[derive(Default, Clone, Debug)]
 pub struct State {
     pub input: Vec<u8>,
-    pub output: (u32, Vec<u8>),
+    pub output: CallOutput,
     pub value: u128,
     pub storage: HashMap<U256, U256>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct CallOutput {
+    pub flags: u32,
+    pub data: Vec<u8>,
+}
+
+impl State {
+    pub fn new(input: Vec<u8>) -> Self {
+        Self {
+            input,
+            ..Default::default()
+        }
+    }
+
+    pub fn reset_output(&mut self) {
+        self.output = Default::default();
+    }
+
+    pub fn assert_storage_key(&self, at: U256, expect: U256) {
+        assert_eq!(self.storage[&at], expect);
+    }
 }
 
 fn link_host_functions(engine: &Engine) -> Linker<State> {
@@ -42,8 +65,8 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
             |caller: Caller<State>, flags: u32, data_ptr: u32, data_len: u32| -> Result<(), Trap> {
                 let (caller, state) = caller.split();
 
-                state.output.0 = flags;
-                state.output.1 = caller.read_memory_into_vec(data_ptr, data_len)?;
+                state.output.flags = flags;
+                state.output.data = caller.read_memory_into_vec(data_ptr, data_len)?;
 
                 Err(Default::default())
             },
@@ -137,19 +160,10 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
 }
 
-pub fn prepare(
-    code: &[u8],
-    input: Vec<u8>,
-    backend: BackendKind,
-) -> (State, InstancePre<State>, ExportIndex) {
+pub fn prepare(code: &[u8]) -> (InstancePre<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
-    let mut config = Config::new();
-    config.set_allow_insecure(true);
-    config.set_backend(Some(backend));
-    config.set_trace_execution(true);
-
-    let engine = Engine::new(&config).unwrap();
+    let engine = Engine::new(&Config::new()).unwrap();
 
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
@@ -160,15 +174,12 @@ pub fn prepare(
         .instantiate_pre(&module)
         .unwrap();
 
-    let state = State {
-        input,
-        ..Default::default()
-    };
-
-    (state, func, export)
+    (func, export)
 }
 
-pub fn call(mut state: State, on: InstancePre<State>, export: ExportIndex) -> State {
+pub fn call(mut state: State, on: &InstancePre<State>, export: ExportIndex) -> State {
+    state.reset_output();
+
     let mut state_args = polkavm::StateArgs::default();
     state_args.set_gas(polkavm::Gas::MAX);
 

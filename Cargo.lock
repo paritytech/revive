@@ -1040,6 +1040,7 @@ name = "revive-integration"
 version = "0.1.0"
 dependencies = [
  "era-compiler-llvm-context",
+ "hex",
  "parity-scale-codec",
  "polkavm",
  "primitive-types",

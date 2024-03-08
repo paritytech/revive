@@ -42,6 +42,7 @@ pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler as SolcCompiler;
 pub use self::warning::Warning;
 
+pub mod test_utils;
 pub mod tests;
 
 use std::collections::BTreeSet;

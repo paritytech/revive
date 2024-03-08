@@ -260,8 +260,7 @@ where
                 )
             })?;
 
-        std::fs::write("/tmp/out.pvm", &buffer).unwrap();
-        let assembly_text = String::from_utf8_lossy(buffer.as_slice()).to_string();
+        let assembly_text = hex::encode(buffer.as_slice());
 
         let build = match crate::eravm::build_assembly_text(
             contract_path,

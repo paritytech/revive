@@ -119,6 +119,16 @@ where
     /// The loop stack default capacity.
     const LOOP_STACK_INITIAL_CAPACITY: usize = 16;
 
+    /// Link in the stdlib module.
+    fn link_stdlib_module(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module
+            .link_in_module(revive_stdlib::module(llvm, "revive_stdlib").unwrap())
+            .expect("the stdlib module should be linkable");
+    }
+
     /// Link in the PolkaVM guest module, containing imported and exported functions,
     /// and marking them as external (they need to be relocatable as too).
     fn link_polkavm_guest_module(
@@ -143,8 +153,8 @@ where
         );
         assert!(deploy_function.get_first_basic_block().is_none());
 
-        // TODO: Factor out a list and forbid these function names in the frontend
-        // Also should be prefixed by double underscores
+        // TODO: Factor out a list
+        // Also should be prefixed with double underscores
         for name in ["seal_return", "input", "set_storage", "get_storage"] {
             let runtime_api_function = module.get_function(name).expect("should be declared");
             runtime_api_function.set_linkage(inkwell::module::Linkage::External);
@@ -174,6 +184,7 @@ where
         include_metadata_hash: bool,
         debug_config: Option<DebugConfig>,
     ) -> Self {
+        Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_guest_module(llvm, &module);
         Self::set_module_flags(llvm, &module);
 

@@ -2,12 +2,12 @@
 //! TODO: Switch to drink! once RISCV is ready in polkadot-sdk
 use std::collections::HashMap;
 
+use alloy_primitives::U256;
 use parity_scale_codec::Encode;
 use polkavm::{
-    BackendKind, Caller, Config, Engine, ExportIndex, GasMeteringKind, InstancePre, Linker, Module,
+    Caller, Config, Engine, ExportIndex, GasMeteringKind, InstancePre, Linker, Module,
     ModuleConfig, ProgramBlob, Trap,
 };
-use primitive_types::U256;
 
 #[derive(Default, Clone, Debug)]
 pub struct State {
@@ -17,10 +17,19 @@ pub struct State {
     pub storage: HashMap<U256, U256>,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct CallOutput {
     pub flags: u32,
     pub data: Vec<u8>,
+}
+
+impl Default for CallOutput {
+    fn default() -> Self {
+        Self {
+            flags: u32::MAX,
+            data: Vec::new(),
+        }
+    }
 }
 
 impl State {
@@ -114,12 +123,15 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
              -> Result<u32, Trap> {
                 let (caller, state) = caller.split();
 
+                assert_eq!(key_len, 32, "storage key must be 32 bytes");
+                assert_eq!(value_len, 32, "storage value must be 32 bytes");
+
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let value = caller.read_memory_into_vec(value_ptr, value_len)?;
 
                 state.storage.insert(
-                    U256::from_big_endian(&key[..]),
-                    U256::from_big_endian(&value[..]),
+                    U256::from_be_bytes::<32>(key.try_into().unwrap()),
+                    U256::from_be_bytes::<32>(value.try_into().unwrap()),
                 );
 
                 Ok(0)
@@ -142,12 +154,11 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 let out_len = caller.read_u32(out_len_ptr)?;
                 assert!(out_len >= 32);
 
-                let mut value = vec![0u8; 32];
-
-                state
+                let value = state
                     .storage
-                    .get(&U256::from_big_endian(&key[..]))
-                    .map(|storage_value| storage_value.to_big_endian(&mut value));
+                    .get(&U256::from_be_bytes::<32>(key.try_into().unwrap()))
+                    .map(U256::to_be_bytes::<32>)
+                    .unwrap_or_default();
 
                 caller.write_memory(out_ptr, &value[..])?;
                 caller.write_memory(out_len_ptr, &32u32.to_le_bytes())?;
@@ -164,6 +175,10 @@ pub fn prepare(code: &[u8]) -> (InstancePre<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
     let engine = Engine::new(&Config::new()).unwrap();
+    //let mut config = Config::new();
+    //config.set_allow_insecure(true);
+    //config.set_trace_execution(true);
+    //let engine = Engine::new(&config).unwrap();
 
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));

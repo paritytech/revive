@@ -408,9 +408,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_default_attributes(llvm, exp, optimizer);
         Function::set_pure_function_attributes(llvm, exp);
 
-        let sign_extend = Self::declare(
-            module,
-            Self::FUNCTION_SIGNEXTEND,
+        let sign_extend = FunctionDeclaration::new(
             llvm.custom_width_int_type(era_compiler_common::BIT_LENGTH_FIELD as u32)
                 .fn_type(
                     vec![
@@ -422,7 +420,9 @@ impl<'ctx> LLVMRuntime<'ctx> {
                     .as_slice(),
                     false,
                 ),
-            Some(inkwell::module::Linkage::External),
+            module
+                .get_function(Self::FUNCTION_SIGNEXTEND)
+                .expect("should be declared in stdlib"),
         );
         Function::set_default_attributes(llvm, sign_extend, optimizer);
         Function::set_pure_function_attributes(llvm, sign_extend);

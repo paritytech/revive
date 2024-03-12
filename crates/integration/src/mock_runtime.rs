@@ -175,10 +175,6 @@ pub fn prepare(code: &[u8]) -> (InstancePre<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
     let engine = Engine::new(&Config::new()).unwrap();
-    //let mut config = Config::new();
-    //config.set_allow_insecure(true);
-    //config.set_trace_execution(true);
-    //let engine = Engine::new(&config).unwrap();
 
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));

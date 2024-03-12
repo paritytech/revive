@@ -270,7 +270,7 @@ where
                     error
                 )
             })?;
-
+        std::fs::write("/tmp/out.pvm", &buffer).unwrap();
         let assembly_text = hex::encode(buffer.as_slice());
 
         let build = match crate::eravm::build_assembly_text(
@@ -1219,7 +1219,7 @@ where
         let offset_truncated = self.safe_truncate_int_to_i32(offset)?;
         let offset_into_heap = unsafe {
             self.builder().build_gep(
-                heap_pointer.r#type,
+                self.byte_type(),
                 heap_pointer.value.as_pointer_value(),
                 &[offset_truncated],
                 "heap_offset_via_gep",

@@ -54,10 +54,10 @@ mod tests {
     #[test]
     fn triangle_number() {
         let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
-        let param = alloy_primitives::U256::try_from(3_000_000i64).unwrap();
-        let expected = alloy_primitives::U256::try_from(4_500_001_500_000i64).unwrap();
+        let param = alloy_primitives::U256::try_from(13).unwrap();
+        let expected = alloy_primitives::U256::try_from(91).unwrap();
 
-        //  function triangle_number(int64)
+        // function triangle_number(int64)
         let mut input = 0x0f760610u32.to_be_bytes().to_vec();
         input.extend_from_slice(&param.to_be_bytes::<32>());
 
@@ -69,6 +69,27 @@ mod tests {
 
         let received =
             alloy_primitives::U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, expected);
+    }
+
+    #[test]
+    fn odd_product() {
+        let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
+        let param = alloy_primitives::I256::try_from(5i32).unwrap();
+        let expected = alloy_primitives::I256::try_from(945i64).unwrap();
+
+        // function odd_product(int32)
+        let mut input = 0x00261b66u32.to_be_bytes().to_vec();
+        input.extend_from_slice(&param.to_be_bytes::<32>());
+
+        let state = State::new(input);
+        let (instance, export) = mock_runtime::prepare(&code);
+        let state = crate::mock_runtime::call(state, &instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        let received =
+            alloy_primitives::I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }
 }

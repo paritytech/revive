@@ -1,0 +1,25 @@
+        .text
+        .file   "main"
+        .globl  __entry
+__entry:
+.func_begin0:
+        sub.s!  0, r2, r1
+        jump.eq @.BB0_2
+        add     32, r0, r1
+        st.1    r0, r1
+        st.1    r1, r0
+        add     @CPI0_1[0], r0, r1
+        ret.ok.to_label r1, @DEFAULT_FAR_RETURN
+.BB0_2:
+        add     42, r0, r1
+        st.1    r0, r1
+        add     @CPI0_0[0], r0, r1
+        ret.ok.to_label r1, @DEFAULT_FAR_RETURN
+.func_end0:
+
+        .note.GNU-stack
+        .rodata
+CPI0_0:
+        .cell 2535301200456458802993406410752
+CPI0_1:
+        .cell 5070602400912917605986812821504

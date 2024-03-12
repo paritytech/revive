@@ -1,0 +1,7 @@
+[package]
+name = "pallet-contracts-pvm-llapi"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+inkwell = { workspace = true, no-default-features = true, features = ["target-riscv", "no-libffi-linking", "llvm16-0"] }

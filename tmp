@@ -1,3 +1,0 @@
-ADD		-1	[stack(-1)]			[stack(-1) = stack(-1) + (stack(-2)]
-ADD		-2	[stack(-2)]			[stack(-2) = stack(-1) + (stack(-1)]
-

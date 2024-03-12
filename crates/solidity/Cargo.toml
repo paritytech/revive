@@ -1,0 +1,44 @@
+[package]
+name = "revive-solidity"
+version = "1.4.0"
+authors = [
+    "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
+]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+description = "EraVM Solidity compiler"
+
+[[bin]]
+name = "zksolc"
+path = "src/zksolc/main.rs"
+
+[lib]
+doctest = false
+
+[dependencies]
+structopt = { workspace = true }
+colored = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+which = { workspace = true }
+path-slash = { workspace = true }
+rayon = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+semver = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+hex = { workspace = true }
+num = { workspace = true }
+sha3 = { workspace = true }
+md5 = { workspace = true }
+inkwell = { workspace = true }
+
+era-compiler-common = { git = "https://github.com/matter-labs/era-compiler-common", branch = "main" }
+era-compiler-llvm-context = { path = "../llvm-context" }
+
+
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { version = "*", default-features = false }

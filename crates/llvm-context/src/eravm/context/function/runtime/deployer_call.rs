@@ -3,7 +3,6 @@
 //!
 
 use inkwell::types::BasicType;
-use inkwell::values::BasicValue;
 
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::function::Function;
@@ -121,7 +120,7 @@ where
         let value_join_block = context.append_basic_block("deployer_call_value_join_block");
 
         context.set_basic_block(context.current_function().borrow().entry_block());
-        let abi_data = crate::eravm::utils::abi_data(
+        let _abi_data = crate::eravm::utils::abi_data(
             context,
             input_offset,
             input_length,

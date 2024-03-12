@@ -1041,13 +1041,13 @@ where
             InstructionName::CALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
 
-                let gas = arguments.remove(0).into_int_value();
-                let address = arguments.remove(0).into_int_value();
-                let value = arguments.remove(0).into_int_value();
-                let input_offset = arguments.remove(0).into_int_value();
-                let input_size = arguments.remove(0).into_int_value();
-                let output_offset = arguments.remove(0).into_int_value();
-                let output_size = arguments.remove(0).into_int_value();
+                let _gas = arguments.remove(0).into_int_value();
+                let _address = arguments.remove(0).into_int_value();
+                let _value = arguments.remove(0).into_int_value();
+                let _input_offset = arguments.remove(0).into_int_value();
+                let _input_size = arguments.remove(0).into_int_value();
+                let _output_offset = arguments.remove(0).into_int_value();
+                let _output_size = arguments.remove(0).into_int_value();
 
                 todo!()
                 /*

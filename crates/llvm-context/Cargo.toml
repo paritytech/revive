@@ -3,6 +3,7 @@ name = "era-compiler-llvm-context"
 version = "1.4.1"
 authors = [
     "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
+    "Cyrill Leutwiler <cyrill@parity.io>",
 ]
 license = "MIT OR Apache-2.0"
 edition = "2021"

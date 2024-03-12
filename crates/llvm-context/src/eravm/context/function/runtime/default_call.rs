@@ -3,13 +3,10 @@
 //!
 
 use inkwell::types::BasicType;
-use inkwell::values::BasicValue;
 
-use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::function::declaration::Declaration as FunctionDeclaration;
 use crate::eravm::context::function::llvm_runtime::LLVMRuntime;
 use crate::eravm::context::function::Function;
-use crate::eravm::context::pointer::Pointer;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 use crate::eravm::WriteLLVM;
@@ -27,6 +24,7 @@ pub struct DefaultCall {
     name: String,
 }
 
+#[allow(unused)]
 impl DefaultCall {
     /// The gas argument index.
     pub const ARGUMENT_INDEX_GAS: usize = 0;

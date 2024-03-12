@@ -64,15 +64,6 @@ impl TargetMachine {
     ///
     pub fn set_target_data(&self, module: &inkwell::module::Module) {
         module.set_triple(&self.target_machine.get_triple());
-        let data_layout = self
-            .target_machine
-            .get_target_data()
-            .get_data_layout()
-            .as_str()
-            .to_str()
-            .expect("datalayout sting should be valid")
-            .to_owned();
-
         module.set_data_layout(&self.target_machine.get_target_data().get_data_layout());
     }
 

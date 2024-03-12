@@ -2,9 +2,6 @@
 //! Translates a log or event call.
 //!
 
-use inkwell::values::BasicValue;
-
-use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
@@ -18,10 +15,10 @@ use crate::eravm::Dependency;
 /// accept two at once.
 ///
 pub fn log<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    input_offset: inkwell::values::IntValue<'ctx>,
-    input_length: inkwell::values::IntValue<'ctx>,
-    topics: Vec<inkwell::values::IntValue<'ctx>>,
+    _context: &mut Context<'ctx, D>,
+    _input_offset: inkwell::values::IntValue<'ctx>,
+    _input_length: inkwell::values::IntValue<'ctx>,
+    _topics: Vec<inkwell::values::IntValue<'ctx>>,
 ) -> anyhow::Result<()>
 where
     D: Dependency + Clone,

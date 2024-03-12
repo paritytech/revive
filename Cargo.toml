@@ -8,8 +8,6 @@ petgraph = "0.6"
 cc = "1.0"
 libc = "0.2"
 tempfile = "3.8"
-#inkwell = { version = "0.4.0", default-features = false, features = ["llvm16-0", "no-libffi-linking", "target-riscv"] }
-inkwell = { path = "../inkwell", default-features = false, features = ["serde", "llvm16-0", "no-libffi-linking", "target-riscv"] }
 anyhow = "1.0"
 semver = { version = "1.0", features = [ "serde" ] }
 itertools = "0.12"
@@ -33,3 +31,9 @@ polkavm-linker = { git = "https://github.com/koute/polkavm.git" }
 polkavm = { git = "https://github.com/koute/polkavm.git" } 
 parity-scale-codec = "3.6"
 alloy-primitives = "0.6"
+
+[workspace.dependencies.inkwell]
+git = "https://github.com/TheDan64/inkwell.git"
+commit = "69c5a3f"
+default-features = false
+features = ["serde", "llvm16-0", "no-libffi-linking", "target-riscv"]

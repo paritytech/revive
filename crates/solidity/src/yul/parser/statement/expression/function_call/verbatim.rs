@@ -218,7 +218,7 @@ where
                 );
             }
 
-            let arguments = call.pop_arguments_llvm::<D, ARGUMENTS_COUNT>(context)?;
+            let _arguments = call.pop_arguments_llvm::<D, ARGUMENTS_COUNT>(context)?;
             todo!()
             //era_compiler_llvm_context::eravm_call::raw_far(
             //    context,
@@ -255,7 +255,7 @@ where
             )
             .map(Some)
         }
-        identifier @ "system_call" => {
+        _identifier @ "system_call" => {
             unimplemented!()
         }
         identifier @ "system_call_byref" => {

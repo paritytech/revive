@@ -262,7 +262,6 @@ where
 
         let buffer = target_machine
             .write_to_memory_buffer(self.module())
-            .map(|blob| revive_linker::link(blob.as_slice()))
             .map_err(|error| {
                 anyhow::anyhow!(
                     "The contract `{}` assembly generating error: {}",
@@ -270,8 +269,8 @@ where
                     error
                 )
             })?;
-        std::fs::write("/tmp/out.pvm", &buffer).unwrap();
-        let assembly_text = hex::encode(buffer.as_slice());
+
+        let assembly_text = revive_linker::link(buffer.as_slice()).map(hex::encode)?;
 
         let build = match crate::eravm::build_assembly_text(
             contract_path,

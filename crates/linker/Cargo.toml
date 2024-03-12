@@ -11,6 +11,7 @@ tempfile = { workspace = true }
 polkavm-linker = { workspace = true }
 polkavm-common = { workspace = true }
 libc = { workspace = true }
+anyhow = { workspace = true }
 
 revive-builtins = { path = "../builtins" }
 lld-sys = { path = "../lld-sys" }

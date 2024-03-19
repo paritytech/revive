@@ -12,3 +12,4 @@ parity-scale-codec = { workspace = true }
 revive-solidity = { path = "../solidity" }
 era-compiler-llvm-context = { path = "../llvm-context" }
 alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }

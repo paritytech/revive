@@ -31,6 +31,7 @@ polkavm-linker = { git = "https://github.com/koute/polkavm.git" }
 polkavm = { git = "https://github.com/koute/polkavm.git" } 
 parity-scale-codec = "3.6"
 alloy-primitives = "0.6"
+alloy-sol-types = "0.6"
 
 [workspace.dependencies.inkwell]
 git = "https://github.com/TheDan64/inkwell.git"

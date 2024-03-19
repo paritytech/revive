@@ -2,7 +2,7 @@
 
 YUL and EVM bytecode recompiler to LLVM, targetting RISC-V on PolkaVM.
 
-Code bases of [frontend](https://github.com/matter-labs/era-compiler-solidity) and [code generator](https://github.com/matter-labs/era-compiler-llvm-context) are forked adapted from ZKSync `zksolc`.
+Code bases of [frontend](https://github.com/matter-labs/era-compiler-solidity) and [code generator](https://github.com/matter-labs/era-compiler-llvm-context) are forked and adapted from ZKSync `zksolc`.
 
 # Status
 
@@ -12,8 +12,9 @@ Currently, primary goal of this codebase is to allow for benchmarks comparing pe
 
 The project is in a very early PoC phase. Don't yet expect the produced code to be working nor to be correct for anything more than a basic flipper contract at the current stage.
 
-- [ ] Efficient implementations of byte swaps, memset, memmove and the like
+- [ ] Efficient implementations of byte swaps, memset, memmove, mulmod and the like
 - [ ] Use `drink` for integration tests once we have 64bit support in PolkaVM
+- [ ] Use PolkaVM allocator for heap space
 - [ ] Exercice `schlau` and possibly `smart-bench` benchmark cases
 - [ ] Tests currently rely on the binary being in $PATH, which is very annoying and requires `cargo install` all the times
 - [ ] Define how to do deployments

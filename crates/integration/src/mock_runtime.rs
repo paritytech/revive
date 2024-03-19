@@ -2,7 +2,7 @@
 //! TODO: Switch to drink! once RISCV is ready in polkadot-sdk
 use std::collections::HashMap;
 
-use alloy_primitives::U256;
+use alloy_primitives::{Keccak256, U256};
 use parity_scale_codec::Encode;
 use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, InstancePre, Linker, Module,
@@ -164,6 +164,27 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 caller.write_memory(out_len_ptr, &32u32.to_le_bytes())?;
 
                 Ok(0)
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            "hash_keccak_256",
+            |caller: Caller<State>,
+             input_ptr: u32,
+             input_len: u32,
+             out_ptr: u32|
+             -> Result<(), Trap> {
+                let (mut caller, _) = caller.split();
+
+                let pre = caller.read_memory_into_vec(input_ptr, input_len)?;
+
+                let mut hasher = Keccak256::new();
+                hasher.update(&pre);
+                caller.write_memory(out_ptr, &hasher.finalize()[..])?;
+
+                Ok(())
             },
         )
         .unwrap();

@@ -59,29 +59,36 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    // TODO: Untested
-    let destination = Pointer::new_with_offset(
-        context,
-        AddressSpace::Heap,
-        context.byte_type(),
-        destination_offset,
-        "calldata_copy_destination_pointer",
-    );
+    let heap_pointer = context
+        .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+        .value
+        .as_pointer_value();
+    let destination = unsafe {
+        context.builder().build_gep(
+            context.byte_type(),
+            heap_pointer,
+            &[destination_offset],
+            "calldata_pointer_with_offset",
+        )
+    }?;
+
     let calldata_pointer = context
         .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
         .value
         .as_pointer_value();
-    let source = context.build_gep(
-        Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
-        &[source_offset],
-        context.field_type().as_basic_type_enum(),
-        "calldata_pointer_with_offset",
-    );
+    let source = unsafe {
+        context.builder().build_gep(
+            context.byte_type(),
+            calldata_pointer,
+            &[source_offset],
+            "calldata_pointer_with_offset",
+        )
+    }?;
 
     context.build_memcpy(
         context.intrinsics().memory_copy_from_generic,
-        destination,
-        source,
+        Pointer::new(context.byte_type(), AddressSpace::Stack, destination),
+        Pointer::new(context.byte_type(), AddressSpace::Stack, source),
         size,
         "calldata_copy_memcpy_from_child",
     )

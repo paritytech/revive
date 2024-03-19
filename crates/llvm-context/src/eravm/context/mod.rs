@@ -671,15 +671,13 @@ where
                     "offset_ptrtoint",
                 )?;
                 let pointer_value = unsafe {
-                    self.builder
-                        .build_gep(
-                            self.byte_type(),
-                            heap_pointer.value.as_pointer_value(),
-                            &[offset],
-                            "heap_offset_via_gep",
-                        )
-                        .unwrap()
-                };
+                    self.builder.build_gep(
+                        self.byte_type(),
+                        heap_pointer.value.as_pointer_value(),
+                        &[offset],
+                        "heap_offset_via_gep",
+                    )
+                }?;
                 let value = self
                     .builder()
                     .build_load(pointer.r#type, pointer_value, name)?;
@@ -806,6 +804,7 @@ where
                         )
                         .unwrap()
                 };
+
                 let value = self.build_byte_swap(value.as_basic_value_enum());
 
                 let instruction = self.builder.build_store(pointer_value, value).unwrap();

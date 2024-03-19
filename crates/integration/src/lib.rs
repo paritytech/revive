@@ -27,7 +27,8 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::U256;
+    use alloy_primitives::{FixedBytes, Keccak256, I256, U256};
+    use alloy_sol_types::{sol, SolCall};
 
     use crate::mock_runtime::{self, State};
 
@@ -47,6 +48,37 @@ mod tests {
     }
 
     #[test]
+    fn hash_keccak_256() {
+        sol!(
+            #[derive(Debug, PartialEq, Eq)]
+            contract TestSha3 {
+                function test(string memory _pre) external payable returns (bytes32);
+            }
+        );
+        let source = r#"contract TestSha3 {
+            function test(string memory _pre) external payable returns (bytes32 hash) {
+                hash = keccak256(bytes(_pre));
+            }
+        }"#;
+        let code = crate::compile_blob("TestSha3", source);
+
+        let param = "hello";
+        let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
+
+        let state = State::new(input);
+        let (instance, export) = mock_runtime::prepare(&code);
+        let state = crate::mock_runtime::call(state, &instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        let mut hasher = Keccak256::new();
+        hasher.update(param);
+        let expected = hasher.finalize();
+        let received = FixedBytes::<32>::from_slice(&state.output.data);
+        assert_eq!(expected, received);
+    }
+
+    #[test]
     fn erc20() {
         let _ = crate::compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
     }
@@ -54,8 +86,8 @@ mod tests {
     #[test]
     fn triangle_number() {
         let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
-        let param = alloy_primitives::U256::try_from(13).unwrap();
-        let expected = alloy_primitives::U256::try_from(91).unwrap();
+        let param = U256::try_from(13).unwrap();
+        let expected = U256::try_from(91).unwrap();
 
         // function triangle_number(int64)
         let mut input = 0x0f760610u32.to_be_bytes().to_vec();
@@ -67,16 +99,15 @@ mod tests {
 
         assert_eq!(state.output.flags, 0);
 
-        let received =
-            alloy_primitives::U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }
 
     #[test]
     fn odd_product() {
         let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
-        let param = alloy_primitives::I256::try_from(5i32).unwrap();
-        let expected = alloy_primitives::I256::try_from(945i64).unwrap();
+        let param = I256::try_from(5i32).unwrap();
+        let expected = I256::try_from(945i64).unwrap();
 
         // function odd_product(int32)
         let mut input = 0x00261b66u32.to_be_bytes().to_vec();
@@ -88,8 +119,7 @@ mod tests {
 
         assert_eq!(state.output.flags, 0);
 
-        let received =
-            alloy_primitives::I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }
 }

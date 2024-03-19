@@ -662,7 +662,10 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let heap_pointer = self.get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?;
+                let heap_pointer = self
+                    .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+                    .value
+                    .as_pointer_value();
 
                 // TODO: Ensure safe casts somehow
                 let offset = self.builder().build_ptr_to_int(
@@ -670,17 +673,15 @@ where
                     self.integer_type(32),
                     "offset_ptrtoint",
                 )?;
-                let pointer_value = unsafe {
-                    self.builder.build_gep(
-                        self.byte_type(),
-                        heap_pointer.value.as_pointer_value(),
-                        &[offset],
-                        "heap_offset_via_gep",
-                    )
-                }?;
+                let pointer_value = self.build_gep(
+                    Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+                    &[offset],
+                    self.byte_type(),
+                    "heap_offset_via_gep",
+                );
                 let value = self
                     .builder()
-                    .build_load(pointer.r#type, pointer_value, name)?;
+                    .build_load(pointer.r#type, pointer_value.value, name)?;
                 self.basic_block()
                     .get_last_instruction()
                     .expect("Always exists")
@@ -786,7 +787,9 @@ where
             AddressSpace::Heap => {
                 let heap_pointer = self
                     .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)
-                    .unwrap();
+                    .unwrap()
+                    .value
+                    .as_pointer_value();
 
                 // TODO: Ensure safe casts somehow
                 let offset = self.builder().build_ptr_to_int(
@@ -794,20 +797,19 @@ where
                     self.integer_type(32),
                     "offset_ptrtoint",
                 )?;
-                let pointer_value = unsafe {
-                    self.builder()
-                        .build_gep(
-                            self.byte_type(),
-                            heap_pointer.value.as_pointer_value(),
-                            &[offset],
-                            "heap_offset_via_gep",
-                        )
-                        .unwrap()
-                };
+                let pointer_value = self.build_gep(
+                    Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+                    &[offset],
+                    self.byte_type(),
+                    "heap_offset_via_gep",
+                );
 
                 let value = self.build_byte_swap(value.as_basic_value_enum());
 
-                let instruction = self.builder.build_store(pointer_value, value).unwrap();
+                let instruction = self
+                    .builder
+                    .build_store(pointer_value.value, value)
+                    .unwrap();
                 instruction
                     .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
@@ -909,10 +911,7 @@ where
         T: BasicType<'ctx>,
     {
         assert_ne!(pointer.address_space, AddressSpace::Storage);
-        assert_ne!(pointer.address_space, AddressSpace::Heap);
-        assert_ne!(pointer.address_space, AddressSpace::HeapAuxiliary);
         assert_ne!(pointer.address_space, AddressSpace::TransientStorage);
-        assert_ne!(pointer.address_space, AddressSpace::Code);
 
         let value = unsafe {
             self.builder
@@ -1213,20 +1212,21 @@ where
         //    zkevm_opcode_defs::RetForwardPageType::UseHeap
         //};
 
-        let heap_pointer = self.get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?;
+        let heap_pointer = self
+            .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+            .value
+            .as_pointer_value();
         let offset_truncated = self.safe_truncate_int_to_i32(offset)?;
-        let offset_into_heap = unsafe {
-            self.builder().build_gep(
-                self.byte_type(),
-                heap_pointer.value.as_pointer_value(),
-                &[offset_truncated],
-                "heap_offset_via_gep",
-            )
-        }?;
+        let offset_into_heap = self.build_gep(
+            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+            &[offset_truncated],
+            self.byte_type(),
+            "heap_offset_via_gep",
+        );
 
         let length_pointer = self.safe_truncate_int_to_i32(length)?;
         let offset_pointer = self.builder().build_ptr_to_int(
-            offset_into_heap,
+            offset_into_heap.value,
             self.integer_type(32),
             "return_data_ptr_to_int",
         )?;

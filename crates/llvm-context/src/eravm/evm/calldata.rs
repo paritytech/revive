@@ -63,32 +63,28 @@ where
         .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
         .value
         .as_pointer_value();
-    let destination = unsafe {
-        context.builder().build_gep(
-            context.byte_type(),
-            heap_pointer,
-            &[destination_offset],
-            "calldata_pointer_with_offset",
-        )
-    }?;
+    let destination = context.build_gep(
+        Pointer::new(context.byte_type(), AddressSpace::Stack, heap_pointer),
+        &[context.safe_truncate_int_to_i32(destination_offset)?],
+        context.byte_type(),
+        "heap_pointer_with_offset",
+    );
 
     let calldata_pointer = context
         .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?
         .value
         .as_pointer_value();
-    let source = unsafe {
-        context.builder().build_gep(
-            context.byte_type(),
-            calldata_pointer,
-            &[source_offset],
-            "calldata_pointer_with_offset",
-        )
-    }?;
+    let source = context.build_gep(
+        Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
+        &[context.safe_truncate_int_to_i32(source_offset)?],
+        context.byte_type(),
+        "calldata_pointer_with_offset",
+    );
 
     context.build_memcpy(
         context.intrinsics().memory_copy_from_generic,
-        Pointer::new(context.byte_type(), AddressSpace::Stack, destination),
-        Pointer::new(context.byte_type(), AddressSpace::Stack, source),
+        destination,
+        source,
         size,
         "calldata_copy_memcpy_from_child",
     )

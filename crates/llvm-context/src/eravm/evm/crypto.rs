@@ -17,17 +17,9 @@ where
     D: Dependency + Clone,
 {
     let offset_casted = context.safe_truncate_int_to_i32(offset)?;
-    let heap_pointer = context.get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?;
-    let input_pointer = unsafe {
-        context.builder().build_gep(
-            context.byte_type(),
-            heap_pointer.value.as_pointer_value(),
-            &[offset_casted],
-            "heap_offset_via_gep",
-        )
-    }?;
+    let input_pointer = context.build_heap_offset_pointer(offset_casted, length)?;
     let input_pointer_casted = context.builder().build_ptr_to_int(
-        input_pointer,
+        input_pointer.value,
         context.integer_type(32),
         "input_pointer_casted",
     )?;

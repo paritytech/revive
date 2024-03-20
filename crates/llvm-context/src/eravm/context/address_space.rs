@@ -5,9 +5,10 @@
 ///
 /// The address space aliases.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AddressSpace {
     /// The stack memory.
+    #[default]
     Stack,
     /// The heap memory.
     Heap,

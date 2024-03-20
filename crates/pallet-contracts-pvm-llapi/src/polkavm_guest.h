@@ -162,4 +162,3 @@ static void __attribute__ ((naked, used)) POLKAVM_UNIQUE(polkavm_stack_size)() {
 }
 
 #endif
-    

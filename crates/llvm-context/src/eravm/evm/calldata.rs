@@ -59,16 +59,9 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let heap_pointer = context
-        .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
-        .value
-        .as_pointer_value();
-    let destination = context.build_gep(
-        Pointer::new(context.byte_type(), AddressSpace::Stack, heap_pointer),
-        &[context.safe_truncate_int_to_i32(destination_offset)?],
-        context.byte_type(),
-        "heap_pointer_with_offset",
-    );
+    let offset = context.safe_truncate_int_to_i32(destination_offset)?;
+    let size = context.safe_truncate_int_to_i32(size)?;
+    let destination = context.build_heap_offset_pointer(offset, size)?;
 
     let calldata_pointer = context
         .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?

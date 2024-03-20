@@ -21,6 +21,16 @@ void * memcpy(void *dst, const void *_src, size_t len) {
     return dst;
 }
 
+void * sbrk(uint32_t size) {
+    uint32_t address;
+    __asm__(
+            ".insn r 0xb, 1, 0, %[dst], %[sz], zero\n"
+            : [dst] "=r" (address)
+            : [sz] "i" (size)
+            :
+    );
+    return (void *)address;
+}
 
 // Exports
 

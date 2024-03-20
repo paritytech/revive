@@ -1416,6 +1416,13 @@ name = "revive-builtins"
 version = "0.1.0"
 
 [[package]]
+name = "revive-extensions"
+version = "0.1.0"
+dependencies = [
+ "inkwell",
+]
+
+[[package]]
 name = "revive-integration"
 version = "0.1.0"
 dependencies = [

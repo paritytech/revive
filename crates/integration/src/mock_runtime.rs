@@ -217,9 +217,21 @@ pub fn call(mut state: State, on: &InstancePre<State>, export: ExportIndex) -> S
 
     let call_args = polkavm::CallArgs::new(&mut state, export);
 
+    init_logs();
+
     match on.instantiate().unwrap().call(state_args, call_args) {
         Err(polkavm::ExecutionError::Trap(_)) => state,
         Err(other) => panic!("unexpected error: {other}"),
         Ok(_) => panic!("unexpected return"),
+    }
+}
+
+fn init_logs() {
+    if std::env::var("RUST_LOG").is_ok() {
+        #[cfg(test)]
+        let test = true;
+        #[cfg(not(test))]
+        let test = false;
+        let _ = env_logger::builder().is_test(test).try_init();
     }
 }

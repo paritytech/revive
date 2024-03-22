@@ -30,7 +30,7 @@ impl Entry {
 
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
-    pub fn initialize_globals<D>(context: &mut Context<D>)
+    pub fn initialize_globals<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
@@ -42,13 +42,18 @@ impl Entry {
             calldata_type.get_undef(),
         );
 
-        let heap_memory_type = context.array_type(context.byte_type(), 1024 * 1024);
         context.set_global(
             crate::eravm::GLOBAL_HEAP_MEMORY_POINTER,
-            heap_memory_type,
+            context.byte_type().ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
-            heap_memory_type.get_undef(),
+            context.integer_type(32).get_undef(),
         );
+        context.build_store(
+            context
+                .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+                .into(),
+            context.build_sbrk(context.integer_const(32, 0))?,
+        )?;
 
         context.set_global(
             crate::eravm::GLOBAL_CALLDATA_SIZE,
@@ -80,6 +85,8 @@ impl Entry {
             AddressSpace::Stack,
             extra_abi_data_type.const_zero(),
         );
+
+        Ok(())
     }
 
     /// Load the calldata via seal `input` and initialize the calldata end
@@ -256,7 +263,7 @@ where
         context.set_current_function(Runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        Self::initialize_globals(context);
+        Self::initialize_globals(context)?;
         Self::load_calldata(context)?;
         Self::leave_entry(context)?;
 

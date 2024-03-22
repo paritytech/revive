@@ -21,13 +21,13 @@ void * memcpy(void *dst, const void *_src, size_t len) {
     return dst;
 }
 
-void * sbrk(uint32_t size) {
+void * __attribute__((inline)) __sbrk(uint32_t size) {
     uint32_t address;
-    __asm__(
-            ".insn r 0xb, 1, 0, %[dst], %[sz], zero\n"
+    __asm__ __volatile__(
+            ".insn r 0xb, 1, 0, %[dst], %[sz], zero"
             : [dst] "=r" (address)
-            : [sz] "i" (size)
-            :
+            : [sz] "ir" (size)
+            : 
     );
     return (void *)address;
 }

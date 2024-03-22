@@ -46,14 +46,14 @@ impl Entry {
             crate::eravm::GLOBAL_HEAP_MEMORY_POINTER,
             context.byte_type().ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
-            context.sbrk(context.integer_type(32).const_zero())?,
+            context.integer_type(32).get_undef(),
         );
-        context.set_global(
-            crate::eravm::GLOBAL_HEAP_MEMORY_SIZE,
-            context.integer_type(32),
-            AddressSpace::Stack,
-            context.integer_type(32).const_zero(),
-        );
+        context.build_store(
+            context
+                .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+                .into(),
+            context.build_sbrk(context.integer_const(32, 0))?,
+        )?;
 
         context.set_global(
             crate::eravm::GLOBAL_CALLDATA_SIZE,

@@ -61,7 +61,7 @@ where
 {
     let offset = context.safe_truncate_int_to_i32(destination_offset)?;
     let size = context.safe_truncate_int_to_i32(size)?;
-    let destination = context.build_heap_offset_pointer(offset, size)?;
+    let destination = context.build_heap_gep(offset, size)?;
 
     let calldata_pointer = context
         .get_global(crate::eravm::GLOBAL_CALLDATA_POINTER)?

@@ -667,11 +667,17 @@ where
                     self.integer_type(32),
                     "offset_ptrtoint",
                 )?;
-                let length = pointer.r#type.size_of().unwrap();
-                let pointer_value = self.build_heap_offset_pointer(offset, length)?;
-                let value = self
-                    .builder()
-                    .build_load(pointer.r#type, pointer_value.value, name)?;
+                let length = pointer
+                    .r#type
+                    .size_of()
+                    .expect("should be IntValue")
+                    .const_truncate(self.integer_type(32));
+
+                let value = self.builder().build_load(
+                    pointer.r#type,
+                    self.build_heap_gep(offset, length)?.value,
+                    name,
+                )?;
                 self.basic_block()
                     .get_last_instruction()
                     .expect("Always exists")
@@ -776,8 +782,13 @@ where
                     self.integer_type(32),
                     "offset_ptrtoint",
                 )?;
-                let length = value.as_basic_value_enum().get_type().size_of().unwrap();
-                let pointer_value = self.build_heap_offset_pointer(offset, length)?;
+                let length = value
+                    .as_basic_value_enum()
+                    .get_type()
+                    .size_of()
+                    .expect("should be IntValue")
+                    .const_truncate(self.integer_type(32));
+                let pointer_value = self.build_heap_gep(offset, length)?;
 
                 let value = self.build_byte_swap(value.as_basic_value_enum());
 
@@ -1178,8 +1189,7 @@ where
 
         let offset_truncated = self.safe_truncate_int_to_i32(offset)?;
         let length_truncated = self.safe_truncate_int_to_i32(length)?;
-        let offset_into_heap =
-            self.build_heap_offset_pointer(offset_truncated, length_truncated)?;
+        let offset_into_heap = self.build_heap_gep(offset_truncated, length_truncated)?;
 
         let length_pointer = self.safe_truncate_int_to_i32(length)?;
         let offset_pointer = self.builder().build_ptr_to_int(
@@ -1236,26 +1246,32 @@ where
         Ok(truncated)
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap.
-    ///
-    /// Traps if the call failed.
-    pub fn sbrk(
+    /// Build a call to PolkaVM `sbrk` for extending the heap by `size`.
+    pub fn build_sbrk(
         &self,
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
-        let end_of_memory = self
+        Ok(self
             .builder()
             .build_call(
-                self.module().get_function("sbrk").expect("is declared"),
+                self.module().get_function("__sbrk").expect("is declared"),
                 &[size.into()],
                 "call_sbrk",
             )?
             .try_as_basic_value()
             .left()
             .expect("sbrk returns a pointer")
-            .into_pointer_value();
+            .into_pointer_value())
+    }
 
-        let is_nil = self.builder().build_int_compare(
+    /// Call PolkaVM `sbrk` for extending the heap by `size`,
+    /// trapping the contract if the call failed.
+    pub fn build_heap_alloc(
+        &self,
+        size: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
+        let end_of_memory = self.build_sbrk(size)?;
+        let return_is_nil = self.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             end_of_memory,
             self.byte_type().ptr_type(Default::default()).const_null(),
@@ -1264,7 +1280,7 @@ where
 
         let continue_block = self.append_basic_block("sbrk_not_nil");
         let trap_block = self.append_basic_block("sbrk_nil");
-        self.build_conditional_branch(is_nil, trap_block, continue_block)?;
+        self.build_conditional_branch(return_is_nil, trap_block, continue_block)?;
 
         self.set_basic_block(trap_block);
         self.build_call(self.intrinsics().trap, &[], "invalid_trap");
@@ -1275,12 +1291,12 @@ where
         Ok(end_of_memory)
     }
 
-    /// Returns a pointer to `offset` into the heap.
+    /// Returns a pointer to `offset` into the heap, allocating
+    /// enough memory if `offset` + `length` would be out of bounds.
     ///
+    /// # Panics
     /// Assumes `offset` and `length` to be an i32 value.
-    ///
-    /// Allocates enough memory if `offset` + `length` would be out of bounds.
-    pub fn build_heap_offset_pointer(
+    pub fn build_heap_gep(
         &self,
         offset: inkwell::values::IntValue<'ctx>,
         length: inkwell::values::IntValue<'ctx>,
@@ -1288,18 +1304,23 @@ where
         assert_eq!(offset.get_type(), self.integer_type(32));
         assert_eq!(length.get_type(), self.integer_type(32));
 
-        let heap_end = self
-            .get_global_value(crate::eravm::GLOBAL_HEAP_MEMORY_SIZE)?
-            .into_int_value();
-        let value_end = self
-            .builder()
-            .build_int_add(offset, length, "offset_plus_length")?;
+        let heap_pointer = self
+            .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+            .value
+            .as_pointer_value();
 
+        let heap_end = self.build_sbrk(self.integer_const(32, 0))?;
+        let value_end = self.build_gep(
+            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+            &[self.builder().build_int_nuw_add(offset, length, "end")?],
+            self.byte_type(),
+            "heap_end_gep",
+        );
         let is_out_of_bounds = self.builder().build_int_compare(
-            inkwell::IntPredicate::UGE,
-            value_end,
-            heap_end.into(),
-            "offset_uge_heapsize",
+            inkwell::IntPredicate::UGT,
+            value_end.value,
+            heap_end,
+            "is_value_overflowing_heap",
         )?;
 
         let out_of_bounds_block = self.append_basic_block("heap_offset_out_of_bounds");
@@ -1307,21 +1328,10 @@ where
         self.build_conditional_branch(is_out_of_bounds, out_of_bounds_block, heap_offset_block)?;
 
         self.set_basic_block(out_of_bounds_block);
-
-        let size =
-            self.builder()
-                .build_int_nuw_sub(value_end, heap_end, "offset_minus_heapsize")?;
-        self.sbrk(size)?;
-
+        self.build_heap_alloc(length)?;
         self.build_unconditional_branch(heap_offset_block);
 
         self.set_basic_block(heap_offset_block);
-
-        let heap_pointer = self
-            .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
-            .value
-            .as_pointer_value();
-
         Ok(self.build_gep(
             Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
             &[offset],

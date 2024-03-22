@@ -1287,8 +1287,8 @@ where
         Ok(end_of_memory)
     }
 
-    /// Returns a pointer to `offset` into the heap, allocating
-    /// enough memory if `offset` + `length` would be out of bounds.
+    /// Returns a pointer to `offset` into the heap, allocating `length`
+    /// bytes more memory if `offset + length` would be out of bounds.
     ///
     /// # Panics
     /// Assumes `offset` and `length` to be an i32 value.

@@ -662,22 +662,22 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let offset = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.integer_type(32),
-                    "offset_ptrtoint",
+                let heap_pointer = self.build_heap_gep(
+                    self.builder().build_ptr_to_int(
+                        pointer.value,
+                        self.integer_type(32),
+                        "offset_ptrtoint",
+                    )?,
+                    pointer
+                        .r#type
+                        .size_of()
+                        .expect("should be IntValue")
+                        .const_truncate(self.integer_type(32)),
                 )?;
-                let length = pointer
-                    .r#type
-                    .size_of()
-                    .expect("should be IntValue")
-                    .const_truncate(self.integer_type(32));
 
-                let value = self.builder().build_load(
-                    pointer.r#type,
-                    self.build_heap_gep(offset, length)?.value,
-                    name,
-                )?;
+                let value = self
+                    .builder()
+                    .build_load(pointer.r#type, heap_pointer.value, name)?;
                 self.basic_block()
                     .get_last_instruction()
                     .expect("Always exists")
@@ -776,27 +776,23 @@ where
     {
         match pointer.address_space {
             AddressSpace::Heap => {
-                // TODO: Ensure safe casts somehow
-                let offset = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.integer_type(32),
-                    "offset_ptrtoint",
+                let heap_pointer = self.build_heap_gep(
+                    self.builder().build_ptr_to_int(
+                        pointer.value,
+                        self.integer_type(32),
+                        "offset_ptrtoint",
+                    )?,
+                    value
+                        .as_basic_value_enum()
+                        .get_type()
+                        .size_of()
+                        .expect("should be IntValue")
+                        .const_truncate(self.integer_type(32)),
                 )?;
-                let length = value
-                    .as_basic_value_enum()
-                    .get_type()
-                    .size_of()
-                    .expect("should be IntValue")
-                    .const_truncate(self.integer_type(32));
-                let pointer_value = self.build_heap_gep(offset, length)?;
-
                 let value = self.build_byte_swap(value.as_basic_value_enum());
 
-                let instruction = self
-                    .builder
-                    .build_store(pointer_value.value, value)
-                    .unwrap();
-                instruction
+                self.builder
+                    .build_store(heap_pointer.value, value)?
                     .set_alignment(era_compiler_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
             }
@@ -1304,14 +1300,13 @@ where
         assert_eq!(offset.get_type(), self.integer_type(32));
         assert_eq!(length.get_type(), self.integer_type(32));
 
-        let heap_pointer = self
+        let heap_start = self
             .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
             .value
             .as_pointer_value();
-
         let heap_end = self.build_sbrk(self.integer_const(32, 0))?;
         let value_end = self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
             &[self.builder().build_int_nuw_add(offset, length, "end")?],
             self.byte_type(),
             "heap_end_gep",
@@ -1333,7 +1328,7 @@ where
 
         self.set_basic_block(heap_offset_block);
         Ok(self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_pointer),
+            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
             &[offset],
             self.byte_type(),
             "heap_offset_via_gep",

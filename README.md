@@ -14,7 +14,7 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
 
 - [ ] Efficient implementations of byte swaps, memset, memmove, mulmod and the like
 - [ ] Use `drink` for integration tests once we have 64bit support in PolkaVM
-- [ ] Use PolkaVM allocator for heap space
+- [x] Use PolkaVM allocator for heap space
 - [ ] Exercice `schlau` and possibly `smart-bench` benchmark cases
 - [ ] Tests currently rely on the binary being in $PATH, which is very annoying and requires `cargo install` all the times
 - [ ] Define how to do deployments

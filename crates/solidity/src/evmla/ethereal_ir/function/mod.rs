@@ -593,7 +593,7 @@ impl Function {
             } => (
                 vec![num::BigUint::from_str_radix(
                     constant.as_str(),
-                    era_compiler_common::BASE_HEXADECIMAL,
+                    revive_common::BASE_HEXADECIMAL,
                 )
                 .map(StackElement::Constant)?],
                 None,
@@ -784,7 +784,7 @@ impl Function {
 
                 let result = match (&operands[0], &operands[1]) {
                     (Element::Tag(tag), Element::Constant(offset)) => {
-                        let offset = offset % era_compiler_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
                         let offset = offset.to_u64().expect("Always valid");
                         let result = tag << offset;
                         if Self::is_tag_value_valid(blocks, &result) {
@@ -794,7 +794,7 @@ impl Function {
                         }
                     }
                     (Element::Constant(constant), Element::Constant(offset)) => {
-                        let offset = offset % era_compiler_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
                         let offset = offset.to_u64().expect("Always valid");
                         Element::Constant(constant << offset)
                     }
@@ -811,7 +811,7 @@ impl Function {
 
                 let result = match (&operands[0], &operands[1]) {
                     (Element::Tag(tag), Element::Constant(offset)) => {
-                        let offset = offset % era_compiler_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
                         let offset = offset.to_u64().expect("Always valid");
                         let result = tag >> offset;
                         if Self::is_tag_value_valid(blocks, &result) {
@@ -821,7 +821,7 @@ impl Function {
                         }
                     }
                     (Element::Constant(constant), Element::Constant(offset)) => {
-                        let offset = offset % era_compiler_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
                         let offset = offset.to_u64().expect("Always valid");
                         Element::Constant(constant >> offset)
                     }
@@ -1170,7 +1170,7 @@ where
                 let output_size = 0;
                 let r#type = context.function_type(
                     vec![context
-                        .integer_type(era_compiler_common::BIT_LENGTH_BOOLEAN)
+                        .integer_type(revive_common::BIT_LENGTH_BOOLEAN)
                         .as_basic_type_enum()],
                     output_size,
                     false,
@@ -1185,7 +1185,7 @@ where
                 let r#type = context.function_type(
                     vec![
                         context
-                            .integer_type(era_compiler_common::BIT_LENGTH_FIELD)
+                            .integer_type(revive_common::BIT_LENGTH_FIELD)
                             .as_basic_type_enum();
                         input_size
                     ],

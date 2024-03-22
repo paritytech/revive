@@ -46,8 +46,8 @@ impl<'ctx> Intrinsics<'ctx> {
     ) -> Self {
         let void_type = llvm.void_type();
         let bool_type = llvm.bool_type();
-        let byte_type = llvm.custom_width_int_type(era_compiler_common::BIT_LENGTH_BYTE as u32);
-        let field_type = llvm.custom_width_int_type(era_compiler_common::BIT_LENGTH_FIELD as u32);
+        let byte_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_BYTE as u32);
+        let field_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32);
         let _stack_field_pointer_type = field_type.ptr_type(AddressSpace::Stack.into());
         let heap_field_pointer_type = byte_type.ptr_type(AddressSpace::Heap.into());
         let generic_byte_pointer_type = byte_type.ptr_type(AddressSpace::Generic.into());
@@ -126,7 +126,7 @@ impl<'ctx> Intrinsics<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         name: &str,
     ) -> Vec<inkwell::types::BasicTypeEnum<'ctx>> {
-        let field_type = llvm.custom_width_int_type(era_compiler_common::BIT_LENGTH_FIELD as u32);
+        let field_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32);
 
         match name {
             name if name == Self::FUNCTION_MEMORY_COPY => vec![

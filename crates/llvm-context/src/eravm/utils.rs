@@ -138,17 +138,17 @@ where
 
     let input_offset_shifted = context.builder().build_left_shift(
         input_offset,
-        context.field_const((era_compiler_common::BIT_LENGTH_X32 * 2) as u64),
+        context.field_const((revive_common::BIT_LENGTH_X32 * 2) as u64),
         "abi_data_input_offset_shifted",
     )?;
     let input_length_shifted = context.builder().build_left_shift(
         input_length,
-        context.field_const((era_compiler_common::BIT_LENGTH_X32 * 3) as u64),
+        context.field_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
         "abi_data_input_length_shifted",
     )?;
     let gas_shifted = context.builder().build_left_shift(
         gas,
-        context.field_const((era_compiler_common::BIT_LENGTH_X32 * 6) as u64),
+        context.field_const((revive_common::BIT_LENGTH_X32 * 6) as u64),
         "abi_data_gas_shifted",
     )?;
 
@@ -163,7 +163,7 @@ where
     if let AddressSpace::HeapAuxiliary = address_space {
         let auxiliary_heap_marker_shifted = context.builder().build_left_shift(
             context.field_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
-            context.field_const((era_compiler_common::BIT_LENGTH_X32 * 7) as u64),
+            context.field_const((revive_common::BIT_LENGTH_X32 * 7) as u64),
             "abi_data_auxiliary_heap_marker_shifted",
         )?;
         abi_data = context.builder().build_int_add(
@@ -176,8 +176,7 @@ where
         let auxiliary_heap_marker_shifted = context.builder().build_left_shift(
             context.field_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
             context.field_const(
-                ((era_compiler_common::BIT_LENGTH_X32 * 7)
-                    + (era_compiler_common::BIT_LENGTH_BYTE * 3)) as u64,
+                ((revive_common::BIT_LENGTH_X32 * 7) + (revive_common::BIT_LENGTH_BYTE * 3)) as u64,
             ),
             "abi_data_system_call_marker_shifted",
         )?;

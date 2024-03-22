@@ -122,21 +122,21 @@ impl Compiler {
             );
         }
 
-        let mut output: StandardJsonOutput = era_compiler_common::deserialize_from_slice(
-            output.stdout.as_slice(),
-        )
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "{} subprocess output parsing error: {}\n{}",
-                self.executable,
-                error,
-                era_compiler_common::deserialize_from_slice::<serde_json::Value>(
-                    output.stdout.as_slice()
+        let mut output: StandardJsonOutput =
+            revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
+                anyhow::anyhow!(
+                    "{} subprocess output parsing error: {}\n{}",
+                    self.executable,
+                    error,
+                    revive_common::deserialize_from_slice::<serde_json::Value>(
+                        output.stdout.as_slice()
+                    )
+                    .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
+                    .unwrap_or_else(
+                        |_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()
+                    ),
                 )
-                .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
-                .unwrap_or_else(|_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()),
-            )
-        })?;
+            })?;
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
         output.remove_evm();
 
@@ -183,21 +183,21 @@ impl Compiler {
             );
         }
 
-        let mut combined_json: CombinedJson = era_compiler_common::deserialize_from_slice(
-            output.stdout.as_slice(),
-        )
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "{} subprocess output parsing error: {}\n{}",
-                self.executable,
-                error,
-                era_compiler_common::deserialize_from_slice::<serde_json::Value>(
-                    output.stdout.as_slice()
+        let mut combined_json: CombinedJson =
+            revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
+                anyhow::anyhow!(
+                    "{} subprocess output parsing error: {}\n{}",
+                    self.executable,
+                    error,
+                    revive_common::deserialize_from_slice::<serde_json::Value>(
+                        output.stdout.as_slice()
+                    )
+                    .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
+                    .unwrap_or_else(
+                        |_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()
+                    ),
                 )
-                .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
-                .unwrap_or_else(|_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()),
-            )
-        })?;
+            })?;
         for filtered_flag in filtered_flags.into_iter() {
             for (_path, contract) in combined_json.contracts.iter_mut() {
                 match filtered_flag {

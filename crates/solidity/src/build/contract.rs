@@ -63,11 +63,7 @@ impl Contract {
         let file_name = Self::short_path(self.path.as_str());
 
         if output_assembly {
-            let file_name = format!(
-                "{}.{}",
-                file_name,
-                era_compiler_common::EXTENSION_ERAVM_ASSEMBLY
-            );
+            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_ERAVM_ASSEMBLY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 
@@ -88,11 +84,7 @@ impl Contract {
         }
 
         if output_binary {
-            let file_name = format!(
-                "{}.{}",
-                file_name,
-                era_compiler_common::EXTENSION_ERAVM_BINARY
-            );
+            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_ERAVM_BINARY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 

@@ -89,7 +89,7 @@ impl CombinedJson {
         overwrite: bool,
     ) -> anyhow::Result<()> {
         let mut file_path = output_directory.to_owned();
-        file_path.push(format!("combined.{}", era_compiler_common::EXTENSION_JSON));
+        file_path.push(format!("combined.{}", revive_common::EXTENSION_JSON));
 
         if file_path.exists() && !overwrite {
             eprintln!(

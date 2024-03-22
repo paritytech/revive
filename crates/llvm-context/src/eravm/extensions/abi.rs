@@ -169,7 +169,7 @@ where
     )?;
     let active_pointer_value_shifted = context.builder().build_right_shift(
         active_pointer_value,
-        context.field_const((era_compiler_common::BIT_LENGTH_X32 * 3) as u64),
+        context.field_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
         false,
         "active_pointer_value_shifted",
     )?;

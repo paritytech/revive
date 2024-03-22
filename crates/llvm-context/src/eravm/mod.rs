@@ -30,7 +30,7 @@ pub fn initialize_target() {
 pub fn build_assembly_text(
     contract_path: &str,
     assembly_text: &str,
-    _metadata_hash: Option<[u8; era_compiler_common::BYTE_LENGTH_FIELD]>,
+    _metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
     debug_config: Option<&DebugConfig>,
 ) -> anyhow::Result<Build> {
     if let Some(debug_config) = debug_config {

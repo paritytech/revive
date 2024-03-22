@@ -77,7 +77,7 @@ where
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((era_compiler_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
         "shift_left_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -117,7 +117,7 @@ where
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((era_compiler_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
         "shift_right_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -166,7 +166,7 @@ where
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((era_compiler_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
         "shift_right_arithmetic_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -174,7 +174,7 @@ where
     context.set_basic_block(overflow_block);
     let sign_bit = context.builder().build_right_shift(
         value,
-        context.field_const((era_compiler_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
         false,
         "shift_right_arithmetic_sign_bit",
     )?;

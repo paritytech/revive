@@ -24,7 +24,7 @@ use self::selection::Selection;
 pub struct Settings {
     /// The target EVM version.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub evm_version: Option<era_compiler_common::EVMVersion>,
+    pub evm_version: Option<revive_common::EVMVersion>,
     /// The linker library addresses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub libraries: Option<BTreeMap<String, BTreeMap<String, String>>>,
@@ -53,7 +53,7 @@ impl Settings {
     /// A shortcut constructor.
     ///
     pub fn new(
-        evm_version: Option<era_compiler_common::EVMVersion>,
+        evm_version: Option<revive_common::EVMVersion>,
         libraries: BTreeMap<String, BTreeMap<String, String>>,
         remappings: Option<BTreeSet<String>>,
         output_selection: Selection,

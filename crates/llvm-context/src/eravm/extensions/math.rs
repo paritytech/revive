@@ -20,12 +20,12 @@ where
 {
     let operand_1_extended = context.builder().build_int_z_extend_or_bit_cast(
         operand_1,
-        context.integer_type(era_compiler_common::BIT_LENGTH_FIELD * 2),
+        context.integer_type(revive_common::BIT_LENGTH_FIELD * 2),
         "multiplication_512_operand_1_extended",
     )?;
     let operand_2_extended = context.builder().build_int_z_extend_or_bit_cast(
         operand_2,
-        context.integer_type(era_compiler_common::BIT_LENGTH_FIELD * 2),
+        context.integer_type(revive_common::BIT_LENGTH_FIELD * 2),
         "multiplication_512_operand_2_extended",
     )?;
     let result_extended = context.builder().build_int_mul(
@@ -36,8 +36,8 @@ where
     let result_shifted = context.builder().build_right_shift(
         result_extended,
         context.integer_const(
-            era_compiler_common::BIT_LENGTH_FIELD * 2,
-            era_compiler_common::BIT_LENGTH_FIELD as u64,
+            revive_common::BIT_LENGTH_FIELD * 2,
+            revive_common::BIT_LENGTH_FIELD as u64,
         ),
         false,
         "multiplication_512_result_shifted",

@@ -894,9 +894,7 @@ impl FunctionCall {
                 let offset = context.builder().build_int_add(
                     arguments[0].into_int_value(),
                     context.field_const(
-                        (era_compiler_common::BYTE_LENGTH_X32
-                            + era_compiler_common::BYTE_LENGTH_FIELD)
-                            as u64,
+                        (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_FIELD) as u64,
                     ),
                     "datacopy_contract_hash_offset",
                 )?;

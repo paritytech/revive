@@ -39,7 +39,7 @@ impl Contract {
     ///
     pub fn new(
         path: String,
-        source_hash: [u8; era_compiler_common::BYTE_LENGTH_FIELD],
+        source_hash: [u8; revive_common::BYTE_LENGTH_FIELD],
         source_version: SolcVersion,
         ir: IR,
         metadata_json: Option<serde_json::Value>,
@@ -110,13 +110,13 @@ impl Contract {
             optimizer.settings().to_owned(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
-        let metadata_hash: Option<[u8; era_compiler_common::BYTE_LENGTH_FIELD]> =
-            if include_metadata_hash {
-                let metadata_string = serde_json::to_string(&metadata).expect("Always valid");
-                Some(sha3::Keccak256::digest(metadata_string.as_bytes()).into())
-            } else {
-                None
-            };
+        let metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]> = if include_metadata_hash
+        {
+            let metadata_string = serde_json::to_string(&metadata).expect("Always valid");
+            Some(sha3::Keccak256::digest(metadata_string.as_bytes()).into())
+        } else {
+            None
+        };
 
         let module = match self.ir {
             IR::LLVMIR(ref llvm_ir) => {

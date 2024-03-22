@@ -83,7 +83,7 @@ impl Integer {
     /// Checks whether the character can continue a decimal number.
     ///
     pub fn can_continue_decimal(character: char) -> bool {
-        character.is_digit(era_compiler_common::BASE_DECIMAL)
+        character.is_digit(revive_common::BASE_DECIMAL)
     }
 
     ///
@@ -97,7 +97,7 @@ impl Integer {
     /// Checks whether the character can continue a hexadecimal number.
     ///
     pub fn can_continue_hexadecimal(character: char) -> bool {
-        character.is_digit(era_compiler_common::BASE_HEXADECIMAL)
+        character.is_digit(revive_common::BASE_HEXADECIMAL)
     }
 
     ///

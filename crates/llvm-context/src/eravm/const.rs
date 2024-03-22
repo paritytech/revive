@@ -43,7 +43,7 @@ pub const HEAP_AUX_OFFSET_EXTERNAL_CALL: u64 = 0;
 
 /// The constructor return data offset in the auxiliary heap.
 pub const HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA: u64 =
-    8 * (era_compiler_common::BYTE_LENGTH_FIELD as u64);
+    8 * (revive_common::BYTE_LENGTH_FIELD as u64);
 
 /// The number of the extra ABI data arguments.
 pub const EXTRA_ABI_DATA_SIZE: usize = 0;
@@ -69,4 +69,4 @@ pub const SYSTEM_CALL_BIT: bool = true;
 /// - constructor arguments length (32 bytes)
 ///
 pub const DEPLOYER_CALL_HEADER_SIZE: usize =
-    era_compiler_common::BYTE_LENGTH_X32 + (era_compiler_common::BYTE_LENGTH_FIELD * 4);
+    revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_FIELD * 4);

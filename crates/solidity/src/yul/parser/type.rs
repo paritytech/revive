@@ -31,7 +31,7 @@ pub enum Type {
 
 impl Default for Type {
     fn default() -> Self {
-        Self::UInt(era_compiler_common::BIT_LENGTH_FIELD)
+        Self::UInt(revive_common::BIT_LENGTH_FIELD)
     }
 }
 
@@ -79,7 +79,7 @@ impl Type {
         D: era_compiler_llvm_context::EraVMDependency + Clone,
     {
         match self {
-            Self::Bool => context.integer_type(era_compiler_common::BIT_LENGTH_BOOLEAN),
+            Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),
             Self::Int(bitlength) => context.integer_type(bitlength),
             Self::UInt(bitlength) => context.integer_type(bitlength),
             Self::Custom(_) => context.field_type(),

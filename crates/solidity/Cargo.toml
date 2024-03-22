@@ -37,7 +37,7 @@ sha3 = { workspace = true }
 md5 = { workspace = true }
 inkwell = { workspace = true }
 
-era-compiler-common = { git = "https://github.com/matter-labs/era-compiler-common", branch = "main" }
+revive-common = { path = "../common" }
 era-compiler-llvm-context = { path = "../llvm-context" }
 
 

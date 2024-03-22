@@ -69,11 +69,11 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Deploy);
         if let Some(vyper) = context.vyper_data.as_ref() {
-            for index in 0..vyper.immutables_size() / era_compiler_common::BYTE_LENGTH_FIELD {
+            for index in 0..vyper.immutables_size() / revive_common::BYTE_LENGTH_FIELD {
                 let offset = (crate::eravm::r#const::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
                     as usize)
-                    + (1 + index) * 2 * era_compiler_common::BYTE_LENGTH_FIELD;
-                let value = index * era_compiler_common::BYTE_LENGTH_FIELD;
+                    + (1 + index) * 2 * revive_common::BYTE_LENGTH_FIELD;
+                let value = index * revive_common::BYTE_LENGTH_FIELD;
                 let pointer = Pointer::new_with_offset(
                     context,
                     AddressSpace::HeapAuxiliary,

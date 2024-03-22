@@ -41,10 +41,10 @@ where
             .declaration();
         let is_deploy_code = match self.code_type {
             era_compiler_llvm_context::EraVMCodeType::Deploy => context
-                .integer_type(era_compiler_common::BIT_LENGTH_BOOLEAN)
+                .integer_type(revive_common::BIT_LENGTH_BOOLEAN)
                 .const_int(1, false),
             era_compiler_llvm_context::EraVMCodeType::Runtime => context
-                .integer_type(era_compiler_common::BIT_LENGTH_BOOLEAN)
+                .integer_type(revive_common::BIT_LENGTH_BOOLEAN)
                 .const_int(0, false),
         };
         context.build_invoke(

@@ -35,7 +35,7 @@ where
                 index_double,
                 context.field_const(
                     crate::eravm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (3 * era_compiler_common::BYTE_LENGTH_FIELD) as u64,
+                        + (3 * revive_common::BYTE_LENGTH_FIELD) as u64,
                 ),
                 "immutable_offset_absolute",
             )?;
@@ -84,7 +84,7 @@ where
                 index_double,
                 context.field_const(
                     crate::eravm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (2 * era_compiler_common::BYTE_LENGTH_FIELD) as u64,
+                        + (2 * revive_common::BYTE_LENGTH_FIELD) as u64,
                 ),
                 "index_offset_absolute",
             )?;
@@ -99,7 +99,7 @@ where
 
             let value_offset_absolute = context.builder().build_int_add(
                 index_offset_absolute,
-                context.field_const(era_compiler_common::BYTE_LENGTH_FIELD as u64),
+                context.field_const(revive_common::BYTE_LENGTH_FIELD as u64),
                 "value_offset_absolute",
             )?;
             let value_offset_pointer = Pointer::new_with_offset(

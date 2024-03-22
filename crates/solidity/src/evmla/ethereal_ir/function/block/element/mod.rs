@@ -170,7 +170,7 @@ where
                     .value
                     .ok_or_else(|| anyhow::anyhow!("Instruction value missing"))?;
 
-                if value.len() > era_compiler_common::BYTE_LENGTH_FIELD * 2 {
+                if value.len() > revive_common::BYTE_LENGTH_FIELD * 2 {
                     Ok(Some(context.field_const(0).as_basic_value_enum()))
                 } else {
                     crate::evmla::assembly::instruction::stack::push(context, value).map(Some)
@@ -1319,10 +1319,8 @@ where
                                 pointer,
                                 &[
                                     context.field_const(0),
-                                    context.integer_const(
-                                        era_compiler_common::BIT_LENGTH_X32,
-                                        index as u64,
-                                    ),
+                                    context
+                                        .integer_const(revive_common::BIT_LENGTH_X32, index as u64),
                                 ],
                                 context.field_type(),
                                 format!("return_value_pointer_element_{}", index).as_str(),

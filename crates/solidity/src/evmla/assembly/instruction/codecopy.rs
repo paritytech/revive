@@ -16,7 +16,7 @@ where
     let offset = context.builder().build_int_add(
         offset,
         context.field_const(
-            (era_compiler_common::BYTE_LENGTH_X32 + era_compiler_common::BYTE_LENGTH_FIELD) as u64,
+            (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_FIELD) as u64,
         ),
         "datacopy_contract_hash_offset",
     )?;
@@ -61,12 +61,12 @@ where
     for (index, chunk) in source
         .chars()
         .collect::<Vec<char>>()
-        .chunks(era_compiler_common::BYTE_LENGTH_FIELD * 2)
+        .chunks(revive_common::BYTE_LENGTH_FIELD * 2)
         .enumerate()
     {
         let mut value_string = chunk.iter().collect::<String>();
         value_string.push_str(
-            "0".repeat((era_compiler_common::BYTE_LENGTH_FIELD * 2) - chunk.len())
+            "0".repeat((revive_common::BYTE_LENGTH_FIELD * 2) - chunk.len())
                 .as_str(),
         );
 

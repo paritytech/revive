@@ -15,7 +15,7 @@ pub struct Build {
     /// The EraVM text assembly.
     pub assembly_text: String,
     /// The metadata hash.
-    pub metadata_hash: Option<[u8; era_compiler_common::BYTE_LENGTH_FIELD]>,
+    pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
     /// The EraVM binary bytecode.
     pub bytecode: Vec<u8>,
     /// The EraVM bytecode hash.
@@ -30,7 +30,7 @@ impl Build {
     ///
     pub fn new(
         assembly_text: String,
-        metadata_hash: Option<[u8; era_compiler_common::BYTE_LENGTH_FIELD]>,
+        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
         bytecode: Vec<u8>,
         bytecode_hash: String,
     ) -> Self {

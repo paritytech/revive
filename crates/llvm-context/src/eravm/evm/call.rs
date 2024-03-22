@@ -44,7 +44,7 @@ where
             .and_then(|value| value.to_u16());
 
         match simulation_address {
-            Some(era_compiler_common::ERAVM_ADDRESS_TO_L1) => {
+            Some(revive_common::ERAVM_ADDRESS_TO_L1) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -57,7 +57,7 @@ where
 
                 return crate::eravm::extensions::general::to_l1(context, is_first, in_0, in_1);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_CODE_ADDRESS) => {
+            Some(revive_common::ERAVM_ADDRESS_CODE_ADDRESS) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -66,7 +66,7 @@ where
 
                 return crate::eravm::extensions::general::code_source(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_PRECOMPILE) => {
+            Some(revive_common::ERAVM_ADDRESS_PRECOMPILE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -78,7 +78,7 @@ where
 
                 return crate::eravm::extensions::general::precompile(context, in_0, gas_left);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_META) => {
+            Some(revive_common::ERAVM_ADDRESS_META) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -87,7 +87,7 @@ where
 
                 return crate::eravm::extensions::general::meta(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_MIMIC_CALL) => {
+            Some(revive_common::ERAVM_ADDRESS_MIMIC_CALL) => {
                 let address = gas;
                 let abi_data = input_offset;
                 let mimic = input_length;
@@ -101,7 +101,7 @@ where
                     vec![],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SYSTEM_MIMIC_CALL) => {
+            Some(revive_common::ERAVM_ADDRESS_SYSTEM_MIMIC_CALL) => {
                 let address = gas;
                 let abi_data = input_offset;
                 let mimic = input_length;
@@ -117,7 +117,7 @@ where
                     vec![extra_value_1, extra_value_2],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_MIMIC_CALL_BYREF) => {
+            Some(revive_common::ERAVM_ADDRESS_MIMIC_CALL_BYREF) => {
                 let address = gas;
                 let mimic = input_length;
                 let abi_data = context.get_global_value(crate::eravm::GLOBAL_ACTIVE_POINTER)?;
@@ -131,7 +131,7 @@ where
                     vec![],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SYSTEM_MIMIC_CALL_BYREF) => {
+            Some(revive_common::ERAVM_ADDRESS_SYSTEM_MIMIC_CALL_BYREF) => {
                 let address = gas;
                 let mimic = input_length;
                 let abi_data = context.get_global_value(crate::eravm::GLOBAL_ACTIVE_POINTER)?;
@@ -147,7 +147,7 @@ where
                     vec![extra_value_1, extra_value_2],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_RAW_FAR_CALL) => {
+            Some(revive_common::ERAVM_ADDRESS_RAW_FAR_CALL) => {
                 let address = gas;
                 let abi_data = input_length;
 
@@ -160,7 +160,7 @@ where
                     output_length,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_RAW_FAR_CALL_BYREF) => {
+            Some(revive_common::ERAVM_ADDRESS_RAW_FAR_CALL_BYREF) => {
                 let address = gas;
                 let abi_data = context.get_global_value(crate::eravm::GLOBAL_ACTIVE_POINTER)?;
 
@@ -173,7 +173,7 @@ where
                     output_length,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SYSTEM_CALL) => {
+            Some(revive_common::ERAVM_ADDRESS_SYSTEM_CALL) => {
                 let address = gas;
                 let abi_data = input_length;
                 let extra_value_1 = value.expect("Always exists");
@@ -191,7 +191,7 @@ where
                     vec![extra_value_1, extra_value_2, extra_value_3, extra_value_4],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SYSTEM_CALL_BYREF) => {
+            Some(revive_common::ERAVM_ADDRESS_SYSTEM_CALL_BYREF) => {
                 let address = gas;
                 let abi_data = context.get_global_value(crate::eravm::GLOBAL_ACTIVE_POINTER)?;
                 let extra_value_1 = value.expect("Always exists");
@@ -209,7 +209,7 @@ where
                     vec![extra_value_1, extra_value_2, extra_value_3, extra_value_4],
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SET_CONTEXT_VALUE_CALL) => {
+            Some(revive_common::ERAVM_ADDRESS_SET_CONTEXT_VALUE_CALL) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -220,7 +220,7 @@ where
 
                 return crate::eravm::extensions::general::set_context_value(context, value);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_SET_PUBDATA_PRICE) => {
+            Some(revive_common::ERAVM_ADDRESS_SET_PUBDATA_PRICE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -231,7 +231,7 @@ where
 
                 return crate::eravm::extensions::general::set_pubdata_price(context, price);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_INCREMENT_TX_COUNTER) => {
+            Some(revive_common::ERAVM_ADDRESS_INCREMENT_TX_COUNTER) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -240,7 +240,7 @@ where
 
                 return crate::eravm::extensions::general::increment_tx_counter(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_GET_GLOBAL_PTR_CALLDATA) => {
+            Some(revive_common::ERAVM_ADDRESS_GET_GLOBAL_PTR_CALLDATA) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -255,7 +255,7 @@ where
                 )?;
                 return Ok(value.as_basic_value_enum());
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_GET_GLOBAL_CALL_FLAGS) => {
+            Some(revive_common::ERAVM_ADDRESS_GET_GLOBAL_CALL_FLAGS) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -264,7 +264,7 @@ where
 
                 return context.get_global_value(crate::eravm::GLOBAL_CALL_FLAGS);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_GET_GLOBAL_PTR_RETURN_DATA) => {
+            Some(revive_common::ERAVM_ADDRESS_GET_GLOBAL_PTR_RETURN_DATA) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -279,7 +279,7 @@ where
                 )?;
                 return Ok(value.as_basic_value_enum());
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_EVENT_INITIALIZE) => {
+            Some(revive_common::ERAVM_ADDRESS_EVENT_INITIALIZE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -293,7 +293,7 @@ where
                     context, operand_1, operand_2, true,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_EVENT_WRITE) => {
+            Some(revive_common::ERAVM_ADDRESS_EVENT_WRITE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().far_call,
                     function,
@@ -307,7 +307,7 @@ where
                     context, operand_1, operand_2, false,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_LOAD_CALLDATA) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_LOAD_CALLDATA) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -316,7 +316,7 @@ where
 
                 return crate::eravm::extensions::abi::calldata_ptr_to_active(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_LOAD_RETURN_DATA) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_LOAD_RETURN_DATA) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -325,7 +325,7 @@ where
 
                 return crate::eravm::extensions::abi::return_data_ptr_to_active(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_ADD) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_ADD) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -336,7 +336,7 @@ where
 
                 return crate::eravm::extensions::abi::active_ptr_add_assign(context, offset);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_SHRINK) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_SHRINK) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -347,7 +347,7 @@ where
 
                 return crate::eravm::extensions::abi::active_ptr_shrink_assign(context, offset);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_PACK) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_PACK) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -358,7 +358,7 @@ where
 
                 return crate::eravm::extensions::abi::active_ptr_pack_assign(context, data);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_MULTIPLICATION_HIGH_REGISTER) => {
+            Some(revive_common::ERAVM_ADDRESS_MULTIPLICATION_HIGH_REGISTER) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -372,7 +372,7 @@ where
                     context, operand_1, operand_2,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_GET_GLOBAL_EXTRA_ABI_DATA) => {
+            Some(revive_common::ERAVM_ADDRESS_GET_GLOBAL_EXTRA_ABI_DATA) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -383,7 +383,7 @@ where
 
                 return crate::eravm::extensions::abi::get_extra_abi_data(context, index);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_LOAD) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_LOAD) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -394,7 +394,7 @@ where
 
                 return crate::eravm::extensions::abi::active_ptr_data_load(context, offset);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_SIZE) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_SIZE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -403,7 +403,7 @@ where
 
                 return crate::eravm::extensions::abi::active_ptr_data_size(context);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_COPY) => {
+            Some(revive_common::ERAVM_ADDRESS_ACTIVE_PTR_DATA_COPY) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -421,7 +421,7 @@ where
                     size,
                 );
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_CONST_ARRAY_DECLARE) => {
+            Some(revive_common::ERAVM_ADDRESS_CONST_ARRAY_DECLARE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -443,7 +443,7 @@ where
 
                 return crate::eravm::extensions::const_array::declare(context, index, size);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_CONST_ARRAY_SET) => {
+            Some(revive_common::ERAVM_ADDRESS_CONST_ARRAY_SET) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -469,7 +469,7 @@ where
 
                 return crate::eravm::extensions::const_array::set(context, index, offset, value);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_CONST_ARRAY_FINALIZE) => {
+            Some(revive_common::ERAVM_ADDRESS_CONST_ARRAY_FINALIZE) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -485,7 +485,7 @@ where
 
                 return crate::eravm::extensions::const_array::finalize(context, index);
             }
-            Some(era_compiler_common::ERAVM_ADDRESS_CONST_ARRAY_GET) => {
+            Some(revive_common::ERAVM_ADDRESS_CONST_ARRAY_GET) => {
                 crate::eravm::extensions::call::validate_call_type(
                     context.llvm_runtime().static_call,
                     function,
@@ -604,8 +604,8 @@ where
     let signature_value = context.field_const_str_hex(signature_hash.as_str());
 
     let calldata_size = context.field_const(
-        (era_compiler_common::BYTE_LENGTH_X32
-            + (era_compiler_common::BYTE_LENGTH_FIELD * arguments.len())) as u64,
+        (revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_FIELD * arguments.len()))
+            as u64,
     );
 
     let calldata_array_pointer = context.build_alloca(

@@ -20,10 +20,10 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 ///
 fn main() {
     std::process::exit(match main_inner() {
-        Ok(()) => era_compiler_common::EXIT_CODE_SUCCESS,
+        Ok(()) => revive_common::EXIT_CODE_SUCCESS,
         Err(error) => {
             eprintln!("{error}");
-            era_compiler_common::EXIT_CODE_FAILURE
+            revive_common::EXIT_CODE_FAILURE
         }
     })
 }
@@ -82,9 +82,7 @@ fn main_inner() -> anyhow::Result<()> {
     )?;
 
     let evm_version = match arguments.evm_version {
-        Some(evm_version) => Some(era_compiler_common::EVMVersion::try_from(
-            evm_version.as_str(),
-        )?),
+        Some(evm_version) => Some(revive_common::EVMVersion::try_from(evm_version.as_str())?),
         None => None,
     };
 

@@ -8,6 +8,9 @@ pub const LLVM_VERSION: semver::Version = semver::Version::new(15, 0, 4);
 /// The EraVM version.
 pub const ZKEVM_VERSION: semver::Version = semver::Version::new(1, 3, 2);
 
+/// The register width sized type
+pub static XLEN: usize = revive_common::BIT_LENGTH_X32;
+
 /// The heap memory pointer pointer global variable name.
 pub static GLOBAL_HEAP_MEMORY_POINTER: &str = "memory_pointer";
 

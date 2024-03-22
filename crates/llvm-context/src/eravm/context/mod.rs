@@ -665,14 +665,14 @@ where
                 let heap_pointer = self.build_heap_gep(
                     self.builder().build_ptr_to_int(
                         pointer.value,
-                        self.integer_type(32),
+                        self.xlen_type(),
                         "offset_ptrtoint",
                     )?,
                     pointer
                         .r#type
                         .size_of()
                         .expect("should be IntValue")
-                        .const_truncate(self.integer_type(32)),
+                        .const_truncate(self.xlen_type()),
                 )?;
 
                 let value = self
@@ -697,22 +697,22 @@ where
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
-                    self.integer_type(32),
+                    self.xlen_type(),
                     "storage_key_pointer_casted",
                 )?;
 
                 let storage_value_pointer = self.build_alloca(self.field_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
-                    self.integer_type(32),
+                    self.xlen_type(),
                     "storage_value_pointer_casted",
                 )?;
 
                 let storage_value_length_pointer =
-                    self.build_alloca(self.integer_type(32), "out_len_ptr");
+                    self.build_alloca(self.xlen_type(), "out_len_ptr");
                 let storage_value_length_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_length_pointer.value,
-                    self.integer_type(32),
+                    self.xlen_type(),
                     "storage_value_length_pointer_cast",
                 )?;
 
@@ -779,7 +779,7 @@ where
                 let heap_pointer = self.build_heap_gep(
                     self.builder().build_ptr_to_int(
                         pointer.value,
-                        self.integer_type(32),
+                        self.xlen_type(),
                         "offset_ptrtoint",
                     )?,
                     value
@@ -787,7 +787,7 @@ where
                         .get_type()
                         .size_of()
                         .expect("should be IntValue")
-                        .const_truncate(self.integer_type(32)),
+                        .const_truncate(self.xlen_type()),
                 )?;
                 let value = self.build_byte_swap(value.as_basic_value_enum());
 
@@ -816,12 +816,12 @@ where
 
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
-                    self.integer_type(32),
+                    self.xlen_type(),
                     "storage_key_pointer_casted",
                 )?;
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
-                    self.integer_type(32),
+                    self.xlen_type(),
                     "storage_value_pointer_casted",
                 )?;
 
@@ -1190,7 +1190,7 @@ where
         let length_pointer = self.safe_truncate_int_to_i32(length)?;
         let offset_pointer = self.builder().build_ptr_to_int(
             offset_into_heap.value,
-            self.integer_type(32),
+            self.xlen_type(),
             "return_data_ptr_to_int",
         )?;
 
@@ -1215,7 +1215,7 @@ where
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
         let truncated = self.builder().build_int_truncate_or_bit_cast(
             value,
-            self.integer_type(32),
+            self.xlen_type(),
             "offset_truncated",
         )?;
         let extended = self.builder().build_int_z_extend_or_bit_cast(
@@ -1297,8 +1297,8 @@ where
         offset: inkwell::values::IntValue<'ctx>,
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<Pointer<'ctx>> {
-        assert_eq!(offset.get_type(), self.integer_type(32));
-        assert_eq!(length.get_type(), self.integer_type(32));
+        assert_eq!(offset.get_type(), self.xlen_type());
+        assert_eq!(length.get_type(), self.xlen_type());
 
         let heap_start = self
             .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
@@ -1462,8 +1462,7 @@ where
 
     /// Returns the register witdh sized type.
     pub fn xlen_type(&self) -> inkwell::types::IntType<'ctx> {
-        self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_X32 as u32)
+        self.llvm.custom_width_int_type(crate::eravm::XLEN as u32)
     }
 
     ///

@@ -46,7 +46,7 @@ impl Entry {
             crate::eravm::GLOBAL_HEAP_MEMORY_POINTER,
             context.byte_type().ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
-            context.integer_type(32).get_undef(),
+            context.xlen_type().get_undef(),
         );
         context.build_store(
             context
@@ -101,14 +101,14 @@ impl Entry {
             .as_pointer_value();
         let input_pointer_casted = context.builder.build_ptr_to_int(
             input_pointer,
-            context.integer_type(32),
+            context.xlen_type(),
             "input_pointer_casted",
         )?;
 
-        let length_pointer = context.build_alloca(context.integer_type(32), "len_ptr");
+        let length_pointer = context.build_alloca(context.xlen_type(), "len_ptr");
         let length_pointer_casted = context.builder.build_ptr_to_int(
             length_pointer.value,
-            context.integer_type(32),
+            context.xlen_type(),
             "length_pointer_casted",
         )?;
 

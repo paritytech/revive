@@ -21,14 +21,14 @@ where
     let input_pointer = context.build_heap_gep(offset_casted, length_casted)?;
     let input_pointer_casted = context.builder().build_ptr_to_int(
         input_pointer.value,
-        context.integer_type(32),
+        context.xlen_type(),
         "input_pointer_casted",
     )?;
 
     let output_pointer = context.build_alloca(context.field_type(), "output_pointer");
     let output_pointer_casted = context.builder().build_ptr_to_int(
         output_pointer.value,
-        context.integer_type(32),
+        context.xlen_type(),
         "output_pointer_casted",
     )?;
 

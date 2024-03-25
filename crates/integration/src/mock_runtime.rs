@@ -192,10 +192,10 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
 }
 
-pub fn prepare(code: &[u8]) -> (InstancePre<State>, ExportIndex) {
+pub fn prepare(code: &[u8], config: Option<Config>) -> (InstancePre<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
-    let engine = Engine::new(&Config::new()).unwrap();
+    let engine = Engine::new(&config.unwrap_or_default()).unwrap();
 
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));

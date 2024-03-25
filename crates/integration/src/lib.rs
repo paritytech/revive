@@ -36,7 +36,7 @@ mod tests {
     fn flipper() {
         let code = crate::compile_blob("Flipper", include_str!("../contracts/flipper.sol"));
         let state = State::new(0xcde4efa9u32.to_be_bytes().to_vec());
-        let (instance, export) = mock_runtime::prepare(&code);
+        let (instance, export) = mock_runtime::prepare(&code, None);
 
         let state = crate::mock_runtime::call(state, &instance, export);
         assert_eq!(state.output.flags, 0);
@@ -66,7 +66,7 @@ mod tests {
         let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code);
+        let (instance, export) = mock_runtime::prepare(&code, None);
         let state = crate::mock_runtime::call(state, &instance, export);
 
         assert_eq!(state.output.flags, 0);
@@ -94,7 +94,7 @@ mod tests {
         input.extend_from_slice(&param.to_be_bytes::<32>());
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code);
+        let (instance, export) = mock_runtime::prepare(&code, None);
         let state = crate::mock_runtime::call(state, &instance, export);
 
         assert_eq!(state.output.flags, 0);
@@ -114,7 +114,7 @@ mod tests {
         input.extend_from_slice(&param.to_be_bytes::<32>());
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code);
+        let (instance, export) = mock_runtime::prepare(&code, None);
         let state = crate::mock_runtime::call(state, &instance, export);
 
         assert_eq!(state.output.flags, 0);

@@ -1,14 +1,26 @@
 pub mod mock_runtime;
 
+/// Compile the blob of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_blob_with_options(contract_name, source_code, true)
+}
+
+/// Compile the blob of `contract_name` found in given `source_code`.
+pub fn compile_blob_with_options(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> Vec<u8> {
     let file_name = "contract.sol";
 
-    let contracts = revive_solidity::test_utils::build_solidity(
+    let contracts = revive_solidity::test_utils::build_solidity_with_options(
         [(file_name.into(), source_code.into())].into(),
         Default::default(),
         None,
         revive_solidity::SolcPipeline::Yul,
         era_compiler_llvm_context::OptimizerSettings::cycles(),
+        solc_optimizer_enabled,
     )
     .expect("source should compile")
     .contracts
@@ -147,6 +159,32 @@ mod tests {
         assert_eq!(state.output.flags, 0);
 
         let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, expected);
+    }
+
+    #[test]
+    fn msize() {
+        sol!(
+            #[derive(Debug, PartialEq, Eq)]
+            contract MSize {
+                function mSize() public pure returns (uint);
+            }
+        );
+        let code = crate::compile_blob_with_options(
+            "MSize",
+            include_str!("../contracts/MSize.sol"),
+            false,
+        );
+
+        let input = MSize::mSizeCall::new(()).abi_encode();
+        let (instance, export) = mock_runtime::prepare(&code, None);
+        let state = crate::mock_runtime::call(State::new(input), &instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        // Solidity always stores the "free memory pointer" (32 byte int) at offset 64.
+        let expected = U256::try_from(64 + 32).unwrap();
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }
 }

@@ -30,15 +30,34 @@ fn check_dependencies() {
     }
 }
 
-///
 /// Builds the Solidity project and returns the standard JSON output.
-///
 pub fn build_solidity(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
     optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    build_solidity_with_options(
+        sources,
+        libraries,
+        remappings,
+        pipeline,
+        optimizer_settings,
+        true,
+    )
+}
+
+/// Builds the Solidity project and returns the standard JSON output.
+/// Gives control over additional options:
+/// - `solc_optimizer_enabled`: Whether to use the `solc` optimizer
+pub fn build_solidity_with_options(
+    sources: BTreeMap<String, String>,
+    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    remappings: Option<BTreeSet<String>>,
+    pipeline: SolcPipeline,
+    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    solc_optimizer_enabled: bool,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
@@ -56,7 +75,7 @@ pub fn build_solidity(
         remappings,
         SolcStandardJsonInputSettingsSelection::new_required(pipeline),
         SolcStandardJsonInputSettingsOptimizer::new(
-            true,
+            solc_optimizer_enabled,
             None,
             &solc_version.default,
             false,

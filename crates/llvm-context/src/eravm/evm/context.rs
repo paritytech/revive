@@ -2,6 +2,8 @@
 //! Translates the context getter instructions.
 //!
 
+use inkwell::values::BasicValue;
+
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
@@ -180,10 +182,24 @@ where
 /// Translates the `msize` instruction.
 ///
 pub fn msize<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let heap_end = context.build_sbrk(context.xlen_type().const_zero())?;
+    let heap_start = context
+        .get_global(crate::eravm::GLOBAL_HEAP_MEMORY_POINTER)?
+        .value
+        .as_pointer_value();
+    let heap_size = context.builder().build_int_nuw_sub(
+        context
+            .builder()
+            .build_ptr_to_int(heap_end, context.xlen_type(), "heap_end")?,
+        context
+            .builder()
+            .build_ptr_to_int(heap_start, context.xlen_type(), "heap_start")?,
+        "heap_size",
+    )?;
+    Ok(heap_size.as_basic_value_enum())
 }

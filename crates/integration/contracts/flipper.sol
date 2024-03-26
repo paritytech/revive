@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 contract Flipper {
     bool coin;
 
-    function flip() public payable {
+    function flip() public {
         coin = !coin;
     }
 }

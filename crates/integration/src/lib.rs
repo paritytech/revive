@@ -33,6 +33,33 @@ mod tests {
     use crate::mock_runtime::{self, State};
 
     #[test]
+    fn fibonacci() {
+        sol!(
+            #[derive(Debug, PartialEq, Eq)]
+            contract Fibonacci {
+                function fib3(uint n) public pure returns (uint);
+            }
+        );
+
+        for contract in ["FibonacciIterative", "FibonacciRecursive", "FibonacciBinet"] {
+            let code = crate::compile_blob(contract, include_str!("../contracts/Fibonacci.sol"));
+
+            let parameter = U256::from(6);
+            let input = Fibonacci::fib3Call::new((parameter,)).abi_encode();
+
+            let state = State::new(input);
+            let (instance, export) = mock_runtime::prepare(&code, None);
+            let state = crate::mock_runtime::call(state, &instance, export);
+
+            assert_eq!(state.output.flags, 0);
+
+            let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+            let expected = U256::from(8);
+            assert_eq!(received, expected);
+        }
+    }
+
+    #[test]
     fn flipper() {
         let code = crate::compile_blob("Flipper", include_str!("../contracts/flipper.sol"));
         let state = State::new(0xcde4efa9u32.to_be_bytes().to_vec());
@@ -75,7 +102,7 @@ mod tests {
         hasher.update(param);
         let expected = hasher.finalize();
         let received = FixedBytes::<32>::from_slice(&state.output.data);
-        assert_eq!(expected, received);
+        assert_eq!(received, expected);
     }
 
     #[test]

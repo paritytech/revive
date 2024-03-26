@@ -1262,6 +1262,8 @@ where
 
     /// Call PolkaVM `sbrk` for extending the heap by `size`,
     /// trapping the contract if the call failed.
+    ///
+    /// Returns the end of memory pointer.
     pub fn build_heap_alloc(
         &self,
         size: inkwell::values::IntValue<'ctx>,
@@ -1287,8 +1289,8 @@ where
         Ok(end_of_memory)
     }
 
-    /// Returns a pointer to `offset` into the heap, allocating `length`
-    /// bytes more memory if `offset + length` would be out of bounds.
+    /// Returns a pointer to `offset` into the heap, allocating
+    /// enough memory if `offset + length` would be out of bounds.
     ///
     /// # Panics
     /// Assumes `offset` and `length` to be an i32 value.
@@ -1323,7 +1325,14 @@ where
         self.build_conditional_branch(is_out_of_bounds, out_of_bounds_block, heap_offset_block)?;
 
         self.set_basic_block(out_of_bounds_block);
-        self.build_heap_alloc(length)?;
+        let size = self.builder().build_int_nuw_sub(
+            self.builder()
+                .build_ptr_to_int(value_end.value, self.xlen_type(), "value_end")?,
+            self.builder()
+                .build_ptr_to_int(heap_end, self.xlen_type(), "heap_end")?,
+            "heap_alloc_size",
+        )?;
+        self.build_heap_alloc(size)?;
         self.build_unconditional_branch(heap_offset_block);
 
         self.set_basic_block(heap_offset_block);

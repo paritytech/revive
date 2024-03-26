@@ -89,5 +89,5 @@ where
         "return_data_copy_memcpy_from_return_data",
     )?;
 
-    Ok(())
+    todo!("Build heap GEP to allocate if necessary")
 }

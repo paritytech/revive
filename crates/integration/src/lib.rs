@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn msize() {
+    fn msize_plain() {
         sol!(
             #[derive(Debug, PartialEq, Eq)]
             contract MSize {
@@ -175,15 +175,43 @@ mod tests {
             include_str!("../contracts/MSize.sol"),
             false,
         );
+        let (instance, export) = mock_runtime::prepare(&code, None);
 
         let input = MSize::mSizeCall::new(()).abi_encode();
-        let (instance, export) = mock_runtime::prepare(&code, None);
         let state = crate::mock_runtime::call(State::new(input), &instance, export);
 
         assert_eq!(state.output.flags, 0);
 
         // Solidity always stores the "free memory pointer" (32 byte int) at offset 64.
         let expected = U256::try_from(64 + 32).unwrap();
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, expected);
+    }
+
+    #[test]
+    fn msize_non_word_sized_access() {
+        sol!(
+            #[derive(Debug, PartialEq, Eq)]
+            contract MSize {
+                function mStore100() public pure returns (uint);
+            }
+        );
+        let code = crate::compile_blob_with_options(
+            "MSize",
+            include_str!("../contracts/MSize.sol"),
+            false,
+        );
+        let (instance, export) = mock_runtime::prepare(&code, None);
+
+        let input = MSize::mStore100Call::new(()).abi_encode();
+        let state = crate::mock_runtime::call(State::new(input), &instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        // https://docs.zksync.io/build/developer-reference/differences-with-ethereum.html#mstore-mload
+        // "Unlike EVM, where the memory growth is in words, on zkEVM the memory growth is counted in bytes."
+        // "For example, if you write mstore(100, 0) the msize on zkEVM will be 132, but on the EVM it will be 160."
+        let expected = U256::try_from(132).unwrap();
         let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }

@@ -6,4 +6,11 @@ contract MSize {
             size := msize()
         }
     }
+
+    function mStore100() public pure returns (uint size) {
+        assembly {
+            mstore(100, msize())
+            size := msize()
+        }
+    }
 }

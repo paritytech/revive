@@ -201,5 +201,8 @@ where
             .build_ptr_to_int(heap_start, context.xlen_type(), "heap_start")?,
         "heap_size",
     )?;
-    Ok(heap_size.as_basic_value_enum())
+    Ok(context
+        .builder()
+        .build_int_z_extend(heap_size, context.field_type(), "heap_size_extended")?
+        .as_basic_value_enum())
 }

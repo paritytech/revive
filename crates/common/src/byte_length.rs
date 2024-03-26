@@ -8,6 +8,9 @@ pub const BYTE_LENGTH_BYTE: usize = 1;
 /// The x86 word byte-length.
 pub const BYTE_LENGTH_X32: usize = 4;
 
+/// Native stack alignment size in bytes
+pub const BYTE_LENGTH_STACK_ALIGN: usize = 16;
+
 /// The x86_64 word byte-length.
 pub const BYTE_LENGTH_X64: usize = 8;
 

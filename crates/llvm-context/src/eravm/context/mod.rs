@@ -634,7 +634,7 @@ where
     ///
     /// Builds a stack allocation instruction.
     ///
-    /// Sets the alignment to 256 bits.
+    /// Sets the alignment to 128 bits.
     ///
     pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,
@@ -645,7 +645,7 @@ where
         self.basic_block()
             .get_last_instruction()
             .expect("Always exists")
-            .set_alignment(revive_common::BYTE_LENGTH_FIELD as u32)
+            .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
             .expect("Alignment is valid");
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
@@ -757,7 +757,7 @@ where
                 self.basic_block()
                     .get_last_instruction()
                     .expect("Always exists")
-                    .set_alignment(revive_common::BYTE_LENGTH_FIELD as u32)
+                    .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
                     .expect("Alignment is valid");
 
                 Ok(value)
@@ -851,7 +851,7 @@ where
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
                 instruction
-                    .set_alignment(revive_common::BYTE_LENGTH_FIELD as u32)
+                    .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
                     .expect("Alignment is valid");
             }
         };
@@ -1548,7 +1548,7 @@ where
             if argument.is_pointer_value() {
                 call_site_value.set_alignment_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
-                    revive_common::BYTE_LENGTH_FIELD as u32,
+                    revive_common::BYTE_LENGTH_STACK_ALIGN as u32,
                 );
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
@@ -1630,7 +1630,7 @@ where
         {
             call_site_value.set_alignment_attribute(
                 inkwell::attributes::AttributeLoc::Return,
-                revive_common::BYTE_LENGTH_FIELD as u32,
+                revive_common::BYTE_LENGTH_STACK_ALIGN as u32,
             );
             call_site_value.add_attribute(
                 inkwell::attributes::AttributeLoc::Return,

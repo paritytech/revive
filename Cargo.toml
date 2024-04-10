@@ -37,6 +37,6 @@ serde_stacker = "0.1"
 
 [workspace.dependencies.inkwell]
 git = "https://github.com/TheDan64/inkwell.git"
-commit = "69c5a3f"
+commit = "d916c66"
 default-features = false
-features = ["serde", "llvm16-0", "no-libffi-linking", "target-riscv"]
+features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]

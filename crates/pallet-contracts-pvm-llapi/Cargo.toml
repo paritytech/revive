@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm16-0"] }
+inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-0"] }

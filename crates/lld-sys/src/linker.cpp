@@ -2,6 +2,8 @@
 #include "lld/Common/CommonLinkerContext.h"
 #include "llvm/Support/CrashRecoveryContext.h"
 
+LLD_HAS_DRIVER(elf);
+
 extern "C" bool LLDELFLink(const char *argv[], size_t length)
 {
     bool canRunAgain;

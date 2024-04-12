@@ -28,7 +28,7 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
 - [ ] Debug information
 - [ ] Look for and implement further optimizations
 - [ ] Differential testing against EVM
-- [ ] Switch to LLVM 18 which has `RV{32,64}E` targets upstream
+- [x] Switch to LLVM 18 which has `RV{32,64}E` targets upstream
 - [ ] Minimize scope of "stdlib"
 - [ ] Document differences from EVM
 - [ ] Audit for bugs and correctness

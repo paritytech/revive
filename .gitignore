@@ -6,3 +6,5 @@
 /*.yul
 /*.ll
 /*.s
+/llvm-project
+/llvm18.0

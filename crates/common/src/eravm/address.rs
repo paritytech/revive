@@ -6,9 +6,6 @@
 pub const ERAVM_ADDRESS_TO_L1: u16 = 0xFFFF;
 
 /// The corresponding simulation predefined address.
-pub const ERAVM_ADDRESS_CODE_ADDRESS: u16 = 0xFFFE;
-
-/// The corresponding simulation predefined address.
 pub const ERAVM_ADDRESS_PRECOMPILE: u16 = 0xFFFD;
 
 /// The corresponding simulation predefined address.

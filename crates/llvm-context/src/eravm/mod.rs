@@ -5,7 +5,6 @@
 pub mod r#const;
 pub mod context;
 pub mod evm;
-pub mod extensions;
 pub mod metadata_hash;
 pub mod utils;
 

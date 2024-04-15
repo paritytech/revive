@@ -157,17 +157,6 @@ pub enum Name {
     ///
     /// Passes bytecode to the system contracts.
     Create2,
-    /// create new contract with code `mem[p…(p+n))` and send `v` wei and return the new address
-    ///
-    /// Passes hash to the system contracts.
-    ZkCreate,
-    /// create new contract with code `mem[p…(p+n))` at address
-    /// `keccak256(0xff . this . s . keccak256(mem[p…(p+n)))` and send `v` wei and return the
-    /// new address, where `0xff` is a 1-byte value, this is the current contract’s address as a
-    /// 20-byte value and `s` is a big-endian 256-bit value
-    ///
-    /// Passes hash to the system contracts.
-    ZkCreate2,
     /// returns the size in the data area
     DataSize,
     /// is equivalent to `CodeCopy`
@@ -238,79 +227,6 @@ pub enum Name {
     ExtCodeCopy,
     /// end execution, destroy current contract and send funds to `a`
     SelfDestruct,
-
-    /// The eponymous EraVM Yul extension instruction.
-    ZkToL1,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkCodeSource,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkPrecompile,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkMeta,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSetContextU128,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSetPubdataPrice,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkIncrementTxCounter,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkEventInitialize,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkEventWrite,
-
-    /// The eponymous EraVM Yul extension instruction.
-    ZkMimicCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSystemMimicCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkMimicCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSystemMimicCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkRawCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkRawCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSystemCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkSystemCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkStaticRawCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkStaticRawCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkStaticSystemCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkStaticSystemCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkDelegateRawCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkDelegateRawCallByRef,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkDelegateSystemCall,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkDelegateSystemCallByRef,
-
-    /// The eponymous EraVM Yul extension instruction.
-    ZkLoadCalldataIntoActivePtr,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkLoadReturndataIntoActivePtr,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkPtrAddIntoActive,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkPtrShrinkIntoActive,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkPtrPackIntoActive,
-
-    /// The eponymous EraVM Yul extension instruction.
-    ZkMultiplicationHigh,
-
-    /// The eponymous EraVM Yul extension instruction.
-    ZkGlobalLoad,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkGlobalExtraAbiData,
-    /// The eponymous EraVM Yul extension instruction.
-    ZkGlobalStore,
 }
 
 impl Name {
@@ -406,8 +322,6 @@ impl From<&str> for Name {
 
             "create" => Self::Create,
             "create2" => Self::Create2,
-            "$zk_create" => Self::ZkCreate,
-            "$zk_create2" => Self::ZkCreate2,
             "datasize" => Self::DataSize,
             "dataoffset" => Self::DataOffset,
             "datacopy" => Self::DataCopy,
@@ -445,45 +359,6 @@ impl From<&str> for Name {
             "pc" => Self::Pc,
             "extcodecopy" => Self::ExtCodeCopy,
             "selfdestruct" => Self::SelfDestruct,
-
-            "$zk_to_l1" => Self::ZkToL1,
-            "$zk_code_source" => Self::ZkCodeSource,
-            "$zk_precompile" => Self::ZkPrecompile,
-            "$zk_meta" => Self::ZkMeta,
-            "$zk_set_context_u128" => Self::ZkSetContextU128,
-            "$zk_set_pubdata_price" => Self::ZkSetPubdataPrice,
-            "$zk_increment_tx_counter" => Self::ZkIncrementTxCounter,
-            "$zk_event_initialize" => Self::ZkEventInitialize,
-            "$zk_event_write" => Self::ZkEventWrite,
-
-            "$zk_mimic_call" => Self::ZkMimicCall,
-            "$zk_system_mimic_call" => Self::ZkSystemMimicCall,
-            "$zk_mimic_call_byref" => Self::ZkMimicCallByRef,
-            "$zk_system_mimic_call_byref" => Self::ZkSystemMimicCallByRef,
-            "$zk_raw_call" => Self::ZkRawCall,
-            "$zk_raw_call_byref" => Self::ZkRawCallByRef,
-            "$zk_system_call" => Self::ZkSystemCall,
-            "$zk_system_call_byref" => Self::ZkSystemCallByRef,
-            "$zk_static_raw_call" => Self::ZkStaticRawCall,
-            "$zk_static_raw_call_byref" => Self::ZkStaticRawCallByRef,
-            "$zk_static_system_call" => Self::ZkStaticSystemCall,
-            "$zk_static_system_call_byref" => Self::ZkStaticSystemCallByRef,
-            "$zk_delegate_raw_call" => Self::ZkDelegateRawCall,
-            "$zk_delegate_raw_call_byref" => Self::ZkDelegateRawCallByRef,
-            "$zk_delegate_system_call" => Self::ZkDelegateSystemCall,
-            "$zk_delegate_system_call_byref" => Self::ZkDelegateSystemCallByRef,
-
-            "$zk_load_calldata_into_active_ptr" => Self::ZkLoadCalldataIntoActivePtr,
-            "$zk_load_returndata_into_active_ptr" => Self::ZkLoadReturndataIntoActivePtr,
-            "$zk_ptr_add_into_active" => Self::ZkPtrAddIntoActive,
-            "$zk_ptr_shrink_into_active" => Self::ZkPtrShrinkIntoActive,
-            "$zk_ptr_pack_into_active" => Self::ZkPtrPackIntoActive,
-
-            "$zk_multiplication_high" => Self::ZkMultiplicationHigh,
-
-            "$zk_global_load" => Self::ZkGlobalLoad,
-            "$zk_global_extra_abi_data" => Self::ZkGlobalExtraAbiData,
-            "$zk_global_store" => Self::ZkGlobalStore,
 
             input => Self::UserDefined(input.to_owned()),
         }

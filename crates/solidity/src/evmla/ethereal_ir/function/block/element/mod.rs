@@ -855,13 +855,7 @@ where
                         era_compiler_llvm_context::eravm_evm_calldata::size(context).map(Some)
                     }
                     era_compiler_llvm_context::EraVMCodeType::Runtime => {
-                        let code_source =
-                            era_compiler_llvm_context::eravm_general::code_source(context)?;
-                        era_compiler_llvm_context::eravm_evm_ext_code::size(
-                            context,
-                            code_source.into_int_value(),
-                        )
-                        .map(Some)
+                        todo!()
                     }
                 }
             }

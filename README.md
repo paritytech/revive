@@ -24,6 +24,9 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
     - [ ] Use of exceptions
     - [ ] Change long calls (contract calls)
     - [ ] Check all alignments, attributes etc. if they still make sense with our target
+    - [x] Custom extensions related to zk VM
+    - [ ] `Active Pointer`: Redundant to calldata forwarding in pallet contracts. [Mainly used here](https://github.com/matter-labs/era-contracts/blob/4aa7006153ad571643342dff22c16eaf4a70fdc1/system-contracts/contracts/libraries/EfficientCall.sol) however we could offer a similar optimization.
+    - []
 - [ ] Add a lot more test cases
 - [ ] Debug information
 - [ ] Look for and implement further optimizations

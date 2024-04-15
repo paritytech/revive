@@ -35,16 +35,11 @@ where
 /// Translates the `balance` instructions.
 ///
 pub fn balance<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    address: inkwell::values::IntValue<'ctx>,
+    _context: &mut Context<'ctx, D>,
+    _address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    crate::eravm::evm::call::request(
-        context,
-        context.field_const(zkevm_opcode_defs::ADDRESS_ETH_TOKEN.into()),
-        "balanceOf(uint256)",
-        vec![address],
-    )
+    todo!()
 }

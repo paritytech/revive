@@ -44,7 +44,7 @@ impl Entry {
 
         context.set_global(
             crate::eravm::GLOBAL_HEAP_MEMORY_POINTER,
-            context.byte_type().ptr_type(AddressSpace::Generic.into()),
+            context.llvm().ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
             context.xlen_type().get_undef(),
         );
@@ -145,7 +145,7 @@ impl Entry {
             input_pointer,
             &[calldata_size_casted],
             context
-                .byte_type()
+                .llvm()
                 .ptr_type(AddressSpace::Generic.into())
                 .as_basic_type_enum(),
             "return_data_abi_initializer",

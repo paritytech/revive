@@ -46,11 +46,10 @@ impl<'ctx> Intrinsics<'ctx> {
     ) -> Self {
         let void_type = llvm.void_type();
         let bool_type = llvm.bool_type();
-        let byte_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_BYTE as u32);
         let field_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32);
-        let _stack_field_pointer_type = field_type.ptr_type(AddressSpace::Stack.into());
-        let heap_field_pointer_type = byte_type.ptr_type(AddressSpace::Heap.into());
-        let generic_byte_pointer_type = byte_type.ptr_type(AddressSpace::Generic.into());
+        let _stack_field_pointer_type = llvm.ptr_type(AddressSpace::Stack.into());
+        let heap_field_pointer_type = llvm.ptr_type(AddressSpace::Heap.into());
+        let generic_byte_pointer_type = llvm.ptr_type(AddressSpace::Generic.into());
 
         let trap = Self::declare(
             llvm,
@@ -130,20 +129,16 @@ impl<'ctx> Intrinsics<'ctx> {
 
         match name {
             name if name == Self::FUNCTION_MEMORY_COPY => vec![
-                field_type
-                    .ptr_type(AddressSpace::Heap.into())
+                llvm.ptr_type(AddressSpace::Heap.into())
                     .as_basic_type_enum(),
-                field_type
-                    .ptr_type(AddressSpace::Heap.into())
+                llvm.ptr_type(AddressSpace::Heap.into())
                     .as_basic_type_enum(),
                 field_type.as_basic_type_enum(),
             ],
             name if name == Self::FUNCTION_MEMORY_COPY_FROM_GENERIC => vec![
-                field_type
-                    .ptr_type(AddressSpace::Heap.into())
+                llvm.ptr_type(AddressSpace::Heap.into())
                     .as_basic_type_enum(),
-                field_type
-                    .ptr_type(AddressSpace::Generic.into())
+                llvm.ptr_type(AddressSpace::Generic.into())
                     .as_basic_type_enum(),
                 field_type.as_basic_type_enum(),
             ],

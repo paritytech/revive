@@ -990,7 +990,7 @@ where
 
         self.set_basic_block(catch_block);
         let landing_pad_type = self.structure_type(&[
-            self.byte_type()
+            self.llvm()
                 .ptr_type(AddressSpace::Stack.into())
                 .as_basic_type_enum(),
             self.integer_type(revive_common::BIT_LENGTH_X32)
@@ -1001,7 +1001,7 @@ where
                 landing_pad_type,
                 self.llvm_runtime.personality.value,
                 &[self
-                    .byte_type()
+                    .llvm()
                     .ptr_type(AddressSpace::Stack.into())
                     .const_zero()
                     .as_basic_value_enum()],
@@ -1272,7 +1272,7 @@ where
         let return_is_nil = self.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             end_of_memory,
-            self.byte_type().ptr_type(Default::default()).const_null(),
+            self.llvm().ptr_type(Default::default()).const_null(),
             "compare_end_of_memory_nil",
         )?;
 
@@ -1350,7 +1350,7 @@ where
     pub fn write_abi_pointer(&mut self, pointer: Pointer<'ctx>, global_name: &str) {
         self.set_global(
             global_name,
-            self.byte_type().ptr_type(AddressSpace::Generic.into()),
+            self.llvm().ptr_type(AddressSpace::Generic.into()),
             AddressSpace::Stack,
             pointer.value,
         );
@@ -1528,11 +1528,8 @@ where
                 .void_type()
                 .fn_type(argument_types.as_slice(), false),
             1 => self.field_type().fn_type(argument_types.as_slice(), false),
-            size if is_near_call_abi && self.is_system_mode() => {
-                let return_types: Vec<_> = vec![self.field_type().as_basic_type_enum(); size];
-                let return_type = self
-                    .structure_type(return_types.as_slice())
-                    .ptr_type(AddressSpace::Stack.into());
+            _size if is_near_call_abi && self.is_system_mode() => {
+                let return_type = self.llvm().ptr_type(AddressSpace::Stack.into());
                 argument_types.insert(0, return_type.as_basic_type_enum().into());
                 return_type.fn_type(argument_types.as_slice(), false)
             }

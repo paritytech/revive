@@ -54,7 +54,7 @@ where
     context.build_call(
         context.llvm_runtime().cxa_throw,
         &[context
-            .byte_type()
+            .llvm()
             .ptr_type(AddressSpace::Stack.into())
             .get_undef()
             .as_basic_value_enum(); 3],

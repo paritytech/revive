@@ -81,11 +81,7 @@ impl<'ctx> Pointer<'ctx> {
         let offset = context.safe_truncate_int_to_i32(offset).unwrap();
         let value = context
             .builder
-            .build_int_to_ptr(
-                offset,
-                context.byte_type().ptr_type(address_space.into()),
-                name,
-            )
+            .build_int_to_ptr(offset, context.llvm().ptr_type(address_space.into()), name)
             .unwrap();
         Self::new(r#type, address_space, value)
     }
@@ -115,7 +111,7 @@ impl<'ctx> Pointer<'ctx> {
     {
         let value = context.builder().build_address_space_cast(
             self.value,
-            self.r#type.ptr_type(address_space.into()),
+            context.llvm().ptr_type(address_space.into()),
             name,
         )?;
 

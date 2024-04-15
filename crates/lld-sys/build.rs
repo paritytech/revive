@@ -13,6 +13,7 @@ fn main() {
     llvm_config("--cxxflags")
         .split_whitespace()
         .fold(&mut builder, |builder, flag| builder.flag(flag))
+        .flag("-Wno-unused-parameter")
         .cpp(true)
         .file("src/linker.cpp")
         .compile("liblinker.a");

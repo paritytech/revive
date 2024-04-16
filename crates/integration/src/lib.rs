@@ -60,8 +60,8 @@ mod tests {
             let input = Fibonacci::fib3Call::new((parameter,)).abi_encode();
 
             let state = State::new(input);
-            let (instance, export) = mock_runtime::prepare(&code, None);
-            let state = crate::mock_runtime::call(state, &instance, export);
+            let (mut instance, export) = mock_runtime::prepare(&code, None);
+            let state = crate::mock_runtime::call(state, &mut instance, export);
 
             assert_eq!(state.output.flags, 0);
 
@@ -75,13 +75,13 @@ mod tests {
     fn flipper() {
         let code = crate::compile_blob("Flipper", include_str!("../contracts/flipper.sol"));
         let state = State::new(0xcde4efa9u32.to_be_bytes().to_vec());
-        let (instance, export) = mock_runtime::prepare(&code, None);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
 
-        let state = crate::mock_runtime::call(state, &instance, export);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
         assert_eq!(state.output.flags, 0);
         assert_eq!(state.storage[&U256::ZERO], U256::try_from(1).unwrap());
 
-        let state = crate::mock_runtime::call(state, &instance, export);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
         assert_eq!(state.output.flags, 0);
         assert_eq!(state.storage[&U256::ZERO], U256::ZERO);
     }
@@ -105,8 +105,8 @@ mod tests {
         let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code, None);
-        let state = crate::mock_runtime::call(state, &instance, export);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
 
         assert_eq!(state.output.flags, 0);
 
@@ -133,8 +133,8 @@ mod tests {
         input.extend_from_slice(&param.to_be_bytes::<32>());
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code, None);
-        let state = crate::mock_runtime::call(state, &instance, export);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
 
         assert_eq!(state.output.flags, 0);
 
@@ -153,8 +153,8 @@ mod tests {
         input.extend_from_slice(&param.to_be_bytes::<32>());
 
         let state = State::new(input);
-        let (instance, export) = mock_runtime::prepare(&code, None);
-        let state = crate::mock_runtime::call(state, &instance, export);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
 
         assert_eq!(state.output.flags, 0);
 
@@ -175,10 +175,10 @@ mod tests {
             include_str!("../contracts/MSize.sol"),
             false,
         );
-        let (instance, export) = mock_runtime::prepare(&code, None);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
 
         let input = MSize::mSizeCall::new(()).abi_encode();
-        let state = crate::mock_runtime::call(State::new(input), &instance, export);
+        let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
 
         assert_eq!(state.output.flags, 0);
 
@@ -201,10 +201,10 @@ mod tests {
             include_str!("../contracts/MSize.sol"),
             false,
         );
-        let (instance, export) = mock_runtime::prepare(&code, None);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
 
         let input = MSize::mStore100Call::new(()).abi_encode();
-        let state = crate::mock_runtime::call(State::new(input), &instance, export);
+        let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
 
         assert_eq!(state.output.flags, 0);
 

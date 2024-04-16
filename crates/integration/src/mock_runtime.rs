@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use alloy_primitives::{Keccak256, U256};
 use parity_scale_codec::Encode;
 use polkavm::{
-    Caller, Config, Engine, ExportIndex, GasMeteringKind, InstancePre, Linker, Module,
-    ModuleConfig, ProgramBlob, Trap,
+    Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
+    ProgramBlob, Trap,
 };
 
 #[derive(Default, Clone, Debug)]
@@ -192,7 +192,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
 }
 
-pub fn prepare(code: &[u8], config: Option<Config>) -> (InstancePre<State>, ExportIndex) {
+pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
     let engine = Engine::new(&config.unwrap_or_default()).unwrap();
@@ -205,11 +205,12 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (InstancePre<State>, Expo
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)
         .unwrap();
+    let instance = func.instantiate().unwrap();
 
-    (func, export)
+    (instance, export)
 }
 
-pub fn call(mut state: State, on: &InstancePre<State>, export: ExportIndex) -> State {
+pub fn call(mut state: State, on: &mut Instance<State>, export: ExportIndex) -> State {
     state.reset_output();
 
     let mut state_args = polkavm::StateArgs::default();
@@ -219,7 +220,7 @@ pub fn call(mut state: State, on: &InstancePre<State>, export: ExportIndex) -> S
 
     init_logs();
 
-    match on.instantiate().unwrap().call(state_args, call_args) {
+    match on.call(state_args, call_args) {
         Err(polkavm::ExecutionError::Trap(_)) => state,
         Err(other) => panic!("unexpected error: {other}"),
         Ok(_) => panic!("unexpected return"),

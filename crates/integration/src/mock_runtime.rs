@@ -192,6 +192,27 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
 }
 
+pub fn setup(config: Option<Config>) -> Engine {
+    Engine::new(&config.unwrap_or_default()).unwrap()
+}
+
+pub fn recompile_code(code: &[u8], engine: &Engine) -> Module {
+    let mut module_config = ModuleConfig::new();
+    module_config.set_gas_metering(Some(GasMeteringKind::Sync));
+
+    Module::new(&engine, &module_config, code).unwrap()
+}
+
+pub fn instantiate_module(module: &Module, engine: &Engine) -> (Instance<State>, ExportIndex) {
+    let export = module.lookup_export("call").unwrap();
+    let func = link_host_functions(&engine)
+        .instantiate_pre(module)
+        .unwrap();
+    let instance = func.instantiate().unwrap();
+
+    (instance, export)
+}
+
 pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<State>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 

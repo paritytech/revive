@@ -789,7 +789,13 @@ where
                         .expect("should be IntValue")
                         .const_truncate(self.xlen_type()),
                 )?;
-                let value = self.build_byte_swap(value.as_basic_value_enum());
+
+                let value = value.as_basic_value_enum();
+                let value = match value.get_type().into_int_type().get_bit_width() as usize {
+                    revive_common::BIT_LENGTH_FIELD => self.build_byte_swap(value),
+                    revive_common::BIT_LENGTH_BYTE => value,
+                    _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
+                };
 
                 self.builder
                     .build_store(heap_pointer.value, value)?

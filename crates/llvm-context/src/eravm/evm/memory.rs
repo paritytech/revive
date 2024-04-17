@@ -2,8 +2,6 @@
 //! Translates the heap memory operations.
 //!
 
-use inkwell::values::BasicValue;
-
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::pointer::Pointer;
 use crate::eravm::context::Context;
@@ -68,20 +66,16 @@ pub fn store_byte<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let offset_pointer = Pointer::new_with_offset(
+    let byte_type = context.byte_type();
+    let value = context
+        .builder()
+        .build_int_truncate(value, byte_type, "mstore8_value")?;
+    let pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
-        context.byte_type(),
+        byte_type,
         offset,
-        "mstore8_offset_pointer",
+        "mstore8_destination",
     );
-    context.build_call(
-        context.llvm_runtime().mstore8,
-        &[
-            offset_pointer.value.as_basic_value_enum(),
-            value.as_basic_value_enum(),
-        ],
-        "mstore8_call",
-    );
-    Ok(())
+    context.build_store(pointer, value)
 }

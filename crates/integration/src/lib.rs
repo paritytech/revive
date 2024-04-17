@@ -215,4 +215,97 @@ mod tests {
         let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
         assert_eq!(received, expected);
     }
+
+    #[test]
+    fn mstore8() {
+        sol!(
+            #[derive(Debug, PartialEq, Eq)]
+            contract MStore8 {
+                function mStore8(uint value) public pure returns (uint256 word);
+            }
+
+        );
+        let code = crate::compile_blob_with_options(
+            "MStore8",
+            include_str!("../contracts/mStore8.sol"),
+            false,
+        );
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+
+        let mut assert = |parameter, expected| {
+            let input = MStore8::mStore8Call::new((parameter,)).abi_encode();
+            let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
+
+            assert_eq!(state.output.flags, 0);
+
+            let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+            assert_eq!(received, expected);
+        };
+
+        for (parameter, expected) in [
+            (U256::MIN, U256::MIN),
+            (
+                U256::from(1),
+                U256::from_str_radix(
+                    "452312848583266388373324160190187140051835877600158453279131187530910662656",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::from(2),
+                U256::from_str_radix(
+                    "904625697166532776746648320380374280103671755200316906558262375061821325312",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::from(255),
+                U256::from_str_radix(
+                    "115339776388732929035197660848497720713218148788040405586178452820382218977280",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::from(256),
+                U256::from(0),
+            ),
+            (
+                U256::from(257),
+                U256::from_str_radix(
+                    "452312848583266388373324160190187140051835877600158453279131187530910662656",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::from(258),
+                U256::from_str_radix(
+                    "904625697166532776746648320380374280103671755200316906558262375061821325312",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::from(123456789),
+                U256::from_str_radix(
+                    "9498569820248594155839807363993929941088553429603327518861754938149123915776",
+                    10,
+                )
+                .unwrap(),
+            ),
+            (
+                U256::MAX,
+                U256::from_str_radix(
+                    "115339776388732929035197660848497720713218148788040405586178452820382218977280",
+                    10,
+                )
+                .unwrap(),
+            ),
+        ] {
+            assert(parameter, expected);
+        }
+    }
 }

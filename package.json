@@ -1,0 +1,10 @@
+{
+    "name": "root",
+    "private": true,
+    "scripts": {
+        "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests"
+    },
+    "workspaces": [
+        "crates/solidity/src/tests/cli-tests"
+    ]
+}

@@ -8,3 +8,7 @@
 /*.s
 /llvm-project
 /llvm18.0
+node_modules
+artifacts
+tmp
+package-lock.json

@@ -88,7 +88,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
-                let value = state.value.encode();
+                let value = state.value.to_le_bytes();
 
                 caller.write_memory(out_ptr, &value)?;
                 caller.write_memory(out_len_ptr, &(value.len() as u32).encode())?;

@@ -1480,6 +1480,12 @@ where
         self.llvm.custom_width_int_type(crate::eravm::XLEN as u32)
     }
 
+    /// Returns the runtime value width sized type.
+    pub fn value_type(&self) -> inkwell::types::IntType<'ctx> {
+        self.llvm
+            .custom_width_int_type(revive_common::BIT_LENGTH_VALUE as u32)
+    }
+
     ///
     /// Returns the default field type.
     ///

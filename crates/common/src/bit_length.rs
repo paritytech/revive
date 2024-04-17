@@ -20,3 +20,6 @@ pub const BIT_LENGTH_ETH_ADDRESS: usize =
 
 /// The field (usually `u256` or `i256`) bit-length.
 pub const BIT_LENGTH_FIELD: usize = crate::byte_length::BYTE_LENGTH_FIELD * BIT_LENGTH_BYTE;
+
+/// Bit length of the runtime value type.
+pub const BIT_LENGTH_VALUE: usize = crate::byte_length::BYTE_LENGTH_VALUE * BIT_LENGTH_BYTE;

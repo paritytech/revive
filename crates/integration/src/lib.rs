@@ -189,6 +189,27 @@ mod tests {
     }
 
     #[test]
+    fn transferred_value() {
+        sol!(
+            contract Value {
+                function value() public payable returns (uint);
+            }
+        );
+        let code = crate::compile_blob("Value", include_str!("../contracts/Value.sol"));
+        let mut state = State::new(Value::valueCall::SELECTOR.to_vec());
+        state.value = 0x1;
+
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let state = crate::mock_runtime::call(state, &mut instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        let expected = I256::try_from(state.value).unwrap();
+        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, expected);
+    }
+
+    #[test]
     fn msize_non_word_sized_access() {
         sol!(
             #[derive(Debug, PartialEq, Eq)]

@@ -16,3 +16,4 @@ env_logger = { workspace = true }
 
 [dev-dependencies]
 alloy-sol-types = { workspace = true }
+sha1 = { workspace = true }

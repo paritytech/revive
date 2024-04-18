@@ -58,7 +58,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
-                assert_ne!(0, caller.read_u32(out_len_ptr)?);
+                assert!(state.input.len() <= caller.read_u32(out_len_ptr).unwrap() as usize);
 
                 caller.write_memory(out_ptr, &state.input)?;
                 caller.write_memory(out_len_ptr, &(state.input.len() as u32).encode())?;

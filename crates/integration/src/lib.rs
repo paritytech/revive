@@ -41,6 +41,7 @@ pub fn compile_blob_with_options(
 mod tests {
     use alloy_primitives::{FixedBytes, Keccak256, I256, U256};
     use alloy_sol_types::{sol, SolCall};
+    use sha1::Digest;
 
     use crate::mock_runtime::{self, State};
 
@@ -244,7 +245,6 @@ mod tests {
             contract MStore8 {
                 function mStore8(uint value) public pure returns (uint256 word);
             }
-
         );
         let code = crate::compile_blob_with_options(
             "MStore8",
@@ -328,5 +328,32 @@ mod tests {
         ] {
             assert(parameter, expected);
         }
+    }
+
+    #[test]
+    fn sha1() {
+        sol!(
+            contract SHA1 {
+                function sha1(bytes memory data) public pure returns (bytes20);
+            }
+        );
+
+        let code =
+            crate::compile_blob_with_options("SHA1", include_str!("../contracts/sha1.sol"), false);
+        let (mut instance, export) = mock_runtime::prepare(&code, None);
+
+        let pre = vec![0xffu8; 512];
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(&pre);
+        let hash = hasher.finalize();
+
+        let input = SHA1::sha1Call::new((pre,)).abi_encode();
+        let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
+
+        assert_eq!(state.output.flags, 0);
+
+        let expected = FixedBytes::<20>::from_slice(&hash[..]);
+        let received = FixedBytes::<20>::from_slice(&state.output.data[..20]);
+        assert_eq!(received, expected);
     }
 }

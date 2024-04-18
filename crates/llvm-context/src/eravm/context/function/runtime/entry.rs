@@ -28,13 +28,16 @@ impl Entry {
     /// The number of mandatory arguments.
     pub const MANDATORY_ARGUMENTS_COUNT: usize = 2;
 
+    /// Reserve 1kb for calldata.
+    pub const MAX_CALLDATA_SIZE: usize = 1024;
+
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
     pub fn initialize_globals<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
-        let calldata_type = context.array_type(context.byte_type(), 1024);
+        let calldata_type = context.array_type(context.byte_type(), Self::MAX_CALLDATA_SIZE);
         context.set_global(
             crate::eravm::GLOBAL_CALLDATA_POINTER,
             calldata_type,
@@ -112,7 +115,10 @@ impl Entry {
             "length_pointer_casted",
         )?;
 
-        context.build_store(length_pointer, context.integer_const(32, 1024))?;
+        context.build_store(
+            length_pointer,
+            context.integer_const(32, Self::MAX_CALLDATA_SIZE as u64),
+        )?;
         context.builder().build_call(
             context.module().get_function("input").expect("is declared"),
             &[input_pointer_casted.into(), length_pointer_casted.into()],

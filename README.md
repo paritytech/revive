@@ -16,7 +16,7 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
 - [ ] Use `drink` for integration tests once we have 64bit support in PolkaVM
 - [x] Use PolkaVM allocator for heap space
 - [ ] Exercice `schlau` and possibly `smart-bench` benchmark cases
-- [ ] Tests currently rely on the binary being in $PATH, which is very annoying and requires `cargo install` all the times
+- [x] Tests currently rely on the binary being in $PATH, which is very annoying and requires `cargo install` all the times
 - [ ] Define how to do deployments
 - [ ] Calling conventions for calling other contracts
 - [ ] Runtime environment isn't fully figured out; implement all EVM builtins

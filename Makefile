@@ -1,24 +1,23 @@
-.PHONY : install test test-solidity test-cli test-integration clean
+.PHONY: install test test-solidity test-cli test-integration clean
 
-install :
-        cargo install --path crates/solidity && \
-        npm install && npm fund
+install:
+	cargo install --path crates/solidity && \
+	npm install && npm fund
 
-test : install test-integration test-cli test-solidity
+test: install test-integration test-cli test-solidity
 
-test-integration : install
-        cargo test --package revive-integration
+test-integration: install
+	cargo test --package revive-integration
 
-test-solidity : install
-        cargo test --package revive-solidity
+test-solidity: install
+	cargo test --package revive-solidity
 
-test-cli : install
-        npm run test:cli
+test-cli: install
+	npm run test:cli
 
-clean :
-        cargo clean && \
-        rm -rf node_modules && \
-        rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
-        rm -f ~/.cargo/bin/zksolc && \
-        rm -f package-lock.json
- 
+clean:
+	cargo clean && \
+	rm -rf node_modules && \
+	rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
+	rm -f ~/.cargo/bin/zksolc && \
+	rm -f package-lock.json

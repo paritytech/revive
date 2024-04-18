@@ -1,12 +1,18 @@
-build:
-	cargo build && \
-	cp target/debug/zksolc ~/.cargo/bin/zksolc && \
+install:
+	cargo install --path crates/solidity && \
 	npm install && npm fund
 
-build-release:
-	cargo build --release && \
-	cp target/release/zksolc ~/.cargo/bin/zksolc && \
-	npm install && npm fund
+test:
+	cargo install --path crates/solidity && \
+	npm install && npm fund && \
+	cargo test --manifest-path crates/solidity/Cargo.toml 
+	npm run test:cli
+
+test-solidity:
+	cargo test --manifest-path crates/solidity/Cargo.toml
+
+test-cli:
+	npm run test:cli
 
 clean:
 	cargo clean && \
@@ -15,5 +21,4 @@ clean:
 	rm -f ~/.cargo/bin/zksolc && \
 	rm -f package-lock.json
 
-test:
-	npm run test:cli
+

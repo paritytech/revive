@@ -1,24 +1,24 @@
-install:
-	cargo install --path crates/solidity && \
-	npm install && npm fund
+.PHONY : install test test-solidity test-cli test-integration clean
 
-test:
-	cargo install --path crates/solidity && \
-	npm install && npm fund && \
-	cargo test --manifest-path crates/solidity/Cargo.toml 
-	npm run test:cli
+install :
+        cargo install --path crates/solidity && \
+        npm install && npm fund
 
-test-solidity:
-	cargo test --manifest-path crates/solidity/Cargo.toml
+test : install test-integration test-cli test-solidity
 
-test-cli:
-	npm run test:cli
+test-integration : install
+        cargo test --package revive-integration
 
-clean:
-	cargo clean && \
-	rm -rf node_modules && \
-	rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
-	rm -f ~/.cargo/bin/zksolc && \
-	rm -f package-lock.json
+test-solidity : install
+        cargo test --package revive-solidity
 
+test-cli : install
+        npm run test:cli
 
+clean :
+        cargo clean && \
+        rm -rf node_modules && \
+        rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
+        rm -f ~/.cargo/bin/zksolc && \
+        rm -f package-lock.json
+ 

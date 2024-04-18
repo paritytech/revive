@@ -16,8 +16,8 @@ test-cli: install
 	npm run test:cli
 
 clean:
-	cargo clean && \
-	rm -rf node_modules && \
-	rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
-	cargo uninstall revive-solidity && \
+	cargo clean ; \
+	rm -rf node_modules ; \
+	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
+	cargo uninstall revive-solidity ; \
 	rm -f package-lock.json

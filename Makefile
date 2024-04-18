@@ -19,5 +19,5 @@ clean:
 	cargo clean && \
 	rm -rf node_modules && \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts && \
-	rm -f ~/.cargo/bin/zksolc && \
+	cargo uninstall revive-solidity && \
 	rm -f package-lock.json

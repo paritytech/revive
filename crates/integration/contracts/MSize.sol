@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 contract MSize {
     uint[] public data;
 

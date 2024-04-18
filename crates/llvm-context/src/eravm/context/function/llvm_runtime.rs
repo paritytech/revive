@@ -5,7 +5,6 @@
 use inkwell::types::BasicType;
 
 use crate::eravm::context::address_space::AddressSpace;
-use crate::eravm::context::attribute::Attribute;
 use crate::eravm::context::function::declaration::Declaration as FunctionDeclaration;
 use crate::eravm::context::function::Function;
 use crate::optimizer::Optimizer;
@@ -48,9 +47,6 @@ pub struct LLVMRuntime<'ctx> {
     pub exp: FunctionDeclaration<'ctx>,
     /// The corresponding LLVM runtime function.
     pub sign_extend: FunctionDeclaration<'ctx>,
-
-    /// The corresponding LLVM runtime function.
-    pub mstore8: FunctionDeclaration<'ctx>,
 
     /// The corresponding LLVM runtime function.
     pub sha3: FunctionDeclaration<'ctx>,
@@ -126,9 +122,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
 
     /// The corresponding runtime function name.
     pub const FUNCTION_SIGNEXTEND: &'static str = "__signextend";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_MSTORE8: &'static str = "__mstore8";
 
     /// The corresponding runtime function name.
     pub const FUNCTION_SHA3: &'static str = "__sha3";
@@ -350,110 +343,24 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_default_attributes(llvm, byte, optimizer);
         Function::set_pure_function_attributes(llvm, byte);
 
-        let add_mod = Self::declare(
-            module,
-            Self::FUNCTION_ADDMOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        3
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
+        let add_mod =
+            Self::define(module, Self::FUNCTION_ADDMOD).expect("should be declared in stdlib");
         Function::set_default_attributes(llvm, add_mod, optimizer);
         Function::set_pure_function_attributes(llvm, add_mod);
 
-        let mul_mod = Self::declare(
-            module,
-            Self::FUNCTION_MULMOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        3
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
+        let mul_mod =
+            Self::define(module, Self::FUNCTION_MULMOD).expect("should be declared in stdlib");
         Function::set_default_attributes(llvm, mul_mod, optimizer);
         Function::set_pure_function_attributes(llvm, mul_mod);
 
-        let exp = Self::declare(
-            module,
-            Self::FUNCTION_EXP,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
+        let exp = Self::define(module, Self::FUNCTION_EXP).expect("should be declared in stdlib");
         Function::set_default_attributes(llvm, exp, optimizer);
         Function::set_pure_function_attributes(llvm, exp);
 
-        let sign_extend = FunctionDeclaration::new(
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            module
-                .get_function(Self::FUNCTION_SIGNEXTEND)
-                .expect("should be declared in stdlib"),
-        );
+        let sign_extend =
+            Self::define(module, Self::FUNCTION_SIGNEXTEND).expect("should be declared in stdlib");
         Function::set_default_attributes(llvm, sign_extend, optimizer);
         Function::set_pure_function_attributes(llvm, sign_extend);
-
-        let mstore8 = Self::declare(
-            module,
-            Self::FUNCTION_MSTORE8,
-            llvm.void_type().fn_type(
-                vec![
-                    llvm.ptr_type(AddressSpace::Heap.into())
-                        .as_basic_type_enum()
-                        .into(),
-                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
-                        .as_basic_type_enum()
-                        .into(),
-                ]
-                .as_slice(),
-                false,
-            ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, mstore8, optimizer);
-        Function::set_attributes(
-            llvm,
-            mstore8,
-            vec![
-                Attribute::MustProgress,
-                Attribute::NoUnwind,
-                Attribute::WillReturn,
-            ],
-            false,
-        );
 
         let sha3 = Self::declare(
             module,
@@ -676,8 +583,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
             exp,
             sign_extend,
 
-            mstore8,
-
             sha3,
 
             system_request,
@@ -708,6 +613,16 @@ impl<'ctx> LLVMRuntime<'ctx> {
     ) -> FunctionDeclaration<'ctx> {
         let value = module.add_function(name, r#type, linkage);
         FunctionDeclaration::new(r#type, value)
+    }
+
+    /// Create the function definition from an existing symbol.
+    pub fn define(
+        module: &inkwell::module::Module<'ctx>,
+        name: &str,
+    ) -> Option<FunctionDeclaration<'ctx>> {
+        let value = module.get_function(name)?;
+        value.set_linkage(inkwell::module::Linkage::External);
+        FunctionDeclaration::new(value.get_type(), value).into()
     }
 
     ///

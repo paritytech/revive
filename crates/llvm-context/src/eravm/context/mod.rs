@@ -1582,13 +1582,6 @@ where
                     inkwell::attributes::AttributeLoc::Param(index as u32),
                     self.llvm.create_enum_attribute(Attribute::NoFree as u32, 0),
                 );
-                if function == self.llvm_runtime().mstore8 {
-                    call_site_value.add_attribute(
-                        inkwell::attributes::AttributeLoc::Param(index as u32),
-                        self.llvm
-                            .create_enum_attribute(Attribute::WriteOnly as u32, 0),
-                    );
-                }
                 if function == self.llvm_runtime().sha3 {
                     call_site_value.add_attribute(
                         inkwell::attributes::AttributeLoc::Param(index as u32),

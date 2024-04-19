@@ -1,9 +1,15 @@
+pub mod cases;
 pub mod mock_runtime;
 
 /// Compile the blob of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_blob_with_options(contract_name, source_code, true)
+    compile_blob_with_options(
+        contract_name,
+        source_code,
+        true,
+        revive_solidity::SolcPipeline::Yul,
+    )
 }
 
 /// Compile the blob of `contract_name` found in given `source_code`.
@@ -11,6 +17,7 @@ pub fn compile_blob_with_options(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
+    pipeline: revive_solidity::SolcPipeline,
 ) -> Vec<u8> {
     let file_name = "contract.sol";
 
@@ -18,7 +25,7 @@ pub fn compile_blob_with_options(
         [(file_name.into(), source_code.into())].into(),
         Default::default(),
         None,
-        revive_solidity::SolcPipeline::Yul,
+        pipeline,
         era_compiler_llvm_context::OptimizerSettings::cycles(),
         solc_optimizer_enabled,
     )
@@ -43,27 +50,22 @@ mod tests {
     use alloy_sol_types::{sol, SolCall};
     use sha1::Digest;
 
-    use crate::mock_runtime::{self, State};
+    use crate::{
+        cases::Contract,
+        mock_runtime::{self, State},
+    };
 
     #[test]
     fn fibonacci() {
-        sol!(
-            #[derive(Debug, PartialEq, Eq)]
-            contract Fibonacci {
-                function fib3(uint n) public pure returns (uint);
-            }
-        );
-
-        for contract in ["FibonacciIterative", "FibonacciRecursive", "FibonacciBinet"] {
-            let code = crate::compile_blob(contract, include_str!("../contracts/Fibonacci.sol"));
-
-            let parameter = U256::from(6);
-            let input = Fibonacci::fib3Call::new((parameter,)).abi_encode();
-
-            let state = State::new(input);
-            let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let parameter = 6;
+        for contract in [
+            Contract::fib_recursive(parameter),
+            Contract::fib_iterative(parameter),
+            Contract::fib_binet(parameter),
+        ] {
+            let state = State::new(contract.calldata);
+            let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
             let state = crate::mock_runtime::call(state, &mut instance, export);
-
             assert_eq!(state.output.flags, 0);
 
             let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
@@ -125,41 +127,27 @@ mod tests {
 
     #[test]
     fn triangle_number() {
-        let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
-        let param = U256::try_from(13).unwrap();
-        let expected = U256::try_from(91).unwrap();
-
-        // function triangle_number(int64)
-        let mut input = 0x0f760610u32.to_be_bytes().to_vec();
-        input.extend_from_slice(&param.to_be_bytes::<32>());
-
-        let state = State::new(input);
-        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let contract = Contract::triangle_number(13);
+        let state = State::new(contract.calldata);
+        let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
         let state = crate::mock_runtime::call(state, &mut instance, export);
-
         assert_eq!(state.output.flags, 0);
 
         let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let expected = U256::try_from(91).unwrap();
         assert_eq!(received, expected);
     }
 
     #[test]
     fn odd_product() {
-        let code = crate::compile_blob("Computation", include_str!("../contracts/Computation.sol"));
-        let param = I256::try_from(5i32).unwrap();
-        let expected = I256::try_from(945i64).unwrap();
-
-        // function odd_product(int32)
-        let mut input = 0x00261b66u32.to_be_bytes().to_vec();
-        input.extend_from_slice(&param.to_be_bytes::<32>());
-
-        let state = State::new(input);
-        let (mut instance, export) = mock_runtime::prepare(&code, None);
+        let contract = Contract::odd_product(5);
+        let state = State::new(contract.calldata);
+        let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
         let state = crate::mock_runtime::call(state, &mut instance, export);
-
         assert_eq!(state.output.flags, 0);
 
         let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let expected = I256::try_from(945i64).unwrap();
         assert_eq!(received, expected);
     }
 
@@ -175,6 +163,7 @@ mod tests {
             "MSize",
             include_str!("../contracts/MSize.sol"),
             false,
+            revive_solidity::SolcPipeline::EVMLA,
         );
         let (mut instance, export) = mock_runtime::prepare(&code, None);
 
@@ -222,6 +211,7 @@ mod tests {
             "MSize",
             include_str!("../contracts/MSize.sol"),
             false,
+            revive_solidity::SolcPipeline::Yul,
         );
         let (mut instance, export) = mock_runtime::prepare(&code, None);
 
@@ -246,11 +236,7 @@ mod tests {
                 function mStore8(uint value) public pure returns (uint256 word);
             }
         );
-        let code = crate::compile_blob_with_options(
-            "MStore8",
-            include_str!("../contracts/mStore8.sol"),
-            false,
-        );
+        let code = crate::compile_blob("MStore8", include_str!("../contracts/mStore8.sol"));
         let (mut instance, export) = mock_runtime::prepare(&code, None);
 
         let mut assert = |parameter, expected| {
@@ -332,24 +318,14 @@ mod tests {
 
     #[test]
     fn sha1() {
-        sol!(
-            contract SHA1 {
-                function sha1(bytes memory data) public pure returns (bytes20);
-            }
-        );
-
-        let code =
-            crate::compile_blob_with_options("SHA1", include_str!("../contracts/sha1.sol"), false);
-        let (mut instance, export) = mock_runtime::prepare(&code, None);
-
         let pre = vec![0xffu8; 512];
         let mut hasher = sha1::Sha1::new();
         hasher.update(&pre);
         let hash = hasher.finalize();
 
-        let input = SHA1::sha1Call::new((pre,)).abi_encode();
-        let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
-
+        let contract = Contract::sha1(pre);
+        let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
+        let state = crate::mock_runtime::call(State::new(contract.calldata), &mut instance, export);
         assert_eq!(state.output.flags, 0);
 
         let expected = FixedBytes::<20>::from_slice(&hash[..]);

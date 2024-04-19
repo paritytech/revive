@@ -30,11 +30,15 @@ rand = "0.8"
 polkavm-common = { git = "https://github.com/koute/polkavm.git" } 
 polkavm-linker = { git = "https://github.com/koute/polkavm.git" } 
 polkavm = { git = "https://github.com/koute/polkavm.git" } 
-parity-scale-codec = "3.6"
 alloy-primitives = "0.6"
 alloy-sol-types = "0.6"
 env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Benchmarking against EVM
+primitive-types = { version = "0.12", features = ["codec"] }
+evm-interpreter = { git = "https://github.com/xermicus/evm.git", branch = "separate-compilation" }
 
 [workspace.dependencies.inkwell]
 git = "https://github.com/TheDan64/inkwell.git"

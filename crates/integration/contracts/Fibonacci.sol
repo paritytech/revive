@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 
+pragma solidity ^0.8.24;
+
 // https://medium.com/coinmonks/fibonacci-in-solidity-8477d907e22a
 
 contract FibonacciRecursive {

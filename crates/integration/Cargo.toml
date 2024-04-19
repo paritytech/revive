@@ -8,12 +8,11 @@ edition = "2021"
 [dependencies]
 polkavm = { workspace = true }
 alloy-primitives = { workspace = true }
-parity-scale-codec = { workspace = true }
+alloy-sol-types = { workspace = true }
 revive-solidity = { path = "../solidity" }
 era-compiler-llvm-context = { path = "../llvm-context" }
 hex = { workspace = true }
 env_logger = { workspace = true }
 
 [dev-dependencies]
-alloy-sol-types = { workspace = true }
 sha1 = { workspace = true }

@@ -1,0 +1,36 @@
+[package]
+name = "compare-runtimes"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["bench-pvm-interpreter"]
+bench-pvm-interpreter = []
+bench-pvm-compiler = []
+bench-evm = ["primitive-types", "evm-interpreter"]
+
+[dependencies]
+hex = { workspace = true }
+polkavm = { workspace = true }
+revive-integration = { path = "../integration" }
+alloy-primitives = { workspace = true }
+evm-interpreter = { workspace = true, optional = true }
+primitive-types = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "execute"
+harness = false
+
+[[bench]]
+name = "prepare"
+harness = false
+
+[profile.benchmark]
+inherits = "release"
+lto = true
+codegen-units = 1

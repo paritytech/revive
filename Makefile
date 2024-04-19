@@ -1,12 +1,16 @@
 .PHONY: install test test-solidity test-cli test-integration clean
 
-install:
-	cargo install --path crates/solidity && \
+install: install-bin install-npm
+
+install-bin:
+	cargo install --path crates/solidity
+
+install-npm:
 	npm install && npm fund
 
 test: install test-integration test-cli test-solidity
 
-test-integration: install
+test-integration: install-bin
 	cargo test --package revive-integration
 
 test-solidity: install

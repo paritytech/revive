@@ -20,7 +20,17 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", llvm_config("--libdir"));
 
-    for lib in ["lldELF", "lldCommon", "lldMachO"] {
+    for lib in [
+        "lldELF",
+        "lldCommon",
+        "lldMachO",
+        "LLVMSupport",
+        "LLVMLinker",
+        "LLVMCore",
+        "LLVMLTO",
+        "LLVMTargetParser",
+        "LLVMBinaryFormat",
+    ] {
         println!("cargo:rustc-link-lib=static={lib}");
     }
 

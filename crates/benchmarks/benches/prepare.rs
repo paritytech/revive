@@ -79,6 +79,8 @@ fn bench(
             },
         );
     }
+
+    group.finish();
 }
 
 fn bench_baseline(c: &mut Criterion) {

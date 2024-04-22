@@ -1,3 +1,4 @@
+#[cfg(feature = "bench-extensive")]
 use std::time::Duration;
 
 use criterion::{
@@ -64,6 +65,8 @@ fn bench<'a, P, L, I, M>(
             });
         }
     }
+
+    group.finish();
 }
 
 fn bench_baseline(c: &mut Criterion) {
@@ -79,6 +82,8 @@ fn bench_baseline(c: &mut Criterion) {
 
 fn bench_odd_product(c: &mut Criterion) {
     let mut group = c.benchmark_group("OddProduct");
+    group.sample_size(20);
+    #[cfg(feauture = "bench-extensive")]
     group
         .sample_size(10)
         .measurement_time(Duration::from_secs(60));
@@ -93,6 +98,8 @@ fn bench_odd_product(c: &mut Criterion) {
 
 fn bench_triangle_number(c: &mut Criterion) {
     let mut group = c.benchmark_group("TriangleNumber");
+    group.sample_size(20);
+    #[cfg(feauture = "bench-extensive")]
     group
         .sample_size(10)
         .measurement_time(Duration::from_secs(60));

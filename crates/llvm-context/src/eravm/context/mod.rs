@@ -119,6 +119,9 @@ where
     /// The loop stack default capacity.
     const LOOP_STACK_INITIAL_CAPACITY: usize = 16;
 
+    /// The PolkaVM minimum stack size.
+    const POLKAVM_STACK_SIZE: u32 = 0x4000;
+
     /// Link in the stdlib module.
     fn link_stdlib_module(
         llvm: &'ctx inkwell::context::Context,
@@ -161,6 +164,21 @@ where
         }
     }
 
+    /// Configure the PolkaVM minimum stack size.
+    fn set_polkavm_stack_size(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+        size: u32,
+    ) {
+        module
+            .link_in_module(pallet_contracts_pvm_llapi::min_stack_size(
+                llvm,
+                "polkavm_stack_size",
+                size,
+            ))
+            .expect("the PolkaVM minimum stack size module should be linkable");
+    }
+
     /// PolkaVM wants PIE code; we set this flag on the module here.
     fn set_module_flags(
         llvm: &'ctx inkwell::context::Context,
@@ -186,6 +204,7 @@ where
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_guest_module(llvm, &module);
+        Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);

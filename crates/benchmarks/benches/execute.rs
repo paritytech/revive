@@ -150,14 +150,13 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
 fn bench_sha1(c: &mut Criterion) {
     #[cfg(not(feauture = "bench-extensive"))]
     let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 256], vec![0xff; 512]];
+    #[cfg(feauture = "bench-extensive")]
+    let parameters = &[vec![0xff; 512], vec![0xff, 1024], vec![0xff, 2048]];
     let labels = parameters.iter().map(|p| p.len()).collect::<Vec<_>>();
 
-    bench(
-        c.benchmark_group("FibonacciBinet"),
-        parameters,
-        &labels,
-        |p| Contract::sha1(p),
-    );
+    bench(c.benchmark_group("SHA1"), parameters, &labels, |p| {
+        Contract::sha1(p)
+    });
 }
 
 criterion_group!(

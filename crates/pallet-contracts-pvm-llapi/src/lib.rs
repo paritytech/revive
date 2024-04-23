@@ -28,6 +28,21 @@ pub fn module<'context>(
     Module::parse_bitcode_from_buffer(&buf, context)
 }
 
+/// Creates a module that sets the PolkaVM minimum stack size to [`size`] if linked in.
+pub fn min_stack_size<'context>(
+    context: &'context Context,
+    module_name: &str,
+    size: u32,
+) -> Module<'context> {
+    let module = context.create_module(module_name);
+    module.set_inline_assembly(&format!(
+        ".pushsection .polkavm_min_stack_size,\"\",@progbits
+        .word {size}
+        .popsection"
+    ));
+    module
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

@@ -41,7 +41,7 @@ impl Compiler {
     pub const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);
 
     /// The last supported version of `solc`.
-    pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 24);
+    pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 25);
 
     ///
     /// A shortcut constructor.

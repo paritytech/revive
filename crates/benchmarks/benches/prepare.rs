@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use polkavm::BackendKind;
 
-use compare_runtimes::runtimes::polkavm::instantiate_engine;
+use revive_benchmarks::runtimes;
 use revive_integration::cases::Contract;
 
 fn bench(
@@ -16,6 +16,9 @@ fn bench(
     let code_size = 0;
 
     #[cfg(feature = "bench-evm")]
+    dbg!(&evm_runtime);
+
+    #[cfg(feature = "bench-evm")]
     group.bench_with_input(
         BenchmarkId::new("Evm", code_size),
         &evm_runtime,
@@ -24,7 +27,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-interpreter")]
     {
-        let engine = instantiate_engine(BackendKind::Interpreter);
+        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
         group.bench_with_input(
             BenchmarkId::new("PvmInterpreterCompile", code_size),
             &(&pvm_runtime, engine),
@@ -38,7 +41,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-interpreter")]
     {
-        let engine = instantiate_engine(BackendKind::Interpreter);
+        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
         let module = revive_integration::mock_runtime::recompile_code(&pvm_runtime, &engine);
         group.bench_with_input(
             BenchmarkId::new("PvmInterpreterInstantiate", code_size),
@@ -53,7 +56,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-compiler")]
     {
-        let engine = instantiate_engine(BackendKind::Compiler);
+        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
         group.bench_with_input(
             BenchmarkId::new("PvmCompile", code_size),
             &(&pvm_runtime, engine),
@@ -67,7 +70,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-compiler")]
     {
-        let engine = instantiate_engine(BackendKind::Compiler);
+        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
         let module = revive_integration::mock_runtime::recompile_code(&code, &engine);
         group.bench_with_input(
             BenchmarkId::new("PvmInstantiate", code_size),

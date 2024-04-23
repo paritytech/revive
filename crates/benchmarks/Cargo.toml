@@ -1,5 +1,5 @@
 [package]
-name = "compare-runtimes"
+name = "revive-benchmarks"
 version = "0.1.0"
 edition = "2021"
 

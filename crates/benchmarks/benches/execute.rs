@@ -5,9 +5,10 @@ use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,
     Criterion,
 };
+#[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
 use polkavm::BackendKind;
 
-use compare_runtimes::*;
+use revive_benchmarks::runtimes;
 use revive_integration::cases::Contract;
 
 fn bench<'a, P, L, I, M>(

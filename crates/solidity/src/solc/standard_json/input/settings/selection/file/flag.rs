@@ -41,6 +41,8 @@ pub enum Flag {
     /// The EVM legacy assembly JSON.
     #[serde(rename = "evm.legacyAssembly")]
     EVMLA,
+    #[serde(rename = "evm.deployedBytecode")]
+    EVMDBC,
 }
 
 impl From<SolcPipeline> for Flag {
@@ -64,6 +66,7 @@ impl std::fmt::Display for Flag {
             Self::AST => write!(f, "ast"),
             Self::Yul => write!(f, "irOptimized"),
             Self::EVMLA => write!(f, "evm.legacyAssembly"),
+            Self::EVMDBC => write!(f, "evm.deployedBytecode"),
         }
     }
 }

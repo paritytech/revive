@@ -12,6 +12,27 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
     )
 }
 
+/// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
+    let file_name = "contract.sol";
+
+    let contracts = revive_solidity::test_utils::build_solidity_with_options_evm(
+        [(file_name.into(), source_code.into())].into(),
+        Default::default(),
+        None,
+        revive_solidity::SolcPipeline::Yul,
+        true,
+    )
+    .expect("source should compile");
+    let bin_runtime = &contracts
+        .get(contract_name)
+        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name))
+        .object;
+
+    hex::decode(bin_runtime).expect("bin-runtime shold be hex encoded")
+}
+
 /// Compile the blob of `contract_name` found in given `source_code`.
 pub fn compile_blob_with_options(
     contract_name: &str,

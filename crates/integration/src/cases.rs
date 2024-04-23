@@ -41,71 +41,75 @@ sol!(
 
 impl Contract {
     pub fn baseline() -> Self {
+        let code = include_str!("../contracts/Baseline.sol");
+        let name = "Baseline";
+
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob("Baseline", include_str!("../contracts/Baseline.sol")),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: Baseline::baselineCall::new(()).abi_encode(),
         }
     }
 
     pub fn odd_product(n: i32) -> Self {
+        let code = include_str!("../contracts/Computation.sol");
+        let name = "Computation";
+
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob(
-                "Computation",
-                include_str!("../contracts/Computation.sol"),
-            ),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: Computation::odd_productCall::new((n,)).abi_encode(),
         }
     }
     pub fn triangle_number(n: i64) -> Self {
+        let code = include_str!("../contracts/Computation.sol");
+        let name = "TrinagleNumber";
+
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob(
-                "Computation",
-                include_str!("../contracts/Computation.sol"),
-            ),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: Computation::triangle_numberCall::new((n,)).abi_encode(),
         }
     }
 
     pub fn fib_recursive(n: u32) -> Self {
+        let code = include_str!("../contracts/Fibonacci.sol");
+        let name = "FibonacciRecursive";
+
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob(
-                "FibonacciRecursive",
-                include_str!("../contracts/Fibonacci.sol"),
-            ),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciRecursive::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
 
     pub fn fib_iterative(n: u32) -> Self {
+        let code = include_str!("../contracts/Fibonacci.sol");
+        let name = "FibonacciIterative";
+
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob(
-                "FibonacciIterative",
-                include_str!("../contracts/Fibonacci.sol"),
-            ),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciIterative::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
 
     pub fn fib_binet(n: u32) -> Self {
+        let code = include_str!("../contracts/Fibonacci.sol");
+        let name = "FibonacciBinet";
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob(
-                "FibonacciBinet",
-                include_str!("../contracts/Fibonacci.sol"),
-            ),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciBinet::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
 
     pub fn sha1(pre: Vec<u8>) -> Self {
+        let code = include_str!("../contracts/SHA1.sol");
+        let name = "SHA1";
         Self {
-            evm_runtime: Default::default(),
-            pvm_runtime: crate::compile_blob("SHA1", include_str!("../contracts/SHA1.sol")),
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
             calldata: SHA1::sha1Call::new((pre,)).abi_encode(),
         }
     }

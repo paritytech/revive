@@ -8,15 +8,10 @@ fn bench(
     c: &mut Criterion,
     group_name: &str,
     #[cfg(feature = "bench-evm")] evm_runtime: Vec<u8>,
-    #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))] pvm_runtime: Vec<
-        u8,
-    >,
+    #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))] pvm_runtime: Vec<u8>,
 ) {
     let mut group = c.benchmark_group(group_name);
     let code_size = 0;
-
-    #[cfg(feature = "bench-evm")]
-    dbg!(&evm_runtime);
 
     #[cfg(feature = "bench-evm")]
     group.bench_with_input(
@@ -29,7 +24,7 @@ fn bench(
     {
         let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
         group.bench_with_input(
-            BenchmarkId::new("PvmInterpreterCompile", code_size),
+            BenchmarkId::new("PVMInterpreterCompile", code_size),
             &(&pvm_runtime, engine),
             |b, (code, engine)| {
                 b.iter(|| {
@@ -44,7 +39,7 @@ fn bench(
         let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
         let module = revive_integration::mock_runtime::recompile_code(&pvm_runtime, &engine);
         group.bench_with_input(
-            BenchmarkId::new("PvmInterpreterInstantiate", code_size),
+            BenchmarkId::new("PVMInterpreterInstantiate", code_size),
             &(module, engine),
             |b, (module, engine)| {
                 b.iter(|| {
@@ -54,11 +49,11 @@ fn bench(
         );
     }
 
-    #[cfg(feature = "bench-pvm-compiler")]
+    #[cfg(feature = "bench-pvm")]
     {
         let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
         group.bench_with_input(
-            BenchmarkId::new("PvmCompile", code_size),
+            BenchmarkId::new("PVMCompile", code_size),
             &(&pvm_runtime, engine),
             |b, (code, engine)| {
                 b.iter(|| {
@@ -68,12 +63,12 @@ fn bench(
         );
     }
 
-    #[cfg(feature = "bench-pvm-compiler")]
+    #[cfg(feature = "bench-pvm")]
     {
         let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
-        let module = revive_integration::mock_runtime::recompile_code(&code, &engine);
+        let module = revive_integration::mock_runtime::recompile_code(&pvm_runtime, &engine);
         group.bench_with_input(
-            BenchmarkId::new("PvmInstantiate", code_size),
+            BenchmarkId::new("PVMInstantiate", code_size),
             &(module, engine),
             |b, (module, engine)| {
                 b.iter(|| {
@@ -92,7 +87,7 @@ fn bench_baseline(c: &mut Criterion) {
         "PrepareBaseline",
         #[cfg(feature = "bench-evm")]
         Contract::baseline().evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::baseline().pvm_runtime,
     );
 }
@@ -103,7 +98,7 @@ fn bench_odd_product(c: &mut Criterion) {
         "PrepareOddProduct",
         #[cfg(feature = "bench-evm")]
         Contract::odd_product(0).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::baseline().pvm_runtime,
     );
 }
@@ -114,7 +109,7 @@ fn bench_triangle_number(c: &mut Criterion) {
         "PrepareTriangleNumber",
         #[cfg(feature = "bench-evm")]
         Contract::triangle_number(0).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::triangle_number(0).pvm_runtime,
     );
 }
@@ -125,7 +120,7 @@ fn bench_fibonacci_recursive(c: &mut Criterion) {
         "PrepareFibonacciRecursive",
         #[cfg(feature = "bench-evm")]
         Contract::fib_recursive(0).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::fib_recursive(0).pvm_runtime,
     );
 }
@@ -136,7 +131,7 @@ fn bench_fibonacci_iterative(c: &mut Criterion) {
         "PrepareFibonacciIterative",
         #[cfg(feature = "bench-evm")]
         Contract::fib_iterative(0).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::fib_iterative(0).pvm_runtime,
     );
 }
@@ -147,7 +142,7 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
         "PrepareFibonacciBinet",
         #[cfg(feature = "bench-evm")]
         Contract::fib_binet(0).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::fib_binet(0).pvm_runtime,
     );
 }
@@ -158,7 +153,7 @@ fn bench_sha1(c: &mut Criterion) {
         "PrepareSHA1",
         #[cfg(feature = "bench-evm")]
         Contract::sha1(Default::default()).evm_runtime,
-        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm-compiler"))]
+        #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
         Contract::sha1(Default::default()).pvm_runtime,
     );
 }

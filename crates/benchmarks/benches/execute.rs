@@ -44,14 +44,14 @@ fn bench<'a, P, L, I, M>(
                 &contract.calldata,
                 BackendKind::Interpreter,
             );
-            group.bench_with_input(BenchmarkId::new("PolkaVMInterpreter", l), p, |b, _| {
+            group.bench_with_input(BenchmarkId::new("PVMInterpreter", l), p, |b, _| {
                 b.iter(|| {
                     revive_integration::mock_runtime::call(state.clone(), &mut instance, export);
                 });
             });
         }
 
-        #[cfg(feature = "bench-pvm-compiler")]
+        #[cfg(feature = "bench-pvm")]
         {
             let contract = contract(p.clone());
             let (state, mut instance, export) = runtimes::polkavm::prepare_pvm(
@@ -59,7 +59,7 @@ fn bench<'a, P, L, I, M>(
                 &contract.calldata,
                 BackendKind::Compiler,
             );
-            group.bench_with_input(BenchmarkId::new("PolkaVM", l), p, |b, _| {
+            group.bench_with_input(BenchmarkId::new("PVM", l), p, |b, _| {
                 b.iter(|| {
                     revive_integration::mock_runtime::call(state.clone(), &mut instance, export);
                 });
@@ -92,7 +92,7 @@ fn bench_odd_product(c: &mut Criterion) {
     #[cfg(feauture = "bench-extensive")]
     let parameters = &[2_000_000i32, 4_000_000, 8_000_000, 120_000_000];
     #[cfg(not(feauture = "bench-extensive"))]
-    let parameters = &[100_000];
+    let parameters = &[10_000, 100_000];
 
     bench(group, parameters, parameters, |p| Contract::odd_product(p));
 }
@@ -108,7 +108,7 @@ fn bench_triangle_number(c: &mut Criterion) {
     #[cfg(feauture = "bench-extensive")]
     let parameters = &[3_000_000i64, 6_000_000, 12_000_000, 180_000_000];
     #[cfg(not(feauture = "bench-extensive"))]
-    let parameters = &[100_000];
+    let parameters = &[10_000, 100_000];
 
     bench(group, parameters, parameters, |p| {
         Contract::triangle_number(p)
@@ -116,7 +116,7 @@ fn bench_triangle_number(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_recurisve(c: &mut Criterion) {
-    let parameters = &[8, 12, 16, 18, 20];
+    let parameters = &[12, 16, 20];
 
     bench(
         c.benchmark_group("FibonacciRecursive"),
@@ -127,7 +127,7 @@ fn bench_fibonacci_recurisve(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_iterative(c: &mut Criterion) {
-    let parameters = &[32, 64, 128, 256];
+    let parameters = &[64, 128, 256];
 
     bench(
         c.benchmark_group("FibonacciIterative"),
@@ -138,7 +138,7 @@ fn bench_fibonacci_iterative(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_binet(c: &mut Criterion) {
-    let parameters = &[32, 64, 128, 256];
+    let parameters = &[64, 128, 256];
 
     bench(
         c.benchmark_group("FibonacciBinet"),
@@ -150,7 +150,7 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
 
 fn bench_sha1(c: &mut Criterion) {
     #[cfg(not(feauture = "bench-extensive"))]
-    let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 256], vec![0xff; 512]];
+    let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 256]];
     #[cfg(feauture = "bench-extensive")]
     let parameters = &[vec![0xff; 512], vec![0xff, 1024], vec![0xff, 2048]];
     let labels = parameters.iter().map(|p| p.len()).collect::<Vec<_>>();

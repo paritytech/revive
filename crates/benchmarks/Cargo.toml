@@ -8,7 +8,7 @@ edition = "2021"
 [features]
 default = ["bench-pvm-interpreter"]
 bench-pvm-interpreter = []
-bench-pvm-compiler = []
+bench-pvm = []
 bench-evm = ["primitive-types", "evm-interpreter"]
 
 [dependencies]

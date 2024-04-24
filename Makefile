@@ -19,6 +19,16 @@ test-solidity: install
 test-cli: install
 	npm run test:cli
 
+bench-prepare: install-bin
+	cargo criterion --bench prepare --features bench-evm,bench-pvm --message-format=json \
+	| criterion-table > crates/benchmarks/PREPARE.md
+
+bench-execute: install-bin
+	cargo criterion --bench execute --features bench-evm,bench-pvm --message-format=json \
+	| criterion-table > crates/benchmarks/EXECUTE.md
+
+bench: bench-prepare bench-execute
+
 clean:
 	cargo clean ; \
 	rm -rf node_modules ; \

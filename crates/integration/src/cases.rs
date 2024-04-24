@@ -61,9 +61,10 @@ impl Contract {
             calldata: Computation::odd_productCall::new((n,)).abi_encode(),
         }
     }
+
     pub fn triangle_number(n: i64) -> Self {
         let code = include_str!("../contracts/Computation.sol");
-        let name = "TrinagleNumber";
+        let name = "Computation";
 
         Self {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),

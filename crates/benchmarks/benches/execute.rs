@@ -182,11 +182,11 @@ criterion_group!(
     name = execute;
     config = Criterion::default();
     targets = bench_baseline,
-    //bench_odd_product,
-    //bench_triangle_number,
-    //bench_fibonacci_recurisve,
-    //bench_fibonacci_iterative,
-    //bench_fibonacci_binet,
+    bench_odd_product,
+    bench_triangle_number,
+    bench_fibonacci_recurisve,
+    bench_fibonacci_iterative,
+    bench_fibonacci_binet,
     bench_sha1
 );
 criterion_main!(execute);

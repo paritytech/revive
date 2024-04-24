@@ -31,7 +31,13 @@ bench-extensive: install-bin
 	cargo criterion --all --all-features --message-format=json \
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
-bench: bench-prepare bench-execute
+bench-quick: install-bin
+	cargo criterion --all --features bench-evm
+
+bench: install-bin
+	cargo criterion --all --features bench-evm,bench-pvm --message-format=json \
+	| criterion-table > crates/benchmarks/BENCHMARKS.md
+
 
 clean:
 	cargo clean ; \

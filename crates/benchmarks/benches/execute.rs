@@ -8,7 +8,7 @@ use criterion::{
 #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
 use polkavm::BackendKind;
 
-use revive_benchmarks::runtimes;
+use revive_benchmarks::prepare_pvm;
 use revive_integration::cases::Contract;
 
 fn bench<P, L, I, M>(mut group: BenchmarkGroup<'_, M>, parameters: &[P], labels: &[L], contract: I)
@@ -35,7 +35,7 @@ where
         #[cfg(feature = "bench-pvm-interpreter")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = runtimes::polkavm::prepare_pvm(
+            let (state, mut instance, export) = prepare_pvm(
                 &contract.pvm_runtime,
                 &contract.calldata,
                 BackendKind::Interpreter,
@@ -50,7 +50,7 @@ where
         #[cfg(feature = "bench-pvm")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = runtimes::polkavm::prepare_pvm(
+            let (state, mut instance, export) = prepare_pvm(
                 &contract.pvm_runtime,
                 &contract.calldata,
                 BackendKind::Compiler,

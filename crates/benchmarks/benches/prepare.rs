@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use polkavm::BackendKind;
 
-use revive_benchmarks::runtimes;
+use revive_benchmarks::instantiate_engine;
 use revive_integration::cases::Contract;
 
 fn bench(
@@ -22,7 +22,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-interpreter")]
     {
-        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
+        let engine = instantiate_engine(BackendKind::Interpreter);
         group.bench_with_input(
             BenchmarkId::new("PVMInterpreterCompile", code_size),
             &(&pvm_runtime, engine),
@@ -36,7 +36,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm-interpreter")]
     {
-        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Interpreter);
+        let engine = instantiate_engine(BackendKind::Interpreter);
         let module = revive_integration::mock_runtime::recompile_code(&pvm_runtime, &engine);
         group.bench_with_input(
             BenchmarkId::new("PVMInterpreterInstantiate", code_size),
@@ -51,7 +51,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm")]
     {
-        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
+        let engine = instantiate_engine(BackendKind::Compiler);
         group.bench_with_input(
             BenchmarkId::new("PVMCompile", code_size),
             &(&pvm_runtime, engine),
@@ -65,7 +65,7 @@ fn bench(
 
     #[cfg(feature = "bench-pvm")]
     {
-        let engine = runtimes::polkavm::instantiate_engine(BackendKind::Compiler);
+        let engine = instantiate_engine(BackendKind::Compiler);
         let module = revive_integration::mock_runtime::recompile_code(&pvm_runtime, &engine);
         group.bench_with_input(
             BenchmarkId::new("PVMInstantiate", code_size),

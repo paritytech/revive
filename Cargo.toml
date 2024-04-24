@@ -49,4 +49,3 @@ features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 [profile.benchmark]
 inherits = "release"
 lto = true
-codegen-units = 1

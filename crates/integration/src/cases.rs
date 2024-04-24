@@ -97,6 +97,7 @@ impl Contract {
     pub fn fib_binet(n: u32) -> Self {
         let code = include_str!("../contracts/Fibonacci.sol");
         let name = "FibonacciBinet";
+
         Self {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
@@ -107,6 +108,7 @@ impl Contract {
     pub fn sha1(pre: Vec<u8>) -> Self {
         let code = include_str!("../contracts/SHA1.sol");
         let name = "SHA1";
+
         Self {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),

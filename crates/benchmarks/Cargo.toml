@@ -1,0 +1,32 @@
+[package]
+name = "revive-benchmarks"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Cyrill Leutwiler <cyrill@parity.io>",
+]
+
+[features]
+default = ["bench-pvm-interpreter"]
+bench-pvm-interpreter = []
+bench-pvm = []
+bench-evm = ["revive-differential"]
+bench-extensive = []
+
+[dependencies]
+hex = { workspace = true }
+polkavm = { workspace = true }
+revive-integration = { path = "../integration" }
+revive-differential = { path = "../differential", optional = true }
+alloy-primitives = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "execute"
+harness = false
+
+[[bench]]
+name = "prepare"
+harness = false

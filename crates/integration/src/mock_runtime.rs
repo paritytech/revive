@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use alloy_primitives::{Keccak256, U256};
-use parity_scale_codec::Encode;
 use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
     ProgramBlob, Trap,
@@ -61,7 +60,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 assert!(state.input.len() <= caller.read_u32(out_len_ptr).unwrap() as usize);
 
                 caller.write_memory(out_ptr, &state.input)?;
-                caller.write_memory(out_len_ptr, &(state.input.len() as u32).encode())?;
+                caller.write_memory(out_len_ptr, &(state.input.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },
@@ -91,7 +90,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 let value = state.value.to_le_bytes();
 
                 caller.write_memory(out_ptr, &value)?;
-                caller.write_memory(out_len_ptr, &(value.len() as u32).encode())?;
+                caller.write_memory(out_len_ptr, &(value.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },
@@ -200,14 +199,12 @@ pub fn recompile_code(code: &[u8], engine: &Engine) -> Module {
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
-    Module::new(&engine, &module_config, code).unwrap()
+    Module::new(engine, &module_config, code).unwrap()
 }
 
 pub fn instantiate_module(module: &Module, engine: &Engine) -> (Instance<State>, ExportIndex) {
     let export = module.lookup_export("call").unwrap();
-    let func = link_host_functions(&engine)
-        .instantiate_pre(module)
-        .unwrap();
+    let func = link_host_functions(engine).instantiate_pre(module).unwrap();
     let instance = func.instantiate().unwrap();
 
     (instance, export)

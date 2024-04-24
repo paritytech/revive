@@ -13,6 +13,7 @@ use serde::Serialize;
 use crate::evmla::assembly::Assembly;
 
 use self::bytecode::Bytecode;
+use self::bytecode::DeployedBytecode;
 use self::extra_metadata::ExtraMetadata;
 
 ///
@@ -32,6 +33,8 @@ pub struct EVM {
     /// The contract bytecode.
     /// Is reset by that of EraVM before yielding the compiled project artifacts.
     pub bytecode: Option<Bytecode>,
+    /// The contract deployed bytecode.
+    pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub method_identifiers: Option<BTreeMap<String, String>>,

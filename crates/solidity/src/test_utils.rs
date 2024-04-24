@@ -9,6 +9,7 @@ use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
+use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::solc::Compiler as SolcCompiler;
 use crate::warning::Warning;
@@ -98,6 +99,59 @@ pub fn build_solidity_with_options(
     )?;
 
     Ok(output)
+}
+
+/// Build a Solidity contract and get the EVM bin-runtime.
+pub fn build_solidity_with_options_evm(
+    sources: BTreeMap<String, String>,
+    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    remappings: Option<BTreeSet<String>>,
+    pipeline: SolcPipeline,
+    solc_optimizer_enabled: bool,
+) -> anyhow::Result<BTreeMap<String, DeployedBytecode>> {
+    check_dependencies();
+
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM);
+    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+
+    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let solc_version = solc.version()?;
+
+    let input = SolcStandardJsonInput::try_from_sources(
+        None,
+        sources.clone(),
+        libraries.clone(),
+        remappings,
+        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            None,
+            &solc_version.default,
+            false,
+            false,
+        ),
+        None,
+        pipeline == SolcPipeline::Yul,
+        None,
+    )?;
+
+    let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
+
+    let mut contracts = BTreeMap::new();
+    if let Some(files) = output.contracts.as_mut() {
+        for (_, file) in files.iter_mut() {
+            for (name, contract) in file.iter_mut() {
+                if let Some(evm) = contract.evm.as_mut() {
+                    if let Some(deployed_bytecode) = evm.deployed_bytecode.as_ref() {
+                        contracts.insert(name.clone(), deployed_bytecode.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(contracts)
 }
 
 ///

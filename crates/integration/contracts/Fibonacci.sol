@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 
+pragma solidity ^0.8.24;
+
 // https://medium.com/coinmonks/fibonacci-in-solidity-8477d907e22a
 
 contract FibonacciRecursive {
@@ -24,9 +26,11 @@ contract FibonacciIterative {
         uint a = 1;
         b = 1;
         for (uint i = 2; i < n; i++) {
-            uint c = a + b;
-            a = b;
-            b = c;
+            unchecked {
+                uint c = a + b;
+                a = b;
+                b = c;
+            }
         }
         return b;
     }

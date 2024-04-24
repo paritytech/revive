@@ -17,7 +17,7 @@ fn bench(
     group.bench_with_input(
         BenchmarkId::new("Evm", code_size),
         &evm_runtime,
-        |b, code| b.iter(|| runtimes::evm::prepare(code.clone(), Vec::new())),
+        |b, code| b.iter(|| revive_differential::prepare(code.clone(), Vec::new())),
     );
 
     #[cfg(feature = "bench-pvm-interpreter")]

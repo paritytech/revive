@@ -28,10 +28,10 @@ fn bench<'a, P, L, I, M>(
         #[cfg(feature = "bench-evm")]
         {
             let contract = contract(p.clone());
-            let vm = runtimes::evm::prepare(contract.evm_runtime, contract.calldata);
+            let vm = revive_differential::prepare(contract.evm_runtime, contract.calldata);
             group.bench_with_input(BenchmarkId::new("EVM", l), p, move |b, _| {
                 b.iter(|| {
-                    runtimes::evm::execute(vm.clone());
+                    revive_differential::execute(vm.clone());
                 });
             });
         }

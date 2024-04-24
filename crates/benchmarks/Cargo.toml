@@ -9,16 +9,15 @@ edition = "2021"
 default = ["bench-pvm-interpreter"]
 bench-pvm-interpreter = []
 bench-pvm = []
-bench-evm = ["primitive-types", "evm-interpreter"]
+bench-evm = ["revive-differential"]
 bench-extensive = []
 
 [dependencies]
 hex = { workspace = true }
 polkavm = { workspace = true }
 revive-integration = { path = "../integration" }
+revive-differential = { path = "../differential", optional = true }
 alloy-primitives = { workspace = true }
-evm-interpreter = { workspace = true, optional = true }
-primitive-types = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -30,8 +29,3 @@ harness = false
 [[bench]]
 name = "prepare"
 harness = false
-
-[profile.benchmark]
-inherits = "release"
-lto = true
-codegen-units = 1

@@ -1628,10 +1628,9 @@ version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "criterion",
- "evm-interpreter",
  "hex",
  "polkavm",
- "primitive-types",
+ "revive-differential",
  "revive-integration",
 ]
 
@@ -1647,6 +1646,14 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_stacker",
+]
+
+[[package]]
+name = "revive-differential"
+version = "0.1.0"
+dependencies = [
+ "evm-interpreter",
+ "primitive-types",
 ]
 
 [[package]]
@@ -1666,6 +1673,7 @@ dependencies = [
  "era-compiler-llvm-context",
  "hex",
  "polkavm",
+ "revive-differential",
  "revive-solidity",
  "sha1",
 ]

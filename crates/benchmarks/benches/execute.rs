@@ -11,12 +11,8 @@ use polkavm::BackendKind;
 use revive_benchmarks::runtimes;
 use revive_integration::cases::Contract;
 
-fn bench<'a, P, L, I, M>(
-    mut group: BenchmarkGroup<'a, M>,
-    parameters: &[P],
-    labels: &[L],
-    contract: I,
-) where
+fn bench<P, L, I, M>(mut group: BenchmarkGroup<'_, M>, parameters: &[P], labels: &[L], contract: I)
+where
     P: Clone,
     L: std::fmt::Display,
     I: Fn(P) -> Contract,
@@ -107,7 +103,7 @@ fn bench_odd_product(c: &mut Criterion) {
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
-    bench(group, parameters, parameters, |p| Contract::odd_product(p));
+    bench(group, parameters, parameters, Contract::odd_product);
 }
 
 fn bench_triangle_number(c: &mut Criterion) {
@@ -121,9 +117,7 @@ fn bench_triangle_number(c: &mut Criterion) {
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
-    bench(group, parameters, parameters, |p| {
-        Contract::triangle_number(p)
-    });
+    bench(group, parameters, parameters, Contract::triangle_number);
 }
 
 fn bench_fibonacci_recurisve(c: &mut Criterion) {
@@ -137,9 +131,7 @@ fn bench_fibonacci_recurisve(c: &mut Criterion) {
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[12, 16, 20];
 
-    bench(group, parameters, parameters, |p| {
-        Contract::fib_recursive(p)
-    });
+    bench(group, parameters, parameters, Contract::fib_recursive);
 }
 
 fn bench_fibonacci_iterative(c: &mut Criterion) {
@@ -153,9 +145,7 @@ fn bench_fibonacci_iterative(c: &mut Criterion) {
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[64, 128, 256];
 
-    bench(group, parameters, parameters, |p| {
-        Contract::fib_iterative(p)
-    });
+    bench(group, parameters, parameters, Contract::fib_iterative);
 }
 
 fn bench_fibonacci_binet(c: &mut Criterion) {
@@ -165,7 +155,7 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
         c.benchmark_group("FibonacciBinet"),
         parameters,
         parameters,
-        |p| Contract::fib_binet(p),
+        Contract::fib_binet,
     );
 }
 
@@ -173,9 +163,12 @@ fn bench_sha1(c: &mut Criterion) {
     let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 512]];
     let labels = parameters.iter().map(|p| p.len()).collect::<Vec<_>>();
 
-    bench(c.benchmark_group("SHA1"), parameters, &labels, |p| {
-        Contract::sha1(p)
-    });
+    bench(
+        c.benchmark_group("SHA1"),
+        parameters,
+        &labels,
+        Contract::sha1,
+    );
 }
 
 criterion_group!(

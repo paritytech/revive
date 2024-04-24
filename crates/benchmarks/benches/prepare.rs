@@ -28,7 +28,7 @@ fn bench(
             &(&pvm_runtime, engine),
             |b, (code, engine)| {
                 b.iter(|| {
-                    revive_integration::mock_runtime::recompile_code(code, &engine);
+                    revive_integration::mock_runtime::recompile_code(code, engine);
                 });
             },
         );

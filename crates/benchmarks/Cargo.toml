@@ -10,6 +10,7 @@ default = ["bench-pvm-interpreter"]
 bench-pvm-interpreter = []
 bench-pvm = []
 bench-evm = ["primitive-types", "evm-interpreter"]
+bench-extensive = []
 
 [dependencies]
 hex = { workspace = true }

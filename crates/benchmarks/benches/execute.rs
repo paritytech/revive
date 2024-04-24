@@ -70,6 +70,21 @@ fn bench<'a, P, L, I, M>(
     group.finish();
 }
 
+#[cfg(feature = "bench-extensive")]
+fn group_extensive<'error, M>(
+    c: &'error mut Criterion<M>,
+    group_name: &str,
+) -> BenchmarkGroup<'error, M>
+where
+    M: Measurement,
+{
+    let mut group = c.benchmark_group(group_name);
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(60));
+    group
+}
+
 fn bench_baseline(c: &mut Criterion) {
     let parameters = &[0u8];
 
@@ -82,32 +97,28 @@ fn bench_baseline(c: &mut Criterion) {
 }
 
 fn bench_odd_product(c: &mut Criterion) {
-    let mut group = c.benchmark_group("OddProduct");
-    group.sample_size(20);
-    #[cfg(feauture = "bench-extensive")]
-    group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(60));
+    #[cfg(feature = "bench-extensive")]
+    let group = group_extensive(c, "OddProduct");
+    #[cfg(not(feature = "bench-extensive"))]
+    let group = c.benchmark_group("OddProduct");
 
-    #[cfg(feauture = "bench-extensive")]
+    #[cfg(feature = "bench-extensive")]
     let parameters = &[2_000_000i32, 4_000_000, 8_000_000, 120_000_000];
-    #[cfg(not(feauture = "bench-extensive"))]
+    #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
     bench(group, parameters, parameters, |p| Contract::odd_product(p));
 }
 
 fn bench_triangle_number(c: &mut Criterion) {
-    let mut group = c.benchmark_group("TriangleNumber");
-    group.sample_size(20);
-    #[cfg(feauture = "bench-extensive")]
-    group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(60));
+    #[cfg(feature = "bench-extensive")]
+    let group = group_extensive(c, "TriangleNumber");
+    #[cfg(not(feature = "bench-extensive"))]
+    let group = c.benchmark_group("TriangleNumber");
 
-    #[cfg(feauture = "bench-extensive")]
+    #[cfg(feature = "bench-extensive")]
     let parameters = &[3_000_000i64, 6_000_000, 12_000_000, 180_000_000];
-    #[cfg(not(feauture = "bench-extensive"))]
+    #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
     bench(group, parameters, parameters, |p| {
@@ -116,25 +127,35 @@ fn bench_triangle_number(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_recurisve(c: &mut Criterion) {
+    #[cfg(not(feature = "bench-extensive"))]
+    let group = c.benchmark_group("FibonacciRecursive");
+    #[cfg(feature = "bench-extensive")]
+    let group = group_extensive(c, "FibonacciRecursive");
+
+    #[cfg(feature = "bench-extensive")]
+    let parameters = &[26, 30, 34, 38];
+    #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[12, 16, 20];
 
-    bench(
-        c.benchmark_group("FibonacciRecursive"),
-        parameters,
-        parameters,
-        |p| Contract::fib_recursive(p),
-    );
+    bench(group, parameters, parameters, |p| {
+        Contract::fib_recursive(p)
+    });
 }
 
 fn bench_fibonacci_iterative(c: &mut Criterion) {
+    #[cfg(not(feature = "bench-extensive"))]
+    let group = c.benchmark_group("FibonacciIterative");
+    #[cfg(feature = "bench-extensive")]
+    let group = group_extensive(c, "FibonacciIterative");
+
+    #[cfg(feature = "bench-extensive")]
+    let parameters = &[256, 100000, 1000000, 100000000];
+    #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[64, 128, 256];
 
-    bench(
-        c.benchmark_group("FibonacciIterative"),
-        parameters,
-        parameters,
-        |p| Contract::fib_iterative(p),
-    );
+    bench(group, parameters, parameters, |p| {
+        Contract::fib_iterative(p)
+    });
 }
 
 fn bench_fibonacci_binet(c: &mut Criterion) {
@@ -149,10 +170,7 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
 }
 
 fn bench_sha1(c: &mut Criterion) {
-    #[cfg(not(feauture = "bench-extensive"))]
-    let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 256]];
-    #[cfg(feauture = "bench-extensive")]
-    let parameters = &[vec![0xff; 512], vec![0xff, 1024], vec![0xff, 2048]];
+    let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 512]];
     let labels = parameters.iter().map(|p| p.len()).collect::<Vec<_>>();
 
     bench(c.benchmark_group("SHA1"), parameters, &labels, |p| {
@@ -164,11 +182,11 @@ criterion_group!(
     name = execute;
     config = Criterion::default();
     targets = bench_baseline,
-    bench_odd_product,
-    bench_triangle_number,
-    bench_fibonacci_recurisve,
-    bench_fibonacci_iterative,
-    bench_fibonacci_binet,
+    //bench_odd_product,
+    //bench_triangle_number,
+    //bench_fibonacci_recurisve,
+    //bench_fibonacci_iterative,
+    //bench_fibonacci_binet,
     bench_sha1
 );
 criterion_main!(execute);

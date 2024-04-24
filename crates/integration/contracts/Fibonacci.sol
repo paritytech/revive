@@ -26,9 +26,11 @@ contract FibonacciIterative {
         uint a = 1;
         b = 1;
         for (uint i = 2; i < n; i++) {
-            uint c = a + b;
-            a = b;
-            b = c;
+            unchecked {
+                uint c = a + b;
+                a = b;
+                b = c;
+            }
         }
         return b;
     }

@@ -29,6 +29,12 @@ impl TargetMachine {
     /// The LLVM target triple.
     pub const VM_TARGET_TRIPLE: &'static str = "riscv32-unknown-unknown-elf";
 
+    /// LLVM target features.
+    #[cfg(feature = "riscv-zbb")]
+    pub const VM_FEATURES: &'static str = "+zbb,+e,+m";
+    #[cfg(not(feature = "riscv-zbb"))]
+    pub const VM_FEATURES: &'static str = "+e,+m";
+
     ///
     /// A shortcut constructor.
     ///
@@ -40,7 +46,7 @@ impl TargetMachine {
             .create_target_machine(
                 &inkwell::targets::TargetTriple::create(target.triple()),
                 "generic-rv32",
-                "+e,+m",
+                Self::VM_FEATURES,
                 optimizer_settings.level_back_end,
                 inkwell::targets::RelocMode::PIC,
                 inkwell::targets::CodeModel::Default,

@@ -117,3 +117,52 @@ impl Contract {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::{de::Deserialize, Serialize};
+    use std::{collections::HashMap, fs::File};
+
+    use super::Contract;
+
+    #[test]
+    fn codesize() {
+        let path = "codesize.json";
+
+        let existing = File::open(path)
+            .map(|file| {
+                HashMap::<String, usize>::deserialize(&mut serde_json::Deserializer::from_reader(
+                    file,
+                ))
+                .expect("should be able to deserialze codesize data")
+            })
+            .ok();
+
+        let sizes = HashMap::from([
+            ("Baseline", Contract::baseline().pvm_runtime.len()),
+            ("Computation", Contract::odd_product(0).pvm_runtime.len()),
+            ("Fibonacci", Contract::fib_iterative(0).pvm_runtime.len()),
+        ]);
+
+        for (name, bytes) in sizes.iter() {
+            let change = existing
+                .as_ref()
+                .and_then(|map| map.get(*name))
+                .map(|old| {
+                    let new = *bytes as f32;
+                    let old = *old as f32;
+                    let p = (new - old) / new * 100.0;
+                    format!("({p}% change from {old} bytes)")
+                })
+                .unwrap_or_else(String::new);
+
+            println!("{name}: {bytes} bytes {change}");
+        }
+
+        sizes
+            .serialize(&mut serde_json::Serializer::pretty(
+                File::create(path).unwrap(),
+            ))
+            .unwrap_or_else(|err| panic!("can not write codesize data to '{}': {}", path, err));
+    }
+}

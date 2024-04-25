@@ -18,3 +18,5 @@ era-compiler-llvm-context = { path = "../llvm-context" }
 
 [dev-dependencies]
 sha1 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

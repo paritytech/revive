@@ -122,6 +122,31 @@ where
     /// The PolkaVM minimum stack size.
     const POLKAVM_STACK_SIZE: u32 = 0x4000;
 
+    /// Link in the extensions module.
+    fn link_extensions_module(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module
+            .link_in_module(revive_extensions::module(llvm, "revive_extensions").unwrap())
+            .expect("the extensions module should be linkable");
+
+        let i256_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32);
+        let bswap = module.add_function(
+            "__bswap",
+            i256_type.fn_type(&[i256_type.into()], false),
+            Some(inkwell::module::Linkage::External),
+        );
+        bswap.add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            llvm.create_enum_attribute(Attribute::AlwaysInline as u32, 0),
+        );
+        bswap.add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            llvm.create_enum_attribute(Attribute::WillReturn as u32, 0),
+        );
+    }
+
     /// Link in the stdlib module.
     fn link_stdlib_module(
         llvm: &'ctx inkwell::context::Context,
@@ -203,6 +228,7 @@ where
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
+        Self::link_extensions_module(llvm, &module);
         Self::link_polkavm_guest_module(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
@@ -703,7 +729,7 @@ where
                     .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
 
-                Ok(self.build_byte_swap(value))
+                self.build_byte_swap(value)
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
@@ -761,13 +787,13 @@ where
                 // TODO check return value
 
                 self.build_load(storage_value_pointer, "storage_value_load")
-                    .map(|value| self.build_byte_swap(value))
+                    .and_then(|value| self.build_byte_swap(value))
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
-            AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
+            AddressSpace::Generic => self.build_byte_swap(self.build_load(
                 pointer.address_space_cast(self, AddressSpace::Stack, &format!("{}_cast", name))?,
                 name,
-            )?)),
+            )?),
             AddressSpace::Stack => {
                 let value = self
                     .builder()
@@ -811,7 +837,7 @@ where
 
                 let value = value.as_basic_value_enum();
                 let value = match value.get_type().into_int_type().get_bit_width() as usize {
-                    revive_common::BIT_LENGTH_FIELD => self.build_byte_swap(value),
+                    revive_common::BIT_LENGTH_FIELD => self.build_byte_swap(value)?,
                     revive_common::BIT_LENGTH_BYTE => value,
                     _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
                 };
@@ -834,7 +860,7 @@ where
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
 
                 let storage_value_value = self
-                    .build_byte_swap(value.as_basic_value_enum())
+                    .build_byte_swap(value.as_basic_value_enum())?
                     .into_int_value();
                 let storage_value_pointer =
                     self.build_alloca(storage_value_value.get_type(), "storage_value");
@@ -871,7 +897,7 @@ where
             AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
             AddressSpace::Generic => self.build_store(
                 pointer.address_space_cast(self, AddressSpace::Stack, "cast")?,
-                self.build_byte_swap(value.as_basic_value_enum()),
+                self.build_byte_swap(value.as_basic_value_enum())?,
             )?,
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
@@ -888,9 +914,23 @@ where
     pub fn build_byte_swap(
         &self,
         value: inkwell::values::BasicValueEnum<'ctx>,
-    ) -> inkwell::values::BasicValueEnum<'ctx> {
-        self.build_call(self.intrinsics().byte_swap, &[value], "call_byte_swap")
-            .expect("byte_swap should return a value")
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        //return Ok(self
+        //    .build_call(self.intrinsics().byte_swap, &[value], "call_byte_swap")
+        //    .expect("__bswap should return a value"));
+
+        let function = self
+            .module()
+            .get_function("__bswap")
+            .expect("should be declared");
+
+        Ok(self
+            .builder()
+            .build_direct_call(function, &[value.into()], "call_byte_swap")?
+            .try_as_basic_value()
+            .left()
+            .expect("__bswap should return a value")
+            .into())
     }
 
     ///

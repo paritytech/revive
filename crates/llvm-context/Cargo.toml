@@ -33,3 +33,4 @@ pallet-contracts-pvm-llapi = { path = "../pallet-contracts-pvm-llapi" }
 revive-linker = { path = "../linker" }
 revive-builtins = { path = "../builtins" }
 revive-stdlib = { path = "../stdlib" }
+revive-extensions = { path = "../extensions" }

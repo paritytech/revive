@@ -5,7 +5,7 @@ fn compile(source_path: &str, output_path: &str) {
         .args([
             "-O3",
             "-filetype=asm",
-            "-mattr=+zbb,+e",
+            "-mattr=+zbb,+e,+m",
             source_path,
             "-o",
             output_path,

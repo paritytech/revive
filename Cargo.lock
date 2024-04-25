@@ -687,6 +687,7 @@ dependencies = [
  "regex",
  "revive-builtins",
  "revive-common",
+ "revive-extensions",
  "revive-linker",
  "revive-stdlib",
  "semver 1.0.22",
@@ -1349,7 +1350,7 @@ dependencies = [
 [[package]]
 name = "polkavm"
 version = "0.9.3"
-source = "git+https://github.com/koute/polkavm.git#4ca06cc1b7cb435b2b92e81e30c2eb0e988f563e"
+source = "git+https://github.com/koute/polkavm.git?branch=master_byteswap#8b8050bd58be30c6001925b5b2785bc9c98cca4e"
 dependencies = [
  "libc",
  "log",
@@ -1361,7 +1362,7 @@ dependencies = [
 [[package]]
 name = "polkavm-assembler"
 version = "0.9.0"
-source = "git+https://github.com/koute/polkavm.git#4ca06cc1b7cb435b2b92e81e30c2eb0e988f563e"
+source = "git+https://github.com/koute/polkavm.git?branch=master_byteswap#8b8050bd58be30c6001925b5b2785bc9c98cca4e"
 dependencies = [
  "log",
 ]
@@ -1369,7 +1370,7 @@ dependencies = [
 [[package]]
 name = "polkavm-common"
 version = "0.9.0"
-source = "git+https://github.com/koute/polkavm.git#4ca06cc1b7cb435b2b92e81e30c2eb0e988f563e"
+source = "git+https://github.com/koute/polkavm.git?branch=master_byteswap#8b8050bd58be30c6001925b5b2785bc9c98cca4e"
 dependencies = [
  "log",
 ]
@@ -1377,7 +1378,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linker"
 version = "0.9.2"
-source = "git+https://github.com/koute/polkavm.git#4ca06cc1b7cb435b2b92e81e30c2eb0e988f563e"
+source = "git+https://github.com/koute/polkavm.git?branch=master_byteswap#8b8050bd58be30c6001925b5b2785bc9c98cca4e"
 dependencies = [
  "gimli",
  "hashbrown 0.14.3",
@@ -1391,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.9.0"
-source = "git+https://github.com/koute/polkavm.git#4ca06cc1b7cb435b2b92e81e30c2eb0e988f563e"
+source = "git+https://github.com/koute/polkavm.git?branch=master_byteswap#8b8050bd58be30c6001925b5b2785bc9c98cca4e"
 
 [[package]]
 name = "ppv-lite86"

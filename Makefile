@@ -38,6 +38,8 @@ bench: install-bin
 	cargo criterion --all --features bench-evm,bench-pvm --message-format=json \
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
+clippy:
+	cargo clippy --all-features --workspace --tests --benches
 
 clean:
 	cargo clean ; \

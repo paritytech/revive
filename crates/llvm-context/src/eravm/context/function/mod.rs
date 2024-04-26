@@ -183,6 +183,24 @@ impl<'ctx> Function<'ctx> {
         }
     }
 
+    /// Remove specified attributes existing on the given declaration.
+    pub fn remove_attributes(declaration: Declaration, attributes: &[Attribute]) {
+        for attribute in attributes.iter().filter(|attribute| {
+            declaration
+                .value
+                .get_enum_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    **attribute as u32,
+                )
+                .is_some()
+        }) {
+            declaration.value.remove_enum_attribute(
+                inkwell::attributes::AttributeLoc::Function,
+                *attribute as u32,
+            );
+        }
+    }
+
     ///
     /// Sets the default attributes.
     ///
@@ -194,6 +212,10 @@ impl<'ctx> Function<'ctx> {
         optimizer: &Optimizer,
     ) {
         if optimizer.settings().level_middle_end == inkwell::OptimizationLevel::None {
+            Self::remove_attributes(
+                declaration,
+                &[Attribute::OptimizeForSize, Attribute::AlwaysInline],
+            );
             Self::set_attributes(
                 llvm,
                 declaration,

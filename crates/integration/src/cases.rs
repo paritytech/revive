@@ -41,6 +41,32 @@ sol!(
     }
 );
 
+sol!(
+    interface IERC20 {
+        function totalSupply() external view returns (uint);
+
+        function balanceOf(address account) external view returns (uint);
+
+        function transfer(address recipient, uint amount) external returns (bool);
+
+        function allowance(
+            address owner,
+            address spender
+        ) external view returns (uint);
+
+        function approve(address spender, uint amount) external returns (bool);
+
+        function transferFrom(
+            address sender,
+            address recipient,
+            uint amount
+        ) external returns (bool);
+
+        event Transfer(address indexed from, address indexed to, uint value);
+        event Approval(address indexed owner, address indexed spender, uint value);
+    }
+);
+
 impl Contract {
     pub fn baseline() -> Self {
         let code = include_str!("../contracts/Baseline.sol");
@@ -129,6 +155,17 @@ impl Contract {
             calldata: Flipper::flipCall::new(()).abi_encode(),
         }
     }
+
+    pub fn erc20() -> Self {
+        let code = include_str!("../contracts/ERC20.sol");
+        let name = "ERC20";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: IERC20::totalSupplyCall::new(()).abi_encode(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -156,6 +193,7 @@ mod tests {
             ("Flipper", Contract::flipper().pvm_runtime.len()),
             ("Computation", Contract::odd_product(0).pvm_runtime.len()),
             ("Fibonacci", Contract::fib_iterative(0).pvm_runtime.len()),
+            ("ERC20", Contract::erc20().pvm_runtime.len()),
         ]);
 
         for (name, bytes) in sizes.iter() {

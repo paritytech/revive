@@ -28,11 +28,10 @@ where
         .original
         .take()
         .ok_or_else(|| anyhow::anyhow!("{} Verbatim literal is missing", call.location))?;
-    match identifier.as_str() {
-        _ => anyhow::bail!(
-            "{} Found unknown internal function `{}`",
-            call.location,
-            identifier
-        ),
-    }
+
+    anyhow::bail!(
+        "{} Found unknown internal function `{}`",
+        call.location,
+        identifier
+    )
 }

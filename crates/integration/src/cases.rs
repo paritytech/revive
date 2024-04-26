@@ -154,7 +154,7 @@ mod tests {
                     let p = (new - old) / new * 100.0;
                     format!("({p}% change from {old} bytes)")
                 })
-                .unwrap_or_else(String::new);
+                .unwrap_or_default();
 
             println!("{name}: {bytes} bytes {change}");
         }

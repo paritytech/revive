@@ -10,6 +10,8 @@ pub struct Contract {
 
 sol!(contract Baseline { function baseline() public payable; });
 
+sol!(contract Flipper { function flip() public; });
+
 sol!(contract Computation {
     function odd_product(int32 n) public pure returns (int64);
     function triangle_number(int64 n) public pure returns (int64 sum);
@@ -116,6 +118,17 @@ impl Contract {
             calldata: SHA1::sha1Call::new((pre,)).abi_encode(),
         }
     }
+
+    pub fn flipper() -> Self {
+        let code = include_str!("../contracts/flipper.sol");
+        let name = "Flipper";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Flipper::flipCall::new(()).abi_encode(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -140,6 +153,7 @@ mod tests {
 
         let sizes = HashMap::from([
             ("Baseline", Contract::baseline().pvm_runtime.len()),
+            ("Flipper", Contract::flipper().pvm_runtime.len()),
             ("Computation", Contract::odd_product(0).pvm_runtime.len()),
             ("Fibonacci", Contract::fib_iterative(0).pvm_runtime.len()),
         ]);

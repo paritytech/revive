@@ -26,11 +26,10 @@ fn fibonacci() {
 
 #[test]
 fn flipper() {
-    let code = crate::compile_blob("Flipper", include_str!("../contracts/flipper.sol"));
-    let state = State::new(0xcde4efa9u32.to_be_bytes().to_vec());
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
+    let contract = Contract::flipper();
+    let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
 
-    let state = crate::mock_runtime::call(state, &mut instance, export);
+    let state = crate::mock_runtime::call(State::new(contract.calldata), &mut instance, export);
     assert_eq!(state.output.flags, 0);
     assert_eq!(state.storage[&U256::ZERO], U256::try_from(1).unwrap());
 

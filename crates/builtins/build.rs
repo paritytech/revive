@@ -1,7 +1,7 @@
 use std::{env, fs, io::Read, path::Path, process::Command};
 
 fn main() {
-    let lib = "libclang_rt.builtins-riscv32.a";
+    let lib = "libclang_rt.builtins-riscv64.a";
     let mut llvm_lib_dir = String::new();
 
     Command::new("llvm-config")
@@ -16,7 +16,7 @@ fn main() {
     let lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
         .join("linux")
         .join(lib);
-    let archive = fs::read(lib_path).expect("clang builtins for riscv32 not found");
+    let archive = fs::read(lib_path).expect("clang builtins for riscv64 not found");
 
     let out_dir = env::var_os("OUT_DIR").expect("has OUT_DIR");
     let archive_path = Path::new(&out_dir).join(lib);

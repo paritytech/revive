@@ -19,7 +19,7 @@ impl Target {
     ///
     pub fn name(&self) -> &str {
         match self {
-            Self::PVM => "riscv32",
+            Self::PVM => "riscv64",
         }
     }
 
@@ -28,7 +28,7 @@ impl Target {
     ///
     pub fn triple(&self) -> &str {
         match self {
-            Self::PVM => "riscv32-unknown-unknown-elf",
+            Self::PVM => "riscv64-unknown-unknown-elf",
         }
     }
 
@@ -47,7 +47,7 @@ impl FromStr for Target {
 
     fn from_str(string: &str) -> Result<Self, Self::Err> {
         match string {
-            "riscv32" => Ok(Self::PVM),
+            "riscv64" => Ok(Self::PVM),
             _ => Err(anyhow::anyhow!(
                 "Unknown target `{}`. Supported targets: {:?}",
                 string,
@@ -60,7 +60,7 @@ impl FromStr for Target {
 impl std::fmt::Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Target::PVM => write!(f, "riscv32"),
+            Target::PVM => write!(f, "riscv64"),
         }
     }
 }

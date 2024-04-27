@@ -3,11 +3,11 @@ use std::{env, fs, path::Path, process::Command};
 fn compile(bitcode_path: &str) {
     let output = Command::new("clang")
         .args([
-            "--target=riscv32",
+            "--target=riscv64",
             "-Xclang",
-            "-triple=riscv32-unknown-unknown-elf",
-            "-march=rv32em",
-            "-mabi=ilp32e",
+            "-triple=riscv64-unknown-unknown-elf",
+            "-march=rv64em",
+            "-mabi=lp64e",
             "-fno-exceptions",
             "-ffreestanding",
             "-Wall",

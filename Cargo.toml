@@ -27,9 +27,9 @@ path-slash = "0.2"
 rayon = "1.8"
 structopt = { version = "0.3", default-features = false }
 rand = "0.8"
-polkavm-common = { git = "https://github.com/koute/polkavm.git" } 
-polkavm-linker = { git = "https://github.com/koute/polkavm.git" } 
-polkavm = { git = "https://github.com/koute/polkavm.git" } 
+polkavm-common = { branch = "master_byteswap", git = "https://github.com/xermicus/polkavm.git" } 
+polkavm-linker = { branch = "master_byteswap", git = "https://github.com/xermicus/polkavm.git" } 
+polkavm = { branch = "master_byteswap", git = "https://github.com/xermicus/polkavm.git" } 
 alloy-primitives = "0.6"
 alloy-sol-types = "0.6"
 env_logger = { version = "0.10.0", default-features = false }

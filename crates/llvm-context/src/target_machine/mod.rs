@@ -24,10 +24,10 @@ pub struct TargetMachine {
 
 impl TargetMachine {
     /// The LLVM target name.
-    pub const VM_TARGET_NAME: &'static str = "riscv32";
+    pub const VM_TARGET_NAME: &'static str = "riscv64";
 
     /// The LLVM target triple.
-    pub const VM_TARGET_TRIPLE: &'static str = "riscv32-unknown-unknown-elf";
+    pub const VM_TARGET_TRIPLE: &'static str = "riscv64-unknown-unknown-elf";
 
     /// LLVM target features.
     #[cfg(feature = "riscv-zbb")]
@@ -45,7 +45,7 @@ impl TargetMachine {
             .ok_or_else(|| anyhow::anyhow!("LLVM target machine `{}` not found", target.name()))?
             .create_target_machine(
                 &inkwell::targets::TargetTriple::create(target.triple()),
-                "generic-rv32",
+                "generic-rv64",
                 Self::VM_FEATURES,
                 optimizer_settings.level_back_end,
                 inkwell::targets::RelocMode::PIC,

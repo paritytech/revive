@@ -37,7 +37,7 @@ cd ../compiler-rt
 mkdir -p build
 cd build
 
-CFLAGS="--target=riscv32 -march=rv32em -mabi=ilp32e -nostdlib -nodefaultlibs -mcpu=generic-rv32"
+CFLAGS="--target=riscv64 -march=rv64em -mabi=lp64e -nostdlib -nodefaultlibs -mcpu=generic-rv64"
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
   -DCOMPILER_RT_BUILD_BUILTINS=ON \
   -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
@@ -46,8 +46,8 @@ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
   -DCOMPILER_RT_BUILD_SANITIZERS=OFF \
   -DCOMPILER_RT_BUILD_XRAY=OFF \
   -DCMAKE_C_COMPILER=$INSTALL_DIR/bin/clang \
-  -DCMAKE_C_COMPILER_TARGET="riscv32" \
-  -DCMAKE_ASM_COMPILER_TARGET="riscv32" \
+  -DCMAKE_C_COMPILER_TARGET="riscv64" \
+  -DCMAKE_ASM_COMPILER_TARGET="riscv64" \
   -DCMAKE_AR=$INSTALL_DIR/bin/llvm-ar \
   -DCMAKE_NM=$INSTALL_DIR/bin/llvm-nm \
   -DCMAKE_RANLIB=$INSTALL_DIR/bin/llvm-ranlib \

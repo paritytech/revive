@@ -33,7 +33,7 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
     let output_path = dir.path().join("out.so");
     let object_path = dir.path().join("out.o");
     let linker_script_path = dir.path().join("linker.ld");
-    let compiler_rt_path = dir.path().join("libclang_rt.builtins-riscv32.a");
+    let compiler_rt_path = dir.path().join("libclang_rt.builtins-riscv64.a");
 
     fs::write(&object_path, input).map_err(|msg| anyhow::anyhow!("{msg} {object_path:?}"))?;
 
@@ -58,7 +58,7 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
         "--library-path",
         dir.path().to_str().expect("should be utf8"),
         "--library",
-        "clang_rt.builtins-riscv32",
+        "clang_rt.builtins-riscv64",
         linker_script_path.to_str().expect("should be utf8"),
         object_path.to_str().expect("should be utf8"),
         "-o",

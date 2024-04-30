@@ -5,10 +5,6 @@ use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,
     Criterion,
 };
-#[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
-use polkavm::BackendKind;
-
-use revive_benchmarks::prepare_pvm;
 use revive_integration::cases::Contract;
 
 fn bench<P, L, I, M>(mut group: BenchmarkGroup<'_, M>, parameters: &[P], labels: &[L], contract: I)
@@ -35,10 +31,10 @@ where
         #[cfg(feature = "bench-pvm-interpreter")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = prepare_pvm(
+            let (state, mut instance, export) = revive_benchmarks::prepare_pvm(
                 &contract.pvm_runtime,
                 &contract.calldata,
-                BackendKind::Interpreter,
+                polkavm::BackendKind::Interpreter,
             );
             group.bench_with_input(BenchmarkId::new("PVMInterpreter", l), p, |b, _| {
                 b.iter(|| {
@@ -50,10 +46,10 @@ where
         #[cfg(feature = "bench-pvm")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = prepare_pvm(
+            let (state, mut instance, export) = revive_benchmarks::prepare_pvm(
                 &contract.pvm_runtime,
                 &contract.calldata,
-                BackendKind::Compiler,
+                polkavm::BackendKind::Compiler,
             );
             group.bench_with_input(BenchmarkId::new("PVM", l), p, |b, _| {
                 b.iter(|| {
@@ -66,40 +62,34 @@ where
     group.finish();
 }
 
-#[cfg(feature = "bench-extensive")]
-fn group_extensive<'error, M>(
-    c: &'error mut Criterion<M>,
-    group_name: &str,
-) -> BenchmarkGroup<'error, M>
+fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
 where
     M: Measurement,
 {
-    let mut group = c.benchmark_group(group_name);
-    group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(60));
-    group
+    #[cfg(feature = "bench-extensive")]
+    {
+        let mut group = c.benchmark_group(group_name);
+        group
+            .sample_size(10)
+            .measurement_time(Duration::from_secs(60));
+        return group;
+    }
+
+    #[cfg(not(feature = "bench-extensive"))]
+    return c.benchmark_group(group_name);
 }
 
 fn bench_baseline(c: &mut Criterion) {
+    let group = group(c, "Baseline");
     let parameters = &[0u8];
 
-    bench(
-        c.benchmark_group("Baseline"),
-        parameters,
-        parameters,
-        |_| Contract::baseline(),
-    );
+    bench(group, parameters, parameters, |_| Contract::baseline());
 }
 
 fn bench_odd_product(c: &mut Criterion) {
+    let group = group(c, "OddPorduct");
     #[cfg(feature = "bench-extensive")]
-    let group = group_extensive(c, "OddProduct");
-    #[cfg(not(feature = "bench-extensive"))]
-    let group = c.benchmark_group("OddProduct");
-
-    #[cfg(feature = "bench-extensive")]
-    let parameters = &[2_000_000i32, 4_000_000, 8_000_000, 120_000_000];
+    let parameters = &[300000, 1200000, 12000000, 180000000, 720000000];
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
@@ -107,13 +97,9 @@ fn bench_odd_product(c: &mut Criterion) {
 }
 
 fn bench_triangle_number(c: &mut Criterion) {
+    let group = group(c, "TriangleNumber");
     #[cfg(feature = "bench-extensive")]
-    let group = group_extensive(c, "TriangleNumber");
-    #[cfg(not(feature = "bench-extensive"))]
-    let group = c.benchmark_group("TriangleNumber");
-
-    #[cfg(feature = "bench-extensive")]
-    let parameters = &[3_000_000i64, 6_000_000, 12_000_000, 180_000_000];
+    let parameters = &[360000, 1440000, 14400000, 216000000, 864000000];
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[10_000, 100_000];
 
@@ -121,13 +107,9 @@ fn bench_triangle_number(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_recurisve(c: &mut Criterion) {
-    #[cfg(not(feature = "bench-extensive"))]
-    let group = c.benchmark_group("FibonacciRecursive");
+    let group = group(c, "FibonacciRecursive");
     #[cfg(feature = "bench-extensive")]
-    let group = group_extensive(c, "FibonacciRecursive");
-
-    #[cfg(feature = "bench-extensive")]
-    let parameters = &[26, 30, 34, 38];
+    let parameters = &[24, 27, 31, 36, 39];
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[12, 16, 20];
 
@@ -135,13 +117,9 @@ fn bench_fibonacci_recurisve(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_iterative(c: &mut Criterion) {
-    #[cfg(not(feature = "bench-extensive"))]
-    let group = c.benchmark_group("FibonacciIterative");
+    let group = group(c, "FibonacciIterative");
     #[cfg(feature = "bench-extensive")]
-    let group = group_extensive(c, "FibonacciIterative");
-
-    #[cfg(feature = "bench-extensive")]
-    let parameters = &[256, 100000, 1000000, 100000000];
+    let parameters = &[256, 162500, 650000, 6500000, 100000000, 400000000];
     #[cfg(not(feature = "bench-extensive"))]
     let parameters = &[64, 128, 256];
 
@@ -149,26 +127,18 @@ fn bench_fibonacci_iterative(c: &mut Criterion) {
 }
 
 fn bench_fibonacci_binet(c: &mut Criterion) {
+    let group = group(c, "FibonacciBinet");
     let parameters = &[64, 128, 256];
 
-    bench(
-        c.benchmark_group("FibonacciBinet"),
-        parameters,
-        parameters,
-        Contract::fib_binet,
-    );
+    bench(group, parameters, parameters, Contract::fib_binet);
 }
 
 fn bench_sha1(c: &mut Criterion) {
+    let group = group(c, "SHA1");
     let parameters = &[vec![0xff], vec![0xff; 64], vec![0xff; 512]];
     let labels = parameters.iter().map(|p| p.len()).collect::<Vec<_>>();
 
-    bench(
-        c.benchmark_group("SHA1"),
-        parameters,
-        &labels,
-        Contract::sha1,
-    );
+    bench(group, parameters, &labels, Contract::sha1);
 }
 
 criterion_group!(

@@ -673,30 +673,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
-name = "era-compiler-llvm-context"
-version = "1.4.1"
-dependencies = [
- "anyhow",
- "hex",
- "inkwell",
- "itertools 0.12.1",
- "md5",
- "num",
- "once_cell",
- "pallet-contracts-pvm-llapi",
- "regex",
- "revive-builtins",
- "revive-common",
- "revive-linker",
- "revive-stdlib",
- "semver 1.0.22",
- "serde",
- "sha2",
- "sha3",
- "zkevm_opcode_defs",
-]
-
-[[package]]
 name = "errno"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1670,10 +1646,10 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "env_logger",
- "era-compiler-llvm-context",
  "hex",
  "polkavm",
  "revive-differential",
+ "revive-llvm-context",
  "revive-solidity",
  "serde",
  "serde_json",
@@ -1695,12 +1671,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "revive-llvm-context"
+version = "1.4.1"
+dependencies = [
+ "anyhow",
+ "hex",
+ "inkwell",
+ "itertools 0.12.1",
+ "md5",
+ "num",
+ "once_cell",
+ "pallet-contracts-pvm-llapi",
+ "regex",
+ "revive-builtins",
+ "revive-common",
+ "revive-linker",
+ "revive-stdlib",
+ "semver 1.0.22",
+ "serde",
+ "sha2",
+ "sha3",
+ "zkevm_opcode_defs",
+]
+
+[[package]]
 name = "revive-solidity"
 version = "1.4.0"
 dependencies = [
  "anyhow",
  "colored",
- "era-compiler-llvm-context",
  "hex",
  "inkwell",
  "md5",
@@ -1712,6 +1711,7 @@ dependencies = [
  "rayon",
  "regex",
  "revive-common",
+ "revive-llvm-context",
  "semver 1.0.22",
  "serde",
  "serde_json",

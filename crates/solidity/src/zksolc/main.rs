@@ -50,7 +50,7 @@ fn main_inner() -> anyhow::Result<()> {
         .build_global()
         .expect("Thread pool configuration failure");
     inkwell::support::enable_llvm_pretty_stack_trace();
-    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM); // TODO: pass from CLI
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM); // TODO: pass from CLI
 
     if arguments.recursive_process {
         return revive_solidity::run_process();
@@ -59,7 +59,7 @@ fn main_inner() -> anyhow::Result<()> {
     let debug_config = match arguments.debug_output_directory {
         Some(ref debug_output_directory) => {
             std::fs::create_dir_all(debug_output_directory.as_path())?;
-            Some(era_compiler_llvm_context::DebugConfig::new(
+            Some(revive_llvm_context::DebugConfig::new(
                 debug_output_directory.to_owned(),
             ))
         }
@@ -87,8 +87,8 @@ fn main_inner() -> anyhow::Result<()> {
     };
 
     let mut optimizer_settings = match arguments.optimization {
-        Some(mode) => era_compiler_llvm_context::OptimizerSettings::try_from_cli(mode)?,
-        None => era_compiler_llvm_context::OptimizerSettings::cycles(),
+        Some(mode) => revive_llvm_context::OptimizerSettings::try_from_cli(mode)?,
+        None => revive_llvm_context::OptimizerSettings::cycles(),
     };
     if arguments.fallback_to_optimizing_for_size {
         optimizer_settings.enable_fallback_to_size();
@@ -102,8 +102,8 @@ fn main_inner() -> anyhow::Result<()> {
     let include_metadata_hash = match arguments.metadata_hash {
         Some(metadata_hash) => {
             let metadata =
-                era_compiler_llvm_context::EraVMMetadataHash::from_str(metadata_hash.as_str())?;
-            metadata != era_compiler_llvm_context::EraVMMetadataHash::None
+                revive_llvm_context::EraVMMetadataHash::from_str(metadata_hash.as_str())?;
+            metadata != revive_llvm_context::EraVMMetadataHash::None
         }
         None => true,
     };

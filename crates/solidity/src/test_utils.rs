@@ -37,7 +37,7 @@ pub fn build_solidity(
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     build_solidity_with_options(
         sources,
@@ -57,13 +57,13 @@ pub fn build_solidity_with_options(
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
@@ -112,7 +112,7 @@ pub fn build_solidity_with_options_evm(
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
@@ -165,7 +165,7 @@ pub fn build_solidity_and_detect_missing_libraries(
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
@@ -210,8 +210,8 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    era_compiler_llvm_context::initialize_target(era_compiler_llvm_context::Target::PVM);
-    let optimizer_settings = era_compiler_llvm_context::OptimizerSettings::none();
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
     let project =
         Project::try_from_yul_string(PathBuf::from("test.yul").as_path(), source_code, None)?;

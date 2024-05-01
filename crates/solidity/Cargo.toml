@@ -38,7 +38,7 @@ md5 = { workspace = true }
 inkwell = { workspace = true }
 
 revive-common = { path = "../common" }
-era-compiler-llvm-context = { path = "../llvm-context" }
+revive-llvm-context = { path = "../llvm-context" }
 
 
 [target.'cfg(target_env = "musl")'.dependencies]

@@ -108,10 +108,10 @@ impl Expression {
     ///
     pub fn into_llvm<'ctx, D>(
         self,
-        context: &mut era_compiler_llvm_context::EraVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<era_compiler_llvm_context::EraVMArgument<'ctx>>>
+        context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+    ) -> anyhow::Result<Option<revive_llvm_context::EraVMArgument<'ctx>>>
     where
-        D: era_compiler_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::EraVMDependency + Clone,
     {
         match self {
             Self::Literal(literal) => literal
@@ -149,7 +149,7 @@ impl Expression {
 
                 match constant {
                     Some(constant) => Ok(Some(
-                        era_compiler_llvm_context::EraVMArgument::new_with_constant(
+                        revive_llvm_context::EraVMArgument::new_with_constant(
                             value, constant,
                         ),
                     )),
@@ -158,7 +158,7 @@ impl Expression {
             }
             Self::FunctionCall(call) => Ok(call
                 .into_llvm(context)?
-                .map(era_compiler_llvm_context::EraVMArgument::new)),
+                .map(revive_llvm_context::EraVMArgument::new)),
         }
     }
 }

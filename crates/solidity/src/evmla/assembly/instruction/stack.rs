@@ -8,11 +8,11 @@ use inkwell::values::BasicValue;
 /// Translates the ordinar value push.
 ///
 pub fn push<'ctx, D>(
-    context: &mut era_compiler_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     value: String,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     let result = context
         .field_type()
@@ -29,11 +29,11 @@ where
 /// Translates the block tag label push.
 ///
 pub fn push_tag<'ctx, D>(
-    context: &mut era_compiler_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     value: String,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     let result = context
         .field_type()
@@ -46,17 +46,17 @@ where
 /// Translates the stack memory duplicate.
 ///
 pub fn dup<'ctx, D>(
-    context: &mut era_compiler_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     offset: usize,
     height: usize,
     original: &mut Option<String>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     let element = &context.evmla().stack[height - offset - 1];
     let value = context.build_load(
-        era_compiler_llvm_context::EraVMPointer::new_stack_field(
+        revive_llvm_context::EraVMPointer::new_stack_field(
             context,
             element.to_llvm().into_pointer_value(),
         ),
@@ -72,22 +72,22 @@ where
 /// Translates the stack memory swap.
 ///
 pub fn swap<D>(
-    context: &mut era_compiler_llvm_context::EraVMContext<D>,
+    context: &mut revive_llvm_context::EraVMContext<D>,
     offset: usize,
     height: usize,
 ) -> anyhow::Result<()>
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     let top_element = context.evmla().stack[height - 1].to_owned();
-    let top_pointer = era_compiler_llvm_context::EraVMPointer::new_stack_field(
+    let top_pointer = revive_llvm_context::EraVMPointer::new_stack_field(
         context,
         top_element.to_llvm().into_pointer_value(),
     );
     let top_value = context.build_load(top_pointer, format!("swap{offset}_top_value").as_str())?;
 
     let swap_element = context.evmla().stack[height - offset - 1].to_owned();
-    let swap_pointer = era_compiler_llvm_context::EraVMPointer::new_stack_field(
+    let swap_pointer = revive_llvm_context::EraVMPointer::new_stack_field(
         context,
         swap_element.to_llvm().into_pointer_value(),
     );
@@ -106,9 +106,9 @@ where
 ///
 /// Translates the stack memory pop.
 ///
-pub fn pop<D>(_context: &mut era_compiler_llvm_context::EraVMContext<D>) -> anyhow::Result<()>
+pub fn pop<D>(_context: &mut revive_llvm_context::EraVMContext<D>) -> anyhow::Result<()>
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     Ok(())
 }

@@ -40,7 +40,7 @@ pub struct FunctionDefinition {
     /// The function body block.
     pub body: Block,
     /// The function LLVM attributes encoded in the identifier.
-    pub attributes: BTreeSet<era_compiler_llvm_context::EraVMAttribute>,
+    pub attributes: BTreeSet<revive_llvm_context::EraVMAttribute>,
 }
 
 impl FunctionDefinition {
@@ -102,7 +102,7 @@ impl FunctionDefinition {
         let (mut arguments, next) = Identifier::parse_typed_list(lexer, None)?;
         if identifier
             .inner
-            .contains(era_compiler_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
+            .contains(revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
         {
             if arguments.is_empty() {
                 return Err(ParserError::InvalidNumberOfArguments {
@@ -117,7 +117,7 @@ impl FunctionDefinition {
             arguments.remove(0);
         }
         if identifier.inner.contains(
-            era_compiler_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER,
+            revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER,
         ) && !arguments.is_empty()
         {
             return Err(ParserError::InvalidNumberOfArguments {
@@ -192,7 +192,7 @@ impl FunctionDefinition {
     ///
     pub fn get_llvm_attributes(
         identifier: &Identifier,
-    ) -> Result<BTreeSet<era_compiler_llvm_context::EraVMAttribute>, Error> {
+    ) -> Result<BTreeSet<revive_llvm_context::EraVMAttribute>, Error> {
         let mut valid_attributes = BTreeSet::new();
 
         let llvm_begin = identifier.inner.find(Self::LLVM_ATTRIBUTE_PREFIX);
@@ -209,7 +209,7 @@ impl FunctionDefinition {
 
         let mut invalid_attributes = BTreeSet::new();
         for value in attribute_string.split('_') {
-            match era_compiler_llvm_context::EraVMAttribute::try_from(value) {
+            match revive_llvm_context::EraVMAttribute::try_from(value) {
                 Ok(attribute) => valid_attributes.insert(attribute),
                 Err(value) => invalid_attributes.insert(value),
             };
@@ -227,13 +227,13 @@ impl FunctionDefinition {
     }
 }
 
-impl<D> era_compiler_llvm_context::EraVMWriteLLVM<D> for FunctionDefinition
+impl<D> revive_llvm_context::EraVMWriteLLVM<D> for FunctionDefinition
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         let argument_types: Vec<_> = self
             .arguments
@@ -248,7 +248,7 @@ where
             argument_types,
             self.result.len(),
             self.identifier
-                .starts_with(era_compiler_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX),
+                .starts_with(revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX),
         );
 
         let function = context.add_function(
@@ -257,7 +257,7 @@ where
             self.result.len(),
             Some(inkwell::module::Linkage::Private),
         )?;
-        era_compiler_llvm_context::EraVMFunction::set_attributes(
+        revive_llvm_context::EraVMFunction::set_attributes(
             context.llvm(),
             function.borrow().declaration(),
             self.attributes.clone().into_iter().collect(),
@@ -265,22 +265,22 @@ where
         );
         function
             .borrow_mut()
-            .set_yul_data(era_compiler_llvm_context::EraVMFunctionYulData::default());
+            .set_yul_data(revive_llvm_context::EraVMFunctionYulData::default());
 
         Ok(())
     }
 
     fn into_llvm(
         mut self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         context.set_current_function(self.identifier.as_str())?;
         let r#return = context.current_function().borrow().r#return();
 
         context.set_basic_block(context.current_function().borrow().entry_block());
         match r#return {
-            era_compiler_llvm_context::EraVMFunctionReturn::None => {}
-            era_compiler_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
+            revive_llvm_context::EraVMFunctionReturn::None => {}
+            revive_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
                 let identifier = self.result.pop().expect("Always exists");
                 let r#type = identifier.r#type.unwrap_or_default();
                 context.build_store(pointer, r#type.into_llvm(context).const_zero())?;
@@ -289,7 +289,7 @@ where
                     .borrow_mut()
                     .insert_stack_pointer(identifier.inner, pointer);
             }
-            era_compiler_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
+            revive_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
                 for (index, identifier) in self.result.into_iter().enumerate() {
                     let r#type = identifier.r#type.unwrap_or_default().into_llvm(context);
                     let pointer = context.build_gep(
@@ -328,10 +328,10 @@ where
                 .insert_stack_pointer(argument.inner.clone(), pointer);
             if self
                 .identifier
-                .starts_with(era_compiler_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
+                .starts_with(revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
                 && matches!(
                     context.current_function().borrow().r#return(),
-                    era_compiler_llvm_context::EraVMFunctionReturn::Compound { .. }
+                    revive_llvm_context::EraVMFunctionReturn::Compound { .. }
                 )
                 && context.is_system_mode()
             {
@@ -357,21 +357,21 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         match context.current_function().borrow().r#return() {
-            era_compiler_llvm_context::EraVMFunctionReturn::None => {
+            revive_llvm_context::EraVMFunctionReturn::None => {
                 context.build_return(None);
             }
-            era_compiler_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
+            revive_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
-            era_compiler_llvm_context::EraVMFunctionReturn::Compound { pointer, .. }
+            revive_llvm_context::EraVMFunctionReturn::Compound { pointer, .. }
                 if context.current_function().borrow().name().starts_with(
-                    era_compiler_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
+                    revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
                 ) =>
             {
                 context.build_return(Some(&pointer.value));
             }
-            era_compiler_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
+            revive_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }

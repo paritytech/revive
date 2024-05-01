@@ -62,7 +62,7 @@ impl Output {
         libraries: BTreeMap<String, BTreeMap<String, String>>,
         pipeline: SolcPipeline,
         solc_version: &SolcVersion,
-        debug_config: Option<&era_compiler_llvm_context::DebugConfig>,
+        debug_config: Option<&revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<Project> {
         if let SolcPipeline::EVMLA = pipeline {
             self.preprocess_dependencies()?;

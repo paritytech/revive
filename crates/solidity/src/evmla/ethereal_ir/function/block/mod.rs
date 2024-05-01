@@ -22,13 +22,13 @@ pub struct Block {
     /// The Solidity compiler version.
     pub solc_version: semver::Version,
     /// The block key.
-    pub key: era_compiler_llvm_context::EraVMFunctionBlockKey,
+    pub key: revive_llvm_context::EraVMFunctionBlockKey,
     /// The block instance.
     pub instance: Option<usize>,
     /// The block elements relevant to the stack consistency.
     pub elements: Vec<Element>,
     /// The block predecessors.
-    pub predecessors: HashSet<(era_compiler_llvm_context::EraVMFunctionBlockKey, usize)>,
+    pub predecessors: HashSet<(revive_llvm_context::EraVMFunctionBlockKey, usize)>,
     /// The initial stack state.
     pub initial_stack: ElementStack,
     /// The stack.
@@ -48,7 +48,7 @@ impl Block {
     ///
     pub fn try_from_instructions(
         solc_version: semver::Version,
-        code_type: era_compiler_llvm_context::EraVMCodeType,
+        code_type: revive_llvm_context::EraVMCodeType,
         slice: &[Instruction],
     ) -> anyhow::Result<(Self, usize)> {
         let mut cursor = 0;
@@ -69,7 +69,7 @@ impl Block {
 
         let mut block = Self {
             solc_version: solc_version.clone(),
-            key: era_compiler_llvm_context::EraVMFunctionBlockKey::new(code_type, tag),
+            key: revive_llvm_context::EraVMFunctionBlockKey::new(code_type, tag),
             instance: None,
             elements: Vec::with_capacity(Self::ELEMENTS_VECTOR_DEFAULT_CAPACITY),
             predecessors: HashSet::with_capacity(Self::PREDECESSORS_HASHSET_DEFAULT_CAPACITY),
@@ -114,20 +114,20 @@ impl Block {
     ///
     pub fn insert_predecessor(
         &mut self,
-        key: era_compiler_llvm_context::EraVMFunctionBlockKey,
+        key: revive_llvm_context::EraVMFunctionBlockKey,
         instance: usize,
     ) {
         self.predecessors.insert((key, instance));
     }
 }
 
-impl<D> era_compiler_llvm_context::EraVMWriteLLVM<D> for Block
+impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Block
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     fn into_llvm(
         self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         context.set_code_type(self.key.code_type);
 

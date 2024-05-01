@@ -56,13 +56,13 @@ impl IfConditional {
     }
 }
 
-impl<D> era_compiler_llvm_context::EraVMWriteLLVM<D> for IfConditional
+impl<D> revive_llvm_context::EraVMWriteLLVM<D> for IfConditional
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     fn into_llvm(
         self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         let condition = self
             .condition

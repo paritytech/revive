@@ -342,11 +342,11 @@ impl Instruction {
     ///
     pub fn recursive_call(
         name: String,
-        entry_key: era_compiler_llvm_context::EraVMFunctionBlockKey,
+        entry_key: revive_llvm_context::EraVMFunctionBlockKey,
         stack_hash: md5::Digest,
         input_size: usize,
         output_size: usize,
-        return_address: era_compiler_llvm_context::EraVMFunctionBlockKey,
+        return_address: revive_llvm_context::EraVMFunctionBlockKey,
         previous: &Self,
     ) -> Self {
         Self {

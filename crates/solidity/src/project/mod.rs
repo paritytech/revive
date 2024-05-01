@@ -69,11 +69,11 @@ impl Project {
     ///
     pub fn compile(
         self,
-        optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+        optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
         bytecode_encoding_testing: bool,
-        debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+        debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
         let results: BTreeMap<String, anyhow::Result<ContractBuild>> = self
@@ -230,7 +230,7 @@ impl Project {
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 
         let source_version =
-            SolcVersion::new_simple(era_compiler_llvm_context::eravm_const::LLVM_VERSION);
+            SolcVersion::new_simple(revive_llvm_context::eravm_const::LLVM_VERSION);
         let path = path.to_string_lossy().to_string();
 
         let mut project_contracts = BTreeMap::new();
@@ -262,7 +262,7 @@ impl Project {
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 
         let source_version =
-            SolcVersion::new_simple(era_compiler_llvm_context::eravm_const::ZKEVM_VERSION);
+            SolcVersion::new_simple(revive_llvm_context::eravm_const::ZKEVM_VERSION);
         let path = path.to_string_lossy().to_string();
 
         let mut project_contracts = BTreeMap::new();
@@ -285,14 +285,14 @@ impl Project {
     }
 }
 
-impl era_compiler_llvm_context::EraVMDependency for Project {
+impl revive_llvm_context::EraVMDependency for Project {
     fn compile(
         project: Self,
         identifier: &str,
-        optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+        optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
-        debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+        debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<String> {
         let contract_path = project.resolve_path(identifier)?;
         let contract = project

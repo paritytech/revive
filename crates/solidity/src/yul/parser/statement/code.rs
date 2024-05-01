@@ -63,13 +63,13 @@ impl Code {
     }
 }
 
-impl<D> era_compiler_llvm_context::EraVMWriteLLVM<D> for Code
+impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Code
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     fn into_llvm(
         self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         self.block.into_llvm(context)?;
 

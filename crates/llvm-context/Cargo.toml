@@ -1,5 +1,5 @@
 [package]
-name = "era-compiler-llvm-context"
+name = "revive-llvm-context"
 version = "1.4.1"
 authors = [
     "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",

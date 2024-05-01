@@ -54,10 +54,10 @@ use std::path::PathBuf;
 pub fn yul(
     input_files: &[PathBuf],
     solc: &mut SolcCompiler,
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
     is_system_mode: bool,
     include_metadata_hash: bool,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -99,10 +99,10 @@ pub fn yul(
 ///
 pub fn llvm_ir(
     input_files: &[PathBuf],
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
     is_system_mode: bool,
     include_metadata_hash: bool,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -132,7 +132,7 @@ pub fn llvm_ir(
 pub fn zkasm(
     input_files: &[PathBuf],
     include_metadata_hash: bool,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -145,7 +145,7 @@ pub fn zkasm(
 
     let project = Project::try_from_zkasm_path(path)?;
 
-    let optimizer_settings = era_compiler_llvm_context::OptimizerSettings::none();
+    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
     let build = project.compile(
         optimizer_settings,
         false,
@@ -167,7 +167,7 @@ pub fn standard_output(
     solc: &mut SolcCompiler,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
     force_evmla: bool,
     is_system_mode: bool,
     include_metadata_hash: bool,
@@ -176,7 +176,7 @@ pub fn standard_output(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
@@ -262,7 +262,7 @@ pub fn standard_json(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
@@ -276,11 +276,11 @@ pub fn standard_json(
         .collect();
 
     let optimizer_settings =
-        era_compiler_llvm_context::OptimizerSettings::try_from(&solc_input.settings.optimizer)?;
+        revive_llvm_context::OptimizerSettings::try_from(&solc_input.settings.optimizer)?;
 
     let include_metadata_hash = match solc_input.settings.metadata {
         Some(ref metadata) => {
-            metadata.bytecode_hash != Some(era_compiler_llvm_context::EraVMMetadataHash::None)
+            metadata.bytecode_hash != Some(revive_llvm_context::EraVMMetadataHash::None)
         }
         None => true,
     };
@@ -343,7 +343,7 @@ pub fn combined_json(
     solc: &mut SolcCompiler,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
-    optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
     force_evmla: bool,
     is_system_mode: bool,
     include_metadata_hash: bool,
@@ -352,7 +352,7 @@ pub fn combined_json(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
-    debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    debug_config: Option<revive_llvm_context::DebugConfig>,
     output_directory: Option<PathBuf>,
     overwrite: bool,
 ) -> anyhow::Result<()> {

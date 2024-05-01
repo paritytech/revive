@@ -23,7 +23,7 @@ pub struct Contract {
     /// The auxiliary identifier. Used to identify Yul objects.
     pub identifier: String,
     /// The LLVM module build.
-    pub build: era_compiler_llvm_context::EraVMBuild,
+    pub build: revive_llvm_context::EraVMBuild,
     /// The metadata JSON.
     pub metadata_json: serde_json::Value,
     /// The factory dependencies.
@@ -37,7 +37,7 @@ impl Contract {
     pub fn new(
         path: String,
         identifier: String,
-        build: era_compiler_llvm_context::EraVMBuild,
+        build: revive_llvm_context::EraVMBuild,
         metadata_json: serde_json::Value,
         factory_dependencies: HashSet<String>,
     ) -> Self {

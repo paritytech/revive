@@ -53,7 +53,7 @@ pub fn compile_blob_with_options(
         Default::default(),
         None,
         pipeline,
-        era_compiler_llvm_context::OptimizerSettings::cycles(),
+        revive_llvm_context::OptimizerSettings::cycles(),
         solc_optimizer_enabled,
     )
     .expect("source should compile")

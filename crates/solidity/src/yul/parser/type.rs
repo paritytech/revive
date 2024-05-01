@@ -73,10 +73,10 @@ impl Type {
     ///
     pub fn into_llvm<'ctx, D>(
         self,
-        context: &era_compiler_llvm_context::EraVMContext<'ctx, D>,
+        context: &revive_llvm_context::EraVMContext<'ctx, D>,
     ) -> inkwell::types::IntType<'ctx>
     where
-        D: era_compiler_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::EraVMDependency + Clone,
     {
         match self {
             Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),

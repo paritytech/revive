@@ -26,9 +26,9 @@ pub struct Input {
     /// Enables the test bytecode encoding.
     pub enable_test_encoding: bool,
     /// The optimizer settings.
-    pub optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
+    pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
-    pub debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+    pub debug_config: Option<revive_llvm_context::DebugConfig>,
 }
 
 impl Input {
@@ -41,8 +41,8 @@ impl Input {
         is_system_mode: bool,
         include_metadata_hash: bool,
         enable_test_encoding: bool,
-        optimizer_settings: era_compiler_llvm_context::OptimizerSettings,
-        debug_config: Option<era_compiler_llvm_context::DebugConfig>,
+        optimizer_settings: revive_llvm_context::OptimizerSettings,
+        debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> Self {
         Self {
             contract,

@@ -14,7 +14,7 @@ env_logger = { workspace = true }
 
 revive-solidity = { path = "../solidity" }
 revive-differential = { path = "../differential" }
-era-compiler-llvm-context = { path = "../llvm-context" }
+revive-llvm-context = { path = "../llvm-context" }
 
 [dev-dependencies]
 sha1 = { workspace = true }

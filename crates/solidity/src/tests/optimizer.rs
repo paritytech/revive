@@ -57,7 +57,7 @@ fn optimizer() {
         BTreeMap::new(),
         None,
         SolcPipeline::Yul,
-        era_compiler_llvm_context::OptimizerSettings::none(),
+        revive_llvm_context::OptimizerSettings::none(),
     )
     .expect("Build failure");
     let build_optimized_for_cycles = super::build_solidity(
@@ -65,7 +65,7 @@ fn optimizer() {
         BTreeMap::new(),
         None,
         SolcPipeline::Yul,
-        era_compiler_llvm_context::OptimizerSettings::cycles(),
+        revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Build failure");
     let build_optimized_for_size = super::build_solidity(
@@ -73,7 +73,7 @@ fn optimizer() {
         BTreeMap::new(),
         None,
         SolcPipeline::Yul,
-        era_compiler_llvm_context::OptimizerSettings::size(),
+        revive_llvm_context::OptimizerSettings::size(),
     )
     .expect("Build failure");
 

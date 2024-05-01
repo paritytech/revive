@@ -63,7 +63,7 @@ impl Optimizer {
     }
 }
 
-impl TryFrom<&Optimizer> for era_compiler_llvm_context::OptimizerSettings {
+impl TryFrom<&Optimizer> for revive_llvm_context::OptimizerSettings {
     type Error = anyhow::Error;
 
     fn try_from(value: &Optimizer) -> Result<Self, Self::Error> {

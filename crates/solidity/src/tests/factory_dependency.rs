@@ -54,7 +54,7 @@ fn default() {
         BTreeMap::new(),
         None,
         SolcPipeline::Yul,
-        era_compiler_llvm_context::OptimizerSettings::cycles(),
+        revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Build failure");
 

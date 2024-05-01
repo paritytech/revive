@@ -183,35 +183,35 @@ impl Object {
     }
 }
 
-impl<D> era_compiler_llvm_context::EraVMWriteLLVM<D> for Object
+impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Object
 where
-    D: era_compiler_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::EraVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
-        let mut entry = era_compiler_llvm_context::EraVMEntryFunction::default();
+        let mut entry = revive_llvm_context::EraVMEntryFunction::default();
         entry.declare(context)?;
 
-        let mut runtime = era_compiler_llvm_context::EraVMRuntime::new(
-            era_compiler_llvm_context::EraVMAddressSpace::Heap,
+        let mut runtime = revive_llvm_context::EraVMRuntime::new(
+            revive_llvm_context::EraVMAddressSpace::Heap,
         );
         runtime.declare(context)?;
 
-        era_compiler_llvm_context::EraVMDeployCodeFunction::new(
-            era_compiler_llvm_context::EraVMDummyLLVMWritable::default(),
+        revive_llvm_context::EraVMDeployCodeFunction::new(
+            revive_llvm_context::EraVMDummyLLVMWritable::default(),
         )
         .declare(context)?;
-        era_compiler_llvm_context::EraVMRuntimeCodeFunction::new(
-            era_compiler_llvm_context::EraVMDummyLLVMWritable::default(),
+        revive_llvm_context::EraVMRuntimeCodeFunction::new(
+            revive_llvm_context::EraVMDummyLLVMWritable::default(),
         )
         .declare(context)?;
 
         for name in [
-            era_compiler_llvm_context::EraVMRuntime::FUNCTION_DEPLOY_CODE,
-            era_compiler_llvm_context::EraVMRuntime::FUNCTION_RUNTIME_CODE,
-            era_compiler_llvm_context::EraVMRuntime::FUNCTION_ENTRY,
+            revive_llvm_context::EraVMRuntime::FUNCTION_DEPLOY_CODE,
+            revive_llvm_context::EraVMRuntime::FUNCTION_RUNTIME_CODE,
+            revive_llvm_context::EraVMRuntime::FUNCTION_ENTRY,
         ]
         .into_iter()
         {
@@ -219,7 +219,7 @@ where
                 .get_function(name)
                 .expect("Always exists")
                 .borrow_mut()
-                .set_yul_data(era_compiler_llvm_context::EraVMFunctionYulData::default());
+                .set_yul_data(revive_llvm_context::EraVMFunctionYulData::default());
         }
 
         entry.into_llvm(context)?;
@@ -229,13 +229,13 @@ where
 
     fn into_llvm(
         self,
-        context: &mut era_compiler_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::EraVMContext<D>,
     ) -> anyhow::Result<()> {
         if self.identifier.ends_with("_deployed") {
-            era_compiler_llvm_context::EraVMRuntimeCodeFunction::new(self.code)
+            revive_llvm_context::EraVMRuntimeCodeFunction::new(self.code)
                 .into_llvm(context)?;
         } else {
-            era_compiler_llvm_context::EraVMDeployCodeFunction::new(self.code)
+            revive_llvm_context::EraVMDeployCodeFunction::new(self.code)
                 .into_llvm(context)?;
         }
 
@@ -244,8 +244,8 @@ where
                 object.into_llvm(context)?;
             }
             None => {
-                let runtime = era_compiler_llvm_context::EraVMRuntime::new(
-                    era_compiler_llvm_context::EraVMAddressSpace::Heap,
+                let runtime = revive_llvm_context::EraVMRuntime::new(
+                    revive_llvm_context::EraVMAddressSpace::Heap,
                 );
                 runtime.into_llvm(context)?;
             }

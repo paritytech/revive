@@ -26,18 +26,18 @@ impl ExtraMetadata {
     ///
     pub fn get(
         &self,
-        block_key: &era_compiler_llvm_context::EraVMFunctionBlockKey,
+        block_key: &revive_llvm_context::EraVMFunctionBlockKey,
     ) -> Option<&RecursiveFunction> {
         for function in self.recursive_functions.iter() {
             match block_key.code_type {
-                era_compiler_llvm_context::EraVMCodeType::Deploy => {
+                revive_llvm_context::EraVMCodeType::Deploy => {
                     if let Some(creation_tag) = function.creation_tag {
                         if num::BigUint::from(creation_tag) == block_key.tag {
                             return Some(function);
                         }
                     }
                 }
-                era_compiler_llvm_context::EraVMCodeType::Runtime => {
+                revive_llvm_context::EraVMCodeType::Runtime => {
                     if let Some(runtime_tag) = function.runtime_tag {
                         if num::BigUint::from(runtime_tag) == block_key.tag {
                             return Some(function);

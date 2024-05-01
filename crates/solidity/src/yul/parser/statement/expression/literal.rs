@@ -80,10 +80,10 @@ impl Literal {
     ///
     pub fn into_llvm<'ctx, D>(
         self,
-        context: &era_compiler_llvm_context::EraVMContext<'ctx, D>,
-    ) -> anyhow::Result<era_compiler_llvm_context::EraVMArgument<'ctx>>
+        context: &revive_llvm_context::EraVMContext<'ctx, D>,
+    ) -> anyhow::Result<revive_llvm_context::EraVMArgument<'ctx>>
     where
-        D: era_compiler_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::EraVMDependency + Clone,
     {
         match self.inner {
             LexicalLiteral::Boolean(inner) => {
@@ -105,7 +105,7 @@ impl Literal {
                     BooleanLiteral::True => num::BigUint::one(),
                 };
 
-                Ok(era_compiler_llvm_context::EraVMArgument::new_with_constant(
+                Ok(revive_llvm_context::EraVMArgument::new_with_constant(
                     value, constant,
                 ))
             }
@@ -135,7 +135,7 @@ impl Literal {
                 }
                 .expect("Always valid");
 
-                Ok(era_compiler_llvm_context::EraVMArgument::new_with_constant(
+                Ok(revive_llvm_context::EraVMArgument::new_with_constant(
                     value, constant,
                 ))
             }
@@ -209,7 +209,7 @@ impl Literal {
                 };
 
                 if hex_string.len() > revive_common::BYTE_LENGTH_FIELD * 2 {
-                    return Ok(era_compiler_llvm_context::EraVMArgument::new_with_original(
+                    return Ok(revive_llvm_context::EraVMArgument::new_with_original(
                         r#type.const_zero().as_basic_value_enum(),
                         string,
                     ));
@@ -229,7 +229,7 @@ impl Literal {
                     )
                     .expect("The value is valid")
                     .as_basic_value_enum();
-                Ok(era_compiler_llvm_context::EraVMArgument::new_with_original(
+                Ok(revive_llvm_context::EraVMArgument::new_with_original(
                     value, string,
                 ))
             }

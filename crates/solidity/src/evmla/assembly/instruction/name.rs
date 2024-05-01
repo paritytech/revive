@@ -374,7 +374,7 @@ pub enum Name {
         /// The called function name.
         name: String,
         /// The called function key.
-        entry_key: era_compiler_llvm_context::EraVMFunctionBlockKey,
+        entry_key: revive_llvm_context::EraVMFunctionBlockKey,
         /// The stack state hash after return.
         stack_hash: md5::Digest,
         /// The input size.
@@ -382,7 +382,7 @@ pub enum Name {
         /// The output size.
         output_size: usize,
         /// The return address.
-        return_address: era_compiler_llvm_context::EraVMFunctionBlockKey,
+        return_address: revive_llvm_context::EraVMFunctionBlockKey,
     },
     /// The recursive function return instruction.
     #[serde(skip)]

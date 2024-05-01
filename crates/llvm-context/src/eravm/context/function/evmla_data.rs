@@ -1,17 +1,12 @@
-//!
 //! The LLVM function EVM legacy assembly data.
-//!
 
 use std::collections::BTreeMap;
 
 use crate::eravm::context::function::block::evmla_data::key::Key as BlockKey;
 use crate::eravm::context::function::block::Block;
 
-///
 /// The LLVM function EVM legacy assembly data.
-///
 /// Describes some data that is only relevant to the EVM legacy assembly.
-///
 #[derive(Debug)]
 pub struct EVMLAData<'ctx> {
     /// The ordinary blocks with numeric tags.
@@ -22,9 +17,7 @@ pub struct EVMLAData<'ctx> {
 }
 
 impl<'ctx> EVMLAData<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(stack_size: usize) -> Self {
         Self {
             blocks: BTreeMap::new(),
@@ -32,9 +25,7 @@ impl<'ctx> EVMLAData<'ctx> {
         }
     }
 
-    ///
     /// Inserts a function block.
-    ///
     pub fn insert_block(&mut self, key: BlockKey, block: Block<'ctx>) {
         if let Some(blocks) = self.blocks.get_mut(&key) {
             blocks.push(block);
@@ -43,11 +34,8 @@ impl<'ctx> EVMLAData<'ctx> {
         }
     }
 
-    ///
     /// Returns the block with the specified tag and initial stack pattern.
-    ///
     /// If there is only one block, it is returned unconditionally.
-    ///
     pub fn find_block(
         &self,
         key: &BlockKey,

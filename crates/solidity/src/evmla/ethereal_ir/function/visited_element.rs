@@ -1,12 +1,8 @@
-//!
 //! The Ethereal IR block visited element.
-//!
 
 use std::cmp::Ordering;
 
-///
 /// The Ethereal IR block visited element.
-///
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VisitedElement {
     /// The block key.
@@ -16,9 +12,7 @@ pub struct VisitedElement {
 }
 
 impl VisitedElement {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         block_key: revive_llvm_context::EraVMFunctionBlockKey,
         stack_hash: md5::Digest,

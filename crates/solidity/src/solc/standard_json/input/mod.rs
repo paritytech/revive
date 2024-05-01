@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` input.
-//!
 
 pub mod language;
 pub mod settings;
@@ -25,9 +23,7 @@ use self::language::Language;
 use self::settings::Settings;
 use self::source::Source;
 
-///
 /// The `solc --standard-json` input.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Input {
@@ -43,9 +39,7 @@ pub struct Input {
 }
 
 impl Input {
-    ///
     /// A shortcut constructor from stdin.
-    ///
     pub fn try_from_stdin(solc_pipeline: SolcPipeline) -> anyhow::Result<Self> {
         let mut input: Self = serde_json::from_reader(std::io::BufReader::new(std::io::stdin()))?;
         input
@@ -56,9 +50,7 @@ impl Input {
         Ok(input)
     }
 
-    ///
     /// A shortcut constructor from paths.
-    ///
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_paths(
         language: Language,
@@ -100,11 +92,8 @@ impl Input {
         })
     }
 
-    ///
     /// A shortcut constructor from source code.
-    ///
     /// Only for the integration test purposes.
-    ///
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_sources(
         evm_version: Option<revive_common::EVMVersion>,
@@ -138,9 +127,7 @@ impl Input {
         })
     }
 
-    ///
     /// Sets the necessary defaults.
-    ///
     pub fn normalize(&mut self, version: &semver::Version) {
         self.settings.normalize(version);
     }

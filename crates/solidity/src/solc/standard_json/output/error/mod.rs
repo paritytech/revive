@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output error.
-//!
 
 pub mod source_location;
 
@@ -11,9 +9,7 @@ use serde::Serialize;
 
 use self::source_location::SourceLocation;
 
-///
 /// The `solc --standard-json` output error.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Error {
@@ -34,9 +30,7 @@ pub struct Error {
 }
 
 impl Error {
-    ///
     /// Returns the `ecrecover` function usage warning.
-    ///
     pub fn message_ecrecover(src: Option<&str>) -> Self {
         let message = r#"
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -59,9 +53,7 @@ impl Error {
         }
     }
 
-    ///
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
-    ///
     pub fn message_send_and_transfer(src: Option<&str>) -> Self {
         let message = r#"
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -87,9 +79,7 @@ impl Error {
         }
     }
 
-    ///
     /// Returns the `extcodesize` instruction usage warning.
-    ///
     pub fn message_extcodesize(src: Option<&str>) -> Self {
         let message = r#"
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -114,9 +104,7 @@ impl Error {
         }
     }
 
-    ///
     /// Returns the `origin` instruction usage warning.
-    ///
     pub fn message_tx_origin(src: Option<&str>) -> Self {
         let message = r#"
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -139,9 +127,7 @@ impl Error {
         }
     }
 
-    ///
     /// Returns the internal function pointer usage error.
-    ///
     pub fn message_internal_function_pointer(src: Option<&str>) -> Self {
         let message = r#"
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -161,9 +147,7 @@ impl Error {
         }
     }
 
-    ///
     /// Appends the contract path to the message..
-    ///
     pub fn push_contract_path(&mut self, path: &str) {
         self.formatted_message
             .push_str(format!("\n--> {path}\n").as_str());

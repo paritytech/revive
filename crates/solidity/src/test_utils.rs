@@ -14,9 +14,7 @@ use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::solc::Compiler as SolcCompiler;
 use crate::warning::Warning;
 
-///
 /// Checks if the required executables are present in `${PATH}`.
-///
 fn check_dependencies() {
     for executable in [
         crate::r#const::DEFAULT_EXECUTABLE_NAME,
@@ -154,9 +152,7 @@ pub fn build_solidity_with_options_evm(
     Ok(contracts)
 }
 
-///
 /// Builds the Solidity project and returns the standard JSON output.
-///
 pub fn build_solidity_and_detect_missing_libraries(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
@@ -203,9 +199,7 @@ pub fn build_solidity_and_detect_missing_libraries(
     Ok(output)
 }
 
-///
 /// Checks if the Yul project can be built without errors.
-///
 pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     check_dependencies();
 
@@ -220,9 +214,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-///
 /// Checks if the built Solidity project contains the given warning.
-///
 pub fn check_solidity_warning(
     source_code: &str,
     warning_substring: &str,

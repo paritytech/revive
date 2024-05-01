@@ -1,6 +1,4 @@
-//!
 //! The switch statement.
-//!
 
 pub mod case;
 
@@ -21,9 +19,7 @@ use crate::yul::parser::statement::expression::Expression;
 
 use self::case::Case;
 
-///
 /// The Yul switch statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Switch {
     /// The location.
@@ -36,9 +32,7 @@ pub struct Switch {
     pub default: Option<Block>,
 }
 
-///
 /// The parsing state.
-///
 pub enum State {
     /// After match expression.
     CaseOrDefaultKeyword,
@@ -49,9 +43,7 @@ pub enum State {
 }
 
 impl Switch {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let mut token = crate::yul::parser::take_or_next(initial, lexer)?;
         let location = token.location;
@@ -113,9 +105,7 @@ impl Switch {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut libraries = HashSet::new();
         for case in self.cases.iter() {

@@ -1,6 +1,4 @@
-//!
 //! The EVM instruction.
-//!
 
 pub mod codecopy;
 pub mod jump;
@@ -14,9 +12,7 @@ use serde::Serialize;
 
 use self::name::Name;
 
-///
 /// The EVM instruction.
-///
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Instruction {
     /// The opcode or tag identifier.
@@ -34,9 +30,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    ///
     /// Returns the number of input stack arguments.
-    ///
     pub const fn input_size(&self, version: &semver::Version) -> usize {
         match self.name {
             Name::POP => 1,
@@ -135,9 +129,7 @@ impl Instruction {
         }
     }
 
-    ///
     /// Returns the number of output stack arguments.
-    ///
     pub const fn output_size(&self) -> usize {
         match self.name {
             Name::PUSH => 1,
@@ -285,9 +277,7 @@ impl Instruction {
         }
     }
 
-    ///
     /// Replaces the instruction data aliases with the actual data.
-    ///
     pub fn replace_data_aliases(
         instructions: &mut [Self],
         mapping: &BTreeMap<String, String>,
@@ -323,9 +313,7 @@ impl Instruction {
         Ok(())
     }
 
-    ///
     /// Initializes an `INVALID` instruction to terminate an invalid unreachable block part.
-    ///
     pub fn invalid(previous: &Self) -> Self {
         Self {
             name: Name::INVALID,
@@ -337,9 +325,7 @@ impl Instruction {
         }
     }
 
-    ///
     /// Initializes a recursive function `Call` instruction.
-    ///
     pub fn recursive_call(
         name: String,
         entry_key: revive_llvm_context::EraVMFunctionBlockKey,
@@ -366,9 +352,7 @@ impl Instruction {
         }
     }
 
-    ///
     /// Initializes a recursive function `Return` instruction.
-    ///
     pub fn recursive_return(input_size: usize, previous: &Self) -> Self {
         Self {
             name: Name::RecursiveReturn { input_size },

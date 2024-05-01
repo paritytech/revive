@@ -1,10 +1,6 @@
-//!
 //! The LLVM IR generator loop.
-//!
 
-///
 /// The LLVM IR generator loop.
-///
 #[derive(Debug, Clone)]
 pub struct Loop<'ctx> {
     /// The loop current block.
@@ -16,9 +12,7 @@ pub struct Loop<'ctx> {
 }
 
 impl<'ctx> Loop<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         body_block: inkwell::basic_block::BasicBlock<'ctx>,
         continue_block: inkwell::basic_block::BasicBlock<'ctx>,

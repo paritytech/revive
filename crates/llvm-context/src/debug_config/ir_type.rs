@@ -1,10 +1,6 @@
-//!
 //! The debug IR type.
-//!
 
-///
 /// The debug IR type.
-///
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -24,9 +20,7 @@ pub enum IRType {
 }
 
 impl IRType {
-    ///
     /// Returns the file extension for the specified IR.
-    ///
     pub fn file_extension(&self) -> &'static str {
         match self {
             Self::Yul => revive_common::EXTENSION_YUL,

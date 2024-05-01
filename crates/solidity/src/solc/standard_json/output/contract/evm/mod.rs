@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output contract EVM data.
-//!
 
 pub mod bytecode;
 pub mod extra_metadata;
@@ -16,11 +14,8 @@ use self::bytecode::Bytecode;
 use self::bytecode::DeployedBytecode;
 use self::extra_metadata::ExtraMetadata;
 
-///
 /// The `solc --standard-json` output contract EVM data.
-///
 /// It is replaced by EraVM data after compiling.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
@@ -44,9 +39,7 @@ pub struct EVM {
 }
 
 impl EVM {
-    ///
     /// Sets the EraVM assembly and bytecode.
-    ///
     pub fn modify(&mut self, assembly_text: String, bytecode: String) {
         self.assembly_text = Some(assembly_text);
         self.bytecode = Some(Bytecode::new(bytecode));

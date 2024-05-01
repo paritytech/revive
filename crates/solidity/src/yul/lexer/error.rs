@@ -1,12 +1,8 @@
-//!
 //! The Yul IR lexer error.
-//!
 
 use crate::yul::lexer::token::location::Location;
 
-///
 /// The Yul IR lexer error.
-///
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
     /// The invalid lexeme error.

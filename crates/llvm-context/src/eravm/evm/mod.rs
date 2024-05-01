@@ -1,6 +1,4 @@
-//!
 //! The EVM instructions translation utils.
-//!
 
 pub mod arithmetic;
 pub mod bitwise;

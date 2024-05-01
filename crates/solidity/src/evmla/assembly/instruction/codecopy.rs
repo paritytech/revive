@@ -1,10 +1,6 @@
-//!
 //! Translates the CODECOPY use cases.
-//!
 
-///
 /// Translates the contract hash copying.
-///
 pub fn contract_hash<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
@@ -26,9 +22,7 @@ where
     Ok(())
 }
 
-///
 /// Translates the library marker copying.
-///
 pub fn library_marker<D>(
     context: &mut revive_llvm_context::EraVMContext<D>,
     offset: u64,
@@ -46,9 +40,7 @@ where
     Ok(())
 }
 
-///
 /// Translates the static data copying.
-///
 pub fn static_data<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     destination: inkwell::values::IntValue<'ctx>,

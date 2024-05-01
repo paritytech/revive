@@ -1,6 +1,4 @@
-//!
 //! The Ethereal IR function.
-//!
 
 pub mod block;
 pub mod queue_element;
@@ -37,9 +35,7 @@ use self::queue_element::QueueElement;
 use self::r#type::Type;
 use self::visited_element::VisitedElement;
 
-///
 /// The Ethereal IR function.
-///
 #[derive(Debug, Clone)]
 pub struct Function {
     /// The Solidity compiler version.
@@ -55,9 +51,7 @@ pub struct Function {
 }
 
 impl Function {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(solc_version: semver::Version, r#type: Type) -> Self {
         let name = match r#type {
             Type::Initial => EtherealIR::DEFAULT_ENTRY_FUNCTION_NAME.to_string(),
@@ -77,9 +71,7 @@ impl Function {
         }
     }
 
-    ///
     /// Runs the function block traversal.
-    ///
     pub fn traverse(
         &mut self,
         blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
@@ -143,9 +135,7 @@ impl Function {
         Ok(())
     }
 
-    ///
     /// Consumes the entry or a conditional block attached to another one.
-    ///
     fn consume_block(
         &mut self,
         blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
@@ -219,12 +209,9 @@ impl Function {
         Ok(())
     }
 
-    ///
     /// Processes an instruction, returning an error, if there is an invalid stack state.
-    ///
     /// The blocks with an invalid stack state are considered being partially unreachable, and
     /// the invalid part is truncated after terminating with an `INVALID` instruction.
-    ///
     #[allow(clippy::too_many_arguments)]
     fn handle_instruction(
         blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
@@ -993,9 +980,7 @@ impl Function {
         Ok(())
     }
 
-    ///
     /// Updates the stack data with input and output data.
-    ///
     fn update_io_data(
         block_stack: &mut Stack,
         block_element: &mut BlockElement,
@@ -1017,9 +1002,7 @@ impl Function {
         Ok(())
     }
 
-    ///
     /// Handles the recursive function call.
-    ///
     #[allow(clippy::too_many_arguments)]
     fn handle_recursive_function_call(
         recursive_function: &RecursiveFunction,
@@ -1095,9 +1078,7 @@ impl Function {
         Ok((return_address, stack_output))
     }
 
-    ///
     /// Pushes a block into the function.
-    ///
     fn insert_block(&mut self, mut block: Block) -> &mut Block {
         let key = block.key.clone();
 
@@ -1120,11 +1101,8 @@ impl Function {
             .expect("Always exists")
     }
 
-    ///
     /// Checks whether the tag value actually references an existing block.
-    ///
     /// Checks both deploy and runtime code.
-    ///
     fn is_tag_value_valid(
         blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
         tag: &num::BigUint,
@@ -1138,9 +1116,7 @@ impl Function {
         ))
     }
 
-    ///
     /// Finalizes the function data.
-    ///
     fn finalize(&mut self) {
         for (_tag, blocks) in self.blocks.iter() {
             for block in blocks.iter() {

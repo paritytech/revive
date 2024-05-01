@@ -1,10 +1,6 @@
-//!
 //! The LLVM argument with metadata.
-//!
 
-///
 /// The LLVM argument with metadata.
-///
 #[derive(Debug, Clone)]
 pub struct Argument<'ctx> {
     /// The actual LLVM operand.
@@ -22,9 +18,7 @@ impl<'ctx> Argument<'ctx> {
     /// The calldata length argument index.
     pub const ARGUMENT_INDEX_CALLDATA_LENGTH: usize = 1;
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(value: inkwell::values::BasicValueEnum<'ctx>) -> Self {
         Self {
             value,
@@ -33,9 +27,7 @@ impl<'ctx> Argument<'ctx> {
         }
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_with_original(
         value: inkwell::values::BasicValueEnum<'ctx>,
         original: String,
@@ -47,9 +39,7 @@ impl<'ctx> Argument<'ctx> {
         }
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_with_constant(
         value: inkwell::values::BasicValueEnum<'ctx>,
         constant: num::BigUint,
@@ -61,9 +51,7 @@ impl<'ctx> Argument<'ctx> {
         }
     }
 
-    ///
     /// Returns the inner LLVM value.
-    ///
     pub fn to_llvm(&self) -> inkwell::values::BasicValueEnum<'ctx> {
         self.value
     }

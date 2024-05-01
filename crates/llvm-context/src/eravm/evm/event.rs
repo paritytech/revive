@@ -1,19 +1,13 @@
-//!
 //! Translates a log or event call.
-//!
 
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates a log or event call.
-///
 /// The decoding logic is implemented in a system contract, which is called from here.
-///
 /// There are several cases of the translation for the sake of efficiency, since the front-end
 /// emits topics and values sequentially by one, but the LLVM intrinsic and bytecode instruction
 /// accept two at once.
-///
 pub fn log<'ctx, D>(
     _context: &mut Context<'ctx, D>,
     _input_offset: inkwell::values::IntValue<'ctx>,

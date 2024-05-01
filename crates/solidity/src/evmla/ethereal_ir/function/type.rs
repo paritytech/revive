@@ -1,10 +1,6 @@
-//!
 //! The Ethereal IR function type.
-//!
 
-///
 /// The Ethereal IR function type.
-///
 #[derive(Debug, Clone)]
 pub enum Type {
     /// The initial function, combining deploy and runtime code.
@@ -23,16 +19,12 @@ pub enum Type {
 }
 
 impl Type {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_initial() -> Self {
         Self::Initial
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_recursive(
         name: String,
         block_key: revive_llvm_context::EraVMFunctionBlockKey,

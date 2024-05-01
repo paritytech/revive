@@ -1,14 +1,10 @@
-//!
 //! The Ethereal IR block element stack.
-//!
 
 pub mod element;
 
 use self::element::Element;
 
-///
 /// The Ethereal IR block element stack.
-///
 #[derive(Debug, Default, Clone)]
 pub struct Stack {
     /// The stack elements.
@@ -19,36 +15,27 @@ impl Stack {
     /// The default stack size.
     pub const DEFAULT_STACK_SIZE: usize = 16;
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new() -> Self {
         Self {
             elements: Vec::with_capacity(Self::DEFAULT_STACK_SIZE),
         }
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             elements: Vec::with_capacity(capacity),
         }
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_with_elements(elements: Vec<Element>) -> Self {
         Self { elements }
     }
 
-    ///
     /// The stack state hash, which acts as a block identifier.
-    ///
     /// Each block clone has its own initial stack state, which uniquely identifies the block.
-    ///
     pub fn hash(&self) -> md5::Digest {
         let mut hash_context = md5::Context::new();
         for element in self.elements.iter() {
@@ -60,32 +47,24 @@ impl Stack {
         hash_context.compute()
     }
 
-    ///
     /// Pushes an element onto the stack.
-    ///
     pub fn push(&mut self, element: Element) {
         self.elements.push(element);
     }
 
-    ///
     /// Appends another stack on top of this one.
-    ///
     pub fn append(&mut self, other: &mut Self) {
         self.elements.append(&mut other.elements);
     }
 
-    ///
     /// Pops a stack element.
-    ///
     pub fn pop(&mut self) -> anyhow::Result<Element> {
         self.elements
             .pop()
             .ok_or_else(|| anyhow::anyhow!("Stack underflow"))
     }
 
-    ///
     /// Pops the tag from the top.
-    ///
     pub fn pop_tag(&mut self) -> anyhow::Result<num::BigUint> {
         match self.elements.pop() {
             Some(Element::Tag(tag)) => Ok(tag),
@@ -94,9 +73,7 @@ impl Stack {
         }
     }
 
-    ///
     /// Swaps two stack elements.
-    ///
     pub fn swap(&mut self, index: usize) -> anyhow::Result<()> {
         if self.elements.len() < index + 1 {
             anyhow::bail!("Stack underflow");
@@ -108,9 +85,7 @@ impl Stack {
         Ok(())
     }
 
-    ///
     /// Duplicates a stack element.
-    ///
     pub fn dup(&mut self, index: usize) -> anyhow::Result<Element> {
         if self.elements.len() < index {
             anyhow::bail!("Stack underflow");
@@ -119,16 +94,12 @@ impl Stack {
         Ok(self.elements[self.elements.len() - index].to_owned())
     }
 
-    ///
     /// Returns the stack length.
-    ///
     pub fn len(&self) -> usize {
         self.elements.len()
     }
 
-    ///
     /// Returns an emptiness flag.
-    ///
     pub fn is_empty(&self) -> bool {
         self.elements.len() == 0
     }

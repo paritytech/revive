@@ -1,12 +1,8 @@
-//!
 //! Translates the stack memory operations.
-//!
 
 use inkwell::values::BasicValue;
 
-///
 /// Translates the ordinar value push.
-///
 pub fn push<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     value: String,
@@ -25,9 +21,7 @@ where
     Ok(result)
 }
 
-///
 /// Translates the block tag label push.
-///
 pub fn push_tag<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     value: String,
@@ -42,9 +36,7 @@ where
     Ok(result.as_basic_value_enum())
 }
 
-///
 /// Translates the stack memory duplicate.
-///
 pub fn dup<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     offset: usize,
@@ -68,9 +60,7 @@ where
     Ok(value)
 }
 
-///
 /// Translates the stack memory swap.
-///
 pub fn swap<D>(
     context: &mut revive_llvm_context::EraVMContext<D>,
     offset: usize,
@@ -103,9 +93,7 @@ where
     Ok(())
 }
 
-///
 /// Translates the stack memory pop.
-///
 pub fn pop<D>(_context: &mut revive_llvm_context::EraVMContext<D>) -> anyhow::Result<()>
 where
     D: revive_llvm_context::EraVMDependency + Clone,

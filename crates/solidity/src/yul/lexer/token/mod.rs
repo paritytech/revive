@@ -1,6 +1,4 @@
-//!
 //! The token.
-//!
 
 pub mod lexeme;
 pub mod location;
@@ -8,11 +6,8 @@ pub mod location;
 use self::lexeme::Lexeme;
 use self::location::Location;
 
-///
 /// The token.
-///
 /// Contains a lexeme and its location.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
     /// The token location.
@@ -24,9 +19,7 @@ pub struct Token {
 }
 
 impl Token {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(location: Location, lexeme: Lexeme, length: usize) -> Self {
         Self {
             location,

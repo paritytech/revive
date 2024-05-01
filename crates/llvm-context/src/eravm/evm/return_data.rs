@@ -1,6 +1,4 @@
-//!
 //! Translates the return data instructions.
-//!
 
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
@@ -10,9 +8,7 @@ use crate::eravm::context::pointer::Pointer;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the return data size.
-///
 pub fn size<'ctx, D>(
     context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -25,9 +21,7 @@ where
     }
 }
 
-///
 /// Translates the return data copy.
-///
 pub fn copy<'ctx, D>(
     context: &mut Context<'ctx, D>,
     destination_offset: inkwell::values::IntValue<'ctx>,

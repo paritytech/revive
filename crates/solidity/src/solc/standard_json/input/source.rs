@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` input source.
-//!
 
 use std::io::Read;
 use std::path::Path;
@@ -8,9 +6,7 @@ use std::path::Path;
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The `solc --standard-json` input source.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {

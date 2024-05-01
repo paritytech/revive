@@ -1,13 +1,9 @@
-//!
 //! The `solc --standard-json` input settings optimizer details.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The `solc --standard-json` input settings optimizer details.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
@@ -29,9 +25,7 @@ pub struct Details {
 }
 
 impl Details {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         peephole: bool,
         inliner: Option<bool>,
@@ -52,9 +46,7 @@ impl Details {
         }
     }
 
-    ///
     /// Creates a set of disabled optimizations.
-    ///
     pub fn disabled(version: &semver::Version) -> Self {
         let inliner = if version >= &semver::Version::new(0, 8, 5) {
             Some(false)

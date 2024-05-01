@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output source.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -10,9 +8,7 @@ use crate::solc::standard_json::output::error::Error as SolcStandardJsonOutputEr
 use crate::solc::version::Version as SolcVersion;
 use crate::warning::Warning;
 
-///
 /// The `solc --standard-json` output source.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
@@ -23,9 +19,7 @@ pub struct Source {
 }
 
 impl Source {
-    ///
     /// Checks the AST node for the `ecrecover` function usage.
-    ///
     pub fn check_ecrecover(ast: &serde_json::Value) -> Option<SolcStandardJsonOutputError> {
         let ast = ast.as_object()?;
 
@@ -46,9 +40,7 @@ impl Source {
         ))
     }
 
-    ///
     /// Checks the AST node for the `<address payable>`'s `send` and `transfer` methods usage.
-    ///
     pub fn check_send_and_transfer(ast: &serde_json::Value) -> Option<SolcStandardJsonOutputError> {
         let ast = ast.as_object()?;
 
@@ -70,9 +62,7 @@ impl Source {
         ))
     }
 
-    ///
     /// Checks the AST node for the `extcodesize` assembly instruction usage.
-    ///
     pub fn check_assembly_extcodesize(
         ast: &serde_json::Value,
     ) -> Option<SolcStandardJsonOutputError> {
@@ -96,9 +86,7 @@ impl Source {
         ))
     }
 
-    ///
     /// Checks the AST node for the `origin` assembly instruction usage.
-    ///
     pub fn check_assembly_origin(ast: &serde_json::Value) -> Option<SolcStandardJsonOutputError> {
         let ast = ast.as_object()?;
 
@@ -120,9 +108,7 @@ impl Source {
         ))
     }
 
-    ///
     /// Checks the AST node for the `tx.origin` value usage.
-    ///
     pub fn check_tx_origin(ast: &serde_json::Value) -> Option<SolcStandardJsonOutputError> {
         let ast = ast.as_object()?;
 
@@ -146,9 +132,7 @@ impl Source {
         ))
     }
 
-    ///
     /// Checks the AST node for the internal function pointers value usage.
-    ///
     pub fn check_internal_function_pointer(
         ast: &serde_json::Value,
     ) -> Option<SolcStandardJsonOutputError> {
@@ -174,9 +158,7 @@ impl Source {
         )
     }
 
-    ///
     /// Returns the list of messages for some specific parts of the AST.
-    ///
     pub fn get_messages(
         ast: &serde_json::Value,
         version: &SolcVersion,
@@ -240,9 +222,7 @@ impl Source {
         messages
     }
 
-    ///
     /// Returns the name of the last contract.
-    ///
     pub fn last_contract_name(&self) -> anyhow::Result<String> {
         self.ast
             .as_ref()

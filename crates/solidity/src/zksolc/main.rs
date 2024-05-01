@@ -1,6 +1,4 @@
-//!
 //! Solidity to EraVM compiler binary.
-//!
 
 pub mod arguments;
 
@@ -15,9 +13,7 @@ const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-///
 /// The application entry point.
-///
 fn main() {
     std::process::exit(match main_inner() {
         Ok(()) => revive_common::EXIT_CODE_SUCCESS,
@@ -28,9 +24,7 @@ fn main() {
     })
 }
 
-///
 /// The auxiliary `main` function to facilitate the `?` error conversion operator.
-///
 fn main_inner() -> anyhow::Result<()> {
     let arguments = Arguments::new();
     arguments.validate()?;

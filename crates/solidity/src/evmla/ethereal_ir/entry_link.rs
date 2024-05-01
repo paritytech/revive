@@ -1,16 +1,11 @@
-//!
 //! The Ethereal IR entry function link.
-//!
 
 use inkwell::values::BasicValue;
 
 use crate::evmla::ethereal_ir::EtherealIR;
 
-///
 /// The Ethereal IR entry function link.
-///
 /// The link represents branching between the deploy and runtime code.
-///
 #[derive(Debug, Clone)]
 pub struct EntryLink {
     /// The code part type.
@@ -18,9 +13,7 @@ pub struct EntryLink {
 }
 
 impl EntryLink {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(code_type: revive_llvm_context::EraVMCodeType) -> Self {
         Self { code_type }
     }

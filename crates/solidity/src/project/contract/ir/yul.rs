@@ -1,6 +1,4 @@
-//!
 //! The contract Yul source code.
-//!
 
 use std::collections::HashSet;
 
@@ -9,9 +7,7 @@ use serde::Serialize;
 
 use crate::yul::parser::statement::object::Object;
 
-///
 /// The contract Yul source code.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Yul {
     /// The Yul source code.
@@ -21,9 +17,7 @@ pub struct Yul {
 }
 
 impl Yul {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(source_code: String, object: Object) -> Self {
         Self {
             source_code,
@@ -31,9 +25,7 @@ impl Yul {
         }
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.object.get_missing_libraries()
     }

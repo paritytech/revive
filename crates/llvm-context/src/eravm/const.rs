@@ -1,6 +1,4 @@
-//!
 //! The LLVM context constants.
-//!
 
 /// The LLVM framework version.
 pub const LLVM_VERSION: semver::Version = semver::Version::new(18, 1, 4);
@@ -63,13 +61,11 @@ pub const NO_SYSTEM_CALL_BIT: bool = false;
 /// The system call bit.
 pub const SYSTEM_CALL_BIT: bool = true;
 
-///
 /// The deployer call header size that consists of:
 /// - selector (4 bytes)
 /// - salt (32 bytes)
 /// - bytecode hash (32 bytes)
 /// - constructor arguments offset (32 bytes)
 /// - constructor arguments length (32 bytes)
-///
 pub const DEPLOYER_CALL_HEADER_SIZE: usize =
     revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_FIELD * 4);

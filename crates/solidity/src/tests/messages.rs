@@ -1,6 +1,4 @@
-//!
 //! The Solidity compiler unit tests for messages.
-//!
 
 #![cfg(test)]
 

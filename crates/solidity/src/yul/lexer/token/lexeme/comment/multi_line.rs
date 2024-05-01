@@ -1,14 +1,10 @@
-//!
 //! The multi-line comment lexeme.
-//!
 
 use crate::yul::lexer::token::lexeme::Lexeme;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The multi-line comment lexeme.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Comment {}
 
@@ -18,9 +14,7 @@ impl Comment {
     /// The end symbol.
     pub const END: &'static str = "*/";
 
-    ///
     /// Returns the comment, including its length and number of lines.
-    ///
     pub fn parse(input: &str) -> Token {
         let end_position = input.find(Self::END).unwrap_or(input.len());
         let input = &input[..end_position];

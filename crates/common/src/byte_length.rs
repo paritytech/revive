@@ -1,6 +1,4 @@
-//!
 //! The common sizes in bytes.
-//!
 
 /// The byte-length.
 pub const BYTE_LENGTH_BYTE: usize = 1;

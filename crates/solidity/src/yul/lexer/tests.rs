@@ -1,6 +1,4 @@
-//!
 //! The Yul IR lexer tests.
-//!
 
 use crate::yul::lexer::error::Error;
 use crate::yul::lexer::token::lexeme::Lexeme;

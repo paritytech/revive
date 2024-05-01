@@ -1,6 +1,4 @@
-//!
 //! Translates a contract call.
-//!
 
 use inkwell::values::BasicValue;
 
@@ -9,12 +7,9 @@ use crate::eravm::context::function::declaration::Declaration as FunctionDeclara
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates a contract call.
-///
 /// If the `simulation_address` is specified, the call is substituted with another instruction
 /// according to the specification.
-///
 #[allow(clippy::too_many_arguments)]
 pub fn default<'ctx, D>(
     _context: &mut Context<'ctx, D>,
@@ -95,9 +90,7 @@ where
     */
 }
 
-///
 /// Translates the Yul `linkersymbol` instruction.
-///
 pub fn linker_symbol<'ctx, D>(
     context: &mut Context<'ctx, D>,
     mut arguments: [Argument<'ctx>; 1],

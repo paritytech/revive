@@ -1,12 +1,8 @@
-//!
 //! The LLVM IR generator function return entity.
-//!
 
 use crate::eravm::context::pointer::Pointer;
 
-///
 /// The LLVM IR generator function return entity.
-///
 #[derive(Debug, Clone, Copy)]
 pub enum Return<'ctx> {
     /// The function does not return a value.
@@ -27,30 +23,22 @@ pub enum Return<'ctx> {
 }
 
 impl<'ctx> Return<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn none() -> Self {
         Self::None
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn primitive(pointer: Pointer<'ctx>) -> Self {
         Self::Primitive { pointer }
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn compound(pointer: Pointer<'ctx>, size: usize) -> Self {
         Self::Compound { pointer, size }
     }
 
-    ///
     /// Returns the pointer to the function return value.
-    ///
     pub fn return_pointer(&self) -> Option<Pointer<'ctx>> {
         match self {
             Return::None => None,
@@ -59,9 +47,7 @@ impl<'ctx> Return<'ctx> {
         }
     }
 
-    ///
     /// Returns the return data size in bytes, based on the default stack alignment.
-    ///
     pub fn return_data_size(&self) -> usize {
         revive_common::BYTE_LENGTH_FIELD
             * match self {

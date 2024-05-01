@@ -1,6 +1,4 @@
-//!
 //! The variable declaration statement.
-//!
 
 use std::collections::HashSet;
 
@@ -20,9 +18,7 @@ use crate::yul::parser::identifier::Identifier;
 use crate::yul::parser::statement::expression::function_call::name::Name as FunctionName;
 use crate::yul::parser::statement::expression::Expression;
 
-///
 /// The Yul variable declaration statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct VariableDeclaration {
     /// The location.
@@ -34,9 +30,7 @@ pub struct VariableDeclaration {
 }
 
 impl VariableDeclaration {
-    ///
     /// The element parser.
-    ///
     pub fn parse(
         lexer: &mut Lexer,
         initial: Option<Token>,
@@ -87,9 +81,7 @@ impl VariableDeclaration {
         ))
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.expression
             .as_ref()

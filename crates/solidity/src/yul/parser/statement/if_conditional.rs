@@ -1,6 +1,4 @@
-//!
 //! The if-conditional statement.
-//!
 
 use std::collections::HashSet;
 
@@ -14,9 +12,7 @@ use crate::yul::lexer::Lexer;
 use crate::yul::parser::statement::block::Block;
 use crate::yul::parser::statement::expression::Expression;
 
-///
 /// The Yul if-conditional statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct IfConditional {
     /// The location.
@@ -28,9 +24,7 @@ pub struct IfConditional {
 }
 
 impl IfConditional {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
         let location = token.location;
@@ -46,9 +40,7 @@ impl IfConditional {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut libraries = self.condition.get_missing_libraries();
         libraries.extend(self.block.get_missing_libraries());

@@ -1,6 +1,4 @@
-//!
 //! The common sizes in bits.
-//!
 
 /// The `bool` type bit-length.
 pub const BIT_LENGTH_BOOLEAN: usize = 1;

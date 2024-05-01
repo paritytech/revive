@@ -1,6 +1,4 @@
-//!
 //! The LLVM target machine.
-//!
 
 pub mod target;
 
@@ -9,9 +7,7 @@ use crate::optimizer::settings::Settings as OptimizerSettings;
 
 use self::target::Target;
 
-///
 /// The LLVM target machine.
-///
 #[derive(Debug)]
 pub struct TargetMachine {
     /// The LLVM target.
@@ -35,11 +31,8 @@ impl TargetMachine {
     #[cfg(not(feature = "riscv-zbb"))]
     pub const VM_FEATURES: &'static str = "+e,+m";
 
-    ///
     /// A shortcut constructor.
-    ///
     /// A separate instance for every optimization level is created.
-    ///
     pub fn new(target: Target, optimizer_settings: &OptimizerSettings) -> anyhow::Result<Self> {
         let target_machine = inkwell::targets::Target::from_name(target.name())
             .ok_or_else(|| anyhow::anyhow!("LLVM target machine `{}` not found", target.name()))?
@@ -65,17 +58,13 @@ impl TargetMachine {
         })
     }
 
-    ///
     /// Sets the target-specific data in the module.
-    ///
     pub fn set_target_data(&self, module: &inkwell::module::Module) {
         module.set_triple(&self.target_machine.get_triple());
         module.set_data_layout(&self.target_machine.get_target_data().get_data_layout());
     }
 
-    ///
     /// Writes the LLVM module to a memory buffer.
-    ///
     pub fn write_to_memory_buffer(
         &self,
         module: &inkwell::module::Module,
@@ -87,9 +76,7 @@ impl TargetMachine {
         }
     }
 
-    ///
     /// Runs the optimization passes on `module`.
-    ///
     pub fn run_optimization_passes(
         &self,
         module: &inkwell::module::Module,
@@ -107,16 +94,12 @@ impl TargetMachine {
         module.run_passes(passes, &self.target_machine, pass_builder_options)
     }
 
-    ///
     /// Returns the target triple.
-    ///
     pub fn get_triple(&self) -> inkwell::targets::TargetTriple {
         self.target_machine.get_triple()
     }
 
-    ///
     /// Returns the target data.
-    ///
     pub fn get_target_data(&self) -> inkwell::targets::TargetData {
         self.target_machine.get_target_data()
     }

@@ -1,6 +1,4 @@
-//!
 //! The contract data.
-//!
 
 pub mod ir;
 pub mod metadata;
@@ -20,9 +18,7 @@ use crate::solc::version::Version as SolcVersion;
 use self::ir::IR;
 use self::metadata::Metadata;
 
-///
 /// The contract data.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contract {
     /// The absolute file path.
@@ -34,9 +30,7 @@ pub struct Contract {
 }
 
 impl Contract {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         path: String,
         source_hash: [u8; revive_common::BYTE_LENGTH_FIELD],
@@ -58,12 +52,10 @@ impl Contract {
         }
     }
 
-    ///
     /// Returns the contract identifier, which is:
     /// - the Yul object identifier for Yul
     /// - the full contract path for EVM legacy assembly
     /// - the module name for LLVM IR
-    ///
     pub fn identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
@@ -73,9 +65,7 @@ impl Contract {
         }
     }
 
-    ///
     /// Extract factory dependencies.
-    ///
     pub fn drain_factory_dependencies(&mut self) -> HashSet<String> {
         match self.ir {
             IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
@@ -85,9 +75,7 @@ impl Contract {
         }
     }
 
-    ///
     /// Compiles the specified contract, setting its build artifacts.
-    ///
     pub fn compile(
         mut self,
         project: Project,
@@ -196,9 +184,7 @@ impl Contract {
         ))
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.ir.get_missing_libraries()
     }

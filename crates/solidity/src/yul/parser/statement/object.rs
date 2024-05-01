@@ -1,6 +1,4 @@
-//!
 //! The YUL object.
-//!
 
 use std::collections::HashSet;
 
@@ -18,9 +16,7 @@ use crate::yul::lexer::Lexer;
 use crate::yul::parser::error::Error as ParserError;
 use crate::yul::parser::statement::code::Code;
 
-///
 /// The upper-level YUL object, representing the deploy code.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Object {
     /// The location.
@@ -38,9 +34,7 @@ pub struct Object {
 }
 
 impl Object {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -171,9 +165,7 @@ impl Object {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut missing_libraries = self.code.get_missing_libraries();
         if let Some(inner_object) = &self.inner_object {

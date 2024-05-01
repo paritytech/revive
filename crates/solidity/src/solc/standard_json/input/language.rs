@@ -1,13 +1,9 @@
-//!
 //! The `solc --standard-json` input language.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The `solc --standard-json` input language.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     /// The Solidity language.

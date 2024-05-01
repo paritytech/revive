@@ -1,6 +1,4 @@
-//!
 //! The LLVM optimizing tools.
-//!
 
 pub mod settings;
 
@@ -11,9 +9,7 @@ use crate::target_machine::TargetMachine;
 
 use self::settings::Settings;
 
-///
 /// The LLVM optimizing tools.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Optimizer {
     /// The optimizer settings.
@@ -21,16 +17,12 @@ pub struct Optimizer {
 }
 
 impl Optimizer {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(settings: Settings) -> Self {
         Self { settings }
     }
 
-    ///
     /// Runs the new pass manager.
-    ///
     pub fn run(
         &self,
         target_machine: &TargetMachine,
@@ -42,9 +34,7 @@ impl Optimizer {
         )
     }
 
-    ///
     /// Returns the optimizer settings reference.
-    ///
     pub fn settings(&self) -> &Settings {
         &self.settings
     }

@@ -1,6 +1,4 @@
-//!
 //! The expression statement.
-//!
 
 pub mod function_call;
 pub mod literal;
@@ -22,9 +20,7 @@ use crate::yul::parser::identifier::Identifier;
 use self::function_call::FunctionCall;
 use self::literal::Literal;
 
-///
 /// The Yul expression statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Expression {
     /// The function call subexpression.
@@ -36,9 +32,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -81,9 +75,7 @@ impl Expression {
         }
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         match self {
             Self::FunctionCall(inner) => inner.get_missing_libraries(),
@@ -92,9 +84,7 @@ impl Expression {
         }
     }
 
-    ///
     /// Returns the statement location.
-    ///
     pub fn location(&self) -> Location {
         match self {
             Self::FunctionCall(inner) => inner.location,
@@ -103,9 +93,7 @@ impl Expression {
         }
     }
 
-    ///
     /// Converts the expression into an LLVM value.
-    ///
     pub fn into_llvm<'ctx, D>(
         self,
         context: &mut revive_llvm_context::EraVMContext<'ctx, D>,

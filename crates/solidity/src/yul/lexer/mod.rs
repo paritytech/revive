@@ -1,6 +1,4 @@
-//!
 //! The compiler lexer.
-//!
 
 pub mod error;
 pub mod token;
@@ -18,9 +16,7 @@ use self::token::lexeme::Lexeme;
 use self::token::location::Location;
 use self::token::Token;
 
-///
 /// The compiler lexer.
-///
 pub struct Lexer {
     /// The input source code.
     input: String,
@@ -33,9 +29,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(mut input: String) -> Self {
         input.push('\n');
 
@@ -47,9 +41,7 @@ impl Lexer {
         }
     }
 
-    ///
     /// Advances the lexer, returning the next lexeme.
-    ///
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Token, Error> {
         if let Some(peeked) = self.peeked.take() {
@@ -121,9 +113,7 @@ impl Lexer {
         Ok(Token::new(self.location, Lexeme::EndOfFile, 0))
     }
 
-    ///
     /// Peeks the next lexeme without advancing the iterator.
-    ///
     pub fn peek(&mut self) -> Result<Token, Error> {
         match self.peeked {
             Some(ref peeked) => Ok(peeked.clone()),

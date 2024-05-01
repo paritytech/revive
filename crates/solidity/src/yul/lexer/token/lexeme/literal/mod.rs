@@ -1,6 +1,4 @@
-//!
 //! The literal lexeme.
-//!
 
 pub mod boolean;
 pub mod integer;
@@ -13,9 +11,7 @@ use self::boolean::Boolean;
 use self::integer::Integer;
 use self::string::String;
 
-///
 /// The literal lexeme.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Literal {
     /// A boolean literal, like `true`, or `false`.

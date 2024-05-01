@@ -1,6 +1,4 @@
-//!
 //! The Solidity project build.
-//!
 
 pub mod contract;
 
@@ -13,9 +11,7 @@ use crate::solc::version::Version as SolcVersion;
 
 use self::contract::Contract;
 
-///
 /// The Solidity project build.
-///
 #[derive(Debug, Default)]
 pub struct Build {
     /// The contract data,
@@ -23,9 +19,7 @@ pub struct Build {
 }
 
 impl Build {
-    ///
     /// Writes all contracts to the specified directory.
-    ///
     pub fn write_to_directory(
         self,
         output_directory: &Path,
@@ -45,9 +39,7 @@ impl Build {
         Ok(())
     }
 
-    ///
     /// Writes all contracts assembly and bytecode to the combined JSON.
-    ///
     pub fn write_to_combined_json(
         self,
         combined_json: &mut CombinedJson,
@@ -74,9 +66,7 @@ impl Build {
         Ok(())
     }
 
-    ///
     /// Writes all contracts assembly and bytecode to the standard JSON.
-    ///
     pub fn write_to_standard_json(
         mut self,
         standard_json: &mut StandardJsonOutput,

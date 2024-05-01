@@ -1,10 +1,6 @@
-//!
 //! The Ethereal IR block element stack element.
-//!
 
-///
 /// The Ethereal IR block element stack element.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Element {
     /// The runtime value.

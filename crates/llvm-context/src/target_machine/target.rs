@@ -1,12 +1,8 @@
-//!
 //! The LLVM target.
-//!
 
 use std::str::FromStr;
 
-///
 /// The LLVM target.
-///
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     /// The EraVM target.
@@ -14,27 +10,21 @@ pub enum Target {
 }
 
 impl Target {
-    ///
     /// Returns the target name.
-    ///
     pub fn name(&self) -> &str {
         match self {
             Self::PVM => "riscv32",
         }
     }
 
-    ///
     /// Returns the target triple.
-    ///
     pub fn triple(&self) -> &str {
         match self {
             Self::PVM => "riscv32-unknown-unknown-elf",
         }
     }
 
-    ///
     /// Returns the target production name.
-    ///
     pub fn production_name(&self) -> &str {
         match self {
             Self::PVM => "PVM",

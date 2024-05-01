@@ -1,6 +1,4 @@
-//!
 //! The block statement.
-//!
 
 pub mod assignment;
 pub mod block;
@@ -37,9 +35,7 @@ use self::object::Object;
 use self::switch::Switch;
 use self::variable_declaration::VariableDeclaration;
 
-///
 /// The Yul block statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Statement {
     /// The object element.
@@ -71,9 +67,7 @@ pub enum Statement {
 }
 
 impl Statement {
-    ///
     /// The element parser.
-    ///
     pub fn parse(
         lexer: &mut Lexer,
         initial: Option<Token>,
@@ -145,9 +139,7 @@ impl Statement {
         }
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         match self {
             Self::Object(inner) => inner.get_missing_libraries(),
@@ -166,9 +158,7 @@ impl Statement {
         }
     }
 
-    ///
     /// Returns the statement location.
-    ///
     pub fn location(&self) -> Location {
         match self {
             Self::Object(inner) => inner.location,

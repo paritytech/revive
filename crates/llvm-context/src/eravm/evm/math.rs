@@ -1,15 +1,11 @@
-//!
 //! Translates the mathematical operations.
-//!
 
 use inkwell::values::BasicValue;
 
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the `addmod` instruction.
-///
 pub fn add_mod<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -32,9 +28,7 @@ where
         .expect("Always exists"))
 }
 
-///
 /// Translates the `mulmod` instruction.
-///
 pub fn mul_mod<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -57,9 +51,7 @@ where
         .expect("Always exists"))
 }
 
-///
 /// Translates the `exp` instruction.
-///
 pub fn exponent<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
@@ -77,9 +69,7 @@ where
         .expect("Always exists"))
 }
 
-///
 /// Translates the `signextend` instruction.
-///
 pub fn sign_extend<'ctx, D>(
     context: &mut Context<'ctx, D>,
     bytes: inkwell::values::IntValue<'ctx>,

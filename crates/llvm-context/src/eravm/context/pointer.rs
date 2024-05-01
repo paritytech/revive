@@ -1,6 +1,4 @@
-//!
 //! The LLVM pointer.
-//!
 
 use inkwell::types::BasicType;
 
@@ -9,9 +7,7 @@ use crate::eravm::context::global::Global;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// The LLVM pointer.
-///
 #[derive(Debug, Clone, Copy)]
 pub struct Pointer<'ctx> {
     /// The pointee type.
@@ -23,9 +19,7 @@ pub struct Pointer<'ctx> {
 }
 
 impl<'ctx> Pointer<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new<T>(
         r#type: T,
         address_space: AddressSpace,
@@ -41,9 +35,7 @@ impl<'ctx> Pointer<'ctx> {
         }
     }
 
-    ///
     /// Wraps a 256-bit primitive type pointer.
-    ///
     pub fn new_stack_field<D>(
         context: &Context<'ctx, D>,
         value: inkwell::values::PointerValue<'ctx>,
@@ -58,9 +50,7 @@ impl<'ctx> Pointer<'ctx> {
         }
     }
 
-    ///
     /// Creates a new pointer with the specified `offset`.
-    ///
     pub fn new_with_offset<D, T>(
         context: &Context<'ctx, D>,
         address_space: AddressSpace,
@@ -86,9 +76,7 @@ impl<'ctx> Pointer<'ctx> {
         Self::new(r#type, address_space, value)
     }
 
-    ///
     /// Casts the pointer into another type.
-    ///
     pub fn cast<T>(self, r#type: T) -> Self
     where
         T: BasicType<'ctx>,

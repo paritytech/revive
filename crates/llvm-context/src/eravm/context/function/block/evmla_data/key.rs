@@ -1,14 +1,9 @@
-//!
 //! The LLVM IR generator function block key.
-//!
 
 use crate::eravm::context::code_type::CodeType;
 
-///
 /// The LLVM IR generator function block key.
-///
 /// Is only relevant to the EVM legacy assembly.
-///
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Key {
     /// The block code type.
@@ -18,9 +13,7 @@ pub struct Key {
 }
 
 impl Key {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(code_type: CodeType, tag: num::BigUint) -> Self {
         Self { code_type, tag }
     }

@@ -1,6 +1,4 @@
-//!
 //! The contract source code.
-//!
 
 pub mod evmla;
 pub mod llvm_ir;
@@ -21,9 +19,7 @@ use self::llvm_ir::LLVMIR;
 use self::yul::Yul;
 use self::zkasm::ZKASM;
 
-///
 /// The contract source code.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
@@ -40,37 +36,27 @@ pub enum IR {
 }
 
 impl IR {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_yul(source_code: String, object: Object) -> Self {
         Self::Yul(Yul::new(source_code, object))
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_evmla(assembly: Assembly, extra_metadata: ExtraMetadata) -> Self {
         Self::EVMLA(EVMLA::new(assembly, extra_metadata))
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_llvm_ir(path: String, source: String) -> Self {
         Self::LLVMIR(LLVMIR::new(path, source))
     }
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new_zkasm(path: String, source: String) -> Self {
         Self::ZKASM(ZKASM::new(path, source))
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         match self {
             Self::Yul(inner) => inner.get_missing_libraries(),

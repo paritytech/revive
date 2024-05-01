@@ -1,13 +1,9 @@
-//!
 //! The LLVM debug information.
-//!
 
 use inkwell::debug_info::AsDIScope;
 use num::Zero;
 
-///
 /// The LLVM debug information.
-///
 pub struct DebugInfo<'ctx> {
     /// The compile unit.
     compile_unit: inkwell::debug_info::DICompileUnit<'ctx>,
@@ -16,9 +12,7 @@ pub struct DebugInfo<'ctx> {
 }
 
 impl<'ctx> DebugInfo<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(module: &inkwell::module::Module<'ctx>) -> Self {
         let (builder, compile_unit) = module.create_debug_info_builder(
             true,
@@ -44,9 +38,7 @@ impl<'ctx> DebugInfo<'ctx> {
         }
     }
 
-    ///
     /// Creates a function info.
-    ///
     pub fn create_function(
         &self,
         name: &str,
@@ -82,9 +74,7 @@ impl<'ctx> DebugInfo<'ctx> {
         Ok(function)
     }
 
-    ///
     /// Creates a primitive type info.
-    ///
     pub fn create_type(
         &self,
         bit_length: usize,
@@ -100,9 +90,7 @@ impl<'ctx> DebugInfo<'ctx> {
             .map_err(|error| anyhow::anyhow!("Debug info error: {}", error))
     }
 
-    ///
     /// Finalizes the builder.
-    ///
     pub fn finalize(&self) {
         self.builder.finalize();
     }

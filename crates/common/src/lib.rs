@@ -1,6 +1,4 @@
-//!
 //! The compiler common library.
-//!
 
 pub(crate) mod base;
 pub(crate) mod bit_length;

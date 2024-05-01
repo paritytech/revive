@@ -1,6 +1,4 @@
-//!
 //! The number base constants.
-//!
 
 /// The binary number base.
 pub const BASE_BINARY: u32 = 2;

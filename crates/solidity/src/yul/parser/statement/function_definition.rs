@@ -1,6 +1,4 @@
-//!
 //! The function definition statement.
-//!
 
 use std::collections::BTreeSet;
 use std::collections::HashSet;
@@ -20,13 +18,10 @@ use crate::yul::parser::identifier::Identifier;
 use crate::yul::parser::statement::block::Block;
 use crate::yul::parser::statement::expression::function_call::name::Name as FunctionName;
 
-///
 /// The function definition statement.
-///
 /// All functions are translated in two steps:
 /// 1. The hoisted declaration
 /// 2. The definition, which now has the access to all function signatures
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct FunctionDefinition {
     /// The location.
@@ -50,9 +45,7 @@ impl FunctionDefinition {
     /// The LLVM attribute section suffix.
     pub const LLVM_ATTRIBUTE_SUFFIX: &'static str = "_llvm$";
 
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -180,16 +173,12 @@ impl FunctionDefinition {
         })
     }
 
-    ///
     /// Gets the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.body.get_missing_libraries()
     }
 
-    ///
     /// Gets the list of LLVM attributes provided in the function name.
-    ///
     pub fn get_llvm_attributes(
         identifier: &Identifier,
     ) -> Result<BTreeSet<revive_llvm_context::EraVMAttribute>, Error> {

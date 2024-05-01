@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output contract.
-//!
 
 pub mod evm;
 
@@ -12,9 +10,7 @@ use serde::Serialize;
 
 use self::evm::EVM;
 
-///
 /// The `solc --standard-json` output contract.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Contract {

@@ -1,6 +1,4 @@
-//!
 //! The processed input data.
-//!
 
 pub mod contract;
 
@@ -27,9 +25,7 @@ use crate::yul::parser::statement::object::Object;
 
 use self::contract::Contract;
 
-///
 /// The processes input data.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
     /// The source code version.
@@ -43,9 +39,7 @@ pub struct Project {
 }
 
 impl Project {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         version: SolcVersion,
         contracts: BTreeMap<String, Contract>,
@@ -64,9 +58,7 @@ impl Project {
         }
     }
 
-    ///
     /// Compiles all contracts, returning their build artifacts.
-    ///
     pub fn compile(
         self,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -141,9 +133,7 @@ impl Project {
         Ok(build)
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> MissingLibraries {
         let deployed_libraries = self
             .libraries
@@ -168,9 +158,7 @@ impl Project {
         MissingLibraries::new(missing_deployable_libraries)
     }
 
-    ///
     /// Parses the Yul source code file and returns the source data.
-    ///
     pub fn try_from_yul_path(
         path: &Path,
         solc_validator: Option<&SolcCompiler>,
@@ -180,11 +168,8 @@ impl Project {
         Self::try_from_yul_string(path, source_code.as_str(), solc_validator)
     }
 
-    ///
     /// Parses the test Yul source code string and returns the source data.
-    ///
     /// Only for integration testing purposes.
-    ///
     pub fn try_from_yul_string(
         path: &Path,
         source_code: &str,
@@ -221,9 +206,7 @@ impl Project {
         ))
     }
 
-    ///
     /// Parses the LLVM IR source code file and returns the source data.
-    ///
     pub fn try_from_llvm_ir_path(path: &Path) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path)
             .map_err(|error| anyhow::anyhow!("LLVM IR file {:?} reading error: {}", path, error))?;
@@ -252,9 +235,7 @@ impl Project {
         ))
     }
 
-    ///
     /// Parses the EraVM assembly source code file and returns the source data.
-    ///
     pub fn try_from_zkasm_path(path: &Path) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path).map_err(|error| {
             anyhow::anyhow!("EraVM assembly file {:?} reading error: {}", path, error)

@@ -1,15 +1,11 @@
-//!
 //! The LLVM module build.
-//!
 
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The LLVM module build.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Build {
     /// The EraVM text assembly.
@@ -25,9 +21,7 @@ pub struct Build {
 }
 
 impl Build {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         assembly_text: String,
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,

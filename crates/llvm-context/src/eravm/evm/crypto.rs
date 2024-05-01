@@ -1,13 +1,9 @@
-//!
 //! Translates the cryptographic operations.
-//!
 
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the `sha3` instruction.
-///
 pub fn sha3<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,

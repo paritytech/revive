@@ -1,6 +1,4 @@
-//!
 //! Translates the calldata instructions.
-//!
 
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::pointer::Pointer;
@@ -8,9 +6,7 @@ use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 use inkwell::types::BasicType;
 
-///
 /// Translates the calldata load.
-///
 pub fn load<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
@@ -33,9 +29,7 @@ where
         .map(|value| context.build_byte_swap(value))
 }
 
-///
 /// Translates the calldata size.
-///
 pub fn size<'ctx, D>(
     context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -47,9 +41,7 @@ where
     Ok(value)
 }
 
-///
 /// Translates the calldata copy.
-///
 pub fn copy<'ctx, D>(
     context: &mut Context<'ctx, D>,
     destination_offset: inkwell::values::IntValue<'ctx>,

@@ -1,6 +1,4 @@
-//!
 //! The YUL source code literal.
-//!
 
 use inkwell::values::BasicValue;
 use num::Num;
@@ -21,9 +19,7 @@ use crate::yul::lexer::Lexer;
 use crate::yul::parser::error::Error as ParserError;
 use crate::yul::parser::r#type::Type;
 
-///
 /// Represents a literal in YUL without differentiating its type.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Literal {
     /// The location.
@@ -35,9 +31,7 @@ pub struct Literal {
 }
 
 impl Literal {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -75,9 +69,7 @@ impl Literal {
         })
     }
 
-    ///
     /// Converts the literal into its LLVM.
-    ///
     pub fn into_llvm<'ctx, D>(
         self,
         context: &revive_llvm_context::EraVMContext<'ctx, D>,

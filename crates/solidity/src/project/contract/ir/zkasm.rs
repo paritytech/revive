@@ -1,13 +1,9 @@
-//!
 //! The contract EraVM assembly source code.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The contract EraVM assembly source code.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct ZKASM {
@@ -18,9 +14,7 @@ pub struct ZKASM {
 }
 
 impl ZKASM {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(path: String, source: String) -> Self {
         Self { path, source }
     }

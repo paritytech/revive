@@ -1,13 +1,9 @@
-//!
 //! The `solc --standard-json` input settings metadata.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The `solc --standard-json` input settings metadata.
-///
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
@@ -17,9 +13,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(bytecode_hash: revive_llvm_context::EraVMMetadataHash) -> Self {
         Self {
             bytecode_hash: Some(bytecode_hash),

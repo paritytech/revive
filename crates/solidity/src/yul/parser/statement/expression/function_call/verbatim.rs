@@ -1,12 +1,8 @@
-//!
 //! Translates the verbatim simulations.
-//!
 
 use crate::yul::parser::statement::expression::function_call::FunctionCall;
 
-///
 /// Translates the verbatim simulations.
-///
 pub fn verbatim<'ctx, D>(
     context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
     call: &mut FunctionCall,

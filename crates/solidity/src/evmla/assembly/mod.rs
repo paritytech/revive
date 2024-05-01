@@ -1,6 +1,4 @@
-//!
 //! The `solc --asm-json` output.
-//!
 
 pub mod data;
 pub mod instruction;
@@ -19,9 +17,7 @@ use self::data::Data;
 use self::instruction::name::Name as InstructionName;
 use self::instruction::Instruction;
 
-///
 /// The JSON assembly.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Assembly {
     /// The metadata string.
@@ -46,36 +42,27 @@ pub struct Assembly {
 }
 
 impl Assembly {
-    ///
     /// Gets the contract `keccak256` hash.
-    ///
     pub fn keccak256(&self) -> String {
         let json = serde_json::to_vec(self).expect("Always valid");
         revive_llvm_context::eravm_utils::keccak256(json.as_slice())
     }
 
-    ///
     /// Sets the full contract path.
-    ///
     pub fn set_full_path(&mut self, full_path: String) {
         self.full_path = Some(full_path);
     }
 
-    ///
     /// Returns the full contract path if it is set, or `<undefined>` otherwise.
-    ///
     /// # Panics
     /// If the `full_path` has not been set.
-    ///
     pub fn full_path(&self) -> &str {
         self.full_path
             .as_deref()
             .unwrap_or_else(|| panic!("The full path of some contracts is unset"))
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut missing_libraries = HashSet::new();
         if let Some(code) = self.code.as_ref() {
@@ -94,9 +81,7 @@ impl Assembly {
         missing_libraries
     }
 
-    ///
     /// Replaces the deploy code dependencies with full contract path and returns the list.
-    ///
     pub fn deploy_dependencies_pass(
         &mut self,
         full_path: &str,
@@ -144,9 +129,7 @@ impl Assembly {
         Ok(index_path_mapping)
     }
 
-    ///
     /// Replaces the runtime code dependencies with full contract path and returns the list.
-    ///
     pub fn runtime_dependencies_pass(
         &mut self,
         full_path: &str,

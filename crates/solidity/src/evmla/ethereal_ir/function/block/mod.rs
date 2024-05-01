@@ -1,6 +1,4 @@
-//!
 //! The Ethereal IR block.
-//!
 
 pub mod element;
 
@@ -14,9 +12,7 @@ use crate::evmla::assembly::instruction::Instruction;
 use self::element::stack::Stack as ElementStack;
 use self::element::Element;
 
-///
 /// The Ethereal IR block.
-///
 #[derive(Debug, Clone)]
 pub struct Block {
     /// The Solidity compiler version.
@@ -43,9 +39,7 @@ impl Block {
     /// The predecessors hashset initial capacity.
     pub const PREDECESSORS_HASHSET_DEFAULT_CAPACITY: usize = 4;
 
-    ///
     /// Assembles a block from the sequence of instructions.
-    ///
     pub fn try_from_instructions(
         solc_version: semver::Version,
         code_type: revive_llvm_context::EraVMCodeType,
@@ -109,9 +103,7 @@ impl Block {
         Ok((block, cursor))
     }
 
-    ///
     /// Inserts a predecessor tag.
-    ///
     pub fn insert_predecessor(
         &mut self,
         key: revive_llvm_context::EraVMFunctionBlockKey,

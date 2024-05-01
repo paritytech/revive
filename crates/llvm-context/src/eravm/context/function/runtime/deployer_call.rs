@@ -1,6 +1,4 @@
-//!
 //! The `deployer_call` function.
-//!
 
 use inkwell::types::BasicType;
 
@@ -11,14 +9,10 @@ use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 use crate::eravm::WriteLLVM;
 
-///
 /// The `deployer_call` function.
-///
 /// Calls the deployer system contract, which returns the newly deployed contract address or 0.
-///
 /// The address is returned in the first 32-byte word of the return data. If it is 0, the 0 is
 /// returned. If the entire call has failed, there is also a 0 returned.
-///
 #[derive(Debug)]
 pub struct DeployerCall {
     /// The address space where the calldata is allocated.
@@ -45,9 +39,7 @@ impl DeployerCall {
     /// The salt argument index.
     pub const ARGUMENT_INDEX_SALT: usize = 4;
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(address_space: AddressSpace) -> Self {
         Self { address_space }
     }

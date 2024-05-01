@@ -1,12 +1,8 @@
-//!
 //! The Ethereal IR block queue element.
-//!
 
 use crate::evmla::ethereal_ir::function::block::element::stack::Stack;
 
-///
 /// The Ethereal IR block queue element.
-///
 #[derive(Debug, Clone)]
 pub struct QueueElement {
     /// The block key.
@@ -18,9 +14,7 @@ pub struct QueueElement {
 }
 
 impl QueueElement {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         block_key: revive_llvm_context::EraVMFunctionBlockKey,
         predecessor: Option<(revive_llvm_context::EraVMFunctionBlockKey, usize)>,

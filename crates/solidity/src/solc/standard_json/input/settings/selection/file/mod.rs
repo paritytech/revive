@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output file selection.
-//!
 
 pub mod flag;
 
@@ -13,9 +11,7 @@ use crate::solc::pipeline::Pipeline as SolcPipeline;
 
 use self::flag::Flag as SelectionFlag;
 
-///
 /// The `solc --standard-json` output file selection.
-///
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct File {
     /// The per-file output selections.
@@ -27,9 +23,7 @@ pub struct File {
 }
 
 impl File {
-    ///
     /// Creates the selection required by our compilation process.
-    ///
     pub fn new_required(pipeline: SolcPipeline) -> Self {
         Self {
             per_file: Some(HashSet::from_iter([SelectionFlag::AST])),
@@ -42,9 +36,7 @@ impl File {
         }
     }
 
-    ///
     /// Extends the user's output selection with flag required by our compilation process.
-    ///
     pub fn extend_with_required(&mut self, pipeline: SolcPipeline) -> &mut Self {
         let required = Self::new_required(pipeline);
 

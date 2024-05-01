@@ -1,13 +1,9 @@
-//!
 //! The function name.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The function name.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Name {
     /// The user-defined function.
@@ -147,14 +143,12 @@ pub enum Name {
     StaticCall,
 
     /// create new contract with code `mem[p…(p+n))` and send `v` wei and return the new address
-    ///
     /// Passes bytecode to the system contracts.
     Create,
     /// create new contract with code `mem[p…(p+n))` at address
     /// `keccak256(0xff . this . s . keccak256(mem[p…(p+n)))` and send `v` wei and return the
     /// new address, where `0xff` is a 1-byte value, this is the current contract’s address as a
     /// 20-byte value and `s` is a big-endian 256-bit value
-    ///
     /// Passes bytecode to the system contracts.
     Create2,
     /// returns the size in the data area
@@ -230,9 +224,7 @@ pub enum Name {
 }
 
 impl Name {
-    ///
     /// Tries parsing the verbatim instruction.
-    ///
     fn parse_verbatim(input: &str) -> Option<Self> {
         let verbatim = input.strip_prefix("verbatim")?;
         let regex = regex::Regex::new(r"_(\d+)i_(\d+)o").expect("Always valid");

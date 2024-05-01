@@ -1,6 +1,4 @@
-//!
 //! The file extensions.
-//!
 
 /// The manifest file extension.
 pub static EXTENSION_MANIFEST: &str = "toml";

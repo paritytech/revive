@@ -1,6 +1,4 @@
-//!
 //! Process for compiling a single compilation unit.
-//!
 
 pub mod input;
 pub mod output;
@@ -18,9 +16,7 @@ use self::output::Output;
 /// The overriden executable name used when the compiler is run as a library.
 pub static EXECUTABLE: OnceCell<PathBuf> = OnceCell::new();
 
-///
 /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-///
 pub fn run() -> anyhow::Result<()> {
     let mut stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
@@ -60,9 +56,7 @@ pub fn run() -> anyhow::Result<()> {
     }
 }
 
-///
 /// Runs this process recursively to compile a single contract.
-///
 pub fn call(input: Input) -> anyhow::Result<Output> {
     let input_json = serde_json::to_vec(&input).expect("Always valid");
 

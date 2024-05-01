@@ -1,17 +1,12 @@
-//!
 //! The LLVM intrinsic functions.
-//!
 
 use inkwell::types::BasicType;
 
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::function::declaration::Declaration as FunctionDeclaration;
 
-///
 /// The LLVM intrinsic functions, implemented in the LLVM back-end.
-///
 /// Most of them are translated directly into bytecode instructions.
-///
 #[derive(Debug)]
 pub struct Intrinsics<'ctx> {
     /// The trap.
@@ -37,9 +32,7 @@ impl<'ctx> Intrinsics<'ctx> {
     /// The corresponding intrinsic function name.
     pub const FUNCTION_BYTE_SWAP: &'static str = "llvm.bswap.i256";
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -100,9 +93,7 @@ impl<'ctx> Intrinsics<'ctx> {
         }
     }
 
-    ///
     /// Finds the specified LLVM intrinsic function in the target and returns its declaration.
-    ///
     pub fn declare(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -118,9 +109,7 @@ impl<'ctx> Intrinsics<'ctx> {
         FunctionDeclaration::new(r#type, value)
     }
 
-    ///
     /// Returns the LLVM types for selecting via the signature.
-    ///
     pub fn argument_types(
         llvm: &'ctx inkwell::context::Context,
         name: &str,

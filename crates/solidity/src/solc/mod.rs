@@ -1,6 +1,4 @@
-//!
 //! The Solidity compiler.
-//!
 
 pub mod combined_json;
 pub mod pipeline;
@@ -17,9 +15,7 @@ use self::standard_json::input::Input as StandardJsonInput;
 use self::standard_json::output::Output as StandardJsonOutput;
 use self::version::Version;
 
-///
 /// The Solidity compiler.
-///
 pub struct Compiler {
     /// The binary executable name.
     pub executable: String,
@@ -43,12 +39,9 @@ impl Compiler {
     /// The last supported version of `solc`.
     pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 25);
 
-    ///
     /// A shortcut constructor.
-    ///
     /// Different tools may use different `executable` names. For example, the integration tester
     /// uses `solc-<version>` format.
-    ///
     pub fn new(executable: String) -> anyhow::Result<Self> {
         if let Err(error) = which::which(executable.as_str()) {
             anyhow::bail!(
@@ -62,9 +55,7 @@ impl Compiler {
         })
     }
 
-    ///
     /// Compiles the Solidity `--standard-json` input into Yul IR.
-    ///
     pub fn standard_json(
         &mut self,
         mut input: StandardJsonInput,
@@ -143,9 +134,7 @@ impl Compiler {
         Ok(output)
     }
 
-    ///
     /// The `solc --combined-json abi,hashes...` mirror.
-    ///
     pub fn combined_json(
         &self,
         paths: &[PathBuf],
@@ -217,9 +206,7 @@ impl Compiler {
         Ok(combined_json)
     }
 
-    ///
     /// The `solc` Yul validator.
-    ///
     pub fn validate_yul(&self, path: &Path) -> anyhow::Result<()> {
         let mut command = std::process::Command::new(self.executable.as_str());
         command.arg("--strict-assembly");
@@ -239,9 +226,7 @@ impl Compiler {
         Ok(())
     }
 
-    ///
     /// The `solc --version` mini-parser.
-    ///
     pub fn version(&mut self) -> anyhow::Result<Version> {
         if let Some(version) = self.version.as_ref() {
             return Ok(version.to_owned());

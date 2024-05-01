@@ -1,6 +1,4 @@
-//!
 //! The LLVM IR generator context.
-//!
 
 pub mod address_space;
 pub mod argument;
@@ -52,12 +50,9 @@ use self::solidity_data::SolidityData;
 use self::vyper_data::VyperData;
 use self::yul_data::YulData;
 
-///
 /// The LLVM IR generator context.
-///
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
 /// and a superstructure over the inner `inkwell` LLVM context.
-///
 pub struct Context<'ctx, D>
 where
     D: Dependency + Clone,
@@ -191,9 +186,7 @@ where
         );
     }
 
-    ///
     /// Initializes a new LLVM context.
-    ///
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
@@ -235,9 +228,7 @@ where
         }
     }
 
-    ///
     /// Builds the LLVM IR module, returning the build artifacts.
-    ///
     pub fn build(
         mut self,
         contract_path: &str,
@@ -312,53 +303,39 @@ where
         Ok(build)
     }
 
-    ///
     /// Verifies the current LLVM IR module.
-    ///
     pub fn verify(&self) -> anyhow::Result<()> {
         self.module()
             .verify()
             .map_err(|error| anyhow::anyhow!(error.to_string()))
     }
 
-    ///
     /// Returns the inner LLVM context.
-    ///
     pub fn llvm(&self) -> &'ctx inkwell::context::Context {
         self.llvm
     }
 
-    ///
     /// Returns the LLVM IR builder.
-    ///
     pub fn builder(&self) -> &inkwell::builder::Builder<'ctx> {
         &self.builder
     }
 
-    ///
     /// Returns the current LLVM IR module reference.
-    ///
     pub fn module(&self) -> &inkwell::module::Module<'ctx> {
         &self.module
     }
 
-    ///
     /// Sets the current code type (deploy or runtime).
-    ///
     pub fn set_code_type(&mut self, code_type: CodeType) {
         self.code_type = Some(code_type);
     }
 
-    ///
     /// Returns the current code type (deploy or runtime).
-    ///
     pub fn code_type(&self) -> Option<CodeType> {
         self.code_type.to_owned()
     }
 
-    ///
     /// Returns the pointer to a global variable.
-    ///
     pub fn get_global(&self, name: &str) -> anyhow::Result<Global<'ctx>> {
         match self.globals.get(name) {
             Some(global) => Ok(*global),
@@ -366,9 +343,7 @@ where
         }
     }
 
-    ///
     /// Returns the value of a global variable.
-    ///
     pub fn get_global_value(
         &self,
         name: &str,
@@ -377,9 +352,7 @@ where
         self.build_load(global.into(), name)
     }
 
-    ///
     /// Sets the value to a global variable.
-    ///
     pub fn set_global<T, V>(&mut self, name: &str, r#type: T, address_space: AddressSpace, value: V)
     where
         T: BasicType<'ctx> + Clone + Copy,
@@ -397,16 +370,12 @@ where
         }
     }
 
-    ///
     /// Returns the LLVM intrinsics collection reference.
-    ///
     pub fn intrinsics(&self) -> &Intrinsics<'ctx> {
         &self.intrinsics
     }
 
-    ///
     /// Returns the LLVM runtime function collection reference.
-    ///
     pub fn llvm_runtime(&self) -> &LLVMRuntime<'ctx> {
         &self.llvm_runtime
     }
@@ -440,9 +409,7 @@ where
         Ok(function)
     }
 
-    ///
     /// Appends a function to the current module.
-    ///
     pub fn add_function(
         &mut self,
         name: &str,
@@ -504,25 +471,19 @@ where
         Ok(function)
     }
 
-    ///
     /// Returns a shared reference to the specified function.
-    ///
     pub fn get_function(&self, name: &str) -> Option<Rc<RefCell<Function<'ctx>>>> {
         self.functions.get(name).cloned()
     }
 
-    ///
     /// Returns a shared reference to the current active function.
-    ///
     pub fn current_function(&self) -> Rc<RefCell<Function<'ctx>>> {
         self.current_function
             .clone()
             .expect("Must be declared before use")
     }
 
-    ///
     /// Sets the current active function.
-    ///
     pub fn set_current_function(&mut self, name: &str) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
@@ -531,9 +492,7 @@ where
         Ok(())
     }
 
-    ///
     /// Pushes a new loop context to the stack.
-    ///
     pub fn push_loop(
         &mut self,
         body_block: inkwell::basic_block::BasicBlock<'ctx>,
@@ -544,25 +503,19 @@ where
             .push(Loop::new(body_block, continue_block, join_block));
     }
 
-    ///
     /// Pops the current loop context from the stack.
-    ///
     pub fn pop_loop(&mut self) {
         self.loop_stack.pop();
     }
 
-    ///
     /// Returns the current loop context.
-    ///
     pub fn r#loop(&self) -> &Loop<'ctx> {
         self.loop_stack
             .last()
             .expect("The current context is not in a loop")
     }
 
-    ///
     /// Compiles a contract dependency, if the dependency manager is set.
-    ///
     pub fn compile_dependency(&mut self, name: &str) -> anyhow::Result<String> {
         if let Some(vyper_data) = self.vyper_data.as_mut() {
             vyper_data.set_is_forwarder_used();
@@ -585,9 +538,7 @@ where
             })
     }
 
-    ///
     /// Gets a full contract_path from the dependency manager.
-    ///
     pub fn resolve_path(&self, identifier: &str) -> anyhow::Result<String> {
         self.dependency_manager
             .to_owned()
@@ -598,9 +549,7 @@ where
             })
     }
 
-    ///
     /// Gets a deployed library address from the dependency manager.
-    ///
     pub fn resolve_library(&self, path: &str) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
         self.dependency_manager
             .to_owned()
@@ -612,49 +561,36 @@ where
             })
     }
 
-    ///
     /// Extracts the dependency manager.
-    ///
     pub fn take_dependency_manager(&mut self) -> D {
         self.dependency_manager
             .take()
             .expect("The dependency manager is unset")
     }
 
-    ///
     /// Returns the debug config reference.
-    ///
     pub fn debug_config(&self) -> Option<&DebugConfig> {
         self.debug_config.as_ref()
     }
 
-    ///
     /// Appends a new basic block to the current function.
-    ///
     pub fn append_basic_block(&self, name: &str) -> inkwell::basic_block::BasicBlock<'ctx> {
         self.llvm
             .append_basic_block(self.current_function().borrow().declaration().value, name)
     }
 
-    ///
     /// Sets the current basic block.
-    ///
     pub fn set_basic_block(&self, block: inkwell::basic_block::BasicBlock<'ctx>) {
         self.builder.position_at_end(block);
     }
 
-    ///
     /// Returns the current basic block.
-    ///
     pub fn basic_block(&self) -> inkwell::basic_block::BasicBlock<'ctx> {
         self.builder.get_insert_block().expect("Always exists")
     }
 
-    ///
     /// Builds a stack allocation instruction.
-    ///
     /// Sets the alignment to 128 bits.
-    ///
     pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
@@ -669,11 +605,8 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    ///
     /// Builds a stack load instruction.
-    ///
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
-    ///
     pub fn build_load(
         &self,
         pointer: Pointer<'ctx>,
@@ -784,11 +717,8 @@ where
         }
     }
 
-    ///
     /// Builds a stack store instruction.
-    ///
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
-    ///
     pub fn build_store<V>(&self, pointer: Pointer<'ctx>, value: V) -> anyhow::Result<()>
     where
         V: BasicValue<'ctx>,
@@ -893,9 +823,7 @@ where
             .expect("byte_swap should return a value")
     }
 
-    ///
     /// Builds a GEP instruction.
-    ///
     pub fn build_gep<T>(
         &self,
         pointer: Pointer<'ctx>,
@@ -917,11 +845,8 @@ where
         Pointer::new(element_type, pointer.address_space, value)
     }
 
-    ///
     /// Builds a conditional branch.
-    ///
     /// Checks if there are no other terminators in the block.
-    ///
     pub fn build_conditional_branch(
         &self,
         comparison: inkwell::values::IntValue<'ctx>,
@@ -938,11 +863,8 @@ where
         Ok(())
     }
 
-    ///
     /// Builds an unconditional branch.
-    ///
     /// Checks if there are no other terminators in the block.
-    ///
     pub fn build_unconditional_branch(
         &self,
         destination_block: inkwell::basic_block::BasicBlock<'ctx>,
@@ -956,9 +878,7 @@ where
             .unwrap();
     }
 
-    ///
     /// Builds a call.
-    ///
     pub fn build_call(
         &self,
         function: FunctionDeclaration<'ctx>,
@@ -983,11 +903,8 @@ where
         call_site_value.try_as_basic_value().left()
     }
 
-    ///
     /// Builds an invoke.
-    ///
     /// Is defaulted to a call if there is no global exception handler.
-    ///
     pub fn build_invoke(
         &self,
         function: FunctionDeclaration<'ctx>,
@@ -1072,13 +989,10 @@ where
         return_pointer.map(|pointer| self.build_load(pointer, "invoke_result").unwrap())
     }
 
-    ///
     /// Builds an invoke of local call covered with an exception handler.
-    ///
     /// Yul does not the exception handling, so the user can declare a special handling function
     /// called (see constant `ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER`. If the enclosed function
     /// panics, the control flow will be transferred to the exception handler.
-    ///
     pub fn build_invoke_near_call_abi(
         &self,
         _function: FunctionDeclaration<'ctx>,
@@ -1088,11 +1002,8 @@ where
         unimplemented!()
     }
 
-    ///
     /// Builds a memory copy call.
-    ///
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
-    ///
     pub fn build_memcpy(
         &self,
         _function: FunctionDeclaration<'ctx>,
@@ -1108,12 +1019,9 @@ where
         Ok(())
     }
 
-    ///
     /// Builds a memory copy call for the return data.
-    ///
     /// Sets the output length to `min(output_length, return_data_size` and calls the default
     /// generic page memory copy builder.
-    ///
     pub fn build_memcpy_return_data(
         &self,
         function: FunctionDeclaration<'ctx>,
@@ -1159,11 +1067,8 @@ where
         Ok(())
     }
 
-    ///
     /// Builds a return.
-    ///
     /// Checks if there are no other terminators in the block.
-    ///
     pub fn build_return(&self, value: Option<&dyn BasicValue<'ctx>>) {
         if self.basic_block().get_terminator().is_some() {
             return;
@@ -1172,11 +1077,8 @@ where
         self.builder.build_return(value).unwrap();
     }
 
-    ///
     /// Builds an unreachable.
-    ///
     /// Checks if there are no other terminators in the block.
-    ///
     pub fn build_unreachable(&self) {
         if self.basic_block().get_terminator().is_some() {
             return;
@@ -1185,14 +1087,11 @@ where
         self.builder.build_unreachable().unwrap();
     }
 
-    ///
     /// Builds a long contract exit sequence.
-    ///
     /// The deploy code does not return the runtime code like in EVM. Instead, it returns some
     /// additional contract metadata, e.g. the array of immutables.
     /// The deploy code uses the auxiliary heap for the return, because otherwise it is not possible
     /// to allocate memory together with the Yul allocator safely.
-    ///
     pub fn build_exit(
         &self,
         flags: inkwell::values::IntValue<'ctx>,
@@ -1230,7 +1129,6 @@ where
     }
 
     /// Truncate a memory offset into 32 bits, trapping if it doesn't fit.
-    ///
     /// Pointers are represented as opaque 256 bit integer values in EVM.
     /// In practice, they should never exceed a 32 bit value. However, we
     /// still protect against this possibility here.
@@ -1287,7 +1185,6 @@ where
 
     /// Call PolkaVM `sbrk` for extending the heap by `size`,
     /// trapping the contract if the call failed.
-    ///
     /// Returns the end of memory pointer.
     pub fn build_heap_alloc(
         &self,
@@ -1316,7 +1213,6 @@ where
 
     /// Returns a pointer to `offset` into the heap, allocating
     /// enough memory if `offset + length` would be out of bounds.
-    ///
     /// # Panics
     /// Assumes `offset` and `length` to be an i32 value.
     pub fn build_heap_gep(
@@ -1369,9 +1265,7 @@ where
         ))
     }
 
-    ///
     /// Writes the ABI pointer to the global variable.
-    ///
     pub fn write_abi_pointer(&mut self, pointer: Pointer<'ctx>, global_name: &str) {
         self.set_global(
             global_name,
@@ -1381,9 +1275,7 @@ where
         );
     }
 
-    ///
     /// Writes the ABI data size to the global variable.
-    ///
     pub fn write_abi_data_size(&mut self, _pointer: Pointer<'ctx>, _global_name: &str) {
         /*
         let abi_pointer_value = self
@@ -1416,46 +1308,34 @@ where
         */
     }
 
-    ///
     /// Returns a boolean type constant.
-    ///
     pub fn bool_const(&self, value: bool) -> inkwell::values::IntValue<'ctx> {
         self.bool_type().const_int(u64::from(value), false)
     }
 
-    ///
     /// Returns an integer type constant.
-    ///
     pub fn integer_const(&self, bit_length: usize, value: u64) -> inkwell::values::IntValue<'ctx> {
         self.integer_type(bit_length).const_int(value, false)
     }
 
-    ///
     /// Returns a 256-bit field type constant.
-    ///
     pub fn field_const(&self, value: u64) -> inkwell::values::IntValue<'ctx> {
         self.field_type().const_int(value, false)
     }
 
-    ///
     /// Returns a 256-bit field type undefined value.
-    ///
     pub fn field_undef(&self) -> inkwell::values::IntValue<'ctx> {
         self.field_type().get_undef()
     }
 
-    ///
     /// Returns a field type constant from a decimal string.
-    ///
     pub fn field_const_str_dec(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
         self.field_type()
             .const_int_from_string(value, inkwell::types::StringRadix::Decimal)
             .unwrap_or_else(|| panic!("Invalid string constant `{value}`"))
     }
 
-    ///
     /// Returns a field type constant from a hexadecimal string.
-    ///
     pub fn field_const_str_hex(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
         self.field_type()
             .const_int_from_string(
@@ -1465,31 +1345,23 @@ where
             .unwrap_or_else(|| panic!("Invalid string constant `{value}`"))
     }
 
-    ///
     /// Returns the void type.
-    ///
     pub fn void_type(&self) -> inkwell::types::VoidType<'ctx> {
         self.llvm.void_type()
     }
 
-    ///
     /// Returns the boolean type.
-    ///
     pub fn bool_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm.bool_type()
     }
 
-    ///
     /// Returns the default byte type.
-    ///
     pub fn byte_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
             .custom_width_int_type(revive_common::BIT_LENGTH_BYTE as u32)
     }
 
-    ///
     /// Returns the integer type of the specified bit-length.
-    ///
     pub fn integer_type(&self, bit_length: usize) -> inkwell::types::IntType<'ctx> {
         self.llvm.custom_width_int_type(bit_length as u32)
     }
@@ -1505,17 +1377,13 @@ where
             .custom_width_int_type(revive_common::BIT_LENGTH_VALUE as u32)
     }
 
-    ///
     /// Returns the default field type.
-    ///
     pub fn field_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
             .custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
     }
 
-    ///
     /// Returns the array type with the specified length.
-    ///
     pub fn array_type<T>(&self, element_type: T, length: usize) -> inkwell::types::ArrayType<'ctx>
     where
         T: BasicType<'ctx>,
@@ -1523,9 +1391,7 @@ where
         element_type.array_type(length as u32)
     }
 
-    ///
     /// Returns the structure type with specified fields.
-    ///
     pub fn structure_type<T>(&self, field_types: &[T]) -> inkwell::types::StructType<'ctx>
     where
         T: BasicType<'ctx>,
@@ -1535,9 +1401,7 @@ where
         self.llvm.struct_type(field_types.as_slice(), false)
     }
 
-    ///
     /// Returns a Yul function type with the specified arguments and number of return values.
-    ///
     pub fn function_type<T>(
         &self,
         argument_types: Vec<T>,
@@ -1570,11 +1434,8 @@ where
         }
     }
 
-    ///
     /// Modifies the call site value, setting the default attributes.
-    ///
     /// The attributes only affect the LLVM optimizations.
-    ///
     pub fn modify_call_site_value(
         &self,
         arguments: &[inkwell::values::BasicValueEnum<'ctx>],
@@ -1680,124 +1541,92 @@ where
         }
     }
 
-    ///
     /// Sets the Solidity data.
-    ///
     pub fn set_solidity_data(&mut self, data: SolidityData) {
         self.solidity_data = Some(data);
     }
 
-    ///
     /// Returns the Solidity data reference.
-    ///
     /// # Panics
     /// If the Solidity data has not been initialized.
-    ///
     pub fn solidity(&self) -> &SolidityData {
         self.solidity_data
             .as_ref()
             .expect("The Solidity data must have been initialized")
     }
 
-    ///
     /// Returns the Solidity data mutable reference.
-    ///
     /// # Panics
     /// If the Solidity data has not been initialized.
-    ///
     pub fn solidity_mut(&mut self) -> &mut SolidityData {
         self.solidity_data
             .as_mut()
             .expect("The Solidity data must have been initialized")
     }
 
-    ///
     /// Sets the Yul data.
-    ///
     pub fn set_yul_data(&mut self, data: YulData) {
         self.yul_data = Some(data);
     }
 
-    ///
     /// Returns the Yul data reference.
-    ///
     /// # Panics
     /// If the Yul data has not been initialized.
-    ///
     pub fn yul(&self) -> &YulData {
         self.yul_data
             .as_ref()
             .expect("The Yul data must have been initialized")
     }
 
-    ///
     /// Returns the Yul data mutable reference.
-    ///
     /// # Panics
     /// If the Yul data has not been initialized.
-    ///
     pub fn yul_mut(&mut self) -> &mut YulData {
         self.yul_data
             .as_mut()
             .expect("The Yul data must have been initialized")
     }
 
-    ///
     /// Sets the EVM legacy assembly data.
-    ///
     pub fn set_evmla_data(&mut self, data: EVMLAData<'ctx>) {
         self.evmla_data = Some(data);
     }
 
-    ///
     /// Returns the EVM legacy assembly data reference.
-    ///
     /// # Panics
     /// If the EVM data has not been initialized.
-    ///
     pub fn evmla(&self) -> &EVMLAData<'ctx> {
         self.evmla_data
             .as_ref()
             .expect("The EVMLA data must have been initialized")
     }
 
-    ///
     /// Returns the EVM legacy assembly data mutable reference.
-    ///
     /// # Panics
     /// If the EVM data has not been initialized.
-    ///
     pub fn evmla_mut(&mut self) -> &mut EVMLAData<'ctx> {
         self.evmla_data
             .as_mut()
             .expect("The EVMLA data must have been initialized")
     }
 
-    ///
     /// Sets the EVM legacy assembly data.
-    ///
     pub fn set_vyper_data(&mut self, data: VyperData) {
         self.vyper_data = Some(data);
     }
 
-    ///
     /// Returns the Vyper data reference.
-    ///
     /// # Panics
     /// If the Vyper data has not been initialized.
-    ///
     pub fn vyper(&self) -> &VyperData {
         self.vyper_data
             .as_ref()
             .expect("The Solidity data must have been initialized")
     }
 
-    ///
     /// Returns the current number of immutables values in the contract.
-    ///
     /// If the size is set manually, then it is returned. Otherwise, the number of elements in
     /// the identifier-to-offset mapping tree is returned.
-    ///
     pub fn immutables_size(&self) -> anyhow::Result<usize> {
         if let Some(solidity) = self.solidity_data.as_ref() {
             Ok(solidity.immutables_size())
@@ -1808,9 +1637,7 @@ where
         }
     }
 
-    ///
     /// Whether the system mode is enabled.
-    ///
     pub fn is_system_mode(&self) -> bool {
         self.yul_data
             .as_ref()

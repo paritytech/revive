@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output contract EVM extra metadata.
-//!
 
 pub mod recursive_function;
 
@@ -9,9 +7,7 @@ use serde::Serialize;
 
 use self::recursive_function::RecursiveFunction;
 
-///
 /// The `solc --standard-json` output contract EVM extra metadata.
-///
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtraMetadata {
@@ -21,9 +17,7 @@ pub struct ExtraMetadata {
 }
 
 impl ExtraMetadata {
-    ///
     /// Returns the recursive function reference for the specified tag.
-    ///
     pub fn get(
         &self,
         block_key: &revive_llvm_context::EraVMFunctionBlockKey,

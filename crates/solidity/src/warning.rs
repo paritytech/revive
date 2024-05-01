@@ -1,15 +1,11 @@
-//!
 //! The compiler warning.
-//!
 
 use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The compiler warning.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Warning {
     /// The warning for eponymous feature.
@@ -29,9 +25,7 @@ pub enum Warning {
 }
 
 impl Warning {
-    ///
     /// Converts string arguments into an array of warnings.
-    ///
     pub fn try_from_strings(strings: &[String]) -> Result<Vec<Self>, anyhow::Error> {
         strings
             .iter()

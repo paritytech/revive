@@ -1,6 +1,4 @@
-//!
 //! The Ethereal IR of the EVM bytecode.
-//!
 
 pub mod entry_link;
 pub mod function;
@@ -16,18 +14,14 @@ use self::function::block::Block;
 use self::function::r#type::Type as FunctionType;
 use self::function::Function;
 
-///
 /// The Ethereal IR of the EVM bytecode.
-///
 /// The Ethereal IR (EthIR) is a special IR between the EVM legacy assembly and LLVM IR. It is
 /// created to facilitate the translation and provide an additional environment for applying some
 /// transformations, duplicating parts of the call and control flow graphs, tracking the
 /// data flow, and a few more algorithms of static analysis.
-///
 /// The most important feature of EthIR is flattening the block tags and duplicating blocks for
 /// each of initial states of the stack. The LLVM IR supports only static control flow, so the
 /// stack state must be known all the way throughout the program.
-///
 #[derive(Debug)]
 pub struct EtherealIR {
     /// The Solidity compiler version.
@@ -47,9 +41,7 @@ impl EtherealIR {
     /// The blocks hashmap initial capacity.
     pub const BLOCKS_HASHMAP_DEFAULT_CAPACITY: usize = 64;
 
-    ///
     /// Assembles a sequence of functions from the sequence of instructions.
-    ///
     pub fn new(
         solc_version: semver::Version,
         extra_metadata: ExtraMetadata,
@@ -73,9 +65,7 @@ impl EtherealIR {
         })
     }
 
-    ///
     /// Gets blocks for the specified type of the contract code.
-    ///
     pub fn get_blocks(
         solc_version: semver::Version,
         code_type: revive_llvm_context::EraVMCodeType,

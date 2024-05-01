@@ -1,6 +1,4 @@
-//!
 //! Solidity to EraVM compiler constants.
-//!
 
 #![allow(dead_code)]
 

@@ -1,6 +1,4 @@
-//!
 //! The LLVM IR generator function.
-//!
 
 pub mod block;
 pub mod declaration;
@@ -26,9 +24,7 @@ use self::runtime::Runtime;
 use self::vyper_data::VyperData;
 use self::yul_data::YulData;
 
-///
 /// The LLVM IR generator function.
-///
 #[derive(Debug)]
 pub struct Function<'ctx> {
     /// The high-level source code name.
@@ -66,9 +62,7 @@ impl<'ctx> Function<'ctx> {
     /// The stack hashmap default capacity.
     const STACK_HASHMAP_INITIAL_CAPACITY: usize = 64;
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         name: String,
         declaration: Declaration<'ctx>,
@@ -92,16 +86,12 @@ impl<'ctx> Function<'ctx> {
         }
     }
 
-    ///
     /// Returns the function name reference.
-    ///
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
-    ///
     /// Checks whether the function is defined outside of the front-end.
-    ///
     pub fn is_name_external(name: &str) -> bool {
         name.starts_with("llvm.")
             || (name.starts_with("__")
@@ -110,24 +100,18 @@ impl<'ctx> Function<'ctx> {
                 && name != Runtime::FUNCTION_RUNTIME_CODE)
     }
 
-    ///
     /// Checks whether the function is related to the near call ABI.
-    ///
     pub fn is_near_call_abi(name: &str) -> bool {
         name.starts_with(Self::ZKSYNC_NEAR_CALL_ABI_PREFIX)
             || name == Self::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER
     }
 
-    ///
     /// Returns the LLVM function declaration.
-    ///
     pub fn declaration(&self) -> Declaration<'ctx> {
         self.declaration
     }
 
-    ///
     /// Returns the N-th parameter of the function.
-    ///
     pub fn get_nth_param(&self, index: usize) -> inkwell::values::BasicValueEnum<'ctx> {
         self.declaration()
             .value
@@ -135,9 +119,7 @@ impl<'ctx> Function<'ctx> {
             .expect("Always exists")
     }
 
-    ///
     /// Sets the memory writer function attributes.
-    ///
     pub fn set_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -201,11 +183,8 @@ impl<'ctx> Function<'ctx> {
         }
     }
 
-    ///
     /// Sets the default attributes.
-    ///
     /// The attributes only affect the LLVM optimizations.
-    ///
     pub fn set_default_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -234,9 +213,7 @@ impl<'ctx> Function<'ctx> {
         Self::set_attributes(llvm, declaration, vec![Attribute::NoFree], false);
     }
 
-    ///
     /// Sets the front-end runtime attributes.
-    ///
     pub fn set_frontend_runtime_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -247,9 +224,7 @@ impl<'ctx> Function<'ctx> {
         }
     }
 
-    ///
     /// Sets the exception handler attributes.
-    ///
     pub fn set_exception_handler_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -257,9 +232,7 @@ impl<'ctx> Function<'ctx> {
         Self::set_attributes(llvm, declaration, vec![Attribute::NoInline], false);
     }
 
-    ///
     /// Sets the CXA-throw attributes.
-    ///
     pub fn set_cxa_throw_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -267,9 +240,7 @@ impl<'ctx> Function<'ctx> {
         Self::set_attributes(llvm, declaration, vec![Attribute::NoProfile], false);
     }
 
-    ///
     /// Sets the pure function attributes.
-    ///
     pub fn set_pure_function_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -288,10 +259,8 @@ impl<'ctx> Function<'ctx> {
         );
     }
 
-    ///
     /// Saves the pointer to a stack variable, returning the pointer to the shadowed variable,
     /// if it exists.
-    ///
     pub fn insert_stack_pointer(
         &mut self,
         name: String,
@@ -300,148 +269,108 @@ impl<'ctx> Function<'ctx> {
         self.stack.insert(name, pointer)
     }
 
-    ///
     /// Gets the pointer to a stack variable.
-    ///
     pub fn get_stack_pointer(&self, name: &str) -> Option<Pointer<'ctx>> {
         self.stack.get(name).copied()
     }
 
-    ///
     /// Removes the pointer to a stack variable.
-    ///
     pub fn remove_stack_pointer(&mut self, name: &str) {
         self.stack.remove(name);
     }
 
-    ///
     /// Returns the return entity representation.
-    ///
     pub fn r#return(&self) -> Return<'ctx> {
         self.r#return
     }
 
-    ///
     /// Returns the pointer to the function return value.
-    ///
     /// # Panics
     /// If the pointer has not been set yet.
-    ///
     pub fn return_pointer(&self) -> Option<Pointer<'ctx>> {
         self.r#return.return_pointer()
     }
 
-    ///
     /// Returns the return data size in bytes, based on the default stack alignment.
-    ///
     /// # Panics
     /// If the pointer has not been set yet.
-    ///
     pub fn return_data_size(&self) -> usize {
         self.r#return.return_data_size()
     }
 
-    ///
     /// Returns the function entry block.
-    ///
     pub fn entry_block(&self) -> inkwell::basic_block::BasicBlock<'ctx> {
         self.entry_block
     }
 
-    ///
     /// Returns the function return block.
-    ///
     pub fn return_block(&self) -> inkwell::basic_block::BasicBlock<'ctx> {
         self.return_block
     }
 
-    ///
     /// Sets the EVM legacy assembly data.
-    ///
     pub fn set_evmla_data(&mut self, data: EVMLAData<'ctx>) {
         self.evmla_data = Some(data);
     }
 
-    ///
     /// Returns the EVM legacy assembly data reference.
-    ///
     /// # Panics
     /// If the EVM data has not been initialized.
-    ///
     pub fn evmla(&self) -> &EVMLAData<'ctx> {
         self.evmla_data
             .as_ref()
             .expect("The EVM data must have been initialized")
     }
 
-    ///
     /// Returns the EVM legacy assembly data mutable reference.
-    ///
     /// # Panics
     /// If the EVM data has not been initialized.
-    ///
     pub fn evmla_mut(&mut self) -> &mut EVMLAData<'ctx> {
         self.evmla_data
             .as_mut()
             .expect("The EVM data must have been initialized")
     }
 
-    ///
     /// Sets the Vyper data.
-    ///
     pub fn set_vyper_data(&mut self, data: VyperData) {
         self.vyper_data = Some(data);
     }
 
-    ///
     /// Returns the Vyper data reference.
-    ///
     /// # Panics
     /// If the Vyper data has not been initialized.
-    ///
     pub fn vyper(&self) -> &VyperData {
         self.vyper_data
             .as_ref()
             .expect("The Vyper data must have been initialized")
     }
 
-    ///
     /// Returns the Vyper data mutable reference.
-    ///
     /// # Panics
     /// If the Vyper data has not been initialized.
-    ///
     pub fn vyper_mut(&mut self) -> &mut VyperData {
         self.vyper_data
             .as_mut()
             .expect("The Vyper data must have been initialized")
     }
 
-    ///
     /// Sets the Yul data.
-    ///
     pub fn set_yul_data(&mut self, data: YulData) {
         self.yul_data = Some(data);
     }
 
-    ///
     /// Returns the Yul data reference.
-    ///
     /// # Panics
     /// If the Yul data has not been initialized.
-    ///
     pub fn yul(&self) -> &YulData {
         self.yul_data
             .as_ref()
             .expect("The Yul data must have been initialized")
     }
 
-    ///
     /// Returns the Yul data mutable reference.
-    ///
     /// # Panics
     /// If the Yul data has not been initialized.
-    ///
     pub fn yul_mut(&mut self) -> &mut YulData {
         self.yul_data
             .as_mut()

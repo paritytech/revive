@@ -1,6 +1,4 @@
-//!
 //! The LLVM global value.
-//!
 
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
@@ -9,9 +7,7 @@ use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::Context;
 use crate::EraVMDependency;
 
-///
 /// The LLVM global value.
-///
 #[derive(Debug, Clone, Copy)]
 pub struct Global<'ctx> {
     /// The global type.
@@ -21,9 +17,7 @@ pub struct Global<'ctx> {
 }
 
 impl<'ctx> Global<'ctx> {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new<D, T, V>(
         context: &mut Context<'ctx, D>,
         r#type: T,

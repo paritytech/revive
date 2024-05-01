@@ -1,6 +1,4 @@
-//!
 //! The LLVM optimizer settings.
-//!
 
 pub mod size_level;
 
@@ -11,9 +9,7 @@ use itertools::Itertools;
 
 use self::size_level::SizeLevel;
 
-///
 /// The LLVM optimizer settings.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]
 pub struct Settings {
     /// The middle-end optimization level.
@@ -35,9 +31,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         level_middle_end: inkwell::OptimizationLevel,
         level_middle_end_size: SizeLevel,
@@ -56,9 +50,7 @@ impl Settings {
         }
     }
 
-    ///
     /// A shortcut constructor with debugging tools.
-    ///
     pub fn new_debug(
         level_middle_end: inkwell::OptimizationLevel,
         level_middle_end_size: SizeLevel,
@@ -80,9 +72,7 @@ impl Settings {
         }
     }
 
-    ///
     /// Creates settings from a CLI optimization parameter.
-    ///
     pub fn try_from_cli(value: char) -> anyhow::Result<Self> {
         Ok(match value {
             '0' => Self::new(
@@ -126,9 +116,7 @@ impl Settings {
         })
     }
 
-    ///
     /// Returns the settings without optimizations.
-    ///
     pub fn none() -> Self {
         Self::new(
             inkwell::OptimizationLevel::None,
@@ -137,9 +125,7 @@ impl Settings {
         )
     }
 
-    ///
     /// Returns the settings for the optimal number of VM execution cycles.
-    ///
     pub fn cycles() -> Self {
         Self::new(
             inkwell::OptimizationLevel::Aggressive,
@@ -148,9 +134,7 @@ impl Settings {
         )
     }
 
-    ///
     /// Returns the settings for the optimal size.
-    ///
     pub fn size() -> Self {
         Self::new(
             inkwell::OptimizationLevel::Default,
@@ -159,9 +143,7 @@ impl Settings {
         )
     }
 
-    ///
     /// Returns the middle-end optimization parameter as string.
-    ///
     pub fn middle_end_as_string(&self) -> String {
         match self.level_middle_end_size {
             SizeLevel::Zero => (self.level_middle_end as u8).to_string(),
@@ -169,19 +151,14 @@ impl Settings {
         }
     }
 
-    ///
     /// Checks whether there are middle-end optimizations enabled.
-    ///
     pub fn is_middle_end_enabled(&self) -> bool {
         self.level_middle_end != inkwell::OptimizationLevel::None
             || self.level_middle_end_size != SizeLevel::Zero
     }
 
-    ///
     /// Returns all possible combinations of the optimizer settings.
-    ///
     /// Used only for testing purposes.
-    ///
     pub fn combinations() -> Vec<Self> {
         let performance_combinations: Vec<Self> = vec![
             inkwell::OptimizationLevel::None,
@@ -224,30 +201,22 @@ impl Settings {
         combinations
     }
 
-    ///
     /// Sets the fallback to optimizing for size if the bytecode is too large.
-    ///
     pub fn enable_fallback_to_size(&mut self) {
         self.is_fallback_to_size_enabled = true;
     }
 
-    ///
     /// Disables the system request memoization.
-    ///
     pub fn disable_system_request_memoization(&mut self) {
         self.is_system_request_memoization_disabled = true;
     }
 
-    ///
     /// Whether the fallback to optimizing for size is enabled.
-    ///
     pub fn is_fallback_to_size_enabled(&self) -> bool {
         self.is_fallback_to_size_enabled
     }
 
-    ///
     /// Whether the system request memoization is disabled.
-    ///
     pub fn is_system_request_memoization_disabled(&self) -> bool {
         self.is_system_request_memoization_disabled
     }

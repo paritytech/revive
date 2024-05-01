@@ -1,6 +1,4 @@
-//!
 //! The string literal lexeme.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -10,9 +8,7 @@ use crate::yul::lexer::token::lexeme::Literal;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The string literal lexeme.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct String {
     /// The inner string contents.
@@ -22,9 +18,7 @@ pub struct String {
 }
 
 impl String {
-    ///
     /// Creates a string literal value.
-    ///
     pub fn new(inner: ::std::string::String, is_hexadecimal: bool) -> Self {
         Self {
             inner,
@@ -32,9 +26,7 @@ impl String {
         }
     }
 
-    ///
     /// Parses the value from the source code slice.
-    ///
     pub fn parse(input: &str) -> Option<Token> {
         let mut length = 0;
 

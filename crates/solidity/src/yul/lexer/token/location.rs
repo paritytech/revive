@@ -1,13 +1,9 @@
-//!
 //! The lexical token location.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The token location in the source code file.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq)]
 pub struct Location {
     /// The line number, starting from 1.
@@ -23,17 +19,13 @@ impl Default for Location {
 }
 
 impl Location {
-    ///
     /// Creates a default location.
-    ///
     pub fn new(line: usize, column: usize) -> Self {
         Self { line, column }
     }
 
-    ///
     /// Mutates the location by shifting the original one down by `lines` and
     /// setting the column to `column`.
-    ///
     pub fn shift_down(&mut self, lines: usize, column: usize) {
         if lines == 0 {
             self.shift_right(column);
@@ -44,9 +36,7 @@ impl Location {
         self.column = column;
     }
 
-    ///
     /// Mutates the location by shifting the original one rightward by `columns`.
-    ///
     pub fn shift_right(&mut self, columns: usize) {
         self.column += columns;
     }

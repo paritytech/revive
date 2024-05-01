@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` input settings.
-//!
 
 pub mod metadata;
 pub mod optimizer;
@@ -16,9 +14,7 @@ use self::metadata::Metadata;
 use self::optimizer::Optimizer;
 use self::selection::Selection;
 
-///
 /// The `solc --standard-json` input settings.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -49,9 +45,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
         libraries: BTreeMap<String, BTreeMap<String, String>>,
@@ -72,16 +66,12 @@ impl Settings {
         }
     }
 
-    ///
     /// Sets the necessary defaults.
-    ///
     pub fn normalize(&mut self, version: &semver::Version) {
         self.optimizer.normalize(version);
     }
 
-    ///
     /// Parses the library list and returns their double hashmap with path and name as keys.
-    ///
     pub fn parse_libraries(
         input: Vec<String>,
     ) -> anyhow::Result<BTreeMap<String, BTreeMap<String, String>>> {

@@ -1,6 +1,4 @@
-//!
 //! Solidity to EraVM compiler arguments.
-//!
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -9,14 +7,11 @@ use std::path::PathBuf;
 use path_slash::PathExt;
 use structopt::StructOpt;
 
-///
 /// Compiles the provided Solidity input files (or use the standard input if no files
 /// are given or "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
-///
 /// Example: zksolc ERC20.sol -O3 --bin --output-dir './build/'
-///
 #[derive(Debug, StructOpt)]
 #[structopt(name = "The EraVM Solidity compiler")]
 pub struct Arguments {
@@ -185,16 +180,12 @@ impl Default for Arguments {
 }
 
 impl Arguments {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new() -> Self {
         Self::from_args()
     }
 
-    ///
     /// Validates the arguments.
-    ///
     #[allow(clippy::collapsible_if)]
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.version && std::env::args().count() > 2 {
@@ -336,9 +327,7 @@ impl Arguments {
         Ok(())
     }
 
-    ///
     /// Returns remappings from input paths.
-    ///
     pub fn split_input_files_and_remappings(
         &self,
     ) -> anyhow::Result<(Vec<PathBuf>, Option<BTreeSet<String>>)> {
@@ -379,9 +368,7 @@ impl Arguments {
         Ok((input_files, remappings))
     }
 
-    ///
     /// Normalizes an input path by converting it to POSIX format.
-    ///
     fn path_to_posix(path: &Path) -> anyhow::Result<PathBuf> {
         let path = path
             .to_slash()

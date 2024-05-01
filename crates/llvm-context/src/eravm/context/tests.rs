@@ -1,6 +1,4 @@
-//!
 //! The LLVM IR generator context tests.
-//!
 
 use crate::eravm::context::attribute::Attribute;
 use crate::eravm::context::Context;

@@ -1,6 +1,4 @@
-//!
 //! The integer literal lexeme.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -10,9 +8,7 @@ use crate::yul::lexer::token::lexeme::Literal;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The integer literal lexeme.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Integer {
     /// An integer literal, like `42`.
@@ -28,23 +24,17 @@ pub enum Integer {
 }
 
 impl Integer {
-    ///
     /// Creates a decimal value.
-    ///
     pub fn new_decimal(inner: String) -> Self {
         Self::Decimal { inner }
     }
 
-    ///
     /// Creates a hexadecimal value.
-    ///
     pub fn new_hexadecimal(inner: String) -> Self {
         Self::Hexadecimal { inner }
     }
 
-    ///
     /// Parses the value from the source code slice.
-    ///
     pub fn parse(input: &str) -> Option<Token> {
         let (value, length) = if let Some(body) = input.strip_prefix("0x") {
             let end = body
@@ -72,37 +62,27 @@ impl Integer {
         Some(token)
     }
 
-    ///
     /// Checks whether the character can begin a decimal number.
-    ///
     pub fn can_begin_decimal(character: char) -> bool {
         Self::can_continue_decimal(character)
     }
 
-    ///
     /// Checks whether the character can continue a decimal number.
-    ///
     pub fn can_continue_decimal(character: char) -> bool {
         character.is_digit(revive_common::BASE_DECIMAL)
     }
 
-    ///
     /// Checks whether the character cannot continue a decimal number.
-    ///
     pub fn cannot_continue_decimal(character: char) -> bool {
         !Self::can_continue_decimal(character)
     }
 
-    ///
     /// Checks whether the character can continue a hexadecimal number.
-    ///
     pub fn can_continue_hexadecimal(character: char) -> bool {
         character.is_digit(revive_common::BASE_HEXADECIMAL)
     }
 
-    ///
     /// Checks whether the character cannot continue a hexadecimal number.
-    ///
     pub fn cannot_continue_hexadecimal(character: char) -> bool {
         !Self::can_continue_hexadecimal(character)
     }

@@ -1,6 +1,4 @@
-//!
 //! The front-end runtime functions.
-//!
 
 pub mod default_call;
 pub mod deploy_code;
@@ -17,9 +15,7 @@ use crate::eravm::WriteLLVM;
 use self::default_call::DefaultCall;
 use self::deployer_call::DeployerCall;
 
-///
 /// The front-end runtime functions.
-///
 #[derive(Debug, Clone)]
 pub struct Runtime {
     /// The address space where the calldata is allocated.
@@ -37,16 +33,12 @@ impl Runtime {
     /// The runtime code function name.
     pub const FUNCTION_RUNTIME_CODE: &'static str = "__runtime";
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(address_space: AddressSpace) -> Self {
         Self { address_space }
     }
 
-    ///
     /// Returns the corresponding runtime function.
-    ///
     pub fn default_call<'ctx, D>(
         context: &Context<'ctx, D>,
         call_function: FunctionDeclaration<'ctx>,
@@ -61,9 +53,7 @@ impl Runtime {
             .declaration()
     }
 
-    ///
     /// Returns the corresponding runtime function.
-    ///
     pub fn deployer_call<'ctx, D>(context: &Context<'ctx, D>) -> FunctionDeclaration<'ctx>
     where
         D: Dependency + Clone,

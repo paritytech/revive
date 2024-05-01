@@ -1,6 +1,4 @@
-//!
 //! The runtime code function.
-//!
 
 use std::marker::PhantomData;
 
@@ -10,11 +8,8 @@ use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 use crate::eravm::WriteLLVM;
 
-///
 /// The runtime code function.
-///
 /// Is a special function that is only used by the front-end generated code.
-///
 #[derive(Debug)]
 pub struct RuntimeCode<B, D>
 where
@@ -32,9 +27,7 @@ where
     B: WriteLLVM<D>,
     D: Dependency + Clone,
 {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(inner: B) -> Self {
         Self {
             inner,

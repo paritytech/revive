@@ -1,14 +1,10 @@
-//!
 //! The symbol lexeme.
-//!
 
 use crate::yul::lexer::token::lexeme::Lexeme;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The symbol lexeme.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Symbol {
     /// The `:=` symbol.
@@ -30,9 +26,7 @@ pub enum Symbol {
 }
 
 impl Symbol {
-    ///
     /// Parses the symbol, returning it as a token.
-    ///
     pub fn parse(input: &str) -> Option<Token> {
         let (symbol, length) = match &input[..2] {
             ":=" => (Self::Assignment, 2),

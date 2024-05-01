@@ -1,6 +1,4 @@
-//!
 //! The `solc --combined-json` contract.
-//!
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -8,9 +6,7 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The contract.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Contract {
@@ -53,12 +49,9 @@ pub struct Contract {
 }
 
 impl Contract {
-    ///
     /// Returns the signature hash of the specified contract entry.
-    ///
     /// # Panics
     /// If the hashes have not been requested in the `solc` call.
-    ///
     pub fn entry(&self, entry: &str) -> u32 {
         self.hashes
             .as_ref()

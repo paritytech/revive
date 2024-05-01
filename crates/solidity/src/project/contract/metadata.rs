@@ -1,14 +1,9 @@
-//!
 //! The Solidity contract metadata.
-//!
 
 use serde::Serialize;
 
-///
 /// The Solidity contract metadata.
-///
 /// Is used to append the metadata hash to the contract bytecode.
-///
 #[derive(Debug, Serialize)]
 pub struct Metadata {
     /// The `solc` metadata.
@@ -24,9 +19,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         solc_metadata: serde_json::Value,
         solc_version: semver::Version,

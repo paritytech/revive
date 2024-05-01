@@ -9,7 +9,6 @@ include!(concat!(env!("OUT_DIR"), "/bswap.rs"));
 /// - Takes a `i256` value argument
 /// - Byte swaps it using `rev8` from the `zbb` extension
 /// - Returns the `i256` value
-///
 /// Returns `Error` if the module fails to validate, which should never happen.
 pub fn module<'context>(
     context: &'context Context,

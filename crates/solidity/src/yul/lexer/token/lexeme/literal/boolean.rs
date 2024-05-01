@@ -1,15 +1,11 @@
-//!
 //! The boolean literal lexeme.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::yul::lexer::token::lexeme::keyword::Keyword;
 
-///
 /// The boolean literal lexeme.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Boolean {
     /// Created from the `false` keyword.
@@ -19,16 +15,12 @@ pub enum Boolean {
 }
 
 impl Boolean {
-    ///
     /// Creates a `false` value.
-    ///
     pub fn r#false() -> Self {
         Self::False
     }
 
-    ///
     /// Creates a `true` value.
-    ///
     pub fn r#true() -> Self {
         Self::True
     }

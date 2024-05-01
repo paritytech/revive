@@ -1,6 +1,4 @@
-//!
 //! The Ethereal IR block element.
-//!
 
 pub mod stack;
 
@@ -13,9 +11,7 @@ use crate::evmla::assembly::instruction::Instruction;
 use self::stack::element::Element as StackElement;
 use self::stack::Stack;
 
-///
 /// The Ethereal IR block element.
-///
 #[derive(Debug, Clone)]
 pub struct Element {
     /// The Solidity compiler version.
@@ -31,9 +27,7 @@ pub struct Element {
 }
 
 impl Element {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(solc_version: semver::Version, instruction: Instruction) -> Self {
         let input_size = instruction.input_size(&solc_version);
         let output_size = instruction.output_size();
@@ -47,9 +41,7 @@ impl Element {
         }
     }
 
-    ///
     /// Pops the specified number of arguments, converted into their LLVM values.
-    ///
     fn pop_arguments_llvm<'ctx, D>(
         &mut self,
         context: &mut revive_llvm_context::EraVMContext<'ctx, D>,

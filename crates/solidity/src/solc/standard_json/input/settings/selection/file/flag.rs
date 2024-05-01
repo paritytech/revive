@@ -1,15 +1,11 @@
-//!
 //! The `solc --standard-json` expected output selection flag.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::solc::pipeline::Pipeline as SolcPipeline;
 
-///
 /// The `solc --standard-json` expected output selection flag.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]

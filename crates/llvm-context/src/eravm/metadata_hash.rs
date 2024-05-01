@@ -1,15 +1,11 @@
-//!
 //! The metadata hash mode.
-//!
 
 use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The metadata hash mode.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetadataHash {
     /// Do not include bytecode hash.

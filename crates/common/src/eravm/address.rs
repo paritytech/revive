@@ -1,6 +1,4 @@
-//!
 //! The EraVM address constants.
-//!
 
 /// The corresponding simulation predefined address.
 pub const ERAVM_ADDRESS_TO_L1: u16 = 0xFFFF;

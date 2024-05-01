@@ -1,8 +1,5 @@
-//!
 //! The Solidity compiler unit tests for IR artifacts.
-//!
 //! The tests check if the IR artifacts are kept in the final output.
-//!
 
 #![cfg(test)]
 

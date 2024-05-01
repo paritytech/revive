@@ -1,6 +1,4 @@
-//!
 //! The YUL source code identifier.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -13,9 +11,7 @@ use crate::yul::lexer::token::Token;
 use crate::yul::lexer::Lexer;
 use crate::yul::parser::r#type::Type;
 
-///
 /// The YUL source code identifier.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Identifier {
     /// The location.
@@ -27,9 +23,7 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(location: Location, inner: String) -> Self {
         Self {
             location,
@@ -38,9 +32,7 @@ impl Identifier {
         }
     }
 
-    ///
     /// A shortcut constructor for a typed identifier.
-    ///
     pub fn new_with_type(location: Location, inner: String, r#type: Option<Type>) -> Self {
         Self {
             location,
@@ -49,9 +41,7 @@ impl Identifier {
         }
     }
 
-    ///
     /// Parses the identifier list where the types cannot be specified.
-    ///
     pub fn parse_list(
         lexer: &mut Lexer,
         mut initial: Option<Token>,
@@ -82,9 +72,7 @@ impl Identifier {
         }
     }
 
-    ///
     /// Parses the identifier list where the types may be optionally specified.
-    ///
     pub fn parse_typed_list(
         lexer: &mut Lexer,
         mut initial: Option<Token>,

@@ -1,6 +1,4 @@
-//!
 //! The LLVM runtime functions.
-//!
 
 use inkwell::types::BasicType;
 
@@ -9,11 +7,8 @@ use crate::eravm::context::function::declaration::Declaration as FunctionDeclara
 use crate::eravm::context::function::Function;
 use crate::optimizer::Optimizer;
 
-///
 /// The runtime functions, implemented on the LLVM side.
-///
 /// The functions are automatically linked to the LLVM implementations if the signatures match.
-///
 #[derive(Debug)]
 pub struct LLVMRuntime<'ctx> {
     /// The LLVM personality function, used for exception handling.
@@ -159,9 +154,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
     /// The corresponding runtime function name.
     pub const FUNCTION_REVERT: &'static str = "__revert";
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -602,9 +595,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
         }
     }
 
-    ///
     /// Declares an LLVM runtime function in the `module`,
-    ///
     pub fn declare(
         module: &inkwell::module::Module<'ctx>,
         name: &str,
@@ -625,9 +616,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
         FunctionDeclaration::new(value.get_type(), value).into()
     }
 
-    ///
     /// Modifies the external call function with `is_byref` and `is_system` modifiers.
-    ///
     pub fn modify(
         &self,
         function: FunctionDeclaration<'ctx>,

@@ -1,6 +1,4 @@
-//!
 //! The missing Solidity libraries.
-//!
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -8,25 +6,19 @@ use std::collections::HashSet;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version as SolcVersion;
 
-///
 /// The missing Solidity libraries.
-///
 pub struct MissingLibraries {
     /// The missing libraries.
     pub contract_libraries: BTreeMap<String, HashSet<String>>,
 }
 
 impl MissingLibraries {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(contract_libraries: BTreeMap<String, HashSet<String>>) -> Self {
         Self { contract_libraries }
     }
 
-    ///
     /// Writes the missing libraries to the standard JSON.
-    ///
     pub fn write_to_standard_json(
         mut self,
         standard_json: &mut StandardJsonOutput,

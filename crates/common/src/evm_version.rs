@@ -1,13 +1,9 @@
-//!
 //! The EVM version.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The EVM version.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "camelCase")]
 pub enum EVMVersion {

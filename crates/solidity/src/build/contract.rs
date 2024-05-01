@@ -1,6 +1,4 @@
-//!
 //! The Solidity contract build.
-//!
 
 use std::collections::HashSet;
 use std::fs::File;
@@ -13,9 +11,7 @@ use serde::Serialize;
 use crate::solc::combined_json::contract::Contract as CombinedJsonContract;
 use crate::solc::standard_json::output::contract::Contract as StandardJsonOutputContract;
 
-///
 /// The Solidity contract build.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contract {
     /// The contract path.
@@ -31,9 +27,7 @@ pub struct Contract {
 }
 
 impl Contract {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         path: String,
         identifier: String,
@@ -50,9 +44,7 @@ impl Contract {
         }
     }
 
-    ///
     /// Writes the contract text assembly and bytecode to files.
-    ///
     pub fn write_to_directory(
         self,
         path: &Path,
@@ -107,9 +99,7 @@ impl Contract {
         Ok(())
     }
 
-    ///
     /// Writes the contract text assembly and bytecode to the combined JSON.
-    ///
     pub fn write_to_combined_json(
         self,
         combined_json_contract: &mut CombinedJsonContract,
@@ -130,9 +120,7 @@ impl Contract {
         Ok(())
     }
 
-    ///
     /// Writes the contract text assembly and bytecode to the standard JSON.
-    ///
     pub fn write_to_standard_json(
         self,
         standard_json_contract: &mut StandardJsonOutputContract,
@@ -151,9 +139,7 @@ impl Contract {
         Ok(())
     }
 
-    ///
     /// Converts the full path to a short one.
-    ///
     pub fn short_path(path: &str) -> &str {
         path.rfind('/')
             .map(|last_slash| &path[last_slash + 1..])

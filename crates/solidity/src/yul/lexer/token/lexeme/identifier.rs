@@ -1,15 +1,11 @@
-//!
 //! The identifier lexeme.
-//!
 
 use crate::yul::lexer::token::lexeme::keyword::Keyword;
 use crate::yul::lexer::token::lexeme::Lexeme;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The identifier lexeme.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identifier {
     /// The inner string.
@@ -17,16 +13,12 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(inner: String) -> Self {
         Self { inner }
     }
 
-    ///
     /// Parses the identifier, returning it as a token.
-    ///
     pub fn parse(input: &str) -> Option<Token> {
         if !input.starts_with(Self::can_begin) {
             return None;
@@ -47,16 +39,12 @@ impl Identifier {
         ))
     }
 
-    ///
     /// Checks whether the character can begin an identifier.
-    ///
     pub fn can_begin(character: char) -> bool {
         character.is_alphabetic() || character == '_' || character == '$'
     }
 
-    ///
     /// Checks whether the character can continue an identifier.
-    ///
     pub fn can_continue(character: char) -> bool {
         Self::can_begin(character)
             || character.is_numeric()
@@ -65,9 +53,7 @@ impl Identifier {
             || character == '.'
     }
 
-    ///
     /// Checks whether the character cannot continue an identifier.
-    ///
     pub fn cannot_continue(character: char) -> bool {
         !Self::can_continue(character)
     }

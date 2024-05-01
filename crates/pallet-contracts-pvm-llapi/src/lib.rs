@@ -1,24 +1,19 @@
 //! This crate vendors the [PolkaVM][0] C API and provides a LLVM module for interacting
 //! with the `pallet-contracts` runtime API.
-//!
 //! At present, the contracts pallet requires blobs to export `call` and `deploy`,
 //! and offers a bunch of [runtime API methods][1]. The provided [module] implements
 //! those exports and imports.
-//!
 //! [0]: [https://crates.io/crates/polkavm]
 //! [1]: [https://docs.rs/pallet-contracts/26.0.0/pallet_contracts/api_doc/index.html]
-//!
 
 use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module, support::LLVMString};
 
 include!(concat!(env!("OUT_DIR"), "/polkavm_guest.rs"));
 
 /// Creates a LLVM module from the [BITCODE].
-///
 /// The module does:
 /// - Export the `call` and `deploy` functions (which are named thereafter).
 /// - Import (most) `pallet-contracts` runtime API functions.
-///
 /// Returns `Error` if the bitcode fails to parse, which should never happen.
 pub fn module<'context>(
     context: &'context Context,

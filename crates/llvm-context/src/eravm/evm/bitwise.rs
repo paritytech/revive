@@ -1,15 +1,11 @@
-//!
 //! Translates the bitwise operations.
-//!
 
 use inkwell::values::BasicValue;
 
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the bitwise OR.
-///
 pub fn or<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -24,9 +20,7 @@ where
         .as_basic_value_enum())
 }
 
-///
 /// Translates the bitwise XOR.
-///
 pub fn xor<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -41,9 +35,7 @@ where
         .as_basic_value_enum())
 }
 
-///
 /// Translates the bitwise AND.
-///
 pub fn and<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -58,9 +50,7 @@ where
         .as_basic_value_enum())
 }
 
-///
 /// Translates the bitwise shift left.
-///
 pub fn shift_left<'ctx, D>(
     context: &mut Context<'ctx, D>,
     shift: inkwell::values::IntValue<'ctx>,
@@ -98,9 +88,7 @@ where
     context.build_load(result_pointer, "shift_left_result")
 }
 
-///
 /// Translates the bitwise shift right.
-///
 pub fn shift_right<'ctx, D>(
     context: &mut Context<'ctx, D>,
     shift: inkwell::values::IntValue<'ctx>,
@@ -140,9 +128,7 @@ where
     context.build_load(result_pointer, "shift_right_result")
 }
 
-///
 /// Translates the arithmetic bitwise shift right.
-///
 pub fn shift_right_arithmetic<'ctx, D>(
     context: &mut Context<'ctx, D>,
     shift: inkwell::values::IntValue<'ctx>,
@@ -211,9 +197,7 @@ where
     context.build_load(result_pointer, "shift_right_arithmetic_result")
 }
 
-///
 /// Translates the `byte` instruction.
-///
 pub fn byte<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,

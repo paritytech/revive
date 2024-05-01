@@ -1,6 +1,4 @@
-//!
 //! The keyword lexeme.
-//!
 
 use crate::yul::lexer::token::lexeme::literal::boolean::Boolean as BooleanLiteral;
 use crate::yul::lexer::token::lexeme::literal::Literal;
@@ -8,9 +6,7 @@ use crate::yul::lexer::token::lexeme::Lexeme;
 use crate::yul::lexer::token::location::Location;
 use crate::yul::lexer::token::Token;
 
-///
 /// The keyword lexeme.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keyword {
     /// The `object` keyword.
@@ -50,9 +46,7 @@ pub enum Keyword {
 }
 
 impl Keyword {
-    ///
     /// Parses the keyword, returning it as a token.
-    ///
     pub fn parse(input: &str) -> Option<Token> {
         let keyword = Self::parse_keyword(input)?;
         let lexeme = match BooleanLiteral::try_from(keyword) {
@@ -68,9 +62,7 @@ impl Keyword {
         Some(Token::new(Location::new(0, length), lexeme, length))
     }
 
-    ///
     /// Parses the keyword itself.
-    ///
     fn parse_keyword(input: &str) -> Option<Self> {
         if !input.starts_with(Self::can_begin) {
             return None;
@@ -111,23 +103,17 @@ impl Keyword {
         })
     }
 
-    ///
     /// Checks whether the character can begin a keyword.
-    ///
     pub fn can_begin(character: char) -> bool {
         character.is_alphabetic()
     }
 
-    ///
     /// Checks whether the character can continue a keyword.
-    ///
     pub fn can_continue(character: char) -> bool {
         Self::can_begin(character) || character.is_numeric()
     }
 
-    ///
     /// Checks whether the character cannot continue a keyword.
-    ///
     pub fn cannot_continue(character: char) -> bool {
         !Self::can_continue(character)
     }

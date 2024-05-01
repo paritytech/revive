@@ -1,13 +1,9 @@
-//!
 //! The Solidity compiler version.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The Solidity compiler version.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Version {
     /// The long version string.
@@ -19,9 +15,7 @@ pub struct Version {
 }
 
 impl Version {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         long: String,
         default: semver::Version,
@@ -34,9 +28,7 @@ impl Version {
         }
     }
 
-    ///
     /// A shortcut constructor for a simple version.
-    ///
     pub fn new_simple(version: semver::Version) -> Self {
         Self {
             long: version.to_string(),

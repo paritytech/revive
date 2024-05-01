@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` input settings optimizer.
-//!
 
 pub mod details;
 
@@ -9,9 +7,7 @@ use serde::Serialize;
 
 use self::details::Details;
 
-///
 /// The `solc --standard-json` input settings optimizer.
-///
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Optimizer {
@@ -32,9 +28,7 @@ pub struct Optimizer {
 }
 
 impl Optimizer {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         enabled: bool,
         mode: Option<char>,
@@ -51,9 +45,7 @@ impl Optimizer {
         }
     }
 
-    ///
     /// Sets the necessary defaults.
-    ///
     pub fn normalize(&mut self, version: &semver::Version) {
         self.details = if version >= &semver::Version::new(0, 5, 5) {
             Some(Details::disabled(version))

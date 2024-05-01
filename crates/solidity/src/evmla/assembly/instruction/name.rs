@@ -1,13 +1,9 @@
-//!
 //! The EVM instruction name.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The EVM instruction name.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]

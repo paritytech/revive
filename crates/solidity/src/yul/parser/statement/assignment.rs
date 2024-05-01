@@ -1,6 +1,4 @@
-//!
 //! The assignment expression statement.
-//!
 
 use std::collections::HashSet;
 
@@ -18,9 +16,7 @@ use crate::yul::parser::error::Error as ParserError;
 use crate::yul::parser::identifier::Identifier;
 use crate::yul::parser::statement::expression::Expression;
 
-///
 /// The Yul assignment expression statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Assignment {
     /// The location.
@@ -32,9 +28,7 @@ pub struct Assignment {
 }
 
 impl Assignment {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -107,9 +101,7 @@ impl Assignment {
         }
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.initializer.get_missing_libraries()
     }

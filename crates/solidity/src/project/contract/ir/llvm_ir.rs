@@ -1,13 +1,9 @@
-//!
 //! The contract LLVM IR source code.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
 
-///
 /// The contract LLVM IR source code.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct LLVMIR {
@@ -18,9 +14,7 @@ pub struct LLVMIR {
 }
 
 impl LLVMIR {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(path: String, source: String) -> Self {
         Self { path, source }
     }

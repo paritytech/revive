@@ -1,6 +1,4 @@
-//!
 //! Translates the transaction return operations.
-//!
 
 use crate::eravm::context::address_space::AddressSpace;
 use crate::eravm::context::code_type::CodeType;
@@ -8,11 +6,8 @@ use crate::eravm::context::pointer::Pointer;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the `return` instruction.
-///
 /// Unlike in EVM, zkSync constructors return the array of contract immutables.
-///
 pub fn r#return<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
@@ -79,9 +74,7 @@ where
     Ok(())
 }
 
-///
 /// Translates the `revert` instruction.
-///
 pub fn revert<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
@@ -93,11 +86,8 @@ where
     context.build_exit(context.integer_const(32, 1), offset, length)
 }
 
-///
 /// Translates the `stop` instruction.
-///
 /// Is the same as `return(0, 0)`.
-///
 pub fn stop<D>(context: &mut Context<D>) -> anyhow::Result<()>
 where
     D: Dependency + Clone,
@@ -109,11 +99,8 @@ where
     )
 }
 
-///
 /// Translates the `invalid` instruction.
-///
 /// Burns all gas using an out-of-bounds memory store, causing a panic.
-///
 pub fn invalid<D>(context: &mut Context<D>) -> anyhow::Result<()>
 where
     D: Dependency + Clone,

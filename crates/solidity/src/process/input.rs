@@ -1,8 +1,5 @@
-//!
 //! Process for compiling a single compilation unit.
-//!
 //! The input data.
-//!
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -10,9 +7,7 @@ use serde::Serialize;
 use crate::project::contract::Contract;
 use crate::project::Project;
 
-///
 /// The input data.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Input {
     /// The contract representation.
@@ -32,9 +27,7 @@ pub struct Input {
 }
 
 impl Input {
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(
         contract: Contract,
         project: Project,

@@ -1,6 +1,4 @@
-//!
 //! Translates the contract creation instructions.
-//!
 
 use inkwell::values::BasicValue;
 use num::Zero;
@@ -11,11 +9,8 @@ use crate::eravm::context::function::runtime::Runtime;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the contract `create` instruction.
-///
 /// The instruction is simulated by a call to a system contract.
-///
 pub fn create<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
@@ -49,11 +44,8 @@ where
     Ok(result)
 }
 
-///
 /// Translates the contract `create2` instruction.
-///
 /// The instruction is simulated by a call to a system contract.
-///
 pub fn create2<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
@@ -88,12 +80,9 @@ where
     Ok(result)
 }
 
-///
 /// Translates the contract hash instruction, which is actually used to set the hash of the contract
 /// being created, or other related auxiliary data.
-///
 /// Represents `dataoffset` in Yul and `PUSH [$]` in the EVM legacy assembly.
-///
 pub fn contract_hash<'ctx, D>(
     context: &mut Context<'ctx, D>,
     identifier: String,
@@ -132,20 +121,16 @@ where
     Ok(Argument::new_with_original(hash_value, hash_string))
 }
 
-///
 /// Translates the deployer call header size instruction, Usually, the header consists of:
 /// - the deployer contract method signature
 /// - the salt if the call is `create2`, or zero if the call is `create1`
 /// - the hash of the bytecode of the contract whose instance is being created
 /// - the offset of the constructor arguments
 /// - the length of the constructor arguments
-///
 /// If the call is `create1`, the space for the salt is still allocated, because the memory for the
 /// header is allocated by the Yul or EVM legacy assembly before it is known which version of
 /// `create` is going to be used.
-///
 /// Represents `datasize` in Yul and `PUSH #[$]` in the EVM legacy assembly.
-///
 pub fn header_size<'ctx, D>(
     context: &mut Context<'ctx, D>,
     identifier: String,

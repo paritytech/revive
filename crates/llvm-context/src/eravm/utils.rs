@@ -1,6 +1,4 @@
-//!
 //! Some LLVM IR generator utilies.
-//!
 
 use inkwell::values::BasicValue;
 
@@ -9,9 +7,7 @@ use crate::eravm::context::function::llvm_runtime::LLVMRuntime;
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Clamps `value` to `max_value`, if `value` is bigger than `max_value`.
-///
 pub fn clamp<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
@@ -44,9 +40,7 @@ where
     Ok(result.into_int_value())
 }
 
-///
 /// Generates an exception.
-///
 pub fn throw<D>(context: &Context<D>)
 where
     D: Dependency + Clone,
@@ -63,11 +57,8 @@ where
     context.build_unreachable();
 }
 
-///
 /// Returns the full list of arguments for an external call.
-///
 /// Performs the extra ABI data padding and adds the mimic call extra argument.
-///
 pub fn external_call_arguments<'ctx, D>(
     _context: &Context<'ctx, D>,
     abi_data: inkwell::values::BasicValueEnum<'ctx>,
@@ -96,11 +87,8 @@ where
     result
 }
 
-///
 /// Generates an ABI data for an external call.
-///
 /// If `gas` is `None`, it is fetched from the contract context.
-///
 pub fn abi_data<'ctx, D>(
     context: &mut Context<'ctx, D>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -190,9 +178,7 @@ where
     Ok(abi_data.as_basic_value_enum())
 }
 
-///
 /// Pads the extra ABI data with `i256::undef`, so it always consists of 10 values.
-///
 pub fn pad_extra_abi_data<'ctx, D>(
     context: &Context<'ctx, D>,
     initial_data: Vec<inkwell::values::IntValue<'ctx>>,
@@ -208,9 +194,7 @@ where
     padded_data.try_into().expect("Always valid")
 }
 
-///
 /// Computes the `keccak256` hash for `preimage`.
-///
 pub fn keccak256(preimage: &[u8]) -> String {
     use sha3::Digest;
 

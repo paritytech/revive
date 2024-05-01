@@ -1,6 +1,4 @@
-//!
 //! The source code block.
-//!
 
 use std::collections::HashSet;
 
@@ -18,9 +16,7 @@ use crate::yul::parser::statement::assignment::Assignment;
 use crate::yul::parser::statement::expression::Expression;
 use crate::yul::parser::statement::Statement;
 
-///
 /// The Yul source code block.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Block {
     /// The location.
@@ -30,9 +26,7 @@ pub struct Block {
 }
 
 impl Block {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -124,9 +118,7 @@ impl Block {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut libraries = HashSet::new();
         for statement in self.statements.iter() {

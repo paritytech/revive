@@ -1,15 +1,11 @@
-//!
 //! Translates the context getter instructions.
-//!
 
 use inkwell::values::BasicValue;
 
 use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 
-///
 /// Translates the `gas_limit` instruction.
-///
 pub fn gas_limit<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -19,9 +15,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `gas_price` instruction.
-///
 pub fn gas_price<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -31,9 +25,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `tx.origin` instruction.
-///
 pub fn origin<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -43,9 +35,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `chain_id` instruction.
-///
 pub fn chain_id<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -55,9 +45,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `block_number` instruction.
-///
 pub fn block_number<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -67,9 +55,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `block_timestamp` instruction.
-///
 pub fn block_timestamp<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -79,9 +65,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `block_hash` instruction.
-///
 pub fn block_hash<'ctx, D>(
     _context: &mut Context<'ctx, D>,
     _index: inkwell::values::IntValue<'ctx>,
@@ -92,9 +76,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `difficulty` instruction.
-///
 pub fn difficulty<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -104,9 +86,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `coinbase` instruction.
-///
 pub fn coinbase<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -116,9 +96,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `basefee` instruction.
-///
 pub fn basefee<'ctx, D>(
     _context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
@@ -128,9 +106,7 @@ where
     todo!()
 }
 
-///
 /// Translates the `msize` instruction.
-///
 pub fn msize<'ctx, D>(
     context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>

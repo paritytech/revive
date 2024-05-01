@@ -1,6 +1,4 @@
-//!
 //! The lexeme.
-//!
 
 pub mod comment;
 pub mod identifier;
@@ -13,9 +11,7 @@ use self::keyword::Keyword;
 use self::literal::Literal;
 use self::symbol::Symbol;
 
-///
 /// The lexeme.
-///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lexeme {
     /// The keyword lexeme.

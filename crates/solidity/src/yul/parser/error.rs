@@ -1,14 +1,10 @@
-//!
 //! The Yul IR parser error.
-//!
 
 use std::collections::BTreeSet;
 
 use crate::yul::lexer::token::location::Location;
 
-///
 /// The Yul IR parser error.
-///
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
     /// An invalid token received from the lexer.

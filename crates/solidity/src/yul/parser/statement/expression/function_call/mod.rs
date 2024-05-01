@@ -1,6 +1,4 @@
-//!
 //! The function call subexpression.
-//!
 
 pub mod name;
 pub mod verbatim;
@@ -24,9 +22,7 @@ use crate::yul::parser::statement::expression::Expression;
 
 use self::name::Name;
 
-///
 /// The Yul function call subexpression.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct FunctionCall {
     /// The location.
@@ -38,9 +34,7 @@ pub struct FunctionCall {
 }
 
 impl FunctionCall {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
 
@@ -98,9 +92,7 @@ impl FunctionCall {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut libraries = HashSet::new();
 
@@ -122,9 +114,7 @@ impl FunctionCall {
         libraries
     }
 
-    ///
     /// Converts the function call into an LLVM value.
-    ///
     pub fn into_llvm<'ctx, D>(
         mut self,
         context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
@@ -1013,9 +1003,7 @@ impl FunctionCall {
         }
     }
 
-    ///
     /// Pops the specified number of arguments, converted into their LLVM values.
-    ///
     fn pop_arguments_llvm<'ctx, D, const N: usize>(
         &mut self,
         context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
@@ -1032,9 +1020,7 @@ impl FunctionCall {
         Ok(arguments.try_into().expect("Always successful"))
     }
 
-    ///
     /// Pops the specified number of arguments.
-    ///
     fn pop_arguments<'ctx, D, const N: usize>(
         &mut self,
         context: &mut revive_llvm_context::EraVMContext<'ctx, D>,

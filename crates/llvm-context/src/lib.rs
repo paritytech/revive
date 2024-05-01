@@ -1,6 +1,4 @@
-//!
 //! The LLVM context library.
-//!
 
 pub(crate) mod debug_config;
 pub(crate) mod eravm;
@@ -68,9 +66,7 @@ pub use self::optimizer::Optimizer;
 pub use self::target_machine::target::Target;
 pub use self::target_machine::TargetMachine;
 
-///
 /// Initializes the target machine.
-///
 pub fn initialize_target(target: Target) {
     match target {
         Target::PVM => self::eravm::initialize_target(),

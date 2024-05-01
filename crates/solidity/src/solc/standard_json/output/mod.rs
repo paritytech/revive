@@ -1,6 +1,4 @@
-//!
 //! The `solc --standard-json` output.
-//!
 
 pub mod contract;
 pub mod error;
@@ -27,9 +25,7 @@ use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
 
-///
 /// The `solc --standard-json` output.
-///
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Output {
     /// The file-contract hashmap.
@@ -53,9 +49,7 @@ pub struct Output {
 }
 
 impl Output {
-    ///
     /// Converts the `solc` JSON output into a convenient project.
-    ///
     pub fn try_to_project(
         &mut self,
         source_code_files: BTreeMap<String, String>,
@@ -144,9 +138,7 @@ impl Output {
         ))
     }
 
-    ///
     /// Removes EVM artifacts to prevent their accidental usage.
-    ///
     pub fn remove_evm(&mut self) {
         if let Some(files) = self.contracts.as_mut() {
             for (_, file) in files.iter_mut() {
@@ -159,9 +151,7 @@ impl Output {
         }
     }
 
-    ///
     /// Traverses the AST and returns the list of additional errors and warnings.
-    ///
     pub fn preprocess_ast(
         &mut self,
         version: &SolcVersion,
@@ -196,9 +186,7 @@ impl Output {
         Ok(())
     }
 
-    ///
     /// The pass, which replaces with dependency indexes with actual data.
-    ///
     fn preprocess_dependencies(&mut self) -> anyhow::Result<()> {
         let files = match self.contracts.as_mut() {
             Some(files) => files,
@@ -242,9 +230,7 @@ impl Output {
         Ok(())
     }
 
-    ///
     /// Preprocesses an assembly JSON structure dependency data map.
-    ///
     fn preprocess_dependency_level(
         full_path: &str,
         assembly: &mut Assembly,

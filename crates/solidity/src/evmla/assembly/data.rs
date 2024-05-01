@@ -1,6 +1,4 @@
-//!
 //! The inner JSON legacy assembly code element.
-//!
 
 use std::collections::HashSet;
 
@@ -9,9 +7,7 @@ use serde::Serialize;
 
 use crate::evmla::assembly::Assembly;
 
-///
 /// The inner JSON legacy assembly code element.
-///
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(untagged)]
 pub enum Data {
@@ -24,9 +20,7 @@ pub enum Data {
 }
 
 impl Data {
-    ///
     /// Returns the inner assembly reference if it is present.
-    ///
     pub fn get_assembly(&self) -> Option<&Assembly> {
         match self {
             Self::Assembly(ref assembly) => Some(assembly),
@@ -34,9 +28,7 @@ impl Data {
             Self::Path(_) => None,
         }
     }
-    ///
     /// Returns the inner assembly mutable reference if it is present.
-    ///
     pub fn get_assembly_mut(&mut self) -> Option<&mut Assembly> {
         match self {
             Self::Assembly(ref mut assembly) => Some(assembly),
@@ -45,9 +37,7 @@ impl Data {
         }
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         match self {
             Self::Assembly(assembly) => assembly.get_missing_libraries(),
@@ -56,9 +46,7 @@ impl Data {
         }
     }
 
-    ///
     /// Gets the contract `keccak256` hash.
-    ///
     pub fn keccak256(&self) -> String {
         match self {
             Self::Assembly(assembly) => assembly.keccak256(),

@@ -1,6 +1,4 @@
-//!
 //! The for-loop statement.
-//!
 
 use std::collections::HashSet;
 
@@ -14,9 +12,7 @@ use crate::yul::lexer::Lexer;
 use crate::yul::parser::statement::block::Block;
 use crate::yul::parser::statement::expression::Expression;
 
-///
 /// The Yul for-loop statement.
-///
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ForLoop {
     /// The location.
@@ -32,9 +28,7 @@ pub struct ForLoop {
 }
 
 impl ForLoop {
-    ///
     /// The element parser.
-    ///
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::yul::parser::take_or_next(initial, lexer)?;
         let location = token.location;
@@ -56,9 +50,7 @@ impl ForLoop {
         })
     }
 
-    ///
     /// Get the list of missing deployable libraries.
-    ///
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         let mut libraries = self.initializer.get_missing_libraries();
         libraries.extend(self.condition.get_missing_libraries());

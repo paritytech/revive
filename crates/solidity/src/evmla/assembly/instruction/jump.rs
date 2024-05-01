@@ -1,10 +1,6 @@
-//!
 //! Translates the jump operations.
-//!
 
-///
 /// Translates the unconditional jump.
-///
 pub fn unconditional<D>(
     context: &mut revive_llvm_context::EraVMContext<D>,
     destination: num::BigUint,
@@ -28,9 +24,7 @@ where
     Ok(())
 }
 
-///
 /// Translates the conditional jump.
-///
 pub fn conditional<D>(
     context: &mut revive_llvm_context::EraVMContext<D>,
     destination: num::BigUint,

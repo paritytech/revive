@@ -1,6 +1,4 @@
-//!
 //! Solidity to EraVM compiler library.
-//!
 
 pub(crate) mod build;
 pub(crate) mod r#const;
@@ -48,9 +46,7 @@ pub mod tests;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-///
 /// Runs the Yul mode.
-///
 pub fn yul(
     input_files: &[PathBuf],
     solc: &mut SolcCompiler,
@@ -94,9 +90,7 @@ pub fn yul(
     Ok(build)
 }
 
-///
 /// Runs the LLVM IR mode.
-///
 pub fn llvm_ir(
     input_files: &[PathBuf],
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -126,9 +120,7 @@ pub fn llvm_ir(
     Ok(build)
 }
 
-///
 /// Runs the EraVM assembly mode.
-///
 pub fn zkasm(
     input_files: &[PathBuf],
     include_metadata_hash: bool,
@@ -157,9 +149,7 @@ pub fn zkasm(
     Ok(build)
 }
 
-///
 /// Runs the standard output mode.
-///
 #[allow(clippy::too_many_arguments)]
 pub fn standard_output(
     input_files: &[PathBuf],
@@ -250,9 +240,7 @@ pub fn standard_output(
     Ok(build)
 }
 
-///
 /// Runs the standard JSON mode.
-///
 #[allow(clippy::too_many_arguments)]
 pub fn standard_json(
     solc: &mut SolcCompiler,
@@ -332,9 +320,7 @@ pub fn standard_json(
     std::process::exit(0);
 }
 
-///
 /// Runs the combined JSON mode.
-///
 #[allow(clippy::too_many_arguments)]
 pub fn combined_json(
     format: String,

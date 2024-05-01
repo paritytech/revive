@@ -1,6 +1,4 @@
-//!
 //! The `solc --combined-json` output.
-//!
 
 pub mod contract;
 
@@ -14,9 +12,7 @@ use serde::Serialize;
 
 use self::contract::Contract;
 
-///
 /// The `solc --combined-json` output.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CombinedJson {
     /// The contract entries.
@@ -36,9 +32,7 @@ pub struct CombinedJson {
 }
 
 impl CombinedJson {
-    ///
     /// Returns the signature hash of the specified contract and entry.
-    ///
     pub fn entry(&self, path: &str, entry: &str) -> u32 {
         self.contracts
             .iter()
@@ -53,9 +47,7 @@ impl CombinedJson {
             .entry(entry)
     }
 
-    ///
     /// Returns the full contract path which can be found in `combined-json` output.
-    ///
     pub fn get_full_path(&self, name: &str) -> Option<String> {
         self.contracts.iter().find_map(|(path, _value)| {
             if let Some(last_slash_position) = path.rfind('/') {
@@ -70,9 +62,7 @@ impl CombinedJson {
         })
     }
 
-    ///
     /// Removes EVM artifacts to prevent their accidental usage.
-    ///
     pub fn remove_evm(&mut self) {
         for (_, contract) in self.contracts.iter_mut() {
             contract.bin = None;
@@ -80,9 +70,7 @@ impl CombinedJson {
         }
     }
 
-    ///
     /// Writes the JSON to the specified directory.
-    ///
     pub fn write_to_directory(
         self,
         output_directory: &Path,

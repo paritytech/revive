@@ -1,6 +1,4 @@
-//!
 //! The `default_call` function.
-//!
 
 use inkwell::types::BasicType;
 
@@ -11,11 +9,8 @@ use crate::eravm::context::Context;
 use crate::eravm::Dependency;
 use crate::eravm::WriteLLVM;
 
-///
 /// The `default_call` function.
-///
 /// Generates a default contract call, if the `msg.value` is zero.
-///
 #[derive(Debug)]
 pub struct DefaultCall {
     /// The name of the inner function used for the low-level call.
@@ -44,9 +39,7 @@ impl DefaultCall {
     /// The output length argument index.
     pub const ARGUMENT_INDEX_OUTPUT_LENGTH: usize = 5;
 
-    ///
     /// A shortcut constructor.
-    ///
     pub fn new(call_function: FunctionDeclaration) -> Self {
         let inner_name = call_function.value.get_name().to_string_lossy().to_string();
         let name = Self::name(call_function);
@@ -54,9 +47,7 @@ impl DefaultCall {
         Self { inner_name, name }
     }
 
-    ///
     /// Returns the function name.
-    ///
     pub fn name(call_function: FunctionDeclaration) -> String {
         let suffix = match call_function.value.get_name().to_string_lossy() {
             name if name == LLVMRuntime::FUNCTION_FARCALL => "far",
@@ -67,9 +58,7 @@ impl DefaultCall {
         format!("__default_{suffix}_call")
     }
 
-    ///
     /// Returns the low-level call function.
-    ///
     fn inner_function<'ctx, D>(&self, context: &Context<'ctx, D>) -> FunctionDeclaration<'ctx>
     where
         D: Dependency + Clone,

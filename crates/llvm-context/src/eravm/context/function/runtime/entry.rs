@@ -1,6 +1,4 @@
-//!
 //! The entry function.
-//!
 
 use inkwell::types::BasicType;
 
@@ -11,13 +9,9 @@ use crate::eravm::Dependency;
 use crate::eravm::WriteLLVM;
 use crate::EraVMPointer as Pointer;
 
-///
 /// The entry function.
-///
 /// The function is a wrapper managing the runtime and deploy code calling logic.
-///
 /// Is a special runtime function that is only used by the front-end generated code.
-///
 #[derive(Debug, Default)]
 pub struct Entry {}
 

@@ -410,13 +410,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
             Some(inkwell::module::Linkage::External),
         );
         Function::set_default_attributes(llvm, system_request, optimizer);
-        Function::set_attributes(
-            llvm,
-            system_request,
-            //vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
-            vec![],
-            false,
-        );
 
         let external_call_arguments: Vec<inkwell::types::BasicMetadataTypeEnum> = vec![
                 llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)

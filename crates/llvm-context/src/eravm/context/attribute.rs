@@ -6,7 +6,6 @@ use serde::Serialize;
 /// The LLVM attribute.
 /// In order to check the real order in a new major version of LLVM, find the `Attributes.inc` file
 /// inside of the LLVM build directory. This order is actually generated during the building.
-/// FIXME: Generate this in build.rs?
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Attribute {
     Unused = 0,
@@ -82,7 +81,7 @@ pub enum Attribute {
     Writable = 70,
     WriteOnly = 71,
     ZExt = 72,
-    //LastEnumAttr = 72,
+    // LastEnumAttr = 72,
     // FirstTypeAttr = 73,
     ByRef = 73,
     ByVal = 74,
@@ -117,12 +116,7 @@ impl TryFrom<&str> for Attribute {
             "OptimizeForSize" => Ok(Attribute::OptimizeForSize),
             "NoInline" => Ok(Attribute::NoInline),
             "WillReturn" => Ok(Attribute::WillReturn),
-            "WriteOnly" => Ok(Attribute::WriteOnly),
-            "ReadNone" => Ok(Attribute::ReadNone),
-            "ReadOnly" => Ok(Attribute::ReadOnly),
             "NoReturn" => Ok(Attribute::NoReturn),
-            // FIXME: Not in Attributes.inc
-            //"InaccessibleMemOnly" => Ok(Attribute::InaccessibleMemOnly),
             "MustProgress" => Ok(Attribute::MustProgress),
             _ => Err(value.to_owned()),
         }

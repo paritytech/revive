@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
 
-use revive_llvm_context::EraVMWriteLLVM;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::build::contract::Contract as ContractBuild;
 use crate::project::Project;
@@ -117,7 +117,7 @@ impl Contract {
                     .map_err(|error| anyhow::anyhow!(error.to_string()))?
             }
             IR::ZKASM(ref zkasm) => {
-                let build = revive_llvm_context::eravm_build_assembly_text(
+                let build = revive_llvm_context::polkavm_build_assembly_text(
                     self.path.as_str(),
                     zkasm.source.as_str(),
                     metadata_hash,
@@ -133,7 +133,7 @@ impl Contract {
             }
             _ => llvm.create_module(self.path.as_str()),
         };
-        let mut context = revive_llvm_context::EraVMContext::new(
+        let mut context = revive_llvm_context::PolkaVMContext::new(
             &llvm,
             module,
             optimizer,
@@ -141,15 +141,15 @@ impl Contract {
             include_metadata_hash,
             debug_config,
         );
-        context.set_solidity_data(revive_llvm_context::EraVMContextSolidityData::default());
+        context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
         match self.ir {
             IR::Yul(_) => {
-                let yul_data = revive_llvm_context::EraVMContextYulData::new(is_system_mode);
+                let yul_data = revive_llvm_context::PolkaVMContextYulData::new(is_system_mode);
                 context.set_yul_data(yul_data);
             }
             IR::EVMLA(_) => {
                 let evmla_data =
-                    revive_llvm_context::EraVMContextEVMLAData::new(version.default);
+                    revive_llvm_context::PolkaVMContextEVMLAData::new(version.default);
                 context.set_evmla_data(evmla_data);
             }
             IR::LLVMIR(_) => {}
@@ -190,20 +190,20 @@ impl Contract {
     }
 }
 
-impl<D> EraVMWriteLLVM<D> for Contract
+impl<D> PolkaVMWriteLLVM<D> for Contract
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         self.ir.declare(context)
     }
 
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         self.ir.into_llvm(context)
     }

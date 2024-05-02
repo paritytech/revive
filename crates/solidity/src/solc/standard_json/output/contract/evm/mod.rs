@@ -15,18 +15,18 @@ use self::bytecode::DeployedBytecode;
 use self::extra_metadata::ExtraMetadata;
 
 /// The `solc --standard-json` output contract EVM data.
-/// It is replaced by EraVM data after compiling.
+/// It is replaced by PolkaVM data after compiling.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
     /// The contract EVM legacy assembly code.
     #[serde(rename = "legacyAssembly")]
     pub assembly: Option<Assembly>,
-    /// The contract EraVM assembly code.
+    /// The contract PolkaVM assembly code.
     #[serde(rename = "assembly")]
     pub assembly_text: Option<String>,
     /// The contract bytecode.
-    /// Is reset by that of EraVM before yielding the compiled project artifacts.
+    /// Is reset by that of PolkaVM before yielding the compiled project artifacts.
     pub bytecode: Option<Bytecode>,
     /// The contract deployed bytecode.
     pub deployed_bytecode: Option<DeployedBytecode>,
@@ -39,7 +39,7 @@ pub struct EVM {
 }
 
 impl EVM {
-    /// Sets the EraVM assembly and bytecode.
+    /// Sets the PolkaVM assembly and bytecode.
     pub fn modify(&mut self, assembly_text: String, bytecode: String) {
         self.assembly_text = Some(assembly_text);
         self.bytecode = Some(Bytecode::new(bytecode));

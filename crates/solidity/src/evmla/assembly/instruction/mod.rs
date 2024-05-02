@@ -328,11 +328,11 @@ impl Instruction {
     /// Initializes a recursive function `Call` instruction.
     pub fn recursive_call(
         name: String,
-        entry_key: revive_llvm_context::EraVMFunctionBlockKey,
+        entry_key: revive_llvm_context::PolkaVMFunctionBlockKey,
         stack_hash: md5::Digest,
         input_size: usize,
         output_size: usize,
-        return_address: revive_llvm_context::EraVMFunctionBlockKey,
+        return_address: revive_llvm_context::PolkaVMFunctionBlockKey,
         previous: &Self,
     ) -> Self {
         Self {

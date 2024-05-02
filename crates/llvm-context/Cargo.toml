@@ -7,7 +7,7 @@ authors = [
 ]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-description = "Shared front end code of the EraVM compilers"
+description = "Shared front end code of the revive PolkaVM compilers"
 
 [lib]
 doctest = false

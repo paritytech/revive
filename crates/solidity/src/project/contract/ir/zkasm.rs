@@ -1,15 +1,15 @@
-//! The contract EraVM assembly source code.
+//! The contract PolkaVM assembly source code.
 
 use serde::Deserialize;
 use serde::Serialize;
 
-/// The contract EraVM assembly source code.
+/// The contract PolkaVM assembly source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct ZKASM {
-    /// The EraVM assembly file path.
+    /// The PolkaVM assembly file path.
     pub path: String,
-    /// The EraVM assembly source code.
+    /// The PolkaVM assembly source code.
     pub source: String,
 }
 

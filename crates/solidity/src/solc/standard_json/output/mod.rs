@@ -166,12 +166,12 @@ impl Output {
         let mut messages = Vec::new();
         for (path, source) in sources.iter() {
             if let Some(ast) = source.ast.as_ref() {
-                let mut eravm_messages =
+                let mut polkavm_messages =
                     Source::get_messages(ast, version, pipeline, suppressed_warnings);
-                for message in eravm_messages.iter_mut() {
+                for message in polkavm_messages.iter_mut() {
                     message.push_contract_path(path.as_str());
                 }
-                messages.extend(eravm_messages);
+                messages.extend(polkavm_messages);
             }
         }
 

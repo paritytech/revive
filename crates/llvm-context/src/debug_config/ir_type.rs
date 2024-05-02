@@ -28,7 +28,7 @@ impl IRType {
             Self::EVMLA => revive_common::EXTENSION_EVMLA,
             Self::LLL => revive_common::EXTENSION_LLL,
             Self::LLVM => revive_common::EXTENSION_LLVM_SOURCE,
-            Self::Assembly => revive_common::EXTENSION_ERAVM_ASSEMBLY,
+            Self::Assembly => revive_common::EXTENSION_POLKAVM_ASSEMBLY,
         }
     }
 }

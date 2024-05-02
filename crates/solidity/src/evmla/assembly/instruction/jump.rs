@@ -2,17 +2,17 @@
 
 /// Translates the unconditional jump.
 pub fn unconditional<D>(
-    context: &mut revive_llvm_context::EraVMContext<D>,
+    context: &mut revive_llvm_context::PolkaVMContext<D>,
     destination: num::BigUint,
     stack_hash: md5::Digest,
 ) -> anyhow::Result<()>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let code_type = context
         .code_type()
         .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?;
-    let block_key = revive_llvm_context::EraVMFunctionBlockKey::new(code_type, destination);
+    let block_key = revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, destination);
 
     let block = context
         .current_function()
@@ -26,24 +26,24 @@ where
 
 /// Translates the conditional jump.
 pub fn conditional<D>(
-    context: &mut revive_llvm_context::EraVMContext<D>,
+    context: &mut revive_llvm_context::PolkaVMContext<D>,
     destination: num::BigUint,
     stack_hash: md5::Digest,
     stack_height: usize,
 ) -> anyhow::Result<()>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let code_type = context
         .code_type()
         .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?;
-    let block_key = revive_llvm_context::EraVMFunctionBlockKey::new(code_type, destination);
+    let block_key = revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, destination);
 
     let condition_pointer = context.evmla().stack[stack_height]
         .to_llvm()
         .into_pointer_value();
     let condition = context.build_load(
-        revive_llvm_context::EraVMPointer::new_stack_field(context, condition_pointer),
+        revive_llvm_context::PolkaVMPointer::new_stack_field(context, condition_pointer),
         format!("conditional_{block_key}_condition").as_str(),
     )?;
     let condition = context.builder().build_int_compare(

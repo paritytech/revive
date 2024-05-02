@@ -96,10 +96,10 @@ impl Expression {
     /// Converts the expression into an LLVM value.
     pub fn into_llvm<'ctx, D>(
         self,
-        context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<revive_llvm_context::EraVMArgument<'ctx>>>
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
+    ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>>
     where
-        D: revive_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         match self {
             Self::Literal(literal) => literal
@@ -137,7 +137,7 @@ impl Expression {
 
                 match constant {
                     Some(constant) => Ok(Some(
-                        revive_llvm_context::EraVMArgument::new_with_constant(
+                        revive_llvm_context::PolkaVMArgument::new_with_constant(
                             value, constant,
                         ),
                     )),
@@ -146,7 +146,7 @@ impl Expression {
             }
             Self::FunctionCall(call) => Ok(call
                 .into_llvm(context)?
-                .map(revive_llvm_context::EraVMArgument::new)),
+                .map(revive_llvm_context::PolkaVMArgument::new)),
         }
     }
 }

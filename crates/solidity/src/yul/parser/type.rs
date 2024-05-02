@@ -64,10 +64,10 @@ impl Type {
     /// Converts the type into its LLVM.
     pub fn into_llvm<'ctx, D>(
         self,
-        context: &revive_llvm_context::EraVMContext<'ctx, D>,
+        context: &revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> inkwell::types::IntType<'ctx>
     where
-        D: revive_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         match self {
             Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),

@@ -5,7 +5,7 @@ use std::str::FromStr;
 /// The LLVM target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
-    /// The EraVM target.
+    /// The PolkaVM target.
     PVM,
 }
 

@@ -107,13 +107,13 @@ impl Assignment {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Assignment
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Assignment
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(
         mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         let value = match self.initializer.into_llvm(context)? {
             Some(value) => value,

@@ -31,7 +31,7 @@ pub struct EtherealIR {
     /// The all-inlined function.
     pub entry_function: Function,
     /// The recursive functions.
-    pub recursive_functions: BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Function>,
+    pub recursive_functions: BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Function>,
 }
 
 impl EtherealIR {
@@ -45,7 +45,7 @@ impl EtherealIR {
     pub fn new(
         solc_version: semver::Version,
         extra_metadata: ExtraMetadata,
-        blocks: HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
+        blocks: HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
     ) -> anyhow::Result<Self> {
         let mut entry_function = Function::new(solc_version.clone(), FunctionType::new_initial());
         let mut recursive_functions = BTreeMap::new();
@@ -68,9 +68,9 @@ impl EtherealIR {
     /// Gets blocks for the specified type of the contract code.
     pub fn get_blocks(
         solc_version: semver::Version,
-        code_type: revive_llvm_context::EraVMCodeType,
+        code_type: revive_llvm_context::PolkaVMCodeType,
         instructions: &[Instruction],
-    ) -> anyhow::Result<HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>> {
+    ) -> anyhow::Result<HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>> {
         let mut blocks = HashMap::with_capacity(Self::BLOCKS_HASHMAP_DEFAULT_CAPACITY);
         let mut offset = 0;
 
@@ -81,7 +81,7 @@ impl EtherealIR {
                 &instructions[offset..],
             )?;
             blocks.insert(
-                revive_llvm_context::EraVMFunctionBlockKey::new(
+                revive_llvm_context::PolkaVMFunctionBlockKey::new(
                     code_type,
                     block.key.tag.clone(),
                 ),
@@ -94,13 +94,13 @@ impl EtherealIR {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for EtherealIR
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for EtherealIR
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         self.entry_function.declare(context)?;
 
@@ -113,7 +113,7 @@ where
 
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         context.evmla_mut().stack = vec![];
 

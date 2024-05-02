@@ -31,20 +31,20 @@ impl Yul {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Yul
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Yul
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         self.object.declare(context)
     }
 
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         self.object.into_llvm(context)
     }

@@ -2,12 +2,12 @@
 
 /// Translates the contract hash copying.
 pub fn contract_hash<'ctx, D>(
-    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let offset = context.builder().build_int_add(
         offset,
@@ -17,21 +17,21 @@ where
         "datacopy_contract_hash_offset",
     )?;
 
-    revive_llvm_context::eravm_evm_memory::store(context, offset, value)?;
+    revive_llvm_context::polkavm_evm_memory::store(context, offset, value)?;
 
     Ok(())
 }
 
 /// Translates the library marker copying.
 pub fn library_marker<D>(
-    context: &mut revive_llvm_context::EraVMContext<D>,
+    context: &mut revive_llvm_context::PolkaVMContext<D>,
     offset: u64,
     value: u64,
 ) -> anyhow::Result<()>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
-    revive_llvm_context::eravm_evm_memory::store_byte(
+    revive_llvm_context::polkavm_evm_memory::store_byte(
         context,
         context.field_const(offset),
         context.field_const(value),
@@ -42,12 +42,12 @@ where
 
 /// Translates the static data copying.
 pub fn static_data<'ctx, D>(
-    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     destination: inkwell::values::IntValue<'ctx>,
     source: &str,
 ) -> anyhow::Result<()>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let mut offset = 0;
     for (index, chunk) in source
@@ -68,7 +68,7 @@ where
             format!("datacopy_destination_index_{index}").as_str(),
         )?;
         let datacopy_value = context.field_const_str_hex(value_string.as_str());
-        revive_llvm_context::eravm_evm_memory::store(
+        revive_llvm_context::polkavm_evm_memory::store(
             context,
             datacopy_destination,
             datacopy_value,

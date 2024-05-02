@@ -1,4 +1,4 @@
-//! Solidity to EraVM compiler library.
+//! Solidity to PolkaVM compiler library.
 
 pub(crate) mod build;
 pub(crate) mod r#const;
@@ -120,7 +120,7 @@ pub fn llvm_ir(
     Ok(build)
 }
 
-/// Runs the EraVM assembly mode.
+/// Runs the PolkaVM assembly mode.
 pub fn zkasm(
     input_files: &[PathBuf],
     include_metadata_hash: bool,
@@ -130,7 +130,7 @@ pub fn zkasm(
         1 => input_files.first().expect("Always exists"),
         0 => anyhow::bail!("The input file is missing"),
         length => anyhow::bail!(
-            "Only one input file is allowed in the EraVM assembly mode, but found {}",
+            "Only one input file is allowed in the PolkaVM assembly mode, but found {}",
             length,
         ),
     };
@@ -268,7 +268,7 @@ pub fn standard_json(
 
     let include_metadata_hash = match solc_input.settings.metadata {
         Some(ref metadata) => {
-            metadata.bytecode_hash != Some(revive_llvm_context::EraVMMetadataHash::None)
+            metadata.bytecode_hash != Some(revive_llvm_context::PolkaVMMetadataHash::None)
         }
         None => true,
     };

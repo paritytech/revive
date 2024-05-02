@@ -12,9 +12,9 @@ pub struct Metadata {
     pub solc_version: semver::Version,
     /// The zkVM `solc` edition.
     pub solc_zkvm_edition: Option<semver::Version>,
-    /// The EraVM compiler version.
+    /// The PolkaVM compiler version.
     pub zk_version: semver::Version,
-    /// The EraVM compiler optimizer settings.
+    /// The PolkaVM compiler optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
 }
 

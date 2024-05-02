@@ -10,7 +10,7 @@ pub enum Type {
         /// The function name.
         name: String,
         /// The function initial block key.
-        block_key: revive_llvm_context::EraVMFunctionBlockKey,
+        block_key: revive_llvm_context::PolkaVMFunctionBlockKey,
         /// The size of stack input (in cells or 256-bit words).
         input_size: usize,
         /// The size of stack output (in cells or 256-bit words).
@@ -27,7 +27,7 @@ impl Type {
     /// A shortcut constructor.
     pub fn new_recursive(
         name: String,
-        block_key: revive_llvm_context::EraVMFunctionBlockKey,
+        block_key: revive_llvm_context::PolkaVMFunctionBlockKey,
         input_size: usize,
         output_size: usize,
     ) -> Self {

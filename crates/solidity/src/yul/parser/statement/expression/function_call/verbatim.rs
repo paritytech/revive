@@ -4,13 +4,13 @@ use crate::yul::parser::statement::expression::function_call::FunctionCall;
 
 /// Translates the verbatim simulations.
 pub fn verbatim<'ctx, D>(
-    context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+    context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     call: &mut FunctionCall,
     _input_size: usize,
     output_size: usize,
 ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     if output_size > 1 {
         anyhow::bail!(

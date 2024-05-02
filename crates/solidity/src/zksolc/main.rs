@@ -1,4 +1,4 @@
-//! Solidity to EraVM compiler binary.
+//! Solidity to PolkaVM compiler binary.
 
 pub mod arguments;
 
@@ -96,8 +96,8 @@ fn main_inner() -> anyhow::Result<()> {
     let include_metadata_hash = match arguments.metadata_hash {
         Some(metadata_hash) => {
             let metadata =
-                revive_llvm_context::EraVMMetadataHash::from_str(metadata_hash.as_str())?;
-            metadata != revive_llvm_context::EraVMMetadataHash::None
+                revive_llvm_context::PolkaVMMetadataHash::from_str(metadata_hash.as_str())?;
+            metadata != revive_llvm_context::PolkaVMMetadataHash::None
         }
         None => true,
     };

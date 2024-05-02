@@ -43,7 +43,7 @@ pub struct Function {
     /// The function name.
     pub name: String,
     /// The separately labelled blocks.
-    pub blocks: BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Vec<Block>>,
+    pub blocks: BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Vec<Block>>,
     /// The function type.
     pub r#type: Type,
     /// The function stack size.
@@ -74,8 +74,8 @@ impl Function {
     /// Runs the function block traversal.
     pub fn traverse(
         &mut self,
-        blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
-        functions: &mut BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Self>,
+        blocks: &HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
+        functions: &mut BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Self>,
         extra_metadata: &ExtraMetadata,
         visited_functions: &mut BTreeSet<VisitedElement>,
     ) -> anyhow::Result<()> {
@@ -84,8 +84,8 @@ impl Function {
         match self.r#type {
             Type::Initial => {
                 for code_type in [
-                    revive_llvm_context::EraVMCodeType::Deploy,
-                    revive_llvm_context::EraVMCodeType::Runtime,
+                    revive_llvm_context::PolkaVMCodeType::Deploy,
+                    revive_llvm_context::PolkaVMCodeType::Runtime,
                 ] {
                     self.consume_block(
                         blocks,
@@ -94,7 +94,7 @@ impl Function {
                         visited_functions,
                         &mut visited_blocks,
                         QueueElement::new(
-                            revive_llvm_context::EraVMFunctionBlockKey::new(
+                            revive_llvm_context::PolkaVMFunctionBlockKey::new(
                                 code_type,
                                 num::BigUint::zero(),
                             ),
@@ -138,8 +138,8 @@ impl Function {
     /// Consumes the entry or a conditional block attached to another one.
     fn consume_block(
         &mut self,
-        blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
-        functions: &mut BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Self>,
+        blocks: &HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
+        functions: &mut BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Self>,
         extra_metadata: &ExtraMetadata,
         visited_functions: &mut BTreeSet<VisitedElement>,
         visited_blocks: &mut BTreeSet<VisitedElement>,
@@ -214,11 +214,11 @@ impl Function {
     /// the invalid part is truncated after terminating with an `INVALID` instruction.
     #[allow(clippy::too_many_arguments)]
     fn handle_instruction(
-        blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
-        functions: &mut BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Self>,
+        blocks: &HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
+        functions: &mut BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Self>,
         extra_metadata: &ExtraMetadata,
         visited_functions: &mut BTreeSet<VisitedElement>,
-        code_type: revive_llvm_context::EraVMCodeType,
+        code_type: revive_llvm_context::PolkaVMCodeType,
         instance: usize,
         block_stack: &mut Stack,
         block_element: &mut BlockElement,
@@ -247,13 +247,13 @@ impl Function {
                     .ok_or_else(|| anyhow::anyhow!("Destination tag is missing"))?
                 {
                     Element::Tag(destination) if destination > &num::BigUint::from(u32::MAX) => {
-                        revive_llvm_context::EraVMFunctionBlockKey::new(
-                            revive_llvm_context::EraVMCodeType::Runtime,
+                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                            revive_llvm_context::PolkaVMCodeType::Runtime,
                             destination.to_owned() - num::BigUint::from(1u64 << 32),
                         )
                     }
                     Element::Tag(destination) => {
-                        revive_llvm_context::EraVMFunctionBlockKey::new(
+                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
                             code_type,
                             destination.to_owned(),
                         )
@@ -311,13 +311,13 @@ impl Function {
                     .ok_or_else(|| anyhow::anyhow!("Destination tag is missing"))?
                 {
                     Element::Tag(destination) if destination > &num::BigUint::from(u32::MAX) => {
-                        revive_llvm_context::EraVMFunctionBlockKey::new(
-                            revive_llvm_context::EraVMCodeType::Runtime,
+                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                            revive_llvm_context::PolkaVMCodeType::Runtime,
                             destination.to_owned() - num::BigUint::from(1u64 << 32),
                         )
                     }
                     Element::Tag(destination) => {
-                        revive_llvm_context::EraVMFunctionBlockKey::new(
+                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
                             code_type,
                             destination.to_owned(),
                         )
@@ -347,7 +347,7 @@ impl Function {
             } => {
                 let tag: num::BigUint = tag.parse().expect("Always valid");
                 let block_key =
-                    revive_llvm_context::EraVMFunctionBlockKey::new(code_type, tag);
+                    revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, tag);
 
                 queue_element.predecessor = Some((queue_element.block_key.clone(), instance));
                 queue_element.block_key = block_key.clone();
@@ -1006,16 +1006,16 @@ impl Function {
     #[allow(clippy::too_many_arguments)]
     fn handle_recursive_function_call(
         recursive_function: &RecursiveFunction,
-        blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
-        functions: &mut BTreeMap<revive_llvm_context::EraVMFunctionBlockKey, Self>,
+        blocks: &HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
+        functions: &mut BTreeMap<revive_llvm_context::PolkaVMFunctionBlockKey, Self>,
         extra_metadata: &ExtraMetadata,
         visited_functions: &mut BTreeSet<VisitedElement>,
-        block_key: revive_llvm_context::EraVMFunctionBlockKey,
+        block_key: revive_llvm_context::PolkaVMFunctionBlockKey,
         block_stack: &mut Stack,
         block_element: &mut BlockElement,
         version: &semver::Version,
     ) -> anyhow::Result<(
-        revive_llvm_context::EraVMFunctionBlockKey,
+        revive_llvm_context::PolkaVMFunctionBlockKey,
         Vec<Element>,
     )> {
         let return_address_offset = block_stack.elements.len() - 2 - recursive_function.input_size;
@@ -1024,7 +1024,7 @@ impl Function {
 
         let return_address = match block_stack.elements[return_address_offset] {
             Element::Tag(ref return_address) => {
-                revive_llvm_context::EraVMFunctionBlockKey::new(
+                revive_llvm_context::PolkaVMFunctionBlockKey::new(
                     block_key.code_type,
                     return_address.to_owned(),
                 )
@@ -1104,14 +1104,14 @@ impl Function {
     /// Checks whether the tag value actually references an existing block.
     /// Checks both deploy and runtime code.
     fn is_tag_value_valid(
-        blocks: &HashMap<revive_llvm_context::EraVMFunctionBlockKey, Block>,
+        blocks: &HashMap<revive_llvm_context::PolkaVMFunctionBlockKey, Block>,
         tag: &num::BigUint,
     ) -> bool {
-        blocks.contains_key(&revive_llvm_context::EraVMFunctionBlockKey::new(
-            revive_llvm_context::EraVMCodeType::Deploy,
+        blocks.contains_key(&revive_llvm_context::PolkaVMFunctionBlockKey::new(
+            revive_llvm_context::PolkaVMCodeType::Deploy,
             tag & num::BigUint::from(u32::MAX),
-        )) || blocks.contains_key(&revive_llvm_context::EraVMFunctionBlockKey::new(
-            revive_llvm_context::EraVMCodeType::Runtime,
+        )) || blocks.contains_key(&revive_llvm_context::PolkaVMFunctionBlockKey::new(
+            revive_llvm_context::PolkaVMCodeType::Runtime,
             tag & num::BigUint::from(u32::MAX),
         ))
     }
@@ -1133,13 +1133,13 @@ impl Function {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Function
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Function
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         let (function_type, output_size) = match self.r#type {
             Type::Initial => {
@@ -1178,7 +1178,7 @@ where
             Some(inkwell::module::Linkage::Private),
         )?;
         function.borrow_mut().set_evmla_data(
-            revive_llvm_context::EraVMFunctionEVMLAData::new(self.stack_size),
+            revive_llvm_context::PolkaVMFunctionEVMLAData::new(self.stack_size),
         );
 
         Ok(())
@@ -1186,7 +1186,7 @@ where
 
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         context.set_current_function(self.name.as_str())?;
 
@@ -1196,8 +1196,8 @@ where
                 let mut stack_hashes = vec![block.initial_stack.hash()];
                 stack_hashes.extend_from_slice(block.extra_hashes.as_slice());
                 let evmla_data =
-                    revive_llvm_context::EraVMFunctionBlockEVMLAData::new(stack_hashes);
-                let mut block = revive_llvm_context::EraVMFunctionBlock::new(inner);
+                    revive_llvm_context::PolkaVMFunctionBlockEVMLAData::new(stack_hashes);
+                let mut block = revive_llvm_context::PolkaVMFunctionBlock::new(inner);
                 block.set_evmla_data(evmla_data);
                 context
                     .current_function()
@@ -1229,7 +1229,7 @@ where
                 _ => context.field_const(0).as_basic_value_enum(),
             };
             context.build_store(pointer, value)?;
-            stack_variables.push(revive_llvm_context::EraVMArgument::new(
+            stack_variables.push(revive_llvm_context::PolkaVMArgument::new(
                 pointer.value.as_basic_value_enum(),
             ));
         }
@@ -1243,15 +1243,15 @@ where
                     .get_nth_param(0)
                     .into_int_value();
                 let deploy_code_block = context.current_function().borrow().evmla().find_block(
-                    &revive_llvm_context::EraVMFunctionBlockKey::new(
-                        revive_llvm_context::EraVMCodeType::Deploy,
+                    &revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                        revive_llvm_context::PolkaVMCodeType::Deploy,
                         num::BigUint::zero(),
                     ),
                     &Stack::default().hash(),
                 )?;
                 let runtime_code_block = context.current_function().borrow().evmla().find_block(
-                    &revive_llvm_context::EraVMFunctionBlockKey::new(
-                        revive_llvm_context::EraVMCodeType::Runtime,
+                    &revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                        revive_llvm_context::PolkaVMCodeType::Runtime,
                         num::BigUint::zero(),
                     ),
                     &Stack::default().hash(),
@@ -1297,14 +1297,14 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         match context.current_function().borrow().r#return() {
-            revive_llvm_context::EraVMFunctionReturn::None => {
+            revive_llvm_context::PolkaVMFunctionReturn::None => {
                 context.build_return(None);
             }
-            revive_llvm_context::EraVMFunctionReturn::Primitive { pointer } => {
+            revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
-            revive_llvm_context::EraVMFunctionReturn::Compound { pointer, .. } => {
+            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }

@@ -128,13 +128,13 @@ impl Block {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Block
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Block
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         let current_function = context.current_function().borrow().name().to_owned();
         let current_block = context.basic_block();

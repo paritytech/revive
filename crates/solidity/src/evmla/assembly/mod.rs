@@ -45,7 +45,7 @@ impl Assembly {
     /// Gets the contract `keccak256` hash.
     pub fn keccak256(&self) -> String {
         let json = serde_json::to_vec(self).expect("Always valid");
-        revive_llvm_context::eravm_utils::keccak256(json.as_slice())
+        revive_llvm_context::polkavm_utils::keccak256(json.as_slice())
     }
 
     /// Sets the full contract path.
@@ -180,28 +180,28 @@ impl Assembly {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for Assembly
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Assembly
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        let mut entry = revive_llvm_context::EraVMEntryFunction::default();
+        let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
 
-        let mut runtime = revive_llvm_context::EraVMRuntime::new(
-            revive_llvm_context::EraVMAddressSpace::Heap,
+        let mut runtime = revive_llvm_context::PolkaVMRuntime::new(
+            revive_llvm_context::PolkaVMAddressSpace::Heap,
         );
         runtime.declare(context)?;
 
-        revive_llvm_context::EraVMDeployCodeFunction::new(
-            revive_llvm_context::EraVMDummyLLVMWritable::default(),
+        revive_llvm_context::PolkaVMDeployCodeFunction::new(
+            revive_llvm_context::PolkaVMDummyLLVMWritable::default(),
         )
         .declare(context)?;
-        revive_llvm_context::EraVMRuntimeCodeFunction::new(
-            revive_llvm_context::EraVMDummyLLVMWritable::default(),
+        revive_llvm_context::PolkaVMRuntimeCodeFunction::new(
+            revive_llvm_context::PolkaVMDummyLLVMWritable::default(),
         )
         .declare(context)?;
 
@@ -214,7 +214,7 @@ where
 
     fn into_llvm(
         mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         let full_path = self.full_path().to_owned();
 
@@ -223,7 +223,7 @@ where
         }
         let deploy_code_blocks = EtherealIR::get_blocks(
             context.evmla().version.to_owned(),
-            revive_llvm_context::EraVMCodeType::Deploy,
+            revive_llvm_context::PolkaVMCodeType::Deploy,
             self.code
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("Deploy code instructions not found"))?,
@@ -250,7 +250,7 @@ where
         };
         let runtime_code_blocks = EtherealIR::get_blocks(
             context.evmla().version.to_owned(),
-            revive_llvm_context::EraVMCodeType::Runtime,
+            revive_llvm_context::PolkaVMCodeType::Runtime,
             runtime_code_instructions.as_slice(),
         )?;
 
@@ -265,12 +265,12 @@ where
         ethereal_ir.declare(context)?;
         ethereal_ir.into_llvm(context)?;
 
-        revive_llvm_context::EraVMDeployCodeFunction::new(EntryLink::new(
-            revive_llvm_context::EraVMCodeType::Deploy,
+        revive_llvm_context::PolkaVMDeployCodeFunction::new(EntryLink::new(
+            revive_llvm_context::PolkaVMCodeType::Deploy,
         ))
         .into_llvm(context)?;
-        revive_llvm_context::EraVMRuntimeCodeFunction::new(EntryLink::new(
-            revive_llvm_context::EraVMCodeType::Runtime,
+        revive_llvm_context::PolkaVMRuntimeCodeFunction::new(EntryLink::new(
+            revive_llvm_context::PolkaVMCodeType::Runtime,
         ))
         .into_llvm(context)?;
 

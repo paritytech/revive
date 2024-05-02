@@ -31,7 +31,7 @@ pub enum IR {
     EVMLA(EVMLA),
     /// The LLVM IR source code.
     LLVMIR(LLVMIR),
-    /// The EraVM assembly source code.
+    /// The PolkaVM assembly source code.
     ZKASM(ZKASM),
 }
 
@@ -67,13 +67,13 @@ impl IR {
     }
 }
 
-impl<D> revive_llvm_context::EraVMWriteLLVM<D> for IR
+impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for IR
 where
-    D: revive_llvm_context::EraVMDependency + Clone,
+    D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn declare(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.declare(context),
@@ -85,7 +85,7 @@ where
 
     fn into_llvm(
         self,
-        context: &mut revive_llvm_context::EraVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.into_llvm(context),

@@ -213,7 +213,7 @@ impl Project {
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 
         let source_version =
-            SolcVersion::new_simple(revive_llvm_context::eravm_const::LLVM_VERSION);
+            SolcVersion::new_simple(revive_llvm_context::polkavm_const::LLVM_VERSION);
         let path = path.to_string_lossy().to_string();
 
         let mut project_contracts = BTreeMap::new();
@@ -235,15 +235,15 @@ impl Project {
         ))
     }
 
-    /// Parses the EraVM assembly source code file and returns the source data.
+    /// Parses the PolkaVM assembly source code file and returns the source data.
     pub fn try_from_zkasm_path(path: &Path) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path).map_err(|error| {
-            anyhow::anyhow!("EraVM assembly file {:?} reading error: {}", path, error)
+            anyhow::anyhow!("PolkaVM assembly file {:?} reading error: {}", path, error)
         })?;
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 
         let source_version =
-            SolcVersion::new_simple(revive_llvm_context::eravm_const::ZKEVM_VERSION);
+            SolcVersion::new_simple(revive_llvm_context::polkavm_const::ZKEVM_VERSION);
         let path = path.to_string_lossy().to_string();
 
         let mut project_contracts = BTreeMap::new();
@@ -266,7 +266,7 @@ impl Project {
     }
 }
 
-impl revive_llvm_context::EraVMDependency for Project {
+impl revive_llvm_context::PolkaVMDependency for Project {
     fn compile(
         project: Self,
         identifier: &str,

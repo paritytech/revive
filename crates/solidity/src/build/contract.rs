@@ -19,7 +19,7 @@ pub struct Contract {
     /// The auxiliary identifier. Used to identify Yul objects.
     pub identifier: String,
     /// The LLVM module build.
-    pub build: revive_llvm_context::EraVMBuild,
+    pub build: revive_llvm_context::PolkaVMBuild,
     /// The metadata JSON.
     pub metadata_json: serde_json::Value,
     /// The factory dependencies.
@@ -31,7 +31,7 @@ impl Contract {
     pub fn new(
         path: String,
         identifier: String,
-        build: revive_llvm_context::EraVMBuild,
+        build: revive_llvm_context::PolkaVMBuild,
         metadata_json: serde_json::Value,
         factory_dependencies: HashSet<String>,
     ) -> Self {
@@ -55,7 +55,7 @@ impl Contract {
         let file_name = Self::short_path(self.path.as_str());
 
         if output_assembly {
-            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_ERAVM_ASSEMBLY);
+            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_POLKAVM_ASSEMBLY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 
@@ -76,7 +76,7 @@ impl Contract {
         }
 
         if output_binary {
-            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_ERAVM_BINARY);
+            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_POLKAVM_BINARY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 

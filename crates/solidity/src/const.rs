@@ -1,4 +1,4 @@
-//! Solidity to EraVM compiler constants.
+//! Solidity to PolkaVM compiler constants.
 
 #![allow(dead_code)]
 

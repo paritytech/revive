@@ -1,7 +1,7 @@
 //! This crate vendors EVM related standard library functionality and provides a LLVM module,
 //! exporting the standard library functions.
 //! The standard library code is inherited and adapted from [0].
-//! [0]: [https://github.com/matter-labs/era-compiler-llvm/blob/v1.4.1/llvm/lib/Target/EraVM/eravm-stdlib.ll]
+//! [0]: [https://github.com/matter-labs/era-compiler-llvm/blob/v1.4.1/llvm/lib/Target/PolkaVM/polkavm-stdlib.ll]
 
 use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module, support::LLVMString};
 

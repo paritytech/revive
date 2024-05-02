@@ -117,17 +117,17 @@ impl FunctionCall {
     /// Converts the function call into an LLVM value.
     pub fn into_llvm<'ctx, D>(
         mut self,
-        context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
     where
-        D: revive_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let location = self.location;
 
         match self.name {
             Name::UserDefined(name)
                 if name.starts_with(
-                    revive_llvm_context::EraVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
+                    revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
                 ) && context.is_system_mode() =>
             {
                 unimplemented!();
@@ -166,7 +166,7 @@ impl FunctionCall {
 
             Name::Add => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::addition(
+                revive_llvm_context::polkavm_evm_arithmetic::addition(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -175,7 +175,7 @@ impl FunctionCall {
             }
             Name::Sub => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::subtraction(
+                revive_llvm_context::polkavm_evm_arithmetic::subtraction(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -184,7 +184,7 @@ impl FunctionCall {
             }
             Name::Mul => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::multiplication(
+                revive_llvm_context::polkavm_evm_arithmetic::multiplication(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -193,7 +193,7 @@ impl FunctionCall {
             }
             Name::Div => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::division(
+                revive_llvm_context::polkavm_evm_arithmetic::division(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -202,7 +202,7 @@ impl FunctionCall {
             }
             Name::Mod => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::remainder(
+                revive_llvm_context::polkavm_evm_arithmetic::remainder(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -211,7 +211,7 @@ impl FunctionCall {
             }
             Name::Sdiv => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::division_signed(
+                revive_llvm_context::polkavm_evm_arithmetic::division_signed(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -220,7 +220,7 @@ impl FunctionCall {
             }
             Name::Smod => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_arithmetic::remainder_signed(
+                revive_llvm_context::polkavm_evm_arithmetic::remainder_signed(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -230,7 +230,7 @@ impl FunctionCall {
 
             Name::Lt => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -240,7 +240,7 @@ impl FunctionCall {
             }
             Name::Gt => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -250,7 +250,7 @@ impl FunctionCall {
             }
             Name::Eq => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -260,7 +260,7 @@ impl FunctionCall {
             }
             Name::IsZero => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     context.field_const(0),
@@ -270,7 +270,7 @@ impl FunctionCall {
             }
             Name::Slt => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -280,7 +280,7 @@ impl FunctionCall {
             }
             Name::Sgt => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_comparison::compare(
+                revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -291,7 +291,7 @@ impl FunctionCall {
 
             Name::Or => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::or(
+                revive_llvm_context::polkavm_evm_bitwise::or(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -300,7 +300,7 @@ impl FunctionCall {
             }
             Name::Xor => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::xor(
+                revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -309,7 +309,7 @@ impl FunctionCall {
             }
             Name::Not => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::xor(
+                revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
                     context.field_type().const_all_ones(),
@@ -318,7 +318,7 @@ impl FunctionCall {
             }
             Name::And => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::and(
+                revive_llvm_context::polkavm_evm_bitwise::and(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -327,7 +327,7 @@ impl FunctionCall {
             }
             Name::Shl => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::shift_left(
+                revive_llvm_context::polkavm_evm_bitwise::shift_left(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -336,7 +336,7 @@ impl FunctionCall {
             }
             Name::Shr => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::shift_right(
+                revive_llvm_context::polkavm_evm_bitwise::shift_right(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -345,7 +345,7 @@ impl FunctionCall {
             }
             Name::Sar => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::shift_right_arithmetic(
+                revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -354,7 +354,7 @@ impl FunctionCall {
             }
             Name::Byte => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_bitwise::byte(
+                revive_llvm_context::polkavm_evm_bitwise::byte(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -368,7 +368,7 @@ impl FunctionCall {
 
             Name::AddMod => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                revive_llvm_context::eravm_evm_math::add_mod(
+                revive_llvm_context::polkavm_evm_math::add_mod(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -378,7 +378,7 @@ impl FunctionCall {
             }
             Name::MulMod => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                revive_llvm_context::eravm_evm_math::mul_mod(
+                revive_llvm_context::polkavm_evm_math::mul_mod(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -388,7 +388,7 @@ impl FunctionCall {
             }
             Name::Exp => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_math::exponent(
+                revive_llvm_context::polkavm_evm_math::exponent(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -397,7 +397,7 @@ impl FunctionCall {
             }
             Name::SignExtend => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_math::sign_extend(
+                revive_llvm_context::polkavm_evm_math::sign_extend(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -407,7 +407,7 @@ impl FunctionCall {
 
             Name::Keccak256 => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_crypto::sha3(
+                revive_llvm_context::polkavm_evm_crypto::sha3(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -417,7 +417,7 @@ impl FunctionCall {
 
             Name::MLoad => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_memory::load(
+                revive_llvm_context::polkavm_evm_memory::load(
                     context,
                     arguments[0].into_int_value(),
                 )
@@ -425,7 +425,7 @@ impl FunctionCall {
             }
             Name::MStore => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_memory::store(
+                revive_llvm_context::polkavm_evm_memory::store(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -434,7 +434,7 @@ impl FunctionCall {
             }
             Name::MStore8 => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_memory::store_byte(
+                revive_llvm_context::polkavm_evm_memory::store_byte(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -443,16 +443,16 @@ impl FunctionCall {
             }
             Name::MCopy => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                let destination = revive_llvm_context::EraVMPointer::new_with_offset(
+                let destination = revive_llvm_context::PolkaVMPointer::new_with_offset(
                     context,
-                    revive_llvm_context::EraVMAddressSpace::Heap,
+                    revive_llvm_context::PolkaVMAddressSpace::Heap,
                     context.byte_type(),
                     arguments[0].into_int_value(),
                     "mcopy_destination",
                 );
-                let source = revive_llvm_context::EraVMPointer::new_with_offset(
+                let source = revive_llvm_context::PolkaVMPointer::new_with_offset(
                     context,
-                    revive_llvm_context::EraVMAddressSpace::Heap,
+                    revive_llvm_context::PolkaVMAddressSpace::Heap,
                     context.byte_type(),
                     arguments[1].into_int_value(),
                     "mcopy_source",
@@ -470,7 +470,7 @@ impl FunctionCall {
 
             Name::SLoad => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_storage::load(
+                revive_llvm_context::polkavm_evm_storage::load(
                     context,
                     arguments[0].into_int_value(),
                 )
@@ -478,7 +478,7 @@ impl FunctionCall {
             }
             Name::SStore => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_storage::store(
+                revive_llvm_context::polkavm_evm_storage::store(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -514,7 +514,7 @@ impl FunctionCall {
 
                 let index = context.field_const(offset as u64);
                 let value = arguments[2].value.into_int_value();
-                revive_llvm_context::eravm_evm_immutable::store(context, index, value)
+                revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
 
@@ -525,11 +525,11 @@ impl FunctionCall {
                     .code_type()
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
-                    revive_llvm_context::EraVMCodeType::Deploy => {
+                    revive_llvm_context::PolkaVMCodeType::Deploy => {
                         Ok(Some(context.field_const(0).as_basic_value_enum()))
                     }
-                    revive_llvm_context::EraVMCodeType::Runtime => {
-                        revive_llvm_context::eravm_evm_calldata::load(
+                    revive_llvm_context::PolkaVMCodeType::Runtime => {
+                        revive_llvm_context::polkavm_evm_calldata::load(
                             context,
                             arguments[0].into_int_value(),
                         )
@@ -542,11 +542,11 @@ impl FunctionCall {
                     .code_type()
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
-                    revive_llvm_context::EraVMCodeType::Deploy => {
+                    revive_llvm_context::PolkaVMCodeType::Deploy => {
                         Ok(Some(context.field_const(0).as_basic_value_enum()))
                     }
-                    revive_llvm_context::EraVMCodeType::Runtime => {
-                        revive_llvm_context::eravm_evm_calldata::size(context).map(Some)
+                    revive_llvm_context::PolkaVMCodeType::Runtime => {
+                        revive_llvm_context::polkavm_evm_calldata::size(context).map(Some)
                     }
                 }
             }
@@ -557,11 +557,11 @@ impl FunctionCall {
                     .code_type()
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
-                    revive_llvm_context::EraVMCodeType::Deploy => {
+                    revive_llvm_context::PolkaVMCodeType::Deploy => {
                         let calldata_size =
-                            revive_llvm_context::eravm_evm_calldata::size(context)?;
+                            revive_llvm_context::polkavm_evm_calldata::size(context)?;
 
-                        revive_llvm_context::eravm_evm_calldata::copy(
+                        revive_llvm_context::polkavm_evm_calldata::copy(
                             context,
                             arguments[0].into_int_value(),
                             calldata_size.into_int_value(),
@@ -569,8 +569,8 @@ impl FunctionCall {
                         )
                         .map(|_| None)
                     }
-                    revive_llvm_context::EraVMCodeType::Runtime => {
-                        revive_llvm_context::eravm_evm_calldata::copy(
+                    revive_llvm_context::PolkaVMCodeType::Runtime => {
+                        revive_llvm_context::polkavm_evm_calldata::copy(
                             context,
                             arguments[0].into_int_value(),
                             arguments[1].into_int_value(),
@@ -585,16 +585,16 @@ impl FunctionCall {
                     .code_type()
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
-                    revive_llvm_context::EraVMCodeType::Deploy => {
-                        revive_llvm_context::eravm_evm_calldata::size(context).map(Some)
+                    revive_llvm_context::PolkaVMCodeType::Deploy => {
+                        revive_llvm_context::polkavm_evm_calldata::size(context).map(Some)
                     }
-                    revive_llvm_context::EraVMCodeType::Runtime => {
+                    revive_llvm_context::PolkaVMCodeType::Runtime => {
                         todo!()
                     }
                 }
             }
             Name::CodeCopy => {
-                if let revive_llvm_context::EraVMCodeType::Runtime = context
+                if let revive_llvm_context::PolkaVMCodeType::Runtime = context
                     .code_type()
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
@@ -605,7 +605,7 @@ impl FunctionCall {
                 }
 
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                revive_llvm_context::eravm_evm_calldata::copy(
+                revive_llvm_context::polkavm_evm_calldata::copy(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -614,11 +614,11 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::ReturnDataSize => {
-                revive_llvm_context::eravm_evm_return_data::size(context).map(Some)
+                revive_llvm_context::polkavm_evm_return_data::size(context).map(Some)
             }
             Name::ReturnDataCopy => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                revive_llvm_context::eravm_evm_return_data::copy(
+                revive_llvm_context::polkavm_evm_return_data::copy(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -628,7 +628,7 @@ impl FunctionCall {
             }
             Name::ExtCodeSize => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_ext_code::size(
+                revive_llvm_context::polkavm_evm_ext_code::size(
                     context,
                     arguments[0].into_int_value(),
                 )
@@ -636,7 +636,7 @@ impl FunctionCall {
             }
             Name::ExtCodeHash => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::eravm_evm_ext_code::hash(
+                revive_llvm_context::polkavm_evm_ext_code::hash(
                     context,
                     arguments[0].into_int_value(),
                 )
@@ -645,7 +645,7 @@ impl FunctionCall {
 
             Name::Return => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_return::r#return(
+                revive_llvm_context::polkavm_evm_return::r#return(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -654,21 +654,21 @@ impl FunctionCall {
             }
             Name::Revert => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_return::revert(
+                revive_llvm_context::polkavm_evm_return::revert(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
                 )
                 .map(|_| None)
             }
-            Name::Stop => revive_llvm_context::eravm_evm_return::stop(context).map(|_| None),
+            Name::Stop => revive_llvm_context::polkavm_evm_return::stop(context).map(|_| None),
             Name::Invalid => {
-                revive_llvm_context::eravm_evm_return::invalid(context).map(|_| None)
+                revive_llvm_context::polkavm_evm_return::invalid(context).map(|_| None)
             }
 
             Name::Log0 => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
-                revive_llvm_context::eravm_evm_event::log(
+                revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -678,7 +678,7 @@ impl FunctionCall {
             }
             Name::Log1 => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                revive_llvm_context::eravm_evm_event::log(
+                revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -691,7 +691,7 @@ impl FunctionCall {
             }
             Name::Log2 => {
                 let arguments = self.pop_arguments_llvm::<D, 4>(context)?;
-                revive_llvm_context::eravm_evm_event::log(
+                revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -704,7 +704,7 @@ impl FunctionCall {
             }
             Name::Log3 => {
                 let arguments = self.pop_arguments_llvm::<D, 5>(context)?;
-                revive_llvm_context::eravm_evm_event::log(
+                revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -717,7 +717,7 @@ impl FunctionCall {
             }
             Name::Log4 => {
                 let arguments = self.pop_arguments_llvm::<D, 6>(context)?;
-                revive_llvm_context::eravm_evm_event::log(
+                revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
@@ -747,7 +747,7 @@ impl FunctionCall {
 
                 todo!()
                 /*
-                revive_llvm_context::eravm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::default(
                     context,
                     context.llvm_runtime().far_call,
                     gas,
@@ -777,7 +777,7 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                revive_llvm_context::eravm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::default(
                     context,
                     context.llvm_runtime().static_call,
                     gas,
@@ -806,7 +806,7 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                revive_llvm_context::eravm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::default(
                     context,
                     context.llvm_runtime().delegate_call,
                     gas,
@@ -828,7 +828,7 @@ impl FunctionCall {
                 let input_offset = arguments[1].into_int_value();
                 let input_length = arguments[2].into_int_value();
 
-                revive_llvm_context::eravm_evm_create::create(
+                revive_llvm_context::polkavm_evm_create::create(
                     context,
                     value,
                     input_offset,
@@ -844,7 +844,7 @@ impl FunctionCall {
                 let input_length = arguments[2].into_int_value();
                 let salt = arguments[3].into_int_value();
 
-                revive_llvm_context::eravm_evm_create::create2(
+                revive_llvm_context::polkavm_evm_create::create2(
                     context,
                     value,
                     input_offset,
@@ -860,7 +860,7 @@ impl FunctionCall {
                     anyhow::anyhow!("{} `dataoffset` object identifier is missing", location)
                 })?;
 
-                revive_llvm_context::eravm_evm_create::contract_hash(context, identifier)
+                revive_llvm_context::polkavm_evm_create::contract_hash(context, identifier)
                     .map(|argument| Some(argument.value))
             }
             Name::DataSize => {
@@ -870,7 +870,7 @@ impl FunctionCall {
                     anyhow::anyhow!("{} `dataoffset` object identifier is missing", location)
                 })?;
 
-                revive_llvm_context::eravm_evm_create::header_size(context, identifier)
+                revive_llvm_context::polkavm_evm_create::header_size(context, identifier)
                     .map(|argument| Some(argument.value))
             }
             Name::DataCopy => {
@@ -882,7 +882,7 @@ impl FunctionCall {
                     ),
                     "datacopy_contract_hash_offset",
                 )?;
-                revive_llvm_context::eravm_evm_memory::store(
+                revive_llvm_context::polkavm_evm_memory::store(
                     context,
                     offset,
                     arguments[1].into_int_value(),
@@ -912,42 +912,42 @@ impl FunctionCall {
             }
 
             Name::CallValue => {
-                revive_llvm_context::eravm_evm_ether_gas::value(context).map(Some)
+                revive_llvm_context::polkavm_evm_ether_gas::value(context).map(Some)
             }
-            Name::Gas => revive_llvm_context::eravm_evm_ether_gas::gas(context).map(Some),
+            Name::Gas => revive_llvm_context::polkavm_evm_ether_gas::gas(context).map(Some),
             Name::Balance => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
 
                 let address = arguments[0].into_int_value();
-                revive_llvm_context::eravm_evm_ether_gas::balance(context, address).map(Some)
+                revive_llvm_context::polkavm_evm_ether_gas::balance(context, address).map(Some)
             }
             Name::SelfBalance => todo!(),
 
             Name::GasLimit => {
-                revive_llvm_context::eravm_evm_contract_context::gas_limit(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::gas_limit(context).map(Some)
             }
             Name::GasPrice => {
-                revive_llvm_context::eravm_evm_contract_context::gas_price(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::gas_price(context).map(Some)
             }
             Name::Origin => {
-                revive_llvm_context::eravm_evm_contract_context::origin(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::origin(context).map(Some)
             }
             Name::ChainId => {
-                revive_llvm_context::eravm_evm_contract_context::chain_id(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::chain_id(context).map(Some)
             }
             Name::Timestamp => {
-                revive_llvm_context::eravm_evm_contract_context::block_timestamp(context)
+                revive_llvm_context::polkavm_evm_contract_context::block_timestamp(context)
                     .map(Some)
             }
             Name::Number => {
-                revive_llvm_context::eravm_evm_contract_context::block_number(context)
+                revive_llvm_context::polkavm_evm_contract_context::block_number(context)
                     .map(Some)
             }
             Name::BlockHash => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
                 let index = arguments[0].into_int_value();
 
-                revive_llvm_context::eravm_evm_contract_context::block_hash(context, index)
+                revive_llvm_context::polkavm_evm_contract_context::block_hash(context, index)
                     .map(Some)
             }
             Name::BlobHash => {
@@ -958,13 +958,13 @@ impl FunctionCall {
                 );
             }
             Name::Difficulty | Name::Prevrandao => {
-                revive_llvm_context::eravm_evm_contract_context::difficulty(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::difficulty(context).map(Some)
             }
             Name::CoinBase => {
-                revive_llvm_context::eravm_evm_contract_context::coinbase(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::coinbase(context).map(Some)
             }
             Name::BaseFee => {
-                revive_llvm_context::eravm_evm_contract_context::basefee(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::basefee(context).map(Some)
             }
             Name::BlobBaseFee => {
                 anyhow::bail!(
@@ -973,7 +973,7 @@ impl FunctionCall {
                 );
             }
             Name::MSize => {
-                revive_llvm_context::eravm_evm_contract_context::msize(context).map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
             }
 
             Name::Verbatim {
@@ -1006,10 +1006,10 @@ impl FunctionCall {
     /// Pops the specified number of arguments, converted into their LLVM values.
     fn pop_arguments_llvm<'ctx, D, const N: usize>(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<[inkwell::values::BasicValueEnum<'ctx>; N]>
     where
-        D: revive_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {
@@ -1023,10 +1023,10 @@ impl FunctionCall {
     /// Pops the specified number of arguments.
     fn pop_arguments<'ctx, D, const N: usize>(
         &mut self,
-        context: &mut revive_llvm_context::EraVMContext<'ctx, D>,
-    ) -> anyhow::Result<[revive_llvm_context::EraVMArgument<'ctx>; N]>
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
+    ) -> anyhow::Result<[revive_llvm_context::PolkaVMArgument<'ctx>; N]>
     where
-        D: revive_llvm_context::EraVMDependency + Clone,
+        D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {

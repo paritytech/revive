@@ -1,4 +1,4 @@
-//! Solidity to EraVM compiler arguments.
+//! Solidity to PolkaVM compiler arguments.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -13,7 +13,7 @@ use structopt::StructOpt;
 /// output directory.
 /// Example: zksolc ERC20.sol -O3 --bin --output-dir './build/'
 #[derive(Debug, StructOpt)]
-#[structopt(name = "The EraVM Solidity compiler")]
+#[structopt(name = "The PolkaVM Solidity compiler")]
 pub struct Arguments {
     /// Print the version and exit.
     #[structopt(long = "version")]
@@ -22,7 +22,7 @@ pub struct Arguments {
     /// Specify the input paths and remappings.
     /// If an argument contains a '=', it is considered a remapping.
     /// Multiple Solidity files can be passed in the default Solidity mode.
-    /// Yul, LLVM IR, and EraVM Assembly modes currently support only a single file.
+    /// Yul, LLVM IR, and PolkaVM Assembly modes currently support only a single file.
     pub inputs: Vec<String>,
 
     /// Set the given path as the root of the source tree instead of the root of the filesystem.
@@ -113,10 +113,10 @@ pub struct Arguments {
     #[structopt(long = "llvm-ir")]
     pub llvm_ir: bool,
 
-    /// Switch to EraVM assembly mode.
-    /// Only one input EraVM assembly file is allowed.
+    /// Switch to PolkaVM assembly mode.
+    /// Only one input PolkaVM assembly file is allowed.
     /// Cannot be used with combined and standard JSON modes.
-    /// Use this mode at your own risk, as EraVM assembly input validation is not implemented.
+    /// Use this mode at your own risk, as PolkaVM assembly input validation is not implemented.
     #[structopt(long = "zkasm")]
     pub zkasm: bool,
 
@@ -127,8 +127,8 @@ pub struct Arguments {
     pub force_evmla: bool,
 
     /// Enable system contract compilation mode.
-    /// In this mode EraVM extensions are enabled. For example, calls to addresses `0xFFFF` and below
-    /// are substituted by special EraVM instructions.
+    /// In this mode PolkaVM extensions are enabled. For example, calls to addresses `0xFFFF` and below
+    /// are substituted by special PolkaVM instructions.
     /// In the Yul mode, the `verbatim_*` instruction family is available.
     #[structopt(long = "system-mode")]
     pub is_system_mode: bool,
@@ -139,11 +139,11 @@ pub struct Arguments {
     #[structopt(long = "metadata-hash")]
     pub metadata_hash: Option<String>,
 
-    /// Output EraVM assembly of the contracts.
+    /// Output PolkaVM assembly of the contracts.
     #[structopt(long = "asm")]
     pub output_assembly: bool,
 
-    /// Output EraVM bytecode of the contracts.
+    /// Output PolkaVM bytecode of the contracts.
     #[structopt(long = "bin")]
     pub output_binary: bool,
 
@@ -207,66 +207,66 @@ impl Arguments {
         .filter(|&&x| x)
         .count();
         if modes_count > 1 {
-            anyhow::bail!("Only one modes is allowed at the same time: Yul, LLVM IR, EraVM assembly, combined JSON, standard JSON.");
+            anyhow::bail!("Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.");
         }
 
         if self.yul || self.llvm_ir || self.zkasm {
             if self.base_path.is_some() {
-                anyhow::bail!("`base-path` is not used in Yul, LLVM IR and EraVM assembly modes.");
+                anyhow::bail!("`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes.");
             }
             if !self.include_paths.is_empty() {
                 anyhow::bail!(
-                    "`include-paths` is not used in Yul, LLVM IR and EraVM assembly modes."
+                    "`include-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes."
                 );
             }
             if self.allow_paths.is_some() {
                 anyhow::bail!(
-                    "`allow-paths` is not used in Yul, LLVM IR and EraVM assembly modes."
+                    "`allow-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes."
                 );
             }
             if !self.libraries.is_empty() {
                 anyhow::bail!(
-                    "Libraries are not supported in Yul, LLVM IR and EraVM assembly modes."
+                    "Libraries are not supported in Yul, LLVM IR and PolkaVM assembly modes."
                 );
             }
 
             if self.evm_version.is_some() {
                 anyhow::bail!(
-                    "`evm-version` is not used in Yul, LLVM IR and EraVM assembly modes."
+                    "`evm-version` is not used in Yul, LLVM IR and PolkaVM assembly modes."
                 );
             }
 
             if self.force_evmla {
-                anyhow::bail!("EVM legacy assembly mode is not supported in Yul, LLVM IR and EraVM assembly modes.");
+                anyhow::bail!("EVM legacy assembly mode is not supported in Yul, LLVM IR and PolkaVM assembly modes.");
             }
 
             if self.disable_solc_optimizer {
-                anyhow::bail!("Disabling the solc optimizer is not supported in Yul, LLVM IR and EraVM assembly modes.");
+                anyhow::bail!("Disabling the solc optimizer is not supported in Yul, LLVM IR and PolkaVM assembly modes.");
             }
         }
 
         if self.llvm_ir || self.zkasm {
             if self.solc.is_some() {
-                anyhow::bail!("`solc` is not used in LLVM IR and EraVM assembly modes.");
+                anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
             }
 
             if self.is_system_mode {
                 anyhow::bail!(
-                    "System contract mode is not supported in LLVM IR and EraVM assembly modes."
+                    "System contract mode is not supported in LLVM IR and PolkaVM assembly modes."
                 );
             }
         }
 
         if self.zkasm {
             if self.optimization.is_some() {
-                anyhow::bail!("LLVM optimizations are not supported in EraVM assembly mode.");
+                anyhow::bail!("LLVM optimizations are not supported in PolkaVM assembly mode.");
             }
 
             if self.fallback_to_optimizing_for_size {
-                anyhow::bail!("Falling back to -Oz is not supported in EraVM assembly mode.");
+                anyhow::bail!("Falling back to -Oz is not supported in PolkaVM assembly mode.");
             }
             if self.disable_system_request_memoization {
-                anyhow::bail!("Disabling the system request memoization is not supported in EraVM assembly mode.");
+                anyhow::bail!("Disabling the system request memoization is not supported in PolkaVM assembly mode.");
             }
         }
 

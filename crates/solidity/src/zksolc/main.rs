@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use self::arguments::Arguments;
 
-use anyhow::{bail, Context};
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
 
@@ -197,24 +196,33 @@ fn main_inner() -> anyhow::Result<()> {
             let bytescode = contract.build.bytecode;
 
             if arguments.output_assembly {
-                let program_blob = ProgramBlob::parse(bytescode.as_slice())
-                    .map_err(|error| anyhow::anyhow!("Failed to parse program blob: {error}"))?;
+                let program_blob = ProgramBlob::parse(bytescode.as_slice()).map_err(|error| {
+                    anyhow::anyhow!(format!("Failed to parse program blob: {}", error))
+                })?;
 
-                let disassembler_object =
-                    Disassembler::new(&program_blob, DisassemblyFormat::Guest).context(format!(
-                        "Failed to create disassembler for contract '{}'",
-                        path
-                    ))?;
+                let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+                    .map_err(|error| {
+                    anyhow::anyhow!(format!(
+                        "Failed to create disassembler for contract '{}'\n\nDue to:\n{}",
+                        path, error
+                    ))
+                })?;
 
                 let mut disassembled_code = Vec::new();
-                disassembler_object
+                disassembler
                     .disassemble_into(&mut disassembled_code)
-                    .context(format!("Failed to disassemble contract '{}'", path))?;
+                    .map_err(|error| {
+                        anyhow::anyhow!(format!(
+                            "Failed to disassemble contract '{}'\n\nDue to:\n{}\n\nGas details:{:?}\n",
+                            path, error, disassembler.display_gas()
+                        ))
+                    })?;
 
-                let assembly_text = String::from_utf8(disassembled_code).context(format!(
-                    "Failed to convert disassembled code to string for contract '{}'",
-                    path
-                ))?;
+                let assembly_text = String::from_utf8(disassembled_code)
+                    .map_err(|error| anyhow::anyhow!(format!(
+                        "Failed to convert disassembled code to string for contract '{}'\n\nDue to:\n{}",
+                        path, error
+                    )))?;
 
                 println!("Contract `{}` assembly:\n\n{}", path, assembly_text);
             }

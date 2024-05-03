@@ -197,12 +197,8 @@ fn main_inner() -> anyhow::Result<()> {
             let bytescode = contract.build.bytecode;
 
             if arguments.output_assembly {
-                let program_blob = match ProgramBlob::parse(bytescode.as_slice()) {
-                    Ok(blob) => blob,
-                    Err(error) => {
-                        bail!("Failed to parse program blob: {}", error);
-                    }
-                };
+                let program_blob = ProgramBlob::parse(bytescode.as_slice())
+                    .map_err(|error| anyhow::anyhow!("Failed to parse program blob: {error}"))?;
 
                 let disassembler_object =
                     Disassembler::new(&program_blob, DisassemblyFormat::Guest).context(format!(

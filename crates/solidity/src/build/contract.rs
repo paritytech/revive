@@ -8,6 +8,9 @@ use std::path::Path;
 use serde::Deserialize;
 use serde::Serialize;
 
+use polkavm_common::program::ProgramBlob;
+use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+
 use crate::solc::combined_json::contract::Contract as CombinedJsonContract;
 use crate::solc::standard_json::output::contract::Contract as StandardJsonOutputContract;
 
@@ -53,6 +56,7 @@ impl Contract {
         overwrite: bool,
     ) -> anyhow::Result<()> {
         let file_name = Self::short_path(self.path.as_str());
+        let bytescode = self.build.bytecode;
 
         if output_assembly {
             let file_name = format!(
@@ -68,11 +72,39 @@ impl Contract {
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
                 );
             } else {
+                let program_blob = ProgramBlob::parse(bytescode.as_slice()).map_err(|error| {
+                    anyhow::anyhow!(format!("Failed to parse program blob: {}", error))
+                })?;
+
+                let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+                    .map_err(|error| {
+                    anyhow::anyhow!(format!(
+                        "Failed to create disassembler for contract '{:?}'\n\nDue to:\n{}",
+                        &file_path, error
+                    ))
+                })?;
+
+                let mut disassembled_code = Vec::new();
+                disassembler
+                    .disassemble_into(&mut disassembled_code)
+                    .map_err(|error| {
+                        anyhow::anyhow!(format!(
+                            "Failed to disassemble contract '{:?}'\n\nDue to:\n{}\n\nGas details:{:?}\n",
+                            &file_path, error, disassembler.display_gas()
+                        ))
+                    })?;
+
+                let assembly_text = String::from_utf8(disassembled_code)
+                    .map_err(|error| anyhow::anyhow!(format!(
+                        "Failed to convert disassembled code to string for contract '{:?}'\n\nDue to:\n{}",
+                        &file_path, error
+                    )))?;
+
                 File::create(&file_path)
                     .map_err(|error| {
                         anyhow::anyhow!("File {:?} creating error: {}", file_path, error)
                     })?
-                    .write_all(self.build.assembly_text.as_bytes())
+                    .write_all(assembly_text.as_bytes())
                     .map_err(|error| {
                         anyhow::anyhow!("File {:?} writing error: {}", file_path, error)
                     })?;
@@ -93,7 +125,7 @@ impl Contract {
                     .map_err(|error| {
                         anyhow::anyhow!("File {:?} creating error: {}", file_path, error)
                     })?
-                    .write_all(self.build.bytecode.as_slice())
+                    .write_all(bytescode.as_slice())
                     .map_err(|error| {
                         anyhow::anyhow!("File {:?} writing error: {}", file_path, error)
                     })?;

@@ -1,4 +1,4 @@
-.PHONY: install test test-solidity test-cli test-integration clean
+.PHONY: install format test test-solidity test-cli test-integration clean
 
 install: install-bin install-npm
 
@@ -8,7 +8,10 @@ install-bin:
 install-npm:
 	npm install && npm fund
 
-test: install test-integration test-cli test-solidity
+format:
+	cargo fmt --all
+
+test: format install test-integration test-cli test-solidity
 
 test-integration: install-bin
 	cargo test --package revive-integration

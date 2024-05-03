@@ -212,7 +212,9 @@ impl Arguments {
 
         if self.yul || self.llvm_ir || self.zkasm {
             if self.base_path.is_some() {
-                anyhow::bail!("`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes.");
+                anyhow::bail!(
+                    "`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes."
+                );
             }
             if !self.include_paths.is_empty() {
                 anyhow::bail!(

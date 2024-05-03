@@ -41,10 +41,7 @@ where
         self.assembly.declare(context)
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         self.assembly.into_llvm(context)
     }
 }

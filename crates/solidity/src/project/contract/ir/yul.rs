@@ -42,10 +42,7 @@ where
         self.object.declare(context)
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         self.object.into_llvm(context)
     }
 }

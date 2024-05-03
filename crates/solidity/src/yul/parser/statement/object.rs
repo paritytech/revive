@@ -219,16 +219,11 @@ where
         Ok(())
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         if self.identifier.ends_with("_deployed") {
-            revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code)
-                .into_llvm(context)?;
+            revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code).into_llvm(context)?;
         } else {
-            revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code)
-                .into_llvm(context)?;
+            revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;
         }
 
         match self.inner_object {

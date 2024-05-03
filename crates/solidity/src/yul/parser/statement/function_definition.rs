@@ -109,9 +109,10 @@ impl FunctionDefinition {
 
             arguments.remove(0);
         }
-        if identifier.inner.contains(
-            revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER,
-        ) && !arguments.is_empty()
+        if identifier
+            .inner
+            .contains(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER)
+            && !arguments.is_empty()
         {
             return Err(ParserError::InvalidNumberOfArguments {
                 location,

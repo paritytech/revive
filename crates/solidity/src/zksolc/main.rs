@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use self::arguments::Arguments;
 
+use polkavm_common::program::ProgramBlob;
+use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+
 /// The rayon worker stack size.
 const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
@@ -190,18 +193,41 @@ fn main_inner() -> anyhow::Result<()> {
         );
     } else if arguments.output_assembly || arguments.output_binary {
         for (path, contract) in build.contracts.into_iter() {
+            let bytescode = contract.build.bytecode;
+
             if arguments.output_assembly {
-                println!(
-                    "Contract `{}` assembly:\n\n{}",
-                    path, contract.build.assembly_text
-                );
+                let program_blob = ProgramBlob::parse(bytescode.as_slice()).map_err(|error| {
+                    anyhow::anyhow!(format!("Failed to parse program blob: {}", error))
+                })?;
+
+                let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+                    .map_err(|error| {
+                    anyhow::anyhow!(format!(
+                        "Failed to create disassembler for contract '{}'\n\nDue to:\n{}",
+                        path, error
+                    ))
+                })?;
+
+                let mut disassembled_code = Vec::new();
+                disassembler
+                    .disassemble_into(&mut disassembled_code)
+                    .map_err(|error| {
+                        anyhow::anyhow!(format!(
+                            "Failed to disassemble contract '{}'\n\nDue to:\n{}\n\nGas details:{:?}\n",
+                            path, error, disassembler.display_gas()
+                        ))
+                    })?;
+
+                let assembly_text = String::from_utf8(disassembled_code)
+                    .map_err(|error| anyhow::anyhow!(format!(
+                        "Failed to convert disassembled code to string for contract '{}'\n\nDue to:\n{}",
+                        path, error
+                    )))?;
+
+                println!("Contract `{}` assembly:\n\n{}", path, assembly_text);
             }
             if arguments.output_binary {
-                println!(
-                    "Contract `{}` bytecode: 0x{}",
-                    path,
-                    hex::encode(contract.build.bytecode)
-                );
+                println!("Contract `{}` bytecode: 0x{}", path, hex::encode(bytescode));
             }
         }
     } else {

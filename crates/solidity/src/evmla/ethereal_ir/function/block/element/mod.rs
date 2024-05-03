@@ -1168,8 +1168,7 @@ where
                     .map(Some)
             }
             InstructionName::NUMBER => {
-                revive_llvm_context::polkavm_evm_contract_context::block_number(context)
-                    .map(Some)
+                revive_llvm_context::polkavm_evm_contract_context::block_number(context).map(Some)
             }
             InstructionName::BLOCKHASH => {
                 let arguments = self.pop_arguments_llvm(context);
@@ -1244,9 +1243,7 @@ where
                             .to_llvm()
                             .into_pointer_value();
                         context.build_store(
-                            revive_llvm_context::PolkaVMPointer::new_stack_field(
-                                context, pointer,
-                            ),
+                            revive_llvm_context::PolkaVMPointer::new_stack_field(context, pointer),
                             value,
                         )?;
                     }
@@ -1297,9 +1294,7 @@ where
                         assert_eq!(arguments.len(), 1);
                         context.build_store(pointer, arguments.remove(0))?;
                     }
-                    revive_llvm_context::PolkaVMFunctionReturn::Compound {
-                        pointer, ..
-                    } => {
+                    revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
                         for (index, argument) in arguments.into_iter().enumerate() {
                             let element_pointer = context.build_gep(
                                 pointer,

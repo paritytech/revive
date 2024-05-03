@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use self::arguments::Arguments;
 
+use anyhow::{bail, Context};
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
 
@@ -199,17 +200,25 @@ fn main_inner() -> anyhow::Result<()> {
                 let program_blob = match ProgramBlob::parse(bytescode.as_slice()) {
                     Ok(blob) => blob,
                     Err(error) => {
-                        anyhow::bail!("Failed to parse program blob: {}", error);
+                        bail!("Failed to parse program blob: {}", error);
                     }
                 };
 
                 let disassembler_object =
-                    Disassembler::new(&program_blob, DisassemblyFormat::Guest)?;
+                    Disassembler::new(&program_blob, DisassemblyFormat::Guest).context(format!(
+                        "Failed to create disassembler for contract '{}'",
+                        path
+                    ))?;
 
                 let mut disassembled_code = Vec::new();
-                disassembler_object.disassemble_into(&mut disassembled_code)?;
+                disassembler_object
+                    .disassemble_into(&mut disassembled_code)
+                    .context(format!("Failed to disassemble contract '{}'", path))?;
 
-                let assembly_text = String::from_utf8(disassembled_code)?;
+                let assembly_text = String::from_utf8(disassembled_code).context(format!(
+                    "Failed to convert disassembled code to string for contract '{}'",
+                    path
+                ))?;
 
                 println!("Contract `{}` assembly:\n\n{}", path, assembly_text);
             }

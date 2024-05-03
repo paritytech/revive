@@ -148,8 +148,7 @@ impl Contract {
                 context.set_yul_data(yul_data);
             }
             IR::EVMLA(_) => {
-                let evmla_data =
-                    revive_llvm_context::PolkaVMContextEVMLAData::new(version.default);
+                let evmla_data = revive_llvm_context::PolkaVMContextEVMLAData::new(version.default);
                 context.set_evmla_data(evmla_data);
             }
             IR::LLVMIR(_) => {}
@@ -201,10 +200,7 @@ where
         self.ir.declare(context)
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         self.ir.into_llvm(context)
     }
 }

@@ -72,7 +72,7 @@ where
         group
             .sample_size(10)
             .measurement_time(Duration::from_secs(60));
-        return group;
+        group
     }
 
     #[cfg(not(feature = "bench-extensive"))]

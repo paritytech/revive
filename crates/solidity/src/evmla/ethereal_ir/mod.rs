@@ -81,10 +81,7 @@ impl EtherealIR {
                 &instructions[offset..],
             )?;
             blocks.insert(
-                revive_llvm_context::PolkaVMFunctionBlockKey::new(
-                    code_type,
-                    block.key.tag.clone(),
-                ),
+                revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, block.key.tag.clone()),
                 block,
             );
             offset += size;
@@ -111,10 +108,7 @@ where
         Ok(())
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         context.evmla_mut().stack = vec![];
 
         self.entry_function.into_llvm(context)?;

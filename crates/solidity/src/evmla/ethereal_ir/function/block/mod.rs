@@ -117,10 +117,7 @@ impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Block
 where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         context.set_code_type(self.key.code_type);
 
         for element in self.elements.into_iter() {

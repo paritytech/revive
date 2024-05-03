@@ -252,12 +252,10 @@ impl Function {
                             destination.to_owned() - num::BigUint::from(1u64 << 32),
                         )
                     }
-                    Element::Tag(destination) => {
-                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
-                            code_type,
-                            destination.to_owned(),
-                        )
-                    }
+                    Element::Tag(destination) => revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                        code_type,
+                        destination.to_owned(),
+                    ),
                     Element::ReturnAddress(output_size) => {
                         block_element.instruction =
                             Instruction::recursive_return(1 + output_size, instruction);
@@ -316,12 +314,10 @@ impl Function {
                             destination.to_owned() - num::BigUint::from(1u64 << 32),
                         )
                     }
-                    Element::Tag(destination) => {
-                        revive_llvm_context::PolkaVMFunctionBlockKey::new(
-                            code_type,
-                            destination.to_owned(),
-                        )
-                    }
+                    Element::Tag(destination) => revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                        code_type,
+                        destination.to_owned(),
+                    ),
                     element => {
                         return Err(anyhow::anyhow!(
                             "The {} instruction expected a tag or return address, found {}",
@@ -346,8 +342,7 @@ impl Function {
                 ..
             } => {
                 let tag: num::BigUint = tag.parse().expect("Always valid");
-                let block_key =
-                    revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, tag);
+                let block_key = revive_llvm_context::PolkaVMFunctionBlockKey::new(code_type, tag);
 
                 queue_element.predecessor = Some((queue_element.block_key.clone(), instance));
                 queue_element.block_key = block_key.clone();
@@ -1014,21 +1009,16 @@ impl Function {
         block_stack: &mut Stack,
         block_element: &mut BlockElement,
         version: &semver::Version,
-    ) -> anyhow::Result<(
-        revive_llvm_context::PolkaVMFunctionBlockKey,
-        Vec<Element>,
-    )> {
+    ) -> anyhow::Result<(revive_llvm_context::PolkaVMFunctionBlockKey, Vec<Element>)> {
         let return_address_offset = block_stack.elements.len() - 2 - recursive_function.input_size;
         let input_arguments_offset = return_address_offset + 1;
         let callee_tag_offset = input_arguments_offset + recursive_function.input_size;
 
         let return_address = match block_stack.elements[return_address_offset] {
-            Element::Tag(ref return_address) => {
-                revive_llvm_context::PolkaVMFunctionBlockKey::new(
-                    block_key.code_type,
-                    return_address.to_owned(),
-                )
-            }
+            Element::Tag(ref return_address) => revive_llvm_context::PolkaVMFunctionBlockKey::new(
+                block_key.code_type,
+                return_address.to_owned(),
+            ),
             ref element => anyhow::bail!("Expected the function return address, found {}", element),
         };
         let mut stack = Stack::with_capacity(1 + recursive_function.input_size);
@@ -1177,17 +1167,16 @@ where
             output_size,
             Some(inkwell::module::Linkage::Private),
         )?;
-        function.borrow_mut().set_evmla_data(
-            revive_llvm_context::PolkaVMFunctionEVMLAData::new(self.stack_size),
-        );
+        function
+            .borrow_mut()
+            .set_evmla_data(revive_llvm_context::PolkaVMFunctionEVMLAData::new(
+                self.stack_size,
+            ));
 
         Ok(())
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         context.set_current_function(self.name.as_str())?;
 
         for (key, blocks) in self.blocks.iter() {

@@ -83,10 +83,7 @@ where
         }
     }
 
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.into_llvm(context),
             Self::EVMLA(inner) => inner.into_llvm(context),

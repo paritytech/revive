@@ -122,10 +122,7 @@ impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Switch
 where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         let scrutinee = self.expression.into_llvm(context)?;
 
         if self.cases.is_empty() {

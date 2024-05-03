@@ -23,10 +23,7 @@ impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for EntryLink
 where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
-    fn into_llvm(
-        self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         let target = context
             .get_function(EtherealIR::DEFAULT_ENTRY_FUNCTION_NAME)
             .expect("Always exists")

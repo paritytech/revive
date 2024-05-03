@@ -9,7 +9,7 @@ install-npm:
 	npm install && npm fund
 
 format:
-	cargo fmt --all
+	cargo fmt --all --check
 
 test: format install test-integration test-cli test-solidity
 

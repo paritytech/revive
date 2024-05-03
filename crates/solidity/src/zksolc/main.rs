@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use self::arguments::Arguments;
 
+use polkavm_common::program::ProgramBlob;
+use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+
 /// The rayon worker stack size.
 const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
@@ -190,18 +193,28 @@ fn main_inner() -> anyhow::Result<()> {
         );
     } else if arguments.output_assembly || arguments.output_binary {
         for (path, contract) in build.contracts.into_iter() {
+            let bytescode = contract.build.bytecode;
+
             if arguments.output_assembly {
-                println!(
-                    "Contract `{}` assembly:\n\n{}",
-                    path, contract.build.assembly_text
-                );
+                let program_blob = match ProgramBlob::parse(bytescode.as_slice()) {
+                    Ok(blob) => blob,
+                    Err(error) => {
+                        anyhow::bail!("Failed to parse program blob: {}", error);
+                    }
+                };
+
+                let disassembler_object =
+                    Disassembler::new(&program_blob, DisassemblyFormat::Guest)?;
+
+                let mut disassembled_code = Vec::new();
+                disassembler_object.disassemble_into(&mut disassembled_code)?;
+
+                let assembly_text = String::from_utf8(disassembled_code)?;
+
+                println!("Contract `{}` assembly:\n\n{}", path, assembly_text);
             }
             if arguments.output_binary {
-                println!(
-                    "Contract `{}` bytecode: 0x{}",
-                    path,
-                    hex::encode(contract.build.bytecode)
-                );
+                println!("Contract `{}` bytecode: 0x{}", path, hex::encode(bytescode));
             }
         }
     } else {

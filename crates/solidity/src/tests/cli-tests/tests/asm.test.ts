@@ -14,19 +14,23 @@ describe("Run with --asm by default", () => {
   });
 
   it("--asm output is presented", () => {
-      expect(result.output).toMatch(/(__entry:)/i);
+    const expectedPatterns = [/(deploy)/i, /(call)/i, /(seal_return)/i];
+
+    for (const pattern of expectedPatterns) {
+      expect(result.output).toMatch(pattern);
+    }
   });
 
-
   it("solc exit code == zksolc exit code", () => {
-      const command = `solc ${paths.pathToBasicSolContract} --asm`;
-      const solcResult = executeCommand(command);
-      expect(solcResult.exitCode).toBe(result.exitCode);
+    const command = `solc ${paths.pathToBasicSolContract} --asm`;
+    const solcResult = executeCommand(command);
+    expect(solcResult.exitCode).toBe(result.exitCode);
   });
 
   it("run invalid: zksolc --asm", () => {
     expect(resultInvalid.output).toMatch(/(No input sources specified|Compilation aborted)/i);
   });
+  
   it("Invalid command exit code = 1", () => {
     expect(resultInvalid.exitCode).toBe(1);
   });

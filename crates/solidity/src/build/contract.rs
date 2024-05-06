@@ -149,7 +149,9 @@ impl Contract {
         }
         let hexadecimal_bytecode = hex::encode(self.build.bytecode);
         combined_json_contract.bin = Some(hexadecimal_bytecode);
-        combined_json_contract.bin_runtime = combined_json_contract.bin.clone();
+        combined_json_contract
+            .bin_runtime
+            .clone_from(&combined_json_contract.bin);
 
         combined_json_contract.factory_deps = Some(self.build.factory_dependencies);
 

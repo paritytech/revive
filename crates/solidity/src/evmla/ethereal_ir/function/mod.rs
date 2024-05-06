@@ -968,7 +968,7 @@ impl Function {
         )?;
 
         if let Some(mut queue_element) = queue_element {
-            queue_element.stack = block_element.stack.to_owned();
+            block_element.stack.clone_into(&mut queue_element.stack);
             queue.push(queue_element);
         }
 

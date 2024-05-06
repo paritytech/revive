@@ -55,7 +55,7 @@ where
         format!("dup{offset}").as_str(),
     )?;
 
-    *original = element.original.to_owned();
+    element.original.clone_into(original);
 
     Ok(value)
 }
@@ -84,8 +84,12 @@ where
     let swap_value =
         context.build_load(swap_pointer, format!("swap{offset}_swap_value").as_str())?;
 
-    context.evmla_mut().stack[height - 1].original = swap_element.original.to_owned();
-    context.evmla_mut().stack[height - offset - 1].original = top_element.original.to_owned();
+    swap_element
+        .original
+        .clone_into(&mut context.evmla_mut().stack[height - 1].original);
+    top_element
+        .original
+        .clone_into(&mut context.evmla_mut().stack[height - offset - 1].original);
 
     context.build_store(top_pointer, swap_value)?;
     context.build_store(swap_pointer, top_value)?;

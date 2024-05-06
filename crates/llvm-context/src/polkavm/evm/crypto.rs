@@ -13,8 +13,8 @@ pub fn sha3<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let offset_casted = context.safe_truncate_int_to_i32(offset)?;
-    let length_casted = context.safe_truncate_int_to_i32(length)?;
+    let offset_casted = context.safe_truncate_int_to_xlen(offset)?;
+    let length_casted = context.safe_truncate_int_to_xlen(length)?;
     let input_pointer = context.build_heap_gep(offset_casted, length_casted)?;
     let input_pointer_casted = context.builder().build_ptr_to_int(
         input_pointer.value,

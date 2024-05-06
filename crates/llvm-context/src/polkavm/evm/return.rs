@@ -61,13 +61,17 @@ where
             )?;
 
             context.build_exit(
-                context.integer_const(32, 0),
+                context.integer_const(crate::polkavm::XLEN, 0),
                 context.field_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
                 return_data_length,
             )?;
         }
         Some(CodeType::Runtime) => {
-            context.build_exit(context.integer_const(32, 0), offset, length)?;
+            context.build_exit(
+                context.integer_const(crate::polkavm::XLEN, 0),
+                offset,
+                length,
+            )?;
         }
     }
 
@@ -83,7 +87,11 @@ pub fn revert<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_exit(context.integer_const(32, 1), offset, length)
+    context.build_exit(
+        context.integer_const(crate::polkavm::XLEN, 1),
+        offset,
+        length,
+    )
 }
 
 /// Translates the `stop` instruction.
@@ -94,8 +102,8 @@ where
 {
     r#return(
         context,
-        context.integer_const(32, 0),
-        context.integer_const(32, 0),
+        context.integer_const(crate::polkavm::XLEN, 0),
+        context.integer_const(crate::polkavm::XLEN, 0),
     )
 }
 

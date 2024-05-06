@@ -51,8 +51,8 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let offset = context.safe_truncate_int_to_i32(destination_offset)?;
-    let size = context.safe_truncate_int_to_i32(size)?;
+    let offset = context.safe_truncate_int_to_xlen(destination_offset)?;
+    let size = context.safe_truncate_int_to_xlen(size)?;
     let destination = context.build_heap_gep(offset, size)?;
 
     let calldata_pointer = context
@@ -61,7 +61,7 @@ where
         .as_pointer_value();
     let source = context.build_gep(
         Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
-        &[context.safe_truncate_int_to_i32(source_offset)?],
+        &[context.safe_truncate_int_to_xlen(source_offset)?],
         context.byte_type(),
         "calldata_pointer_with_offset",
     );

@@ -68,7 +68,7 @@ impl<'ctx> Pointer<'ctx> {
             "Stack pointers cannot be addressed"
         );
 
-        let offset = context.safe_truncate_int_to_i32(offset).unwrap();
+        let offset = context.safe_truncate_int_to_xlen(offset).unwrap();
         let value = context
             .builder
             .build_int_to_ptr(offset, context.llvm().ptr_type(address_space.into()), name)

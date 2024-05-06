@@ -677,14 +677,17 @@ where
                     .build_store(storage_key_pointer.value, storage_key_value)?;
                 self.builder().build_store(
                     storage_value_length_pointer.value,
-                    self.integer_const(32, revive_common::BIT_LENGTH_FIELD as u64),
+                    self.integer_const(
+                        crate::polkavm::XLEN,
+                        revive_common::BIT_LENGTH_FIELD as u64,
+                    ),
                 )?;
 
                 self.build_runtime_call(
                     runtime_api::GET_STORAGE,
                     &[
                         storage_key_pointer_casted.into(),
-                        self.integer_const(32, 32).into(),
+                        self.integer_const(crate::polkavm::XLEN, 32).into(),
                         storage_value_pointer_casted.into(),
                         storage_value_length_pointer_casted.into(),
                     ],
@@ -788,9 +791,9 @@ where
                     runtime_api::SET_STORAGE,
                     &[
                         storage_key_pointer_casted.into(),
-                        self.integer_const(32, 32).into(),
+                        self.integer_const(crate::polkavm::XLEN, 32).into(),
                         storage_value_pointer_casted.into(),
-                        self.integer_const(32, 32).into(),
+                        self.integer_const(crate::polkavm::XLEN, 32).into(),
                     ],
                 );
             }
@@ -1124,11 +1127,11 @@ where
         //    zkevm_opcode_defs::RetForwardPageType::UseHeap
         //};
 
-        let offset_truncated = self.safe_truncate_int_to_i32(offset)?;
-        let length_truncated = self.safe_truncate_int_to_i32(length)?;
+        let offset_truncated = self.safe_truncate_int_to_xlen(offset)?;
+        let length_truncated = self.safe_truncate_int_to_xlen(length)?;
         let offset_into_heap = self.build_heap_gep(offset_truncated, length_truncated)?;
 
-        let length_pointer = self.safe_truncate_int_to_i32(length)?;
+        let length_pointer = self.safe_truncate_int_to_xlen(length)?;
         let offset_pointer = self.builder().build_ptr_to_int(
             offset_into_heap.value,
             self.xlen_type(),
@@ -1144,11 +1147,11 @@ where
         Ok(())
     }
 
-    /// Truncate a memory offset into 32 bits, trapping if it doesn't fit.
+    /// Truncate a memory offset to register size, trapping if it doesn't fit.
     /// Pointers are represented as opaque 256 bit integer values in EVM.
-    /// In practice, they should never exceed a 32 bit value. However, we
-    /// still protect against this possibility here.
-    pub fn safe_truncate_int_to_i32(
+    /// In practice, they should never exceed a register sized bit value.
+    /// However, we still protect against this possibility here.
+    pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
@@ -1230,7 +1233,7 @@ where
     /// Returns a pointer to `offset` into the heap, allocating
     /// enough memory if `offset + length` would be out of bounds.
     /// # Panics
-    /// Assumes `offset` and `length` to be an i32 value.
+    /// Assumes `offset` and `length` to be a register sized value.
     pub fn build_heap_gep(
         &self,
         offset: inkwell::values::IntValue<'ctx>,
@@ -1243,7 +1246,7 @@ where
             .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
             .value
             .as_pointer_value();
-        let heap_end = self.build_sbrk(self.integer_const(32, 0))?;
+        let heap_end = self.build_sbrk(self.integer_const(crate::polkavm::XLEN, 0))?;
         let value_end = self.build_gep(
             Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
             &[self.builder().build_int_nuw_add(offset, length, "end")?],

@@ -50,7 +50,7 @@ impl Entry {
             context
                 .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
                 .into(),
-            context.build_sbrk(context.integer_const(32, 0))?,
+            context.build_sbrk(context.integer_const(crate::polkavm::XLEN, 0))?,
         )?;
 
         context.set_global(
@@ -112,7 +112,7 @@ impl Entry {
 
         context.build_store(
             length_pointer,
-            context.integer_const(32, Self::MAX_CALLDATA_SIZE as u64),
+            context.integer_const(crate::polkavm::XLEN, Self::MAX_CALLDATA_SIZE as u64),
         )?;
         context.build_runtime_call(
             runtime_api::INPUT,

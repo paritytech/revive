@@ -7,6 +7,7 @@ use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
     ProgramBlob, Trap,
 };
+use revive_llvm_context::polkavm_const::runtime_api;
 
 #[derive(Default, Clone, Debug)]
 pub struct State {
@@ -53,7 +54,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "input",
+            runtime_api::INPUT,
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
@@ -69,7 +70,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "seal_return",
+            runtime_api::RETURN,
             |caller: Caller<State>, flags: u32, data_ptr: u32, data_len: u32| -> Result<(), Trap> {
                 let (caller, state) = caller.split();
 
@@ -83,7 +84,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "value_transferred",
+            runtime_api::VALUE_TRANSFERRED,
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
@@ -113,7 +114,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "set_storage",
+            runtime_api::SET_STORAGE,
             |caller: Caller<State>,
              key_ptr: u32,
              key_len: u32,
@@ -140,7 +141,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "get_storage",
+            runtime_api::GET_STORAGE,
             |caller: Caller<State>,
              key_ptr: u32,
              key_len: u32,
@@ -169,7 +170,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
     linker
         .func_wrap(
-            "hash_keccak_256",
+            runtime_api::HASH_KECCAK_256,
             |caller: Caller<State>,
              input_ptr: u32,
              input_len: u32,
@@ -203,7 +204,7 @@ pub fn recompile_code(code: &[u8], engine: &Engine) -> Module {
 }
 
 pub fn instantiate_module(module: &Module, engine: &Engine) -> (Instance<State>, ExportIndex) {
-    let export = module.lookup_export("call").unwrap();
+    let export = module.lookup_export(runtime_api::CALL).unwrap();
     let func = link_host_functions(engine).instantiate_pre(module).unwrap();
     let instance = func.instantiate().unwrap();
 
@@ -219,7 +220,7 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<State>, ExportI
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
     let module = Module::from_blob(&engine, &module_config, &blob).unwrap();
-    let export = module.lookup_export("call").unwrap();
+    let export = module.lookup_export(runtime_api::CALL).unwrap();
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)
         .unwrap();

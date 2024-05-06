@@ -1,7 +1,7 @@
 {
-  "Computation": 7380,
-  "ERC20": 51241,
-  "Baseline": 3912,
   "Fibonacci": 5971,
-  "Flipper": 4354
+  "Baseline": 3912,
+  "Computation": 7380,
+  "Flipper": 4354,
+  "ERC20": 53186
 }

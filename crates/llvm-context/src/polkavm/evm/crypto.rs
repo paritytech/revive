@@ -2,6 +2,7 @@
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
 
 /// Translates the `sha3` instruction.
 pub fn sha3<'ctx, D>(
@@ -28,20 +29,14 @@ where
         "output_pointer_casted",
     )?;
 
-    let function = context
-        .module()
-        .get_function("hash_keccak_256")
-        .expect("is declared");
-
-    context.builder().build_call(
-        function,
+    context.build_runtime_call(
+        runtime_api::HASH_KECCAK_256,
         &[
             input_pointer_casted.into(),
             length_casted.into(),
             output_pointer_casted.into(),
         ],
-        "call_seal_hash_keccak_256",
-    )?;
+    );
 
     Ok(context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?))
 }

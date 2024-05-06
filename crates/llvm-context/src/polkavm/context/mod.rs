@@ -27,6 +27,7 @@ use inkwell::values::BasicValue;
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
+use crate::polkavm::r#const::*;
 use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
@@ -36,6 +37,7 @@ use self::address_space::AddressSpace;
 use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
+// TODO
 // use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
@@ -137,25 +139,21 @@ where
             .link_in_module(pallet_contracts_pvm_llapi::module(llvm, "polkavm_guest").unwrap())
             .expect("the PolkaVM guest API module should be linkable");
 
-        let call_function = module.get_function("call").unwrap();
-        call_function.add_attribute(
-            inkwell::attributes::AttributeLoc::Function,
-            llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
-        );
-        assert!(call_function.get_first_basic_block().is_none());
+        for export in runtime_api::EXPORTS {
+            module
+                .get_function(export)
+                .expect("should be declared")
+                .add_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
+                );
+        }
 
-        let deploy_function = module.get_function("deploy").unwrap();
-        deploy_function.add_attribute(
-            inkwell::attributes::AttributeLoc::Function,
-            llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
-        );
-        assert!(deploy_function.get_first_basic_block().is_none());
-
-        // TODO: Factor out a list
-        // Also should be prefixed with double underscores
-        for name in ["seal_return", "input", "set_storage", "get_storage"] {
-            let runtime_api_function = module.get_function(name).expect("should be declared");
-            runtime_api_function.set_linkage(inkwell::module::Linkage::External);
+        for import in runtime_api::IMPORTS {
+            module
+                .get_function(import)
+                .expect("should be declared")
+                .set_linkage(inkwell::module::Linkage::External);
         }
     }
 
@@ -333,6 +331,13 @@ where
     /// Returns the current code type (deploy or runtime).
     pub fn code_type(&self) -> Option<CodeType> {
         self.code_type.to_owned()
+    }
+
+    /// Returns the function value of a runtime API method.
+    pub fn runtime_api_method(&self, name: &'static str) -> inkwell::values::FunctionValue<'ctx> {
+        self.module()
+            .get_function(name)
+            .unwrap_or_else(|| panic!("runtime API method {name} not declared"))
     }
 
     /// Returns the pointer to a global variable.
@@ -675,23 +680,19 @@ where
                     self.integer_const(32, revive_common::BIT_LENGTH_FIELD as u64),
                 )?;
 
-                let runtime_api = self
-                    .module()
-                    .get_function("get_storage")
-                    .expect("should be declared");
-                let arguments = &[
-                    storage_key_pointer_casted.into(),
-                    self.integer_const(32, 32).into(),
-                    storage_value_pointer_casted.into(),
-                    storage_value_length_pointer_casted.into(),
-                ];
-                let _ = self
-                    .builder()
-                    .build_call(runtime_api, arguments, "call_seal_get_storage")?
-                    .try_as_basic_value()
-                    .left()
-                    .expect("should not be a void function type");
-                // TODO check return value
+                self.build_runtime_call(
+                    runtime_api::GET_STORAGE,
+                    &[
+                        storage_key_pointer_casted.into(),
+                        self.integer_const(32, 32).into(),
+                        storage_value_pointer_casted.into(),
+                        storage_value_length_pointer_casted.into(),
+                    ],
+                );
+
+                // We do not to check the return value.
+                // Solidity assumes infallible SLOAD.
+                // If a key doesn't exist the "zero" value is returned.
 
                 self.build_load(storage_value_pointer, "storage_value_load")
                     .map(|value| self.build_byte_swap(value))
@@ -753,8 +754,6 @@ where
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
-                // TODO: Tests, factor out into dedicated functions
-
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
                     self.field_type(),
@@ -785,18 +784,15 @@ where
                 self.builder()
                     .build_store(storage_value_pointer.value, storage_value_value)?;
 
-                let runtime_api = self
-                    .module()
-                    .get_function("set_storage")
-                    .expect("should be declared");
-                let arguments = &[
-                    storage_key_pointer_casted.into(),
-                    self.integer_const(32, 32).into(),
-                    storage_value_pointer_casted.into(),
-                    self.integer_const(32, 32).into(),
-                ];
-                self.builder()
-                    .build_call(runtime_api, arguments, "call_seal_set_storage")?;
+                self.build_runtime_call(
+                    runtime_api::SET_STORAGE,
+                    &[
+                        storage_key_pointer_casted.into(),
+                        self.integer_const(32, 32).into(),
+                        storage_value_pointer_casted.into(),
+                        self.integer_const(32, 32).into(),
+                    ],
+                );
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
             AddressSpace::Generic => self.build_store(
@@ -876,6 +872,27 @@ where
         self.builder
             .build_unconditional_branch(destination_block)
             .unwrap();
+    }
+
+    /// Builds a call to a runtime API method.
+    pub fn build_runtime_call(
+        &self,
+        name: &'static str,
+        arguments: &[inkwell::values::BasicValueEnum<'ctx>],
+    ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
+        self.builder
+            .build_direct_call(
+                self.runtime_api_method(name),
+                &arguments
+                    .iter()
+                    .copied()
+                    .map(inkwell::values::BasicMetadataValueEnum::from)
+                    .collect::<Vec<_>>(),
+                &format!("runtime API call {name}"),
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
     }
 
     /// Builds a call.
@@ -1118,11 +1135,10 @@ where
             "return_data_ptr_to_int",
         )?;
 
-        self.builder().build_call(
-            self.module().get_function("seal_return").unwrap(),
+        self.build_runtime_call(
+            runtime_api::RETURN,
             &[flags.into(), offset_pointer.into(), length_pointer.into()],
-            "seal_return",
-        )?;
+        );
         self.build_unreachable();
 
         Ok(())
@@ -1173,7 +1189,7 @@ where
         Ok(self
             .builder()
             .build_call(
-                self.module().get_function("__sbrk").expect("is declared"),
+                self.runtime_api_method(runtime_api::SBRK),
                 &[size.into()],
                 "call_sbrk",
             )?

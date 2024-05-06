@@ -4,6 +4,7 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
 
 /// Translates the `gas` instruction.
 pub fn gas<'ctx, D>(
@@ -43,17 +44,13 @@ where
         ),
     )?;
 
-    context.builder().build_call(
-        context
-            .module()
-            .get_function("value_transferred")
-            .expect("is declared"),
+    context.build_runtime_call(
+        runtime_api::VALUE_TRANSFERRED,
         &[
             output_pointer_casted.into(),
             output_length_pointer_casted.into(),
         ],
-        "call_seal_value_transferred",
-    )?;
+    );
 
     let value = context.build_load(output_pointer, "transferred_value")?;
     let value_extended = context.builder().build_int_z_extend(

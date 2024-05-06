@@ -5,6 +5,7 @@ use inkwell::types::BasicType;
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime::Runtime;
 use crate::polkavm::context::Context;
+use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 use crate::PolkaVMPointer as Pointer;
@@ -113,11 +114,10 @@ impl Entry {
             length_pointer,
             context.integer_const(32, Self::MAX_CALLDATA_SIZE as u64),
         )?;
-        context.builder().build_call(
-            context.module().get_function("input").expect("is declared"),
+        context.build_runtime_call(
+            runtime_api::INPUT,
             &[input_pointer_casted.into(), length_pointer_casted.into()],
-            "call_seal_input",
-        )?;
+        );
 
         // Store the calldata size
         let calldata_size = context
@@ -218,8 +218,9 @@ where
         let entry_function_type = context.function_type(entry_arguments, 0, false);
         context.add_function(Runtime::FUNCTION_ENTRY, entry_function_type, 0, None)?;
 
-        context.declare_extern_function("deploy")?;
-        context.declare_extern_function("call")?;
+        for symbol in runtime_api::EXPORTS {
+            context.declare_extern_function(symbol)?;
+        }
 
         Ok(())
     }
@@ -240,7 +241,7 @@ where
             true,
         );
 
-        context.set_current_function("deploy")?;
+        context.set_current_function(runtime_api::DEPLOY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context
@@ -250,7 +251,7 @@ where
         context.set_basic_block(context.current_function().borrow().return_block);
         context.build_unreachable();
 
-        context.set_current_function("call")?;
+        context.set_current_function(runtime_api::CALL)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context

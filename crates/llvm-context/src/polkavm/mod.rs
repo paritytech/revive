@@ -11,6 +11,9 @@ pub use self::r#const::*;
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
+use polkavm_common::program::ProgramBlob;
+use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+
 use self::context::build::Build;
 use self::context::Context;
 
@@ -22,64 +25,51 @@ pub fn initialize_target() {
 /// Builds PolkaVM assembly text.
 pub fn build_assembly_text(
     contract_path: &str,
-    assembly_text: &str,
+    encoded_hex_text: &str,
     _metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: Option<&DebugConfig>,
 ) -> anyhow::Result<Build> {
     if let Some(debug_config) = debug_config {
-        debug_config.dump_assembly(contract_path, assembly_text)?;
+        debug_config.dump_assembly(contract_path, encoded_hex_text)?;
     }
 
-    /*
-    let mut assembly =
-        zkevm_assembly::Assembly::from_string(assembly_text.to_owned(), metadata_hash).map_err(
-            |error| {
-                anyhow::anyhow!(
-                    "The contract `{}` assembly parsing error: {}",
-                    contract_path,
-                    error,
-                )
-            },
-        )?;
+    let bytecode = hex::decode(encoded_hex_text)
+        .map_err(|e| anyhow::anyhow!("Failed to decode encoded hex text:\n{}\n", e))?;
 
-    let bytecode_words = match zkevm_assembly::get_encoding_mode() {
-        zkevm_assembly::RunningVmEncodingMode::Production => { assembly.compile_to_bytecode_for_mode::<8, zkevm_opcode_defs::decoding::EncodingModeProduction>() },
-        zkevm_assembly::RunningVmEncodingMode::Testing => { assembly.compile_to_bytecode_for_mode::<16, zkevm_opcode_defs::decoding::EncodingModeTesting>() },
-    }
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` assembly-to-bytecode conversion error: {}",
-                contract_path,
-                error,
-            )
+    let program_blob = ProgramBlob::parse(bytecode.as_slice())
+        .map_err(|error| anyhow::anyhow!(format!("Failed to parse program blob:\n{}\n", error)))?;
+
+    let mut disassembler =
+        Disassembler::new(&program_blob, DisassemblyFormat::Guest).map_err(|error| {
+            anyhow::anyhow!(format!(
+                "Failed to create disassembler for contract:\n{:?}\n\nDue to:\n{}\n",
+                contract_path, error
+            ))
         })?;
 
-    let bytecode_hash = match zkevm_assembly::get_encoding_mode() {
-        zkevm_assembly::RunningVmEncodingMode::Production => {
-            zkevm_opcode_defs::utils::bytecode_to_code_hash_for_mode::<
-                8,
-                zkevm_opcode_defs::decoding::EncodingModeProduction,
-            >(bytecode_words.as_slice())
-        }
-        zkevm_assembly::RunningVmEncodingMode::Testing => {
-            zkevm_opcode_defs::utils::bytecode_to_code_hash_for_mode::<
-                16,
-                zkevm_opcode_defs::decoding::EncodingModeTesting,
-            >(bytecode_words.as_slice())
-        }
-    }
-    .map(hex::encode)
-    .map_err(|_error| {
-        anyhow::anyhow!("The contract `{}` bytecode hashing error", contract_path,)
-    })?;
+    let mut disassembled_code = Vec::new();
+    disassembler
+        .disassemble_into(&mut disassembled_code)
+        .map_err(|error| {
+            anyhow::anyhow!(format!(
+                "Failed to disassemble contract:\n{:?}\n\nDue to:\n{}\n\nGas details:{:?}\n",
+                contract_path,
+                error,
+                disassembler.display_gas()
+            ))
+        })?;
 
-    let bytecode = bytecode_words.into_iter().flatten().collect();
-    */
+    let assembly_text = String::from_utf8(disassembled_code).map_err(|error| {
+        anyhow::anyhow!(format!(
+            "Failed to convert disassembled code to string for contract\n{:?}\n\nDue to:\n{}\n",
+            contract_path, error
+        ))
+    })?;
 
     Ok(Build::new(
         assembly_text.to_owned(),
         Default::default(),
-        hex::decode(assembly_text).unwrap(),
+        bytecode.to_owned(),
         Default::default(),
     ))
 }

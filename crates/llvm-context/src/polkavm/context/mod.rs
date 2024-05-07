@@ -30,6 +30,7 @@ use crate::optimizer::Optimizer;
 use crate::polkavm::r#const::*;
 use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
+//use crate::polkavm_evm_event::log;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 
@@ -278,11 +279,11 @@ where
                 )
             })?;
 
-        let assembly_text = revive_linker::link(buffer.as_slice()).map(hex::encode)?;
+        let encoded_hex_text = revive_linker::link(buffer.as_slice()).map(hex::encode)?;
 
         let build = match crate::polkavm::build_assembly_text(
             contract_path,
-            assembly_text.as_str(),
+            encoded_hex_text.as_str(),
             metadata_hash,
             self.debug_config(),
         ) {

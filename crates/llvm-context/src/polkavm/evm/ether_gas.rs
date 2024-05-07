@@ -23,42 +23,20 @@ pub fn value<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let output_pointer = context.build_alloca(context.value_type(), "output_pointer");
-    let output_pointer_casted = context.builder().build_ptr_to_int(
-        output_pointer.value,
-        context.xlen_type(),
-        "output_pointer_casted",
-    )?;
-
-    let output_length_pointer = context.build_alloca(context.xlen_type(), "output_len_pointer");
-    let output_length_pointer_casted = context.builder().build_ptr_to_int(
-        output_length_pointer.value,
-        context.xlen_type(),
-        "output_pointer_casted",
-    )?;
-    context.build_store(
-        output_length_pointer,
-        context.integer_const(
-            crate::polkavm::XLEN,
-            revive_common::BYTE_LENGTH_VALUE as u64,
-        ),
-    )?;
-
+    let (output_pointer, output_length_pointer) =
+        context.build_stack_parameter(revive_common::BIT_LENGTH_VALUE, "value_transferred_output");
     context.build_runtime_call(
         runtime_api::VALUE_TRANSFERRED,
         &[
-            output_pointer_casted.into(),
-            output_length_pointer_casted.into(),
+            output_pointer.to_int(context).into(),
+            output_length_pointer.to_int(context).into(),
         ],
     );
-
-    let value = context.build_load(output_pointer, "transferred_value")?;
-    let value_extended = context.builder().build_int_z_extend(
-        value.into_int_value(),
-        context.word_type(),
-        "transferred_value_extended",
-    )?;
-    Ok(value_extended.as_basic_value_enum())
+    context.build_load_word(
+        output_pointer,
+        revive_common::BIT_LENGTH_VALUE,
+        "value_transferred",
+    )
 }
 
 /// Translates the `balance` instructions.

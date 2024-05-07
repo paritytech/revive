@@ -43,7 +43,13 @@ pub static GLOBAL_CONST_ARRAY_PREFIX: &str = "const_array_";
 pub static GLOBAL_VERBATIM_GETTER_PREFIX: &str = "get_global::";
 
 /// The static word size.
-pub static GLOBAL_WORD_SIZE: &str = "word_size";
+pub static GLOBAL_I256_SIZE: &str = "i256_size";
+
+/// The static value size.
+pub static GLOBAL_I128_SIZE: &str = "i128_size";
+
+/// The static i64 size.
+pub static GLOBAL_I64_SIZE: &str = "i64_size";
 
 /// The external call data offset in the auxiliary heap.
 pub const HEAP_AUX_OFFSET_EXTERNAL_CALL: u64 = 0;

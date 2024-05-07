@@ -21,3 +21,11 @@ pub const BIT_LENGTH_WORD: usize = crate::byte_length::BYTE_LENGTH_WORD * BIT_LE
 
 /// Bit length of the runtime value type.
 pub const BIT_LENGTH_VALUE: usize = crate::byte_length::BYTE_LENGTH_VALUE * BIT_LENGTH_BYTE;
+
+/// Bit length of thre runimte block number type.
+pub const BIT_LENGTH_BLOCK_NUMBER: usize =
+    crate::byte_length::BYTE_LENGTH_BLOCK_NUMBER * BIT_LENGTH_BYTE;
+
+/// Bit length of thre runimte block timestamp type.
+pub const BIT_LENGTH_BLOCK_TIMESTAMP: usize =
+    crate::byte_length::BYTE_LENGTH_BLOCK_TIMESTAMP * BIT_LENGTH_BYTE;

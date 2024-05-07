@@ -10,11 +10,15 @@ pub static DEPLOY: &str = "deploy";
 /// Useful for configuring common attributes and linkage.
 pub static EXPORTS: [&str; 2] = [CALL, DEPLOY];
 
+pub static BLOCK_NUMBER: &str = "block_number";
+
 pub static GET_STORAGE: &str = "get_storage";
 
 pub static HASH_KECCAK_256: &str = "hash_keccak_256";
 
 pub static INPUT: &str = "input";
+
+pub static NOW: &str = "now";
 
 pub static RETURN: &str = "seal_return";
 

@@ -33,6 +33,9 @@ impl Default for CallOutput {
 }
 
 impl State {
+    pub const BLOCK_NUMBER: u64 = 123;
+    pub const BLOCK_TIMESTAMP: u64 = 456;
+
     pub fn new(input: Vec<u8>) -> Self {
         Self {
             input,
@@ -88,8 +91,12 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
-                let out_len = caller.read_u32(out_len_ptr)?;
-                assert_eq!(out_len, 16, "spurious output buffer size: {out_len}");
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_VALUE,
+                    "spurious output buffer size: {out_len}"
+                );
 
                 let value = state.value.to_le_bytes();
 
@@ -126,8 +133,16 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
              -> Result<u32, Trap> {
                 let (caller, state) = caller.split();
 
-                assert_eq!(key_len, 32, "storage key must be 32 bytes");
-                assert_eq!(value_len, 32, "storage value must be 32 bytes");
+                assert_eq!(
+                    key_len as usize,
+                    revive_common::BYTE_LENGTH_WORD,
+                    "storage key must be 32 bytes"
+                );
+                assert_eq!(
+                    value_len as usize,
+                    revive_common::BYTE_LENGTH_WORD,
+                    "storage value must be 32 bytes"
+                );
 
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let value = caller.read_memory_into_vec(value_ptr, value_len)?;
@@ -154,8 +169,12 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 let (mut caller, state) = caller.split();
 
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
-                let out_len = caller.read_u32(out_len_ptr)?;
-                assert_eq!(out_len, 32, "spurious output buffer size: {out_len}");
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_WORD,
+                    "spurious output buffer size: {out_len}"
+                );
 
                 let value = state
                     .storage
@@ -186,6 +205,48 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 let mut hasher = Keccak256::new();
                 hasher.update(&pre);
                 caller.write_memory(out_ptr, &hasher.finalize()[..])?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::NOW,
+            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, _) = caller.split();
+
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_BLOCK_TIMESTAMP,
+                    "spurious output buffer size: {out_len}"
+                );
+
+                caller.write_memory(out_ptr, &State::BLOCK_TIMESTAMP.to_le_bytes())?;
+                caller.write_memory(out_len_ptr, &64u32.to_le_bytes())?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::BLOCK_NUMBER,
+            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, _) = caller.split();
+
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_BLOCK_NUMBER,
+                    "spurious output buffer size: {out_len}"
+                );
+
+                caller.write_memory(out_ptr, &State::BLOCK_NUMBER.to_le_bytes())?;
+                caller.write_memory(out_len_ptr, &64u32.to_le_bytes())?;
 
                 Ok(())
             },

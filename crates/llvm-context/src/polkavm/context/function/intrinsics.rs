@@ -39,7 +39,7 @@ impl<'ctx> Intrinsics<'ctx> {
     ) -> Self {
         let void_type = llvm.void_type();
         let bool_type = llvm.bool_type();
-        let field_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
+        let word_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
         let _stack_field_pointer_type = llvm.ptr_type(AddressSpace::Stack.into());
         let heap_field_pointer_type = llvm.ptr_type(AddressSpace::Heap.into());
         let generic_byte_pointer_type = llvm.ptr_type(AddressSpace::Generic.into());
@@ -58,7 +58,7 @@ impl<'ctx> Intrinsics<'ctx> {
                 &[
                     heap_field_pointer_type.as_basic_type_enum().into(),
                     heap_field_pointer_type.as_basic_type_enum().into(),
-                    field_type.as_basic_type_enum().into(),
+                    word_type.as_basic_type_enum().into(),
                     bool_type.as_basic_type_enum().into(),
                 ],
                 false,
@@ -72,7 +72,7 @@ impl<'ctx> Intrinsics<'ctx> {
                 &[
                     heap_field_pointer_type.as_basic_type_enum().into(),
                     generic_byte_pointer_type.as_basic_type_enum().into(),
-                    field_type.as_basic_type_enum().into(),
+                    word_type.as_basic_type_enum().into(),
                     bool_type.as_basic_type_enum().into(),
                 ],
                 false,
@@ -82,7 +82,7 @@ impl<'ctx> Intrinsics<'ctx> {
             llvm,
             module,
             Self::FUNCTION_BYTE_SWAP,
-            field_type.fn_type(&[field_type.as_basic_type_enum().into()], false),
+            word_type.fn_type(&[word_type.as_basic_type_enum().into()], false),
         );
 
         Self {
@@ -114,7 +114,7 @@ impl<'ctx> Intrinsics<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         name: &str,
     ) -> Vec<inkwell::types::BasicTypeEnum<'ctx>> {
-        let field_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
+        let word_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
 
         match name {
             name if name == Self::FUNCTION_MEMORY_COPY => vec![
@@ -122,16 +122,16 @@ impl<'ctx> Intrinsics<'ctx> {
                     .as_basic_type_enum(),
                 llvm.ptr_type(AddressSpace::Heap.into())
                     .as_basic_type_enum(),
-                field_type.as_basic_type_enum(),
+                word_type.as_basic_type_enum(),
             ],
             name if name == Self::FUNCTION_MEMORY_COPY_FROM_GENERIC => vec![
                 llvm.ptr_type(AddressSpace::Heap.into())
                     .as_basic_type_enum(),
                 llvm.ptr_type(AddressSpace::Generic.into())
                     .as_basic_type_enum(),
-                field_type.as_basic_type_enum(),
+                word_type.as_basic_type_enum(),
             ],
-            name if name == Self::FUNCTION_BYTE_SWAP => vec![field_type.as_basic_type_enum()],
+            name if name == Self::FUNCTION_BYTE_SWAP => vec![word_type.as_basic_type_enum()],
             _ => vec![],
         }
     }

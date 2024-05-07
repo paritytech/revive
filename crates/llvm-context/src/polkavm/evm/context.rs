@@ -4,6 +4,7 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
 
 /// Translates the `gas_limit` instruction.
 pub fn gas_limit<'ctx, D>(
@@ -47,22 +48,52 @@ where
 
 /// Translates the `block_number` instruction.
 pub fn block_number<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let (output_pointer, output_length_pointer) = context.build_stack_parameter(
+        revive_common::BIT_LENGTH_BLOCK_NUMBER,
+        "block_timestamp_output",
+    );
+    context.build_runtime_call(
+        runtime_api::BLOCK_NUMBER,
+        &[
+            output_pointer.to_int(context).into(),
+            output_length_pointer.to_int(context).into(),
+        ],
+    );
+    context.build_load_word(
+        output_pointer,
+        revive_common::BIT_LENGTH_BLOCK_NUMBER,
+        "block_number",
+    )
 }
 
 /// Translates the `block_timestamp` instruction.
 pub fn block_timestamp<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let (output_pointer, output_length_pointer) = context.build_stack_parameter(
+        revive_common::BIT_LENGTH_BLOCK_TIMESTAMP,
+        "block_timestamp_output",
+    );
+    context.build_runtime_call(
+        runtime_api::NOW,
+        &[
+            output_pointer.to_int(context).into(),
+            output_length_pointer.to_int(context).into(),
+        ],
+    );
+    context.build_load_word(
+        output_pointer,
+        revive_common::BIT_LENGTH_BLOCK_TIMESTAMP,
+        "block_timestamp",
+    )
 }
 
 /// Translates the `block_hash` instruction.

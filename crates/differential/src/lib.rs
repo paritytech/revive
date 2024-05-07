@@ -16,13 +16,13 @@ impl RuntimeEnvironment for UnimplementedHandler {
         unimplemented!()
     }
     fn block_number(&self) -> U256 {
-        unimplemented!()
+        U256::from(123)
     }
     fn block_coinbase(&self) -> H160 {
         unimplemented!()
     }
     fn block_timestamp(&self) -> U256 {
-        unimplemented!()
+        U256::from(456)
     }
     fn block_difficulty(&self) -> U256 {
         unimplemented!()

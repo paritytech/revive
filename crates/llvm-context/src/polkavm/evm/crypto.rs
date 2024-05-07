@@ -27,5 +27,5 @@ where
         ],
     );
 
-    Ok(context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?))
+    context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?)
 }

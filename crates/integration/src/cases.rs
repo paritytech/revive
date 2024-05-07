@@ -67,6 +67,14 @@ sol!(
     }
 );
 
+sol!(
+    contract Block {
+        function timestamp() public view returns (uint ret);
+
+        function number() public view returns (uint ret);
+    }
+);
+
 impl Contract {
     pub fn baseline() -> Self {
         let code = include_str!("../contracts/Baseline.sol");
@@ -166,12 +174,34 @@ impl Contract {
             calldata: IERC20::totalSupplyCall::new(()).abi_encode(),
         }
     }
+
+    pub fn block_number() -> Self {
+        let code = include_str!("../contracts/Block.sol");
+        let name = "Block";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Block::numberCall::new(()).abi_encode(),
+        }
+    }
+
+    pub fn block_timestamp() -> Self {
+        let code = include_str!("../contracts/Block.sol");
+        let name = "Block";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Block::timestampCall::new(()).abi_encode(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use serde::{de::Deserialize, Serialize};
-    use std::{collections::HashMap, fs::File};
+    use std::{collections::BTreeMap, fs::File};
 
     use super::Contract;
 
@@ -181,14 +211,14 @@ mod tests {
 
         let existing = File::open(path)
             .map(|file| {
-                HashMap::<String, usize>::deserialize(&mut serde_json::Deserializer::from_reader(
+                BTreeMap::<String, usize>::deserialize(&mut serde_json::Deserializer::from_reader(
                     file,
                 ))
                 .expect("should be able to deserialze codesize data")
             })
             .ok();
 
-        let sizes = HashMap::from([
+        let sizes = BTreeMap::from([
             ("Baseline", Contract::baseline().pvm_runtime.len()),
             ("Flipper", Contract::flipper().pvm_runtime.len()),
             ("Computation", Contract::odd_product(0).pvm_runtime.len()),

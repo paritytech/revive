@@ -610,14 +610,43 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Allocates a word-sized byte buffer on the stack.
+    /// Allocate an int of size `bit_length` on the stack.
     /// Returns the allocation pointer and the length pointer.
-    pub fn build_stack_word_parameter(&self, name: &str) -> (Pointer<'ctx>, Pointer<'ctx>) {
-        let buffer_pointer = self.build_alloca(self.word_type(), name);
-        let length_pointer = self
-            .get_global(GLOBAL_WORD_SIZE)
-            .expect("should be declared");
+    ///
+    /// Useful helper for passing runtime API parameters on the stack.
+    pub fn build_stack_parameter(
+        &self,
+        bit_length: usize,
+        name: &str,
+    ) -> (Pointer<'ctx>, Pointer<'ctx>) {
+        let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
+        let symbol = match bit_length {
+            256 => GLOBAL_I256_SIZE,
+            128 => GLOBAL_I128_SIZE,
+            64 => GLOBAL_I64_SIZE,
+            _ => unreachable!("invalid stack parameter bit width: {bit_length}"),
+        };
+        let length_pointer = self.get_global(symbol).expect("should be declared");
         (buffer_pointer, length_pointer.into())
+    }
+
+    /// Load the integer at given pointer and zero extend it to the VM word size.
+    pub fn build_load_word(
+        &self,
+        pointer: Pointer<'ctx>,
+        bit_length: usize,
+        name: &str,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        let value = self.build_load(
+            pointer.cast(self.integer_type(bit_length)),
+            &format!("load_{name}"),
+        )?;
+        let value_extended = self.builder().build_int_z_extend(
+            value.into_int_value(),
+            self.word_type(),
+            &format!("zext_{name}"),
+        )?;
+        Ok(value_extended.as_basic_value_enum())
     }
 
     /// Builds a stack load instruction.
@@ -651,7 +680,7 @@ where
                     .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
 
-                Ok(self.build_byte_swap(value))
+                self.build_byte_swap(value)
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
@@ -670,8 +699,8 @@ where
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
 
-                let (storage_value_pointer, storage_value_length_pointer) =
-                    self.build_stack_word_parameter("storage_value_pointer");
+                let (storage_value_pointer, storage_value_length_pointer) = self
+                    .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
 
                 self.build_runtime_call(
                     runtime_api::GET_STORAGE,
@@ -688,13 +717,13 @@ where
                 // If a key doesn't exist the "zero" value is returned.
 
                 self.build_load(storage_value_pointer, "storage_value_load")
-                    .map(|value| self.build_byte_swap(value))
+                    .and_then(|value| self.build_byte_swap(value))
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
             AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
                 pointer.address_space_cast(self, AddressSpace::Stack, &format!("{}_cast", name))?,
                 name,
-            )?)),
+            )?)?),
             AddressSpace::Stack => {
                 let value = self
                     .builder()
@@ -735,7 +764,7 @@ where
 
                 let value = value.as_basic_value_enum();
                 let value = match value.get_type().into_int_type().get_bit_width() as usize {
-                    revive_common::BIT_LENGTH_WORD => self.build_byte_swap(value),
+                    revive_common::BIT_LENGTH_WORD => self.build_byte_swap(value)?,
                     revive_common::BIT_LENGTH_BYTE => value,
                     _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
                 };
@@ -756,7 +785,7 @@ where
                     self.build_alloca(storage_key_value.get_type(), "storage_key");
 
                 let storage_value_value = self
-                    .build_byte_swap(value.as_basic_value_enum())
+                    .build_byte_swap(value.as_basic_value_enum())?
                     .into_int_value();
                 let storage_value_pointer =
                     self.build_alloca(storage_value_value.get_type(), "storage_value");
@@ -790,7 +819,7 @@ where
             AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
             AddressSpace::Generic => self.build_store(
                 pointer.address_space_cast(self, AddressSpace::Stack, "cast")?,
-                self.build_byte_swap(value.as_basic_value_enum()),
+                self.build_byte_swap(value.as_basic_value_enum())?,
             )?,
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
@@ -807,9 +836,17 @@ where
     pub fn build_byte_swap(
         &self,
         value: inkwell::values::BasicValueEnum<'ctx>,
-    ) -> inkwell::values::BasicValueEnum<'ctx> {
-        self.build_call(self.intrinsics().byte_swap, &[value], "call_byte_swap")
-            .expect("byte_swap should return a value")
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        Ok(self
+            .builder()
+            .build_call(
+                self.intrinsics().byte_swap.value,
+                &[value.into()],
+                "call_byte_swap",
+            )?
+            .try_as_basic_value()
+            .left()
+            .unwrap())
     }
 
     /// Builds a GEP instruction.

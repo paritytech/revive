@@ -20,3 +20,9 @@ pub const BYTE_LENGTH_WORD: usize = 32;
 
 /// Byte length of the runtime value type.
 pub const BYTE_LENGTH_VALUE: usize = 16;
+
+/// Byte length of the runtime block number type.
+pub const BYTE_LENGTH_BLOCK_NUMBER: usize = 8;
+
+/// Byte length of the runtime block timestamp type.
+pub const BYTE_LENGTH_BLOCK_TIMESTAMP: usize = 8;

@@ -26,7 +26,7 @@ where
     );
     context
         .build_load(offset, "calldata_value")
-        .map(|value| context.build_byte_swap(value))
+        .and_then(|value| context.build_byte_swap(value))
 }
 
 /// Translates the calldata size.

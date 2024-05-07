@@ -126,7 +126,7 @@ fn transferred_value() {
     );
     let code = crate::compile_blob("Value", include_str!("../contracts/Value.sol"));
     let mut state = State::new(Value::valueCall::SELECTOR.to_vec());
-    state.value = 0x1;
+    state.value = 123;
 
     let (mut instance, export) = mock_runtime::prepare(&code, None);
     let state = crate::mock_runtime::call(state, &mut instance, export);
@@ -262,5 +262,21 @@ fn sha1() {
     let state = assert_success(Contract::sha1(pre), true);
     let expected = FixedBytes::<20>::from_slice(&hash[..]);
     let received = FixedBytes::<20>::from_slice(&state.output.data[..20]);
+    assert_eq!(received, expected);
+}
+
+#[test]
+fn block_number() {
+    let state = assert_success(Contract::block_number(), true);
+    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let expected = U256::from(mock_runtime::State::BLOCK_NUMBER);
+    assert_eq!(received, expected);
+}
+
+#[test]
+fn block_timestamp() {
+    let state = assert_success(Contract::block_timestamp(), true);
+    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let expected = U256::from(mock_runtime::State::BLOCK_TIMESTAMP);
     assert_eq!(received, expected);
 }

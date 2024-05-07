@@ -610,6 +610,16 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
+    /// Allocates a word-sized byte buffer on the stack.
+    /// Returns the allocation pointer and the length pointer.
+    pub fn build_stack_word_parameter(&self, name: &str) -> (Pointer<'ctx>, Pointer<'ctx>) {
+        let buffer_pointer = self.build_alloca(self.word_type(), name);
+        let length_pointer = self
+            .get_global(GLOBAL_WORD_SIZE)
+            .expect("should be declared");
+        (buffer_pointer, length_pointer.into())
+    }
+
     /// Builds a stack load instruction.
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
     pub fn build_load(
@@ -657,39 +667,19 @@ where
                     self.xlen_type(),
                     "storage_key_pointer_casted",
                 )?;
-
-                let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
-                let storage_value_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_value_pointer.value,
-                    self.xlen_type(),
-                    "storage_value_pointer_casted",
-                )?;
-
-                let storage_value_length_pointer =
-                    self.build_alloca(self.xlen_type(), "out_len_ptr");
-                let storage_value_length_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_value_length_pointer.value,
-                    self.xlen_type(),
-                    "storage_value_length_pointer_cast",
-                )?;
-
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
-                self.builder().build_store(
-                    storage_value_length_pointer.value,
-                    self.integer_const(
-                        crate::polkavm::XLEN,
-                        revive_common::BYTE_LENGTH_WORD as u64,
-                    ),
-                )?;
+
+                let (storage_value_pointer, storage_value_length_pointer) =
+                    self.build_stack_word_parameter("storage_value_pointer");
 
                 self.build_runtime_call(
                     runtime_api::GET_STORAGE,
                     &[
                         storage_key_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
-                        storage_value_pointer_casted.into(),
-                        storage_value_length_pointer_casted.into(),
+                        storage_value_pointer.to_int(self).into(),
+                        storage_value_length_pointer.to_int(self).into(),
                     ],
                 );
 

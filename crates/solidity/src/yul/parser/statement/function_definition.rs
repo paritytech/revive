@@ -285,12 +285,12 @@ where
                     let pointer = context.build_gep(
                         pointer,
                         &[
-                            context.field_const(0),
+                            context.word_const(0),
                             context
                                 .integer_type(revive_common::BIT_LENGTH_X32)
                                 .const_int(index as u64, false),
                         ],
-                        context.field_type(),
+                        context.word_type(),
                         format!("return_{index}_gep_pointer").as_str(),
                     );
                     context.build_store(pointer, r#type.const_zero())?;

@@ -42,12 +42,15 @@ pub static GLOBAL_CONST_ARRAY_PREFIX: &str = "const_array_";
 /// The global verbatim getter identifier prefix.
 pub static GLOBAL_VERBATIM_GETTER_PREFIX: &str = "get_global::";
 
+/// The static word size.
+pub static GLOBAL_WORD_SIZE: &str = "word_size";
+
 /// The external call data offset in the auxiliary heap.
 pub const HEAP_AUX_OFFSET_EXTERNAL_CALL: u64 = 0;
 
 /// The constructor return data offset in the auxiliary heap.
 pub const HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA: u64 =
-    8 * (revive_common::BYTE_LENGTH_FIELD as u64);
+    8 * (revive_common::BYTE_LENGTH_WORD as u64);
 
 /// The number of the extra ABI data arguments.
 pub const EXTRA_ABI_DATA_SIZE: usize = 0;
@@ -71,4 +74,4 @@ pub const SYSTEM_CALL_BIT: bool = true;
 /// - constructor arguments offset (32 bytes)
 /// - constructor arguments length (32 bytes)
 pub const DEPLOYER_CALL_HEADER_SIZE: usize =
-    revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_FIELD * 4);
+    revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_WORD * 4);

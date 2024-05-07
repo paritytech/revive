@@ -22,9 +22,9 @@ where
 {
     let signature_hash_string =
         crate::polkavm::utils::keccak256(crate::polkavm::DEPLOYER_SIGNATURE_CREATE.as_bytes());
-    let signature_hash = context.field_const_str_hex(signature_hash_string.as_str());
+    let signature_hash = context.word_const_str_hex(signature_hash_string.as_str());
 
-    let salt = context.field_const(0);
+    let salt = context.word_const(0);
 
     let function = Runtime::deployer_call(context);
     let result = context
@@ -58,9 +58,9 @@ where
 {
     let signature_hash_string =
         crate::polkavm::utils::keccak256(crate::polkavm::DEPLOYER_SIGNATURE_CREATE2.as_bytes());
-    let signature_hash = context.field_const_str_hex(signature_hash_string.as_str());
+    let signature_hash = context.word_const_str_hex(signature_hash_string.as_str());
 
-    let salt = salt.unwrap_or_else(|| context.field_const(0));
+    let salt = salt.unwrap_or_else(|| context.word_const(0));
 
     let function = Runtime::deployer_call(context);
     let result = context
@@ -107,7 +107,7 @@ where
             })?;
     if contract_path.as_str() == parent {
         return Ok(Argument::new_with_constant(
-            context.field_const(0).as_basic_value_enum(),
+            context.word_const(0).as_basic_value_enum(),
             num::BigUint::zero(),
         ));
     } else if identifier.ends_with("_deployed") && code_type == CodeType::Runtime {
@@ -116,7 +116,7 @@ where
 
     let hash_string = context.compile_dependency(identifier.as_str())?;
     let hash_value = context
-        .field_const_str_hex(hash_string.as_str())
+        .word_const_str_hex(hash_string.as_str())
         .as_basic_value_enum();
     Ok(Argument::new_with_original(hash_value, hash_string))
 }
@@ -155,7 +155,7 @@ where
             })?;
     if contract_path.as_str() == parent {
         return Ok(Argument::new_with_constant(
-            context.field_const(0).as_basic_value_enum(),
+            context.word_const(0).as_basic_value_enum(),
             num::BigUint::zero(),
         ));
     } else if identifier.ends_with("_deployed") && code_type == CodeType::Runtime {
@@ -164,7 +164,7 @@ where
 
     let size_bigint = num::BigUint::from(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE);
     let size_value = context
-        .field_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64)
+        .word_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64)
         .as_basic_value_enum();
     Ok(Argument::new_with_constant(size_value, size_bigint))
 }

@@ -19,14 +19,14 @@ impl SolidityData {
 
     /// Returns the current number of immutables values in the contract.
     pub fn immutables_size(&self) -> usize {
-        self.immutables.len() * revive_common::BYTE_LENGTH_FIELD
+        self.immutables.len() * revive_common::BYTE_LENGTH_WORD
     }
 
     /// Allocates memory for an immutable value in the auxiliary heap.
     /// If the identifier is already known, just returns its offset.
     pub fn allocate_immutable(&mut self, identifier: &str) -> usize {
         let number_of_elements = self.immutables.len();
-        let new_offset = number_of_elements * revive_common::BYTE_LENGTH_FIELD;
+        let new_offset = number_of_elements * revive_common::BYTE_LENGTH_WORD;
         *self
             .immutables
             .entry(identifier.to_owned())

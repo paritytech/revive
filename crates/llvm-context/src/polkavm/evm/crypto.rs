@@ -16,25 +16,14 @@ where
     let offset_casted = context.safe_truncate_int_to_xlen(offset)?;
     let length_casted = context.safe_truncate_int_to_xlen(length)?;
     let input_pointer = context.build_heap_gep(offset_casted, length_casted)?;
-    let input_pointer_casted = context.builder().build_ptr_to_int(
-        input_pointer.value,
-        context.xlen_type(),
-        "input_pointer_casted",
-    )?;
-
-    let output_pointer = context.build_alloca(context.field_type(), "output_pointer");
-    let output_pointer_casted = context.builder().build_ptr_to_int(
-        output_pointer.value,
-        context.xlen_type(),
-        "output_pointer_casted",
-    )?;
+    let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
 
     context.build_runtime_call(
         runtime_api::HASH_KECCAK_256,
         &[
-            input_pointer_casted.into(),
+            input_pointer.to_int(context).into(),
             length_casted.into(),
-            output_pointer_casted.into(),
+            output_pointer.to_int(context).into(),
         ],
     );
 

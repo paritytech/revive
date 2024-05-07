@@ -17,7 +17,7 @@ where
     let pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
-        context.field_type(),
+        context.word_type(),
         offset,
         "memory_load_pointer",
     );
@@ -37,7 +37,7 @@ where
     let pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
-        context.field_type(),
+        context.word_type(),
         offset,
         "memory_store_pointer",
     );

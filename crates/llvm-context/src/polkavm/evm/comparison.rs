@@ -24,7 +24,7 @@ where
     )?;
     let result = context.builder().build_int_z_extend_or_bit_cast(
         result,
-        context.field_type(),
+        context.word_type(),
         "comparison_result_extended",
     )?;
     Ok(result.as_basic_value_enum())

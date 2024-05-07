@@ -55,7 +55,7 @@ where
     let value = context.build_load(output_pointer, "transferred_value")?;
     let value_extended = context.builder().build_int_z_extend(
         value.into_int_value(),
-        context.field_type(),
+        context.word_type(),
         "transferred_value_extended",
     )?;
     Ok(value_extended.as_basic_value_enum())

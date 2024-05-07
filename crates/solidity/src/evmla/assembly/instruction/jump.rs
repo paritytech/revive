@@ -49,7 +49,7 @@ where
     let condition = context.builder().build_int_compare(
         inkwell::IntPredicate::NE,
         condition.into_int_value(),
-        context.field_const(0),
+        context.word_const(0),
         format!("conditional_{block_key}_condition_compared").as_str(),
     )?;
 

@@ -55,26 +55,26 @@ impl Entry {
 
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
-            context.field_type(),
+            context.word_type(),
             AddressSpace::Stack,
-            context.field_undef(),
+            context.word_undef(),
         );
         context.set_global(
             crate::polkavm::GLOBAL_RETURN_DATA_SIZE,
-            context.field_type(),
+            context.word_type(),
             AddressSpace::Stack,
-            context.field_const(0),
+            context.word_const(0),
         );
 
         context.set_global(
             crate::polkavm::GLOBAL_CALL_FLAGS,
-            context.field_type(),
+            context.word_type(),
             AddressSpace::Stack,
-            context.field_const(0),
+            context.word_const(0),
         );
 
         let extra_abi_data_type = context.array_type(
-            context.field_type().as_basic_type_enum(),
+            context.word_type().as_basic_type_enum(),
             crate::polkavm::EXTRA_ABI_DATA_SIZE,
         );
         context.set_global(
@@ -82,6 +82,13 @@ impl Entry {
             extra_abi_data_type,
             AddressSpace::Stack,
             extra_abi_data_type.const_zero(),
+        );
+
+        context.set_global(
+            crate::polkavm::GLOBAL_WORD_SIZE,
+            context.xlen_type(),
+            AddressSpace::Stack,
+            context.integer_const(crate::polkavm::XLEN, revive_common::BYTE_LENGTH_WORD as u64),
         );
 
         Ok(())
@@ -125,12 +132,12 @@ impl Entry {
             .into_int_value();
         let calldata_size_casted = context.builder().build_int_z_extend(
             calldata_size,
-            context.field_type(),
+            context.word_type(),
             "zext_input_len",
         )?;
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
-            context.field_type(),
+            context.word_type(),
             AddressSpace::Stack,
             calldata_size_casted,
         );

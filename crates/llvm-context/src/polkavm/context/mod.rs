@@ -230,7 +230,7 @@ where
     pub fn build(
         mut self,
         contract_path: &str,
-        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
+        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     ) -> anyhow::Result<Build> {
         let module_clone = self.module.clone();
 
@@ -437,12 +437,12 @@ where
             0 => FunctionReturn::none(),
             1 => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(self.field_type(), "return_pointer");
+                let pointer = self.build_alloca(self.word_type(), "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
             size if name.starts_with(Function::ZKSYNC_NEAR_CALL_ABI_PREFIX) => {
                 let first_argument = value.get_first_param().expect("Always exists");
-                let r#type = self.structure_type(vec![self.field_type(); size].as_slice());
+                let r#type = self.structure_type(vec![self.word_type(); size].as_slice());
                 let pointer = first_argument.into_pointer_value();
                 FunctionReturn::compound(Pointer::new(r#type, AddressSpace::Stack, pointer), size)
             }
@@ -450,7 +450,7 @@ where
                 self.set_basic_block(entry_block);
                 let pointer = self.build_alloca(
                     self.structure_type(
-                        vec![self.field_type().as_basic_type_enum(); size].as_slice(),
+                        vec![self.word_type().as_basic_type_enum(); size].as_slice(),
                     ),
                     "return_pointer",
                 );
@@ -561,7 +561,7 @@ where
             .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
             .and_then(|manager| {
                 let address = manager.resolve_library(path)?;
-                let address = self.field_const_str_hex(address.as_str());
+                let address = self.word_const_str_hex(address.as_str());
                 Ok(address)
             })
     }
@@ -647,7 +647,7 @@ where
             AddressSpace::Storage => {
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
-                    self.field_type(),
+                    self.word_type(),
                     "storage_ptr_to_int",
                 )?;
                 let storage_key_pointer =
@@ -658,7 +658,7 @@ where
                     "storage_key_pointer_casted",
                 )?;
 
-                let storage_value_pointer = self.build_alloca(self.field_type(), "storage_value");
+                let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
                     self.xlen_type(),
@@ -679,7 +679,7 @@ where
                     storage_value_length_pointer.value,
                     self.integer_const(
                         crate::polkavm::XLEN,
-                        revive_common::BIT_LENGTH_FIELD as u64,
+                        revive_common::BYTE_LENGTH_WORD as u64,
                     ),
                 )?;
 
@@ -745,7 +745,7 @@ where
 
                 let value = value.as_basic_value_enum();
                 let value = match value.get_type().into_int_type().get_bit_width() as usize {
-                    revive_common::BIT_LENGTH_FIELD => self.build_byte_swap(value),
+                    revive_common::BIT_LENGTH_WORD => self.build_byte_swap(value),
                     revive_common::BIT_LENGTH_BYTE => value,
                     _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
                 };
@@ -759,7 +759,7 @@ where
             AddressSpace::Storage => {
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
-                    self.field_type(),
+                    self.word_type(),
                     "storage_ptr_to_int",
                 )?;
                 let storage_key_pointer =
@@ -1052,18 +1052,18 @@ where
     ) -> anyhow::Result<()> {
         let pointer_casted = self.builder.build_ptr_to_int(
             source.value,
-            self.field_type(),
+            self.word_type(),
             format!("{name}_pointer_casted").as_str(),
         )?;
         let return_data_size_shifted = self.builder.build_right_shift(
             pointer_casted,
-            self.field_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
+            self.word_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
             false,
             format!("{name}_return_data_size_shifted").as_str(),
         )?;
         let return_data_size_truncated = self.builder.build_and(
             return_data_size_shifted,
-            self.field_const(u32::MAX as u64),
+            self.word_const(u32::MAX as u64),
             format!("{name}_return_data_size_truncated").as_str(),
         )?;
         let is_return_data_size_lesser = self.builder.build_int_compare(
@@ -1162,7 +1162,7 @@ where
         )?;
         let extended = self.builder().build_int_z_extend_or_bit_cast(
             truncated,
-            self.field_type(),
+            self.word_type(),
             "offset_extended",
         )?;
         let is_overflow = self.builder().build_int_compare(
@@ -1337,26 +1337,26 @@ where
         self.integer_type(bit_length).const_int(value, false)
     }
 
-    /// Returns a 256-bit field type constant.
-    pub fn field_const(&self, value: u64) -> inkwell::values::IntValue<'ctx> {
-        self.field_type().const_int(value, false)
+    /// Returns a word type constant.
+    pub fn word_const(&self, value: u64) -> inkwell::values::IntValue<'ctx> {
+        self.word_type().const_int(value, false)
     }
 
-    /// Returns a 256-bit field type undefined value.
-    pub fn field_undef(&self) -> inkwell::values::IntValue<'ctx> {
-        self.field_type().get_undef()
+    /// Returns a word type undefined value.
+    pub fn word_undef(&self) -> inkwell::values::IntValue<'ctx> {
+        self.word_type().get_undef()
     }
 
-    /// Returns a field type constant from a decimal string.
-    pub fn field_const_str_dec(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
-        self.field_type()
+    /// Returns a word type constant from a decimal string.
+    pub fn word_const_str_dec(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
+        self.word_type()
             .const_int_from_string(value, inkwell::types::StringRadix::Decimal)
             .unwrap_or_else(|| panic!("Invalid string constant `{value}`"))
     }
 
-    /// Returns a field type constant from a hexadecimal string.
-    pub fn field_const_str_hex(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
-        self.field_type()
+    /// Returns a word type constant from a hexadecimal string.
+    pub fn word_const_str_hex(&self, value: &str) -> inkwell::values::IntValue<'ctx> {
+        self.word_type()
             .const_int_from_string(
                 value.strip_prefix("0x").unwrap_or(value),
                 inkwell::types::StringRadix::Hexadecimal,
@@ -1396,10 +1396,10 @@ where
             .custom_width_int_type(revive_common::BIT_LENGTH_VALUE as u32)
     }
 
-    /// Returns the default field type.
-    pub fn field_type(&self) -> inkwell::types::IntType<'ctx> {
+    /// Returns the default word type.
+    pub fn word_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
     }
 
     /// Returns the array type with the specified length.
@@ -1441,14 +1441,14 @@ where
                 .llvm
                 .void_type()
                 .fn_type(argument_types.as_slice(), false),
-            1 => self.field_type().fn_type(argument_types.as_slice(), false),
+            1 => self.word_type().fn_type(argument_types.as_slice(), false),
             _size if is_near_call_abi && self.is_system_mode() => {
                 let return_type = self.llvm().ptr_type(AddressSpace::Stack.into());
                 argument_types.insert(0, return_type.as_basic_type_enum().into());
                 return_type.fn_type(argument_types.as_slice(), false)
             }
             size => self
-                .structure_type(vec![self.field_type().as_basic_type_enum(); size].as_slice())
+                .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
         }
     }
@@ -1508,14 +1508,14 @@ where
                         inkwell::attributes::AttributeLoc::Param(index as u32),
                         self.llvm.create_enum_attribute(
                             Attribute::Dereferenceable as u32,
-                            (revive_common::BIT_LENGTH_FIELD * 2) as u64,
+                            (revive_common::BIT_LENGTH_WORD * 2) as u64,
                         ),
                     );
                     call_site_value.add_attribute(
                         inkwell::attributes::AttributeLoc::Return,
                         self.llvm.create_enum_attribute(
                             Attribute::Dereferenceable as u32,
-                            (revive_common::BIT_LENGTH_FIELD * 2) as u64,
+                            (revive_common::BIT_LENGTH_WORD * 2) as u64,
                         ),
                     );
                 }

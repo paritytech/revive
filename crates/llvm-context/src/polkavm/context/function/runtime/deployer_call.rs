@@ -52,11 +52,11 @@ where
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let function_type = context.function_type(
             vec![
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
             ],
             1,
             false,
@@ -124,7 +124,7 @@ where
         let signature_pointer = Pointer::new_with_offset(
             context,
             self.address_space,
-            context.field_type(),
+            context.word_type(),
             input_offset,
             "deployer_call_signature_pointer",
         );
@@ -132,13 +132,13 @@ where
 
         let salt_offset = context.builder().build_int_add(
             input_offset,
-            context.field_const(revive_common::BYTE_LENGTH_X32 as u64),
+            context.word_const(revive_common::BYTE_LENGTH_X32 as u64),
             "deployer_call_salt_offset",
         )?;
         let salt_pointer = Pointer::new_with_offset(
             context,
             self.address_space,
-            context.field_type(),
+            context.word_type(),
             salt_offset,
             "deployer_call_salt_pointer",
         );
@@ -146,47 +146,47 @@ where
 
         let arguments_offset_offset = context.builder().build_int_add(
             salt_offset,
-            context.field_const((revive_common::BYTE_LENGTH_FIELD * 2) as u64),
+            context.word_const((revive_common::BYTE_LENGTH_WORD * 2) as u64),
             "deployer_call_arguments_offset_offset",
         )?;
         let arguments_offset_pointer = Pointer::new_with_offset(
             context,
             self.address_space,
-            context.field_type(),
+            context.word_type(),
             arguments_offset_offset,
             "deployer_call_arguments_offset_pointer",
         );
         context.build_store(
             arguments_offset_pointer,
-            context.field_const(
+            context.word_const(
                 (crate::polkavm::DEPLOYER_CALL_HEADER_SIZE
-                    - (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_FIELD))
+                    - (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_WORD))
                     as u64,
             ),
         )?;
 
         let arguments_length_offset = context.builder().build_int_add(
             arguments_offset_offset,
-            context.field_const(revive_common::BYTE_LENGTH_FIELD as u64),
+            context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
             "deployer_call_arguments_length_offset",
         )?;
         let arguments_length_pointer = Pointer::new_with_offset(
             context,
             self.address_space,
-            context.field_type(),
+            context.word_type(),
             arguments_length_offset,
             "deployer_call_arguments_length_pointer",
         );
         let arguments_length_value = context.builder().build_int_sub(
             input_length,
-            context.field_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64),
+            context.word_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64),
             "deployer_call_arguments_length",
         )?;
         context.build_store(arguments_length_pointer, arguments_length_value)?;
 
         let result_pointer =
-            context.build_alloca(context.field_type(), "deployer_call_result_pointer");
-        context.build_store(result_pointer, context.field_const(0))?;
+            context.build_alloca(context.word_type(), "deployer_call_result_pointer");
+        context.build_store(result_pointer, context.word_const(0))?;
         let deployer_call_result_type = context.structure_type(&[
             context
                 .llvm()
@@ -203,7 +203,7 @@ where
         let is_value_zero = context.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             value,
-            context.field_const(0),
+            context.word_const(0),
             "deployer_call_is_value_zero",
         )?;
         context.build_conditional_branch(is_value_zero, value_zero_block, value_non_zero_block)?;
@@ -252,7 +252,7 @@ where
         let result_abi_data_pointer = context.build_gep(
             deployer_call_result_pointer,
             &[
-                context.field_const(0),
+                context.word_const(0),
                 context
                     .integer_type(revive_common::BIT_LENGTH_X32)
                     .const_zero(),
@@ -269,7 +269,7 @@ where
         let result_status_code_pointer = context.build_gep(
             deployer_call_result_pointer,
             &[
-                context.field_const(0),
+                context.word_const(0),
                 context
                     .integer_type(revive_common::BIT_LENGTH_X32)
                     .const_int(1, false),
@@ -288,7 +288,7 @@ where
 
         context.set_basic_block(success_block);
         let result_abi_data_pointer = Pointer::new(
-            context.field_type(),
+            context.word_type(),
             AddressSpace::Generic,
             result_abi_data.into_pointer_value(),
         );

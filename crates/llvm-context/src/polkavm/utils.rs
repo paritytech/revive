@@ -20,7 +20,7 @@ where
     let in_bounds_block = context.append_basic_block(format!("{name}_is_bounds_block").as_str());
     let join_block = context.append_basic_block(format!("{name}_join_block").as_str());
 
-    let pointer = context.build_alloca(context.field_type(), format!("{name}_pointer").as_str());
+    let pointer = context.build_alloca(context.word_type(), format!("{name}_pointer").as_str());
     context.build_store(pointer, max_value)?;
 
     let is_in_bounds = context.builder().build_int_compare(
@@ -103,13 +103,13 @@ where
     let input_offset = crate::polkavm::utils::clamp(
         context,
         input_offset,
-        context.field_const(u32::MAX as u64),
+        context.word_const(u32::MAX as u64),
         "abi_data_input_offset",
     )?;
     let input_length = crate::polkavm::utils::clamp(
         context,
         input_length,
-        context.field_const(u32::MAX as u64),
+        context.word_const(u32::MAX as u64),
         "abi_data_input_length",
     )?;
 
@@ -120,23 +120,23 @@ where
     let gas = crate::polkavm::utils::clamp(
         context,
         gas,
-        context.field_const(u32::MAX as u64),
+        context.word_const(u32::MAX as u64),
         "abi_data_gas",
     )?;
 
     let input_offset_shifted = context.builder().build_left_shift(
         input_offset,
-        context.field_const((revive_common::BIT_LENGTH_X32 * 2) as u64),
+        context.word_const((revive_common::BIT_LENGTH_X32 * 2) as u64),
         "abi_data_input_offset_shifted",
     )?;
     let input_length_shifted = context.builder().build_left_shift(
         input_length,
-        context.field_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
+        context.word_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
         "abi_data_input_length_shifted",
     )?;
     let gas_shifted = context.builder().build_left_shift(
         gas,
-        context.field_const((revive_common::BIT_LENGTH_X32 * 6) as u64),
+        context.word_const((revive_common::BIT_LENGTH_X32 * 6) as u64),
         "abi_data_gas_shifted",
     )?;
 
@@ -150,8 +150,8 @@ where
         .build_int_add(abi_data, gas_shifted, "abi_data_add_gas")?;
     if let AddressSpace::HeapAuxiliary = address_space {
         let auxiliary_heap_marker_shifted = context.builder().build_left_shift(
-            context.field_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
-            context.field_const((revive_common::BIT_LENGTH_X32 * 7) as u64),
+            context.word_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
+            context.word_const((revive_common::BIT_LENGTH_X32 * 7) as u64),
             "abi_data_auxiliary_heap_marker_shifted",
         )?;
         abi_data = context.builder().build_int_add(
@@ -162,8 +162,8 @@ where
     }
     if is_system_call {
         let auxiliary_heap_marker_shifted = context.builder().build_left_shift(
-            context.field_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
-            context.field_const(
+            context.word_const(zkevm_opcode_defs::FarCallForwardPageType::UseAuxHeap as u64),
+            context.word_const(
                 ((revive_common::BIT_LENGTH_X32 * 7) + (revive_common::BIT_LENGTH_BYTE * 3)) as u64,
             ),
             "abi_data_system_call_marker_shifted",
@@ -188,7 +188,7 @@ where
 {
     let mut padded_data = initial_data;
     padded_data.extend(vec![
-        context.field_undef();
+        context.word_undef();
         crate::polkavm::EXTRA_ABI_DATA_SIZE - padded_data.len()
     ]);
     padded_data.try_into().expect("Always valid")

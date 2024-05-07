@@ -88,6 +88,9 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
             |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, state) = caller.split();
 
+                let out_len = caller.read_u32(out_len_ptr)?;
+                assert_eq!(out_len, 16, "spurious output buffer size: {out_len}");
+
                 let value = state.value.to_le_bytes();
 
                 caller.write_memory(out_ptr, &value)?;
@@ -152,7 +155,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let out_len = caller.read_u32(out_len_ptr)?;
-                assert!(out_len >= 32);
+                assert_eq!(out_len, 32, "spurious output buffer size: {out_len}");
 
                 let value = state
                     .storage

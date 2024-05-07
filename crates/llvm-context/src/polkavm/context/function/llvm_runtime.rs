@@ -187,10 +187,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let div = Self::declare(
             module,
             Self::FUNCTION_DIV,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -206,10 +206,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let r#mod = Self::declare(
             module,
             Self::FUNCTION_MOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -225,10 +225,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let sdiv = Self::declare(
             module,
             Self::FUNCTION_SDIV,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -244,10 +244,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let smod = Self::declare(
             module,
             Self::FUNCTION_SMOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -263,10 +263,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let shl = Self::declare(
             module,
             Self::FUNCTION_SHL,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -282,10 +282,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let shr = Self::declare(
             module,
             Self::FUNCTION_SHR,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -301,10 +301,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let sar = Self::declare(
             module,
             Self::FUNCTION_SAR,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -320,10 +320,10 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let byte = Self::declare(
             module,
             Self::FUNCTION_BYTE,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into();
                         2
@@ -358,13 +358,13 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let sha3 = Self::declare(
             module,
             Self::FUNCTION_SHA3,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
                         llvm.ptr_type(AddressSpace::Heap.into())
                             .as_basic_type_enum()
                             .into(),
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into(),
                         llvm.custom_width_int_type(revive_common::BIT_LENGTH_BOOLEAN as u32)
@@ -388,16 +388,16 @@ impl<'ctx> LLVMRuntime<'ctx> {
         let system_request = Self::declare(
             module,
             Self::FUNCTION_SYSTEM_REQUEST,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .fn_type(
                     vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into(),
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into(),
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                             .as_basic_type_enum()
                             .into(),
                         llvm.ptr_type(AddressSpace::Stack.into())
@@ -412,7 +412,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_default_attributes(llvm, system_request, optimizer);
 
         let external_call_arguments: Vec<inkwell::types::BasicMetadataTypeEnum> = vec![
-                llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                     .as_basic_type_enum()
                     .into();
                 crate::polkavm::context::function::runtime::entry::Entry::MANDATORY_ARGUMENTS_COUNT
@@ -420,7 +420,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
             ];
         let mut mimic_call_arguments = external_call_arguments.clone();
         mimic_call_arguments.push(
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .as_basic_type_enum()
                 .into(),
         );
@@ -429,13 +429,13 @@ impl<'ctx> LLVMRuntime<'ctx> {
             llvm.ptr_type(AddressSpace::Generic.into())
                 .as_basic_type_enum()
                 .into(),
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .as_basic_type_enum()
                 .into(),
         ];
         external_call_arguments_by_ref.extend::<Vec<inkwell::types::BasicMetadataTypeEnum>>(vec![
             llvm.custom_width_int_type(
-                revive_common::BIT_LENGTH_FIELD as u32
+                revive_common::BIT_LENGTH_WORD as u32
             )
             .as_basic_type_enum()
             .into();
@@ -443,7 +443,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
         ]);
         let mut mimic_call_arguments_by_ref = external_call_arguments_by_ref.clone();
         mimic_call_arguments_by_ref.push(
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                 .as_basic_type_enum()
                 .into(),
         );
@@ -522,7 +522,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
             Self::FUNCTION_RETURN,
             llvm.void_type().fn_type(
                 vec![
-                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                         .as_basic_type_enum()
                         .into();
                     3
@@ -538,7 +538,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
             Self::FUNCTION_REVERT,
             llvm.void_type().fn_type(
                 vec![
-                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_FIELD as u32)
+                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
                         .as_basic_type_enum()
                         .into();
                     3

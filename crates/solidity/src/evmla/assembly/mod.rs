@@ -88,7 +88,7 @@ impl Assembly {
         hash_data_mapping: &BTreeMap<String, String>,
     ) -> anyhow::Result<BTreeMap<String, String>> {
         let mut index_path_mapping = BTreeMap::new();
-        let index = "0".repeat(revive_common::BYTE_LENGTH_FIELD * 2);
+        let index = "0".repeat(revive_common::BYTE_LENGTH_WORD * 2);
         index_path_mapping.insert(index, full_path.to_owned());
 
         let dependencies = match self.data.as_mut() {
@@ -100,7 +100,7 @@ impl Assembly {
                 continue;
             }
 
-            let mut index_extended = "0".repeat(revive_common::BYTE_LENGTH_FIELD * 2 - index.len());
+            let mut index_extended = "0".repeat(revive_common::BYTE_LENGTH_WORD * 2 - index.len());
             index_extended.push_str(index.as_str());
 
             *data = match data {
@@ -136,7 +136,7 @@ impl Assembly {
         hash_data_mapping: &BTreeMap<String, String>,
     ) -> anyhow::Result<BTreeMap<String, String>> {
         let mut index_path_mapping = BTreeMap::new();
-        let index = "0".repeat(revive_common::BYTE_LENGTH_FIELD * 2);
+        let index = "0".repeat(revive_common::BYTE_LENGTH_WORD * 2);
         index_path_mapping.insert(index, full_path.to_owned());
 
         let dependencies = match self
@@ -150,7 +150,7 @@ impl Assembly {
             None => return Ok(index_path_mapping),
         };
         for (index, data) in dependencies.iter_mut() {
-            let mut index_extended = "0".repeat(revive_common::BYTE_LENGTH_FIELD * 2 - index.len());
+            let mut index_extended = "0".repeat(revive_common::BYTE_LENGTH_WORD * 2 - index.len());
             index_extended.push_str(index.as_str());
 
             *data = match data {

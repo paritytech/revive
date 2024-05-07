@@ -27,8 +27,8 @@ pub fn check_attribute_null_pointer_is_invalid() {
         .add_function(
             "test",
             context
-                .field_type()
-                .fn_type(&[context.field_type().into()], false),
+                .word_type()
+                .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
         )
@@ -50,8 +50,8 @@ pub fn check_attribute_optimize_for_size_mode_3() {
         .add_function(
             "test",
             context
-                .field_type()
-                .fn_type(&[context.field_type().into()], false),
+                .word_type()
+                .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
         )
@@ -73,8 +73,8 @@ pub fn check_attribute_optimize_for_size_mode_z() {
         .add_function(
             "test",
             context
-                .field_type()
-                .fn_type(&[context.field_type().into()], false),
+                .word_type()
+                .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
         )
@@ -96,8 +96,8 @@ pub fn check_attribute_min_size_mode_3() {
         .add_function(
             "test",
             context
-                .field_type()
-                .fn_type(&[context.field_type().into()], false),
+                .word_type()
+                .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
         )
@@ -119,8 +119,8 @@ pub fn check_attribute_min_size_mode_z() {
         .add_function(
             "test",
             context
-                .field_type()
-                .fn_type(&[context.field_type().into()], false),
+                .word_type()
+                .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
         )

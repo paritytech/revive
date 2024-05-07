@@ -26,7 +26,7 @@ pub enum Type {
 
 impl Default for Type {
     fn default() -> Self {
-        Self::UInt(revive_common::BIT_LENGTH_FIELD)
+        Self::UInt(revive_common::BIT_LENGTH_WORD)
     }
 }
 
@@ -73,7 +73,7 @@ impl Type {
             Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),
             Self::Int(bitlength) => context.integer_type(bitlength),
             Self::UInt(bitlength) => context.integer_type(bitlength),
-            Self::Custom(_) => context.field_type(),
+            Self::Custom(_) => context.word_type(),
         }
     }
 }

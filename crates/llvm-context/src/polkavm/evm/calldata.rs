@@ -21,7 +21,7 @@ where
     let offset = context.build_gep(
         Pointer::new(context.byte_type(), AddressSpace::Stack, calldata_pointer),
         &[offset],
-        context.field_type().as_basic_type_enum(),
+        context.word_type().as_basic_type_enum(),
         "calldata_pointer_with_offset",
     );
     context

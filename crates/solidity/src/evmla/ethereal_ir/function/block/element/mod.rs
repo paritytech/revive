@@ -162,8 +162,8 @@ where
                     .value
                     .ok_or_else(|| anyhow::anyhow!("Instruction value missing"))?;
 
-                if value.len() > revive_common::BYTE_LENGTH_FIELD * 2 {
-                    Ok(Some(context.field_const(0).as_basic_value_enum()))
+                if value.len() > revive_common::BYTE_LENGTH_WORD * 2 {
+                    Ok(Some(context.word_const(0).as_basic_value_enum()))
                 } else {
                     crate::evmla::assembly::instruction::stack::push(context, value).map(Some)
                 }
@@ -522,7 +522,7 @@ where
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
-                    context.field_const(0),
+                    context.word_const(0),
                     inkwell::IntPredicate::EQ,
                 )
                 .map(Some)
@@ -571,7 +571,7 @@ where
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
-                    context.field_type().const_all_ones(),
+                    context.word_type().const_all_ones(),
                 )
                 .map(Some)
             }
@@ -758,7 +758,7 @@ where
                     .solidity_mut()
                     .get_or_allocate_immutable(key.as_str());
 
-                let index = context.field_const(offset as u64);
+                let index = context.word_const(offset as u64);
                 revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
             }
             InstructionName::ASSIGNIMMUTABLE => {
@@ -771,7 +771,7 @@ where
 
                 let offset = context.solidity_mut().allocate_immutable(key.as_str());
 
-                let index = context.field_const(offset as u64);
+                let index = context.word_const(offset as u64);
                 let value = arguments.pop().expect("Always exists").into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
@@ -783,7 +783,7 @@ where
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
                     revive_llvm_context::PolkaVMCodeType::Deploy => {
-                        Ok(Some(context.field_const(0).as_basic_value_enum()))
+                        Ok(Some(context.word_const(0).as_basic_value_enum()))
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
                         let arguments = self.pop_arguments_llvm(context);
@@ -801,7 +801,7 @@ where
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
                     revive_llvm_context::PolkaVMCodeType::Deploy => {
-                        Ok(Some(context.field_const(0).as_basic_value_enum()))
+                        Ok(Some(context.word_const(0).as_basic_value_enum()))
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
                         revive_llvm_context::polkavm_evm_calldata::size(context).map(Some)
@@ -902,7 +902,7 @@ where
                 }
                 .map(|_| None)
             }
-            InstructionName::PUSHSIZE => Ok(Some(context.field_const(0).as_basic_value_enum())),
+            InstructionName::PUSHSIZE => Ok(Some(context.word_const(0).as_basic_value_enum())),
             InstructionName::RETURNDATASIZE => {
                 revive_llvm_context::polkavm_evm_return_data::size(context).map(Some)
             }
@@ -1259,7 +1259,7 @@ where
                                 )
                                 .expect("Always exists");
                             let pointer = revive_llvm_context::PolkaVMPointer::new(
-                                context.field_type(),
+                                context.word_type(),
                                 revive_llvm_context::PolkaVMAddressSpace::Stack,
                                 context.evmla().stack
                                     [self.stack.elements.len() - output_size + index]
@@ -1299,11 +1299,11 @@ where
                             let element_pointer = context.build_gep(
                                 pointer,
                                 &[
-                                    context.field_const(0),
+                                    context.word_const(0),
                                     context
                                         .integer_const(revive_common::BIT_LENGTH_X32, index as u64),
                                 ],
-                                context.field_type(),
+                                context.word_type(),
                                 format!("return_value_pointer_element_{}", index).as_str(),
                             );
                             context.build_store(element_pointer, argument)?;

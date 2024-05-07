@@ -16,7 +16,7 @@ where
     let position_pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Storage,
-        context.field_type(),
+        context.word_type(),
         position,
         "storage_load_position_pointer",
     );
@@ -35,7 +35,7 @@ where
     let position_pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Storage,
-        context.field_type(),
+        context.word_type(),
         position,
         "storage_store_position_pointer",
     );
@@ -54,7 +54,7 @@ where
     let position_pointer = Pointer::new_with_offset(
         context,
         AddressSpace::TransientStorage,
-        context.field_type(),
+        context.word_type(),
         position,
         "transient_storage_load_position_pointer",
     );
@@ -73,7 +73,7 @@ where
     let position_pointer = Pointer::new_with_offset(
         context,
         AddressSpace::TransientStorage,
-        context.field_type(),
+        context.word_type(),
         position,
         "transient_storage_store_position_pointer",
     );

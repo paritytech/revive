@@ -82,13 +82,13 @@ where
             .into_int_value();
         let condition = context.builder().build_int_z_extend_or_bit_cast(
             condition,
-            context.field_type(),
+            context.word_type(),
             "for_condition_extended",
         )?;
         let condition = context.builder().build_int_compare(
             inkwell::IntPredicate::NE,
             condition,
-            context.field_const(0),
+            context.word_const(0),
             "for_condition_compared",
         )?;
         context.build_conditional_branch(condition, body_block, join_block)?;

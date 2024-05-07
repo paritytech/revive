@@ -17,7 +17,7 @@ where
 {
     match context.get_global_value(crate::polkavm::GLOBAL_RETURN_DATA_SIZE) {
         Ok(global) => Ok(global),
-        Err(_error) => Ok(context.field_const(0).as_basic_value_enum()),
+        Err(_error) => Ok(context.word_const(0).as_basic_value_enum()),
     }
 }
 
@@ -48,7 +48,7 @@ where
     context.build_conditional_branch(is_copy_out_of_bounds, error_block, join_block)?;
 
     context.set_basic_block(error_block);
-    crate::polkavm::evm::r#return::revert(context, context.field_const(0), context.field_const(0))?;
+    crate::polkavm::evm::r#return::revert(context, context.word_const(0), context.word_const(0))?;
 
     context.set_basic_block(join_block);
     let destination = Pointer::new_with_offset(

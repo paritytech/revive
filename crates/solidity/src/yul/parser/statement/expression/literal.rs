@@ -138,8 +138,7 @@ impl Literal {
                 let mut hex_string = if inner.is_hexadecimal {
                     string.clone()
                 } else {
-                    let mut hex_string =
-                        String::with_capacity(revive_common::BYTE_LENGTH_FIELD * 2);
+                    let mut hex_string = String::with_capacity(revive_common::BYTE_LENGTH_WORD * 2);
                     let mut index = 0;
                     loop {
                         if index >= string.len() {
@@ -200,16 +199,16 @@ impl Literal {
                     hex_string
                 };
 
-                if hex_string.len() > revive_common::BYTE_LENGTH_FIELD * 2 {
+                if hex_string.len() > revive_common::BYTE_LENGTH_WORD * 2 {
                     return Ok(revive_llvm_context::PolkaVMArgument::new_with_original(
                         r#type.const_zero().as_basic_value_enum(),
                         string,
                     ));
                 }
 
-                if hex_string.len() < revive_common::BYTE_LENGTH_FIELD * 2 {
+                if hex_string.len() < revive_common::BYTE_LENGTH_WORD * 2 {
                     hex_string.push_str(
-                        "0".repeat((revive_common::BYTE_LENGTH_FIELD * 2) - hex_string.len())
+                        "0".repeat((revive_common::BYTE_LENGTH_WORD * 2) - hex_string.len())
                             .as_str(),
                     );
                 }

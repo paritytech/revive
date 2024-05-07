@@ -185,7 +185,7 @@ where
             let pointer = context.build_gep(
                 pointer,
                 &[
-                    context.field_const(0),
+                    context.word_const(0),
                     context
                         .integer_type(revive_common::BIT_LENGTH_X32)
                         .const_int(index as u64, false),

@@ -145,12 +145,12 @@ where
             let field_pointer = context.build_gep(
                 tuple_pointer,
                 &[
-                    context.field_const(0),
+                    context.word_const(0),
                     context
                         .integer_type(revive_common::BIT_LENGTH_X32)
                         .const_int(index as u64, false),
                 ],
-                context.field_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
                 format!("assignment_binding_{index}_gep_pointer").as_str(),
             );
 

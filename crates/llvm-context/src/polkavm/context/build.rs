@@ -11,7 +11,7 @@ pub struct Build {
     /// The PolkaVM text assembly.
     pub assembly_text: String,
     /// The metadata hash.
-    pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
+    pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     /// The PolkaVM binary bytecode.
     pub bytecode: Vec<u8>,
     /// The PolkaVM bytecode hash.
@@ -24,7 +24,7 @@ impl Build {
     /// A shortcut constructor.
     pub fn new(
         assembly_text: String,
-        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_FIELD]>,
+        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
         bytecode: Vec<u8>,
         bytecode_hash: String,
     ) -> Self {

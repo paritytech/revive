@@ -81,12 +81,12 @@ where
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let function_type = context.function_type(
             vec![
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
-                context.field_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
+                context.word_type().as_basic_type_enum(),
             ],
             1,
             false,
@@ -144,7 +144,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         let status_code_result_pointer = context.build_alloca(
-            context.field_type(),
+            context.word_type(),
             "contract_call_result_status_code_pointer",
         );
         /*

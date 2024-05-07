@@ -263,7 +263,7 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
-                    context.field_const(0),
+                    context.word_const(0),
                     inkwell::IntPredicate::EQ,
                 )
                 .map(Some)
@@ -312,7 +312,7 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
-                    context.field_type().const_all_ones(),
+                    context.word_type().const_all_ones(),
                 )
                 .map(Some)
             }
@@ -512,7 +512,7 @@ impl FunctionCall {
 
                 let offset = context.solidity_mut().allocate_immutable(key.as_str());
 
-                let index = context.field_const(offset as u64);
+                let index = context.word_const(offset as u64);
                 let value = arguments[2].value.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
@@ -526,7 +526,7 @@ impl FunctionCall {
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
                     revive_llvm_context::PolkaVMCodeType::Deploy => {
-                        Ok(Some(context.field_const(0).as_basic_value_enum()))
+                        Ok(Some(context.word_const(0).as_basic_value_enum()))
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
                         revive_llvm_context::polkavm_evm_calldata::load(
@@ -543,7 +543,7 @@ impl FunctionCall {
                     .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?
                 {
                     revive_llvm_context::PolkaVMCodeType::Deploy => {
-                        Ok(Some(context.field_const(0).as_basic_value_enum()))
+                        Ok(Some(context.word_const(0).as_basic_value_enum()))
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
                         revive_llvm_context::polkavm_evm_calldata::size(context).map(Some)
@@ -877,8 +877,8 @@ impl FunctionCall {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
                 let offset = context.builder().build_int_add(
                     arguments[0].into_int_value(),
-                    context.field_const(
-                        (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_FIELD) as u64,
+                    context.word_const(
+                        (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_WORD) as u64,
                     ),
                     "datacopy_contract_hash_offset",
                 )?;

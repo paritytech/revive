@@ -63,17 +63,17 @@ where
     let non_overflow_block = context.append_basic_block("shift_left_non_overflow");
     let join_block = context.append_basic_block("shift_left_join");
 
-    let result_pointer = context.build_alloca(context.field_type(), "shift_left_result_pointer");
+    let result_pointer = context.build_alloca(context.word_type(), "shift_left_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
         "shift_left_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
 
     context.set_basic_block(overflow_block);
-    context.build_store(result_pointer, context.field_const(0))?;
+    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);
@@ -101,17 +101,17 @@ where
     let non_overflow_block = context.append_basic_block("shift_right_non_overflow");
     let join_block = context.append_basic_block("shift_right_join");
 
-    let result_pointer = context.build_alloca(context.field_type(), "shift_right_result_pointer");
+    let result_pointer = context.build_alloca(context.word_type(), "shift_right_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
         "shift_right_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
 
     context.set_basic_block(overflow_block);
-    context.build_store(result_pointer, context.field_const(0))?;
+    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);
@@ -145,14 +145,12 @@ where
     let non_overflow_block = context.append_basic_block("shift_right_arithmetic_non_overflow");
     let join_block = context.append_basic_block("shift_right_arithmetic_join");
 
-    let result_pointer = context.build_alloca(
-        context.field_type(),
-        "shift_right_arithmetic_result_pointer",
-    );
+    let result_pointer =
+        context.build_alloca(context.word_type(), "shift_right_arithmetic_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
         "shift_right_arithmetic_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -160,7 +158,7 @@ where
     context.set_basic_block(overflow_block);
     let sign_bit = context.builder().build_right_shift(
         value,
-        context.field_const((revive_common::BIT_LENGTH_FIELD - 1) as u64),
+        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
         false,
         "shift_right_arithmetic_sign_bit",
     )?;
@@ -176,11 +174,11 @@ where
     )?;
 
     context.set_basic_block(overflow_positive_block);
-    context.build_store(result_pointer, context.field_const(0))?;
+    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(overflow_negative_block);
-    context.build_store(result_pointer, context.field_type().const_all_ones())?;
+    context.build_store(result_pointer, context.word_type().const_all_ones())?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);

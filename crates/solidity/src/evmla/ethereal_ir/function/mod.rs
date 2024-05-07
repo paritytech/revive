@@ -766,7 +766,7 @@ impl Function {
 
                 let result = match (&operands[0], &operands[1]) {
                     (Element::Tag(tag), Element::Constant(offset)) => {
-                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_WORD;
                         let offset = offset.to_u64().expect("Always valid");
                         let result = tag << offset;
                         if Self::is_tag_value_valid(blocks, &result) {
@@ -776,7 +776,7 @@ impl Function {
                         }
                     }
                     (Element::Constant(constant), Element::Constant(offset)) => {
-                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_WORD;
                         let offset = offset.to_u64().expect("Always valid");
                         Element::Constant(constant << offset)
                     }
@@ -793,7 +793,7 @@ impl Function {
 
                 let result = match (&operands[0], &operands[1]) {
                     (Element::Tag(tag), Element::Constant(offset)) => {
-                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_WORD;
                         let offset = offset.to_u64().expect("Always valid");
                         let result = tag >> offset;
                         if Self::is_tag_value_valid(blocks, &result) {
@@ -803,7 +803,7 @@ impl Function {
                         }
                     }
                     (Element::Constant(constant), Element::Constant(offset)) => {
-                        let offset = offset % revive_common::BIT_LENGTH_FIELD;
+                        let offset = offset % revive_common::BIT_LENGTH_WORD;
                         let offset = offset.to_u64().expect("Always valid");
                         Element::Constant(constant >> offset)
                     }
@@ -1151,7 +1151,7 @@ where
                 let r#type = context.function_type(
                     vec![
                         context
-                            .integer_type(revive_common::BIT_LENGTH_FIELD)
+                            .integer_type(revive_common::BIT_LENGTH_WORD)
                             .as_basic_type_enum();
                         input_size
                     ],
@@ -1200,7 +1200,7 @@ where
         let mut stack_variables = Vec::with_capacity(self.stack_size);
         for stack_index in 0..self.stack_size {
             let pointer = context.build_alloca(
-                context.field_type(),
+                context.word_type(),
                 format!("stack_var_{stack_index:03}").as_str(),
             );
             let value = match self.r#type {
@@ -1215,7 +1215,7 @@ where
                         .get_nth_param((stack_index - 1) as u32)
                         .expect("Always valid")
                 }
-                _ => context.field_const(0).as_basic_value_enum(),
+                _ => context.word_const(0).as_basic_value_enum(),
             };
             context.build_store(pointer, value)?;
             stack_variables.push(revive_llvm_context::PolkaVMArgument::new(

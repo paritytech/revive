@@ -44,7 +44,7 @@ impl<'ctx> Pointer<'ctx> {
         D: Dependency + Clone,
     {
         Self {
-            r#type: context.field_type().as_basic_type_enum(),
+            r#type: context.word_type().as_basic_type_enum(),
             address_space: AddressSpace::Stack,
             value,
         }
@@ -86,6 +86,17 @@ impl<'ctx> Pointer<'ctx> {
             address_space: self.address_space,
             value: self.value,
         }
+    }
+
+    /// Cast this pointer to a register sized integer value.
+    pub fn to_int<D>(&self, context: &Context<'ctx, D>) -> inkwell::values::IntValue<'ctx>
+    where
+        D: Dependency + Clone,
+    {
+        context
+            .builder()
+            .build_ptr_to_int(self.value, context.xlen_type(), "ptr_to_xlen")
+            .expect("we should be positioned")
     }
 
     pub fn address_space_cast<D>(

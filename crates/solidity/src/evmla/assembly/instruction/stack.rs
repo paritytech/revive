@@ -11,7 +11,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let result = context
-        .field_type()
+        .word_type()
         .const_int_from_string(
             value.to_ascii_uppercase().as_str(),
             inkwell::types::StringRadix::Hexadecimal,
@@ -30,7 +30,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     let result = context
-        .field_type()
+        .word_type()
         .const_int_from_string(value.as_str(), inkwell::types::StringRadix::Decimal)
         .expect("Always valid");
     Ok(result.as_basic_value_enum())

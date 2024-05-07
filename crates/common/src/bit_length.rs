@@ -16,8 +16,8 @@ pub const BIT_LENGTH_X64: usize = crate::byte_length::BYTE_LENGTH_X64 * BIT_LENG
 pub const BIT_LENGTH_ETH_ADDRESS: usize =
     crate::byte_length::BYTE_LENGTH_ETH_ADDRESS * BIT_LENGTH_BYTE;
 
-/// The field (usually `u256` or `i256`) bit-length.
-pub const BIT_LENGTH_FIELD: usize = crate::byte_length::BYTE_LENGTH_FIELD * BIT_LENGTH_BYTE;
+/// The VM word (usually `u256` or `i256`) bit-length.
+pub const BIT_LENGTH_WORD: usize = crate::byte_length::BYTE_LENGTH_WORD * BIT_LENGTH_BYTE;
 
 /// Bit length of the runtime value type.
 pub const BIT_LENGTH_VALUE: usize = crate::byte_length::BYTE_LENGTH_VALUE * BIT_LENGTH_BYTE;

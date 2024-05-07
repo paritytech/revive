@@ -24,22 +24,22 @@ where
             let immutables_offset_pointer = Pointer::new_with_offset(
                 context,
                 AddressSpace::HeapAuxiliary,
-                context.field_type(),
-                context.field_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
+                context.word_type(),
+                context.word_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
                 "immutables_offset_pointer",
             );
             context.build_store(
                 immutables_offset_pointer,
-                context.field_const(revive_common::BYTE_LENGTH_FIELD as u64),
+                context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
             )?;
 
             let immutables_number_pointer = Pointer::new_with_offset(
                 context,
                 AddressSpace::HeapAuxiliary,
-                context.field_type(),
-                context.field_const(
+                context.word_type(),
+                context.word_const(
                     crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (revive_common::BYTE_LENGTH_FIELD as u64),
+                        + (revive_common::BYTE_LENGTH_WORD as u64),
                 ),
                 "immutables_number_pointer",
             );
@@ -47,22 +47,22 @@ where
             context.build_store(
                 immutables_number_pointer,
                 context
-                    .field_const((immutable_values_size / revive_common::BYTE_LENGTH_FIELD) as u64),
+                    .word_const((immutable_values_size / revive_common::BYTE_LENGTH_WORD) as u64),
             )?;
             let immutables_size = context.builder().build_int_mul(
-                context.field_const(immutable_values_size as u64),
-                context.field_const(2),
+                context.word_const(immutable_values_size as u64),
+                context.word_const(2),
                 "immutables_size",
             )?;
             let return_data_length = context.builder().build_int_add(
                 immutables_size,
-                context.field_const((revive_common::BYTE_LENGTH_FIELD * 2) as u64),
+                context.word_const((revive_common::BYTE_LENGTH_WORD * 2) as u64),
                 "return_data_length",
             )?;
 
             context.build_exit(
                 context.integer_const(crate::polkavm::XLEN, 0),
-                context.field_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
+                context.word_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
                 return_data_length,
             )?;
         }
@@ -115,8 +115,8 @@ where
 {
     crate::polkavm::evm::memory::store(
         context,
-        context.field_type().const_all_ones(),
-        context.field_const(0),
+        context.word_type().const_all_ones(),
+        context.word_const(0),
     )?;
     context.build_call(context.intrinsics().trap, &[], "invalid_trap");
     Ok(())

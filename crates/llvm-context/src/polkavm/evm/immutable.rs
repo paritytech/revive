@@ -23,21 +23,21 @@ where
         Some(CodeType::Deploy) => {
             let index_double = context.builder().build_int_mul(
                 index,
-                context.field_const(2),
+                context.word_const(2),
                 "immutable_load_index_double",
             )?;
             let offset_absolute = context.builder().build_int_add(
                 index_double,
-                context.field_const(
+                context.word_const(
                     crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (3 * revive_common::BYTE_LENGTH_FIELD) as u64,
+                        + (3 * revive_common::BYTE_LENGTH_WORD) as u64,
                 ),
                 "immutable_offset_absolute",
             )?;
             let immutable_pointer = Pointer::new_with_offset(
                 context,
                 AddressSpace::HeapAuxiliary,
-                context.field_type(),
+                context.word_type(),
                 offset_absolute,
                 "immutable_pointer",
             );
@@ -68,21 +68,21 @@ where
         Some(CodeType::Deploy) => {
             let index_double = context.builder().build_int_mul(
                 index,
-                context.field_const(2),
+                context.word_const(2),
                 "immutable_load_index_double",
             )?;
             let index_offset_absolute = context.builder().build_int_add(
                 index_double,
-                context.field_const(
+                context.word_const(
                     crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (2 * revive_common::BYTE_LENGTH_FIELD) as u64,
+                        + (2 * revive_common::BYTE_LENGTH_WORD) as u64,
                 ),
                 "index_offset_absolute",
             )?;
             let index_offset_pointer = Pointer::new_with_offset(
                 context,
                 AddressSpace::HeapAuxiliary,
-                context.field_type(),
+                context.word_type(),
                 index_offset_absolute,
                 "immutable_index_pointer",
             );
@@ -90,13 +90,13 @@ where
 
             let value_offset_absolute = context.builder().build_int_add(
                 index_offset_absolute,
-                context.field_const(revive_common::BYTE_LENGTH_FIELD as u64),
+                context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
                 "value_offset_absolute",
             )?;
             let value_offset_pointer = Pointer::new_with_offset(
                 context,
                 AddressSpace::HeapAuxiliary,
-                context.field_type(),
+                context.word_type(),
                 value_offset_absolute,
                 "immutable_value_pointer",
             );

@@ -40,7 +40,7 @@ pub static EXTENSION_LLVM_SOURCE: &str = "ll";
 pub static EXTENSION_LLVM_BINARY: &str = "bc";
 
 /// The PolkaVM assembly file extension.
-pub static EXTENSION_POLKAVM_ASSEMBLY: &str = "zasm";
+pub static EXTENSION_POLKAVM_ASSEMBLY: &str = "pvmasm";
 
 /// The PolkaVM bytecode file extension.
-pub static EXTENSION_POLKAVM_BINARY: &str = "zbin";
+pub static EXTENSION_POLKAVM_BINARY: &str = "pvm";

@@ -1,8 +1,8 @@
 import * as path from 'path';
 
 const outputDir = 'artifacts';
-const binExtension = ':C.zbin';
-const asmExtension = ':C.zasm';
+const binExtension = ':C.pvm';
+const asmExtension = ':C.pvmasm';
 const contractSolFilename = 'contract.sol';
 const contractYulFilename = 'contract.yul';
 const pathToOutputDir = path.join(__dirname, '..', outputDir);

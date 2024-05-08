@@ -249,42 +249,6 @@ entry:
 }
 
 
-define i256 @__mod(i256 %arg1, i256 %arg2) #0 {
-entry:
-  %is_divider_zero = icmp eq i256 %arg2, 0
-  br i1 %is_divider_zero, label %return, label %remainder
-
-remainder:
-  %rem_res = urem i256 %arg1, %arg2
-  br label %return
-
-return:
-  %res = phi i256 [ 0, %entry ], [ %rem_res, %remainder ]
-  ret i256 %res
-}
-
-define i256 @__smod(i256 %arg1, i256 %arg2) #0 {
-entry:
-  %is_divider_zero = icmp eq i256 %arg2, 0
-  br i1 %is_divider_zero, label %return, label %division_overflow
-
-division_overflow:
-  %is_divided_int_min = icmp eq i256 %arg1, -57896044618658097711785492504343953926634992332820282019728792003956564819968
-  %is_minus_one = icmp eq i256 %arg2, -1
-  %is_overflow = and i1 %is_divided_int_min, %is_minus_one
-  br i1 %is_overflow, label %return, label %remainder
-
-remainder:
-  %rem_res = srem i256 %arg1, %arg2
-  br label %return
-
-return:
-  %res = phi i256 [ 0, %entry ], [ 0, %division_overflow ], [ %rem_res, %remainder ]
-  ret i256 %res
-}
-
-
-
 attributes #0 = { mustprogress nofree norecurse nosync nounwind readnone willreturn }
 attributes #1 = { argmemonly readonly nofree null_pointer_is_valid }
 attributes #2 = { argmemonly mustprogress nofree norecurse nosync nounwind willreturn null_pointer_is_valid }

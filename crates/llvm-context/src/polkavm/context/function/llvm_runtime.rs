@@ -17,15 +17,6 @@ pub struct LLVMRuntime<'ctx> {
     pub cxa_throw: FunctionDeclaration<'ctx>,
 
     /// The corresponding LLVM runtime function.
-    pub div: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub sdiv: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub r#mod: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub smod: FunctionDeclaration<'ctx>,
-
-    /// The corresponding LLVM runtime function.
     pub shl: FunctionDeclaration<'ctx>,
     /// The corresponding LLVM runtime function.
     pub shr: FunctionDeclaration<'ctx>,
@@ -81,18 +72,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
 
     /// The LLVM exception throwing function name.
     pub const FUNCTION_CXA_THROW: &'static str = "__cxa_throw";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_DIV: &'static str = "__div";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SDIV: &'static str = "__sdiv";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_MOD: &'static str = "__mod";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SMOD: &'static str = "__smod";
 
     /// The corresponding runtime function name.
     pub const FUNCTION_SHL: &'static str = "__shl";
@@ -183,82 +162,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
             Some(inkwell::module::Linkage::External),
         );
         Function::set_cxa_throw_attributes(llvm, cxa_throw);
-
-        let div = Self::declare(
-            module,
-            Self::FUNCTION_DIV,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, div, optimizer);
-        Function::set_pure_function_attributes(llvm, div);
-
-        let r#mod = Self::declare(
-            module,
-            Self::FUNCTION_MOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, r#mod, optimizer);
-        Function::set_pure_function_attributes(llvm, r#mod);
-
-        let sdiv = Self::declare(
-            module,
-            Self::FUNCTION_SDIV,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, sdiv, optimizer);
-        Function::set_pure_function_attributes(llvm, sdiv);
-
-        let smod = Self::declare(
-            module,
-            Self::FUNCTION_SMOD,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, smod, optimizer);
-        Function::set_pure_function_attributes(llvm, smod);
 
         let shl = Self::declare(
             module,
@@ -553,11 +456,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Self {
             personality,
             cxa_throw,
-
-            div,
-            sdiv,
-            r#mod,
-            smod,
 
             shl,
             shr,

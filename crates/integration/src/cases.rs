@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy_primitives::{I256, U256};
 use alloy_sol_types::{sol, SolCall};
 
 #[derive(Clone)]
@@ -80,6 +80,18 @@ sol!(
         function address_this() public view returns (address);
 
         function caller() public pure returns (address);
+    }
+);
+
+sol!(
+    contract DivisionArithmetics {
+        function div(uint n, uint d) public pure returns (uint q);
+
+        function sdiv(int n, int d) public pure returns (int q);
+
+        function mod(uint n, uint d) public pure returns (uint r);
+
+        function smod(int n, int d) public pure returns (int r);
     }
 );
 
@@ -224,6 +236,50 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Context::callerCall::new(()).abi_encode(),
+        }
+    }
+
+    pub fn division_arithmetics_div(n: U256, d: U256) -> Self {
+        let code = include_str!("../contracts/DivisionArithmetics.sol");
+        let name = "DivisionArithmetics";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: DivisionArithmetics::divCall::new((n, d)).abi_encode(),
+        }
+    }
+
+    pub fn division_arithmetics_sdiv(n: I256, d: I256) -> Self {
+        let code = include_str!("../contracts/DivisionArithmetics.sol");
+        let name = "DivisionArithmetics";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: DivisionArithmetics::sdivCall::new((n, d)).abi_encode(),
+        }
+    }
+
+    pub fn division_arithmetics_mod(n: U256, d: U256) -> Self {
+        let code = include_str!("../contracts/DivisionArithmetics.sol");
+        let name = "DivisionArithmetics";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: DivisionArithmetics::modCall::new((n, d)).abi_encode(),
+        }
+    }
+
+    pub fn division_arithmetics_smod(n: I256, d: I256) -> Self {
+        let code = include_str!("../contracts/DivisionArithmetics.sol");
+        let name = "DivisionArithmetics";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: DivisionArithmetics::smodCall::new((n, d)).abi_encode(),
         }
     }
 }

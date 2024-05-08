@@ -296,3 +296,99 @@ fn caller() {
     let expected = Address::from(&mock_runtime::State::CALLER);
     assert_eq!(received, expected);
 }
+
+#[test]
+fn unsigned_division() {
+    let one = U256::from(1);
+    let two = U256::from(2);
+    let five = U256::from(5);
+    for (n, d, q) in [
+        (five, five, one),
+        (five, one, five),
+        (U256::ZERO, U256::MAX, U256::ZERO),
+        (five, two, two),
+        (one, U256::ZERO, U256::ZERO),
+    ] {
+        let state = assert_success(Contract::division_arithmetics_div(n, d), true);
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, q);
+    }
+}
+
+#[test]
+fn signed_division() {
+    let one = I256::try_from(1).unwrap();
+    let two = I256::try_from(2).unwrap();
+    let minus_two = I256::try_from(-2).unwrap();
+    let five = I256::try_from(5).unwrap();
+    let minus_five = I256::try_from(-5).unwrap();
+    for (n, d, q) in [
+        (five, five, one),
+        (five, one, five),
+        (I256::ZERO, I256::MAX, I256::ZERO),
+        (I256::ZERO, I256::MINUS_ONE, I256::ZERO),
+        (five, two, two),
+        (five, I256::MINUS_ONE, minus_five),
+        (I256::MINUS_ONE, minus_two, I256::ZERO),
+        (minus_five, minus_five, one),
+        (minus_five, two, minus_two),
+        (I256::MINUS_ONE, I256::MIN, I256::ZERO),
+        (one, I256::ZERO, I256::ZERO),
+    ] {
+        let state = assert_success(Contract::division_arithmetics_sdiv(n, d), true);
+        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, q);
+    }
+}
+
+#[test]
+fn unsigned_remainder() {
+    let one = U256::from(1);
+    let two = U256::from(2);
+    let five = U256::from(5);
+    for (n, d, q) in [
+        (five, five, U256::ZERO),
+        (five, one, U256::ZERO),
+        (U256::ZERO, U256::MAX, U256::ZERO),
+        (U256::MAX, U256::MAX, U256::ZERO),
+        (five, two, one),
+        (two, five, two),
+        (U256::MAX, U256::ZERO, U256::ZERO),
+    ] {
+        let state = assert_success(Contract::division_arithmetics_mod(n, d), true);
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, q);
+    }
+}
+
+#[test]
+fn signed_remainder() {
+    let one = I256::try_from(1).unwrap();
+    let two = I256::try_from(2).unwrap();
+    let minus_two = I256::try_from(-2).unwrap();
+    let five = I256::try_from(5).unwrap();
+    let minus_five = I256::try_from(-5).unwrap();
+    for (n, d, q) in [
+        (five, five, I256::ZERO),
+        (five, one, I256::ZERO),
+        (I256::ZERO, I256::MAX, I256::ZERO),
+        (I256::MAX, I256::MAX, I256::ZERO),
+        (five, two, one),
+        (two, five, two),
+        (five, minus_five, I256::ZERO),
+        (five, I256::MINUS_ONE, I256::ZERO),
+        (five, minus_two, one),
+        (minus_five, two, I256::MINUS_ONE),
+        (minus_two, five, minus_two),
+        (minus_five, minus_five, I256::ZERO),
+        (minus_five, I256::MINUS_ONE, I256::ZERO),
+        (minus_five, minus_two, I256::MINUS_ONE),
+        (minus_two, minus_five, minus_two),
+        (I256::MIN, I256::MINUS_ONE, I256::ZERO),
+        (I256::ZERO, I256::ZERO, I256::ZERO),
+    ] {
+        let state = assert_success(Contract::division_arithmetics_smod(n, d), true);
+        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        assert_eq!(received, q);
+    }
+}

@@ -1182,6 +1182,15 @@ where
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        if value.get_type() == self.xlen_type() {
+            return Ok(value);
+        }
+        assert_eq!(
+            value.get_type(),
+            self.word_type(),
+            "expected XLEN or WORD sized int type for memory offset",
+        );
+
         let truncated = self.builder().build_int_truncate_or_bit_cast(
             value,
             self.xlen_type(),

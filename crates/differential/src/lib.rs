@@ -125,8 +125,8 @@ pub struct PreparedEvm {
 pub fn prepare(code: Vec<u8>, data: Vec<u8>) -> PreparedEvm {
     let state = RuntimeState {
         context: Context {
-            address: H160::default(),
-            caller: H160::default(),
+            address: H160::from_slice(&[1u8; 20]),
+            caller: H160::from_slice(&[2u8; 20]),
             apparent_value: U256::default(),
         },
         transaction_context: TransactionContext {

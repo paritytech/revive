@@ -907,10 +907,12 @@ impl FunctionCall {
                 Ok(Some(arguments[0]))
             }
 
-            Name::Address | Name::Caller => {
-                Ok(Some(context.integer_const(256, 0).as_basic_value_enum()))
+            Name::Address => {
+                revive_llvm_context::polkavm_evm_contract_context::address(context).map(Some)
             }
-
+            Name::Caller => {
+                revive_llvm_context::polkavm_evm_contract_context::caller(context).map(Some)
+            }
             Name::CallValue => revive_llvm_context::polkavm_evm_ether_gas::value(context).map(Some),
             Name::Gas => revive_llvm_context::polkavm_evm_ether_gas::gas(context).map(Some),
             Name::Balance => {

@@ -1134,8 +1134,12 @@ where
                 .map(Some)
             }
 
-            InstructionName::ADDRESS => todo!(),
-            InstructionName::CALLER => todo!(),
+            InstructionName::ADDRESS => {
+                revive_llvm_context::polkavm_evm_contract_context::address(context).map(Some)
+            }
+            InstructionName::CALLER => {
+                revive_llvm_context::polkavm_evm_contract_context::caller(context).map(Some)
+            }
 
             InstructionName::CALLVALUE => {
                 revive_llvm_context::polkavm_evm_ether_gas::value(context).map(Some)

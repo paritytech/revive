@@ -621,9 +621,9 @@ where
     ) -> (Pointer<'ctx>, Pointer<'ctx>) {
         let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
         let symbol = match bit_length {
-            256 => GLOBAL_I256_SIZE,
-            128 => GLOBAL_I128_SIZE,
-            64 => GLOBAL_I64_SIZE,
+            revive_common::BIT_LENGTH_WORD => GLOBAL_I256_SIZE,
+            revive_common::BIT_LENGTH_VALUE => GLOBAL_I128_SIZE,
+            revive_common::BIT_LENGTH_BLOCK_NUMBER => GLOBAL_I64_SIZE,
             _ => unreachable!("invalid stack parameter bit width: {bit_length}"),
         };
         let length_pointer = self.get_global(symbol).expect("should be declared");

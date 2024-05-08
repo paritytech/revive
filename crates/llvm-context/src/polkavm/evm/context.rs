@@ -163,3 +163,41 @@ where
         .build_int_z_extend(heap_size, context.word_type(), "heap_size_extended")?
         .as_basic_value_enum())
 }
+
+/// Translates the `address` instruction.
+pub fn address<'ctx, D>(
+    context: &mut Context<'ctx, D>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+where
+    D: Dependency + Clone,
+{
+    let (output_pointer, output_length_pointer) =
+        context.build_stack_parameter(revive_common::BIT_LENGTH_WORD, "address_output");
+    context.build_runtime_call(
+        runtime_api::ADDRESS,
+        &[
+            output_pointer.to_int(context).into(),
+            output_length_pointer.to_int(context).into(),
+        ],
+    );
+    context.build_load(output_pointer, "address")
+}
+
+/// Translates the `caller` instruction.
+pub fn caller<'ctx, D>(
+    context: &mut Context<'ctx, D>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+where
+    D: Dependency + Clone,
+{
+    let (output_pointer, output_length_pointer) =
+        context.build_stack_parameter(revive_common::BIT_LENGTH_WORD, "caller_output");
+    context.build_runtime_call(
+        runtime_api::CALLER,
+        &[
+            output_pointer.to_int(context).into(),
+            output_length_pointer.to_int(context).into(),
+        ],
+    );
+    context.build_load(output_pointer, "caller")
+}

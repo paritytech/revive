@@ -11,6 +11,7 @@ pub use self::r#const::*;
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
+use anyhow::{anyhow, Context as AnyhowContext};
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
 
@@ -34,36 +35,30 @@ pub fn build_assembly_text(
     }
 
     let bytecode = hex::decode(encoded_hex_text)
-        .map_err(|e| anyhow::anyhow!("Failed to decode encoded hex text:\n{}\n", e))?;
+        .map_err(|e| anyhow!("Failed to decode encoded hex text:\n{}\n", e))?;
 
     let program_blob = ProgramBlob::parse(bytecode.as_slice())
-        .map_err(|error| anyhow::anyhow!(format!("Failed to parse program blob:\n{}\n", error)))?;
+        .map_err(|error| anyhow!(format!("Failed to parse program blob:\n{}\n", error)))?;
 
     let mut disassembler =
         Disassembler::new(&program_blob, DisassemblyFormat::Guest).map_err(|error| {
-            anyhow::anyhow!(format!(
+            anyhow!(format!(
                 "Failed to create disassembler for contract:\n{:?}\n\nDue to:\n{}\n",
                 contract_path, error
             ))
         })?;
+    disassembler.display_gas()?;
 
     let mut disassembled_code = Vec::new();
     disassembler
         .disassemble_into(&mut disassembled_code)
-        .map_err(|error| {
-            anyhow::anyhow!(format!(
-                "Failed to disassemble contract:\n{:?}\n\nDue to:\n{}\n\nGas details:{:?}\n",
-                contract_path,
-                error,
-                disassembler.display_gas()
-            ))
-        })?;
+        .with_context(|| format!("Failed to disassemble contract: {}", contract_path))?;
 
-    let assembly_text = String::from_utf8(disassembled_code).map_err(|error| {
-        anyhow::anyhow!(format!(
-            "Failed to convert disassembled code to string for contract\n{:?}\n\nDue to:\n{}\n",
-            contract_path, error
-        ))
+    let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
+        format!(
+            "Failed to convert disassembled code to string for contract: {}",
+            contract_path
+        )
     })?;
 
     Ok(Build::new(

@@ -30,7 +30,6 @@ use crate::optimizer::Optimizer;
 use crate::polkavm::r#const::*;
 use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
-//use crate::polkavm_evm_event::log;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 

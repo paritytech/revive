@@ -278,11 +278,11 @@ where
                 )
             })?;
 
-        let assembly_text = revive_linker::link(buffer.as_slice()).map(hex::encode)?;
+        let encoded_hex_text = revive_linker::link(buffer.as_slice()).map(hex::encode)?;
 
         let build = match crate::polkavm::build_assembly_text(
             contract_path,
-            assembly_text.as_str(),
+            encoded_hex_text.as_str(),
             metadata_hash,
             self.debug_config(),
         ) {

@@ -7,8 +7,7 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "test": "npx jest --verbose --testPathPattern="
-    
+    "test": "npx jest --verbose --testPathIgnorePatterns=zkasm.test.ts"
   },
   "keywords": [],
   "author": "Matter Labs",

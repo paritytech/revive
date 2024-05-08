@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.24;
+pragma solidity ^0.8;
 
 contract Computation {
     function triangle_number(int64 n) public pure returns (int64 sum) {

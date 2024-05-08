@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.24;
+pragma solidity ^0.8;
 
 contract Block {
     function timestamp() public view returns (uint ret) {

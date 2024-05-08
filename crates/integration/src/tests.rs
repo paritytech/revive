@@ -1,4 +1,4 @@
-use alloy_primitives::{FixedBytes, Keccak256, I256, U256};
+use alloy_primitives::{Address, FixedBytes, Keccak256, I256, U256};
 use alloy_sol_types::{sol, SolCall};
 use sha1::Digest;
 
@@ -278,5 +278,21 @@ fn block_timestamp() {
     let state = assert_success(Contract::block_timestamp(), true);
     let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
     let expected = U256::from(mock_runtime::State::BLOCK_TIMESTAMP);
+    assert_eq!(received, expected);
+}
+
+#[test]
+fn address() {
+    let state = assert_success(Contract::context_address(), true);
+    let received = Address::from_slice(&state.output.data[12..]);
+    let expected = Address::from(&mock_runtime::State::ADDRESS);
+    assert_eq!(received, expected);
+}
+
+#[test]
+fn caller() {
+    let state = assert_success(Contract::context_caller(), true);
+    let received = Address::from_slice(&state.output.data[12..]);
+    let expected = Address::from(&mock_runtime::State::CALLER);
     assert_eq!(received, expected);
 }

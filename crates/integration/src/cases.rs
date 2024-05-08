@@ -75,6 +75,14 @@ sol!(
     }
 );
 
+sol!(
+    contract Context {
+        function address_this() public view returns (address);
+
+        function caller() public pure returns (address);
+    }
+);
+
 impl Contract {
     pub fn baseline() -> Self {
         let code = include_str!("../contracts/Baseline.sol");
@@ -194,6 +202,28 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Block::timestampCall::new(()).abi_encode(),
+        }
+    }
+
+    pub fn context_address() -> Self {
+        let code = include_str!("../contracts/Context.sol");
+        let name = "Context";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Context::address_thisCall::new(()).abi_encode(),
+        }
+    }
+
+    pub fn context_caller() -> Self {
+        let code = include_str!("../contracts/Context.sol");
+        let name = "Context";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Context::callerCall::new(()).abi_encode(),
         }
     }
 }

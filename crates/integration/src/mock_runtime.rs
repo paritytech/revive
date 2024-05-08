@@ -33,8 +33,10 @@ impl Default for CallOutput {
 }
 
 impl State {
+    pub const ADDRESS: [u8; 20] = [1; 20];
     pub const BLOCK_NUMBER: u64 = 123;
     pub const BLOCK_TIMESTAMP: u64 = 456;
+    pub const CALLER: [u8; 20] = [2; 20];
 
     pub fn new(input: Vec<u8>) -> Self {
         Self {
@@ -247,6 +249,48 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
 
                 caller.write_memory(out_ptr, &State::BLOCK_NUMBER.to_le_bytes())?;
                 caller.write_memory(out_len_ptr, &64u32.to_le_bytes())?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::ADDRESS,
+            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, _) = caller.split();
+
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_WORD,
+                    "spurious output buffer size: {out_len}"
+                );
+
+                caller.write_memory(out_ptr, &State::ADDRESS)?;
+                caller.write_memory(out_len_ptr, &(State::ADDRESS.len() as u32).to_le_bytes())?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::CALLER,
+            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, _) = caller.split();
+
+                let out_len = caller.read_u32(out_len_ptr)? as usize;
+                assert_eq!(
+                    out_len,
+                    revive_common::BYTE_LENGTH_WORD,
+                    "spurious output buffer size: {out_len}"
+                );
+
+                caller.write_memory(out_ptr, &State::CALLER)?;
+                caller.write_memory(out_len_ptr, &(State::CALLER.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },

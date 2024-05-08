@@ -64,9 +64,11 @@ pub fn compile_blob_with_options(
         .evm
         .as_ref()
         .expect("source should produce EVM output")
-        .assembly_text
+        .bytecode
         .as_ref()
-        .expect("source should produce assembly text");
+        .expect("source should produce assembly text")
+        .object
+        .as_str();
 
     hex::decode(bytecode).expect("hex encoding should always be valid")
 }

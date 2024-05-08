@@ -120,35 +120,6 @@ pub fn llvm_ir(
     Ok(build)
 }
 
-/// Runs the PolkaVM assembly mode.
-pub fn zkasm(
-    input_files: &[PathBuf],
-    include_metadata_hash: bool,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
-) -> anyhow::Result<Build> {
-    let path = match input_files.len() {
-        1 => input_files.first().expect("Always exists"),
-        0 => anyhow::bail!("The input file is missing"),
-        length => anyhow::bail!(
-            "Only one input file is allowed in the PolkaVM assembly mode, but found {}",
-            length,
-        ),
-    };
-
-    let project = Project::try_from_zkasm_path(path)?;
-
-    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
-    let build = project.compile(
-        optimizer_settings,
-        false,
-        include_metadata_hash,
-        false,
-        debug_config,
-    )?;
-
-    Ok(build)
-}
-
 /// Runs the standard output mode.
 #[allow(clippy::too_many_arguments)]
 pub fn standard_output(

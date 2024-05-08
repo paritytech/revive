@@ -113,13 +113,6 @@ pub struct Arguments {
     #[structopt(long = "llvm-ir")]
     pub llvm_ir: bool,
 
-    /// Switch to PolkaVM assembly mode.
-    /// Only one input PolkaVM assembly file is allowed.
-    /// Cannot be used with combined and standard JSON modes.
-    /// Use this mode at your own risk, as PolkaVM assembly input validation is not implemented.
-    #[structopt(long = "zkasm")]
-    pub zkasm: bool,
-
     /// Forcibly switch to EVM legacy assembly pipeline.
     /// It is useful for older revisions of `solc` 0.8, where Yul was considered highly experimental
     /// and contained more bugs than today.
@@ -199,7 +192,6 @@ impl Arguments {
         let modes_count = [
             self.yul,
             self.llvm_ir,
-            self.zkasm,
             self.combined_json.is_some(),
             self.standard_json,
         ]
@@ -210,7 +202,7 @@ impl Arguments {
             anyhow::bail!("Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.");
         }
 
-        if self.yul || self.llvm_ir || self.zkasm {
+        if self.yul || self.llvm_ir {
             if self.base_path.is_some() {
                 anyhow::bail!(
                     "`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes."
@@ -247,7 +239,7 @@ impl Arguments {
             }
         }
 
-        if self.llvm_ir || self.zkasm {
+        if self.llvm_ir {
             if self.solc.is_some() {
                 anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
             }
@@ -256,19 +248,6 @@ impl Arguments {
                 anyhow::bail!(
                     "System contract mode is not supported in LLVM IR and PolkaVM assembly modes."
                 );
-            }
-        }
-
-        if self.zkasm {
-            if self.optimization.is_some() {
-                anyhow::bail!("LLVM optimizations are not supported in PolkaVM assembly mode.");
-            }
-
-            if self.fallback_to_optimizing_for_size {
-                anyhow::bail!("Falling back to -Oz is not supported in PolkaVM assembly mode.");
-            }
-            if self.disable_system_request_memoization {
-                anyhow::bail!("Disabling the system request memoization is not supported in PolkaVM assembly mode.");
             }
         }
 

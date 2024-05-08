@@ -11,7 +11,7 @@ pub use self::r#const::*;
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
-use anyhow::{anyhow, Context as AnyhowContext};
+use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
 
@@ -26,27 +26,17 @@ pub fn initialize_target() {
 /// Builds PolkaVM assembly text.
 pub fn build_assembly_text(
     contract_path: &str,
-    encoded_hex_text: &str,
-    _metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
+    bytecode: &[u8],
+    metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: Option<&DebugConfig>,
 ) -> anyhow::Result<Build> {
-    if let Some(debug_config) = debug_config {
-        debug_config.dump_assembly(contract_path, encoded_hex_text)?;
-    }
+    let program_blob = ProgramBlob::parse(bytecode)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
 
-    let bytecode = hex::decode(encoded_hex_text)
-        .map_err(|e| anyhow!("Failed to decode encoded hex text:\n{}\n", e))?;
-
-    let program_blob = ProgramBlob::parse(bytecode.as_slice())
-        .map_err(|error| anyhow!(format!("Failed to parse program blob:\n{}\n", error)))?;
-
-    let mut disassembler =
-        Disassembler::new(&program_blob, DisassemblyFormat::Guest).map_err(|error| {
-            anyhow!(format!(
-                "Failed to create disassembler for contract:\n{:?}\n\nDue to:\n{}\n",
-                contract_path, error
-            ))
-        })?;
+    let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("Failed to create disassembler for contract: {contract_path}"))?;
     disassembler.display_gas()?;
 
     let mut disassembled_code = Vec::new();
@@ -55,15 +45,16 @@ pub fn build_assembly_text(
         .with_context(|| format!("Failed to disassemble contract: {}", contract_path))?;
 
     let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
-        format!(
-            "Failed to convert disassembled code to string for contract: {}",
-            contract_path
-        )
+        format!("Failed to convert disassembled code to string for contract: {contract_path}")
     })?;
+
+    if let Some(debug_config) = debug_config {
+        debug_config.dump_assembly(contract_path, &assembly_text)?;
+    }
 
     Ok(Build::new(
         assembly_text.to_owned(),
-        Default::default(),
+        metadata_hash,
         bytecode.to_owned(),
         Default::default(),
     ))

@@ -225,7 +225,7 @@ pub fn standard_json(
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
-    let zksolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
+    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
 
     let solc_input = SolcStandardJsonInput::try_from_stdin(solc_pipeline)?;
     let source_code_files = solc_input
@@ -275,7 +275,7 @@ pub fn standard_json(
         missing_libraries.write_to_standard_json(
             &mut solc_output,
             &solc_version,
-            &zksolc_version,
+            &resolc_version,
         )?;
     } else {
         let build = project.compile(
@@ -285,7 +285,7 @@ pub fn standard_json(
             false,
             debug_config,
         )?;
-        build.write_to_standard_json(&mut solc_output, &solc_version, &zksolc_version)?;
+        build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;
     }
     serde_json::to_writer(std::io::stdout(), &solc_output)?;
     std::process::exit(0);
@@ -313,7 +313,7 @@ pub fn combined_json(
     output_directory: Option<PathBuf>,
     overwrite: bool,
 ) -> anyhow::Result<()> {
-    let zksolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
+    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
 
     let build = standard_output(
         input_files,
@@ -334,7 +334,7 @@ pub fn combined_json(
     )?;
 
     let mut combined_json = solc.combined_json(input_files, format.as_str())?;
-    build.write_to_combined_json(&mut combined_json, &zksolc_version)?;
+    build.write_to_combined_json(&mut combined_json, &resolc_version)?;
 
     match output_directory {
         Some(output_directory) => {

@@ -23,7 +23,7 @@ impl MissingLibraries {
         mut self,
         standard_json: &mut StandardJsonOutput,
         solc_version: &SolcVersion,
-        zksolc_version: &semver::Version,
+        resolc_version: &semver::Version,
     ) -> anyhow::Result<()> {
         let contracts = match standard_json.contracts.as_mut() {
             Some(contracts) => contracts,
@@ -43,7 +43,7 @@ impl MissingLibraries {
 
         standard_json.version = Some(solc_version.default.to_string());
         standard_json.long_version = Some(solc_version.long.to_owned());
-        standard_json.zk_version = Some(zksolc_version.to_string());
+        standard_json.zk_version = Some(resolc_version.to_string());
 
         Ok(())
     }

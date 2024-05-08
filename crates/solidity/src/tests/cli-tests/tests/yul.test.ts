@@ -4,9 +4,9 @@ import { paths } from '../src/entities';
 
 //id1743
 describe("Run with --yul by default", () => {
-  const command = `zksolc ${paths.pathToBasicYulContract} --yul`;
+  const command = `resolc ${paths.pathToBasicYulContract} --yul`;
   const result = executeCommand(command);
-  const commandInvalid = 'zksolc --yul';
+  const commandInvalid = 'resolc --yul';
   const resultInvalid = executeCommand(commandInvalid);
 
   it("Valid command exit code = 0", () => {
@@ -19,20 +19,20 @@ describe("Run with --yul by default", () => {
   });
 
 
-  xit("solc exit code == zksolc exit code", () => { // unknown solc issue for datatype of the contract
+  xit("solc exit code == resolc exit code", () => { // unknown solc issue for datatype of the contract
       const command = `solc ${paths.pathToBasicSolContract} --yul`;
       const solcResult = executeCommand(command);
       expect(solcResult.exitCode).toBe(result.exitCode);
   });
 
-  it("run invalid: zksolc --yul", () => {
+  it("run invalid: resolc --yul", () => {
     expect(resultInvalid.output).toMatch(/(The input file is missing)/i);
   });
   it("Invalid command exit code = 1", () => {
     expect(resultInvalid.exitCode).toBe(1);
   });
 
-  it("Invalid solc exit code == Invalid zksolc exit code", () => {
+  it("Invalid solc exit code == Invalid resolc exit code", () => {
     const command = 'solc --yul';
     const solcResult = executeCommand(command);
     expect(solcResult.exitCode).toBe(resultInvalid.exitCode);

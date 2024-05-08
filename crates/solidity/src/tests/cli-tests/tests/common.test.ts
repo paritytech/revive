@@ -3,8 +3,8 @@ import { paths } from '../src/entities';
 
 
 //id1762
-describe("Run zksolc without any options", () => {
-    const command = 'zksolc';
+describe("Run resolc without any options", () => {
+    const command = 'resolc';
     const result = executeCommand(command);
 
     it("Info with help is presented", () => {
@@ -15,7 +15,7 @@ describe("Run zksolc without any options", () => {
         expect(result.exitCode).toBe(1);
     });
 
-    it("solc exit code == zksolc exit code", () => {
+    it("solc exit code == resolc exit code", () => {
         const command = 'solc';
         const solcResult = executeCommand(command);
         expect(solcResult.exitCode).toBe(result.exitCode);
@@ -26,7 +26,7 @@ describe("Run zksolc without any options", () => {
 //#1713
 describe("Default run a command from the help", () => {
 
-    const command = `zksolc ${paths.pathToBasicSolContract} -O3 --bin --output-dir "${paths.pathToOutputDir}"`; // potential issue on zksolc with full path on Windows cmd
+    const command = `resolc ${paths.pathToBasicSolContract} -O3 --bin --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
     const result = executeCommand(command);
 
     it("Compiler run successful", () => {
@@ -52,7 +52,7 @@ describe("Default run a command from the help", () => {
 //#1818
 describe("Default run a command from the help", () => {
 
-    const command = `zksolc ${paths.pathToBasicSolContract} -O3 --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on zksolc with full path on Windows cmd
+    const command = `resolc ${paths.pathToBasicSolContract} -O3 --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
     const result = executeCommand(command);
 
     it("Compiler run successful", () => {

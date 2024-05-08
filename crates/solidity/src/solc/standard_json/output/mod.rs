@@ -43,7 +43,7 @@ pub struct Output {
     /// The `solc` compiler long version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub long_version: Option<String>,
-    /// The `zksolc` compiler version.
+    /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zk_version: Option<String>,
 }

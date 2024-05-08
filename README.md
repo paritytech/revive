@@ -35,4 +35,4 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
 - [ ] Minimize scope of "stdlib"
 - [ ] Document differences from EVM
 - [ ] Audit for bugs and correctness
-- [ ] Rebranding
+- [x] Rebranding

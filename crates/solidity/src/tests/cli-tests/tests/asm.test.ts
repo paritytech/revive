@@ -4,9 +4,9 @@ import { paths } from '../src/entities';
 
 //id1746
 describe("Run with --asm by default", () => {
-  const command = `zksolc ${paths.pathToBasicSolContract} --asm`;
+  const command = `resolc ${paths.pathToBasicSolContract} --asm`;
   const result = executeCommand(command);
-  const commandInvalid = 'zksolc --asm';
+  const commandInvalid = 'resolc --asm';
   const resultInvalid = executeCommand(commandInvalid);
 
   it("Valid command exit code = 0", () => {
@@ -21,13 +21,13 @@ describe("Run with --asm by default", () => {
     }
   });
 
-  it("solc exit code == zksolc exit code", () => {
+  it("solc exit code == resolc exit code", () => {
     const command = `solc ${paths.pathToBasicSolContract} --asm`;
     const solcResult = executeCommand(command);
     expect(solcResult.exitCode).toBe(result.exitCode);
   });
 
-  it("run invalid: zksolc --asm", () => {
+  it("run invalid: resolc --asm", () => {
     expect(resultInvalid.output).toMatch(/(No input sources specified|Compilation aborted)/i);
   });
   
@@ -35,7 +35,7 @@ describe("Run with --asm by default", () => {
     expect(resultInvalid.exitCode).toBe(1);
   });
 
-  it("Invalid solc exit code == Invalid zksolc exit code", () => {
+  it("Invalid solc exit code == Invalid resolc exit code", () => {
     const command = 'solc --asm';
     const solcResult = executeCommand(command);
     expect(solcResult.exitCode).toBe(resultInvalid.exitCode);

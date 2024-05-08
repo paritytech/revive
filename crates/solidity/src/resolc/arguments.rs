@@ -11,7 +11,7 @@ use structopt::StructOpt;
 /// are given or "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
-/// Example: zksolc ERC20.sol -O3 --bin --output-dir './build/'
+/// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
 #[derive(Debug, StructOpt)]
 #[structopt(name = "The PolkaVM Solidity compiler")]
 pub struct Arguments {
@@ -69,13 +69,13 @@ pub struct Arguments {
     pub disable_solc_optimizer: bool,
 
     /// Specify the path to the `solc` executable. By default, the one in `${PATH}` is used.
-    /// Yul mode: `solc` is used for source code validation, as `zksolc` itself assumes that the input Yul is valid.
+    /// Yul mode: `solc` is used for source code validation, as `resolc` itself assumes that the input Yul is valid.
     /// LLVM IR mode: `solc` is unused.
     #[structopt(long = "solc")]
     pub solc: Option<String>,
 
     /// The EVM target version to generate IR for.
-    /// See https://github.com/matter-labs/era-compiler-common/blob/main/src/evm_version.rs for reference.
+    /// See https://github.com/xermicus/revive/blob/main/crates/common/src/evm_version.rs for reference.
     #[structopt(long = "evm-version")]
     pub evm_version: Option<String>,
 

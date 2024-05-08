@@ -10,8 +10,8 @@ edition = "2021"
 description = "PolkaVM Solidity frontend"
 
 [[bin]]
-name = "zksolc"
-path = "src/zksolc/main.rs"
+name = "resolc"
+path = "src/resolc/main.rs"
 
 [lib]
 doctest = false

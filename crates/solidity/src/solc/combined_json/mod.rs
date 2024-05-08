@@ -26,7 +26,7 @@ pub struct CombinedJson {
     pub sources: Option<serde_json::Value>,
     /// The `solc` compiler version.
     pub version: String,
-    /// The `zksolc` compiler version.
+    /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zk_version: Option<String>,
 }

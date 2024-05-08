@@ -1,9 +1,9 @@
 {
   "name": "cli-tests",
   "version": "1.0.0",
-  "title": "zksolc CLI Tests",
-  "description": "Auto tests for verifying zksolc CLI",
-  "repository": "https://github.com/matter-labs/era_compiler-solidity",
+  "title": "resolc CLI Tests",
+  "description": "Auto tests for verifying resolc CLI",
+  "repository": "https://github.com/xermicus/revive",
   "main": "index.js",
   "private": true,
   "scripts": {
@@ -11,6 +11,9 @@
   },
   "keywords": [],
   "author": "Matter Labs",
+  "contributors": [
+    "cyrill@parity.io"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@types/jest": "^29.5.11",

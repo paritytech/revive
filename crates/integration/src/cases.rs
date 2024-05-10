@@ -3,6 +3,7 @@ use alloy_sol_types::{sol, SolCall};
 
 #[derive(Clone)]
 pub struct Contract {
+    pub name: &'static str,
     pub evm_runtime: Vec<u8>,
     pub pvm_runtime: Vec<u8>,
     pub calldata: Vec<u8>,
@@ -107,6 +108,7 @@ impl Contract {
         let name = "Baseline";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Baseline::baselineCall::new(()).abi_encode(),
@@ -118,6 +120,7 @@ impl Contract {
         let name = "Computation";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Computation::odd_productCall::new((n,)).abi_encode(),
@@ -129,6 +132,7 @@ impl Contract {
         let name = "Computation";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Computation::triangle_numberCall::new((n,)).abi_encode(),
@@ -140,6 +144,7 @@ impl Contract {
         let name = "FibonacciRecursive";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciRecursive::fib3Call::new((U256::from(n),)).abi_encode(),
@@ -151,6 +156,7 @@ impl Contract {
         let name = "FibonacciIterative";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciIterative::fib3Call::new((U256::from(n),)).abi_encode(),
@@ -162,6 +168,7 @@ impl Contract {
         let name = "FibonacciBinet";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: FibonacciBinet::fib3Call::new((U256::from(n),)).abi_encode(),
@@ -173,6 +180,7 @@ impl Contract {
         let name = "SHA1";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: SHA1::sha1Call::new((pre,)).abi_encode(),
@@ -184,6 +192,7 @@ impl Contract {
         let name = "Flipper";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Flipper::flipCall::new(()).abi_encode(),
@@ -195,6 +204,7 @@ impl Contract {
         let name = "ERC20";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: IERC20::totalSupplyCall::new(()).abi_encode(),
@@ -206,6 +216,7 @@ impl Contract {
         let name = "Block";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Block::numberCall::new(()).abi_encode(),
@@ -217,6 +228,7 @@ impl Contract {
         let name = "Block";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Block::timestampCall::new(()).abi_encode(),
@@ -228,6 +240,7 @@ impl Contract {
         let name = "Context";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Context::address_thisCall::new(()).abi_encode(),
@@ -239,6 +252,7 @@ impl Contract {
         let name = "Context";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Context::callerCall::new(()).abi_encode(),
@@ -250,6 +264,7 @@ impl Contract {
         let name = "DivisionArithmetics";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: DivisionArithmetics::divCall::new((n, d)).abi_encode(),
@@ -261,6 +276,7 @@ impl Contract {
         let name = "DivisionArithmetics";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: DivisionArithmetics::sdivCall::new((n, d)).abi_encode(),
@@ -272,6 +288,7 @@ impl Contract {
         let name = "DivisionArithmetics";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: DivisionArithmetics::modCall::new((n, d)).abi_encode(),
@@ -283,6 +300,7 @@ impl Contract {
         let name = "DivisionArithmetics";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: DivisionArithmetics::smodCall::new((n, d)).abi_encode(),
@@ -294,6 +312,7 @@ impl Contract {
         let name = "MStore8";
 
         Self {
+            name,
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: MStore8::mStore8Call::new((value,)).abi_encode(),
@@ -304,7 +323,7 @@ impl Contract {
 #[cfg(test)]
 mod tests {
     use alloy_primitives::U256;
-    use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
     use serde::{de::Deserialize, Serialize};
     use std::{collections::BTreeMap, fs::File};
 
@@ -323,37 +342,40 @@ mod tests {
             })
             .ok();
 
-        let cases: [(&str, Box<dyn Fn() -> Contract + Send + Sync>); 7] = [
-            ("Baseline", Box::new(|| Contract::baseline())),
-            ("Flipper", Box::new(|| Contract::flipper())),
-            ("Computation", Box::new(|| Contract::odd_product(0))),
-            ("Fibonacci", Box::new(|| Contract::fib_iterative(0))),
-            ("ERC20", Box::new(|| Contract::erc20())),
-            ("SHA1", Box::new(|| Contract::sha1(Vec::new()))),
-            (
-                "DivisionArithmetics",
-                Box::new(|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)),
-            ),
-        ];
+        let extract_code_size = |compile: fn() -> Contract| {
+            let contract = compile();
+            let contract_length = contract.pvm_runtime.len();
+            let size_change = existing
+                .as_ref()
+                .and_then(|map| map.get(contract.name))
+                .filter(|old| **old != 0)
+                .map(|old| {
+                    let old = *old as f32;
+                    let p = (contract_length as f32 - old) / old * 100.0;
+                    format!("({p}% change from {old} bytes)",)
+                })
+                .unwrap_or_default();
 
-        cases
-            .par_iter()
-            .map(|(name, f)| (*name, f().pvm_runtime.len()))
-            .inspect(|(name, bytes)| {
-                let change = existing
-                    .as_ref()
-                    .and_then(|map| map.get(*name))
-                    .map(|old| {
-                        let p = (*bytes - *old) as f32 / *old as f32 * 100.0;
-                        format!("({p}% change from {old} bytes)")
-                    })
-                    .unwrap_or_default();
-                println!("{name}: {bytes} bytes {change}");
-            })
-            .collect::<BTreeMap<_, _>>()
-            .serialize(&mut serde_json::Serializer::pretty(
-                File::create(path).unwrap(),
-            ))
-            .unwrap_or_else(|err| panic!("can not write codesize data to '{path}': {err}"));
+            println!("{}: {contract_length} bytes {size_change}", contract.name);
+
+            (contract.name, contract_length)
+        };
+
+        [
+            Contract::baseline as fn() -> Contract,
+            Contract::flipper as fn() -> Contract,
+            (|| Contract::odd_product(0)) as fn() -> Contract,
+            (|| Contract::fib_iterative(0)) as fn() -> Contract,
+            Contract::erc20 as fn() -> Contract,
+            (|| Contract::sha1(Vec::new())) as fn() -> Contract,
+            (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,
+        ]
+        .into_par_iter()
+        .map(extract_code_size)
+        .collect::<BTreeMap<_, _>>()
+        .serialize(&mut serde_json::Serializer::pretty(
+            File::create(path).unwrap(),
+        ))
+        .unwrap_or_else(|err| panic!("can not write codesize data to '{path}': {err}"));
     }
 }

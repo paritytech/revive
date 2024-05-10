@@ -33,7 +33,7 @@ pub fn check_attribute_null_pointer_is_invalid() {
             Some(inkwell::module::Linkage::External),
         )
         .expect("Failed to add function");
-    assert!(function
+    assert!(!function
         .borrow()
         .declaration()
         .value

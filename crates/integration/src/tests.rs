@@ -1,5 +1,6 @@
 use alloy_primitives::{Address, FixedBytes, Keccak256, I256, U256};
 use alloy_sol_types::{sol, SolCall};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
 
 use crate::{
@@ -169,26 +170,7 @@ fn msize_non_word_sized_access() {
 
 #[test]
 fn mstore8() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract MStore8 {
-            function mStore8(uint value) public pure returns (uint256 word);
-        }
-    );
-    let code = crate::compile_blob("MStore8", include_str!("../contracts/mStore8.sol"));
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
-
-    let mut assert = |parameter, expected| {
-        let input = MStore8::mStore8Call::new((parameter,)).abi_encode();
-        let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
-
-        assert_eq!(state.output.flags, 0);
-
-        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
-        assert_eq!(received, expected);
-    };
-
-    for (parameter, expected) in [
+    for (received, expected) in [
         (U256::MIN, U256::MIN),
         (
             U256::from(1),
@@ -247,8 +229,16 @@ fn mstore8() {
             )
             .unwrap(),
         ),
-    ] {
-        assert(parameter, expected);
+    ]
+    .par_iter()
+    .map(|(parameter, expected)| {
+        let state = assert_success(Contract::mstore8(*parameter), true);
+        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        (received, *expected)
+    })
+    .collect::<Vec<_>>()
+    {
+        assert_eq!(received, expected);
     }
 }
 
@@ -302,16 +292,22 @@ fn unsigned_division() {
     let one = U256::from(1);
     let two = U256::from(2);
     let five = U256::from(5);
-    for (n, d, q) in [
+    for (received, expected) in [
         (five, five, one),
         (five, one, five),
         (U256::ZERO, U256::MAX, U256::ZERO),
         (five, two, two),
         (one, U256::ZERO, U256::ZERO),
-    ] {
-        let state = assert_success(Contract::division_arithmetics_div(n, d), true);
+    ]
+    .par_iter()
+    .map(|(n, d, q)| {
+        let state = assert_success(Contract::division_arithmetics_div(*n, *d), true);
         let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
-        assert_eq!(received, q);
+        (received, *q)
+    })
+    .collect::<Vec<_>>()
+    {
+        assert_eq!(received, expected)
     }
 }
 
@@ -322,7 +318,7 @@ fn signed_division() {
     let minus_two = I256::try_from(-2).unwrap();
     let five = I256::try_from(5).unwrap();
     let minus_five = I256::try_from(-5).unwrap();
-    for (n, d, q) in [
+    for (received, expected) in [
         (five, five, one),
         (five, one, five),
         (I256::ZERO, I256::MAX, I256::ZERO),
@@ -334,10 +330,16 @@ fn signed_division() {
         (minus_five, two, minus_two),
         (I256::MINUS_ONE, I256::MIN, I256::ZERO),
         (one, I256::ZERO, I256::ZERO),
-    ] {
-        let state = assert_success(Contract::division_arithmetics_sdiv(n, d), true);
+    ]
+    .par_iter()
+    .map(|(n, d, q)| {
+        let state = assert_success(Contract::division_arithmetics_sdiv(*n, *d), true);
         let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
-        assert_eq!(received, q);
+        (received, *q)
+    })
+    .collect::<Vec<_>>()
+    {
+        assert_eq!(received, expected);
     }
 }
 
@@ -346,7 +348,7 @@ fn unsigned_remainder() {
     let one = U256::from(1);
     let two = U256::from(2);
     let five = U256::from(5);
-    for (n, d, q) in [
+    for (received, expected) in [
         (five, five, U256::ZERO),
         (five, one, U256::ZERO),
         (U256::ZERO, U256::MAX, U256::ZERO),
@@ -354,10 +356,16 @@ fn unsigned_remainder() {
         (five, two, one),
         (two, five, two),
         (U256::MAX, U256::ZERO, U256::ZERO),
-    ] {
-        let state = assert_success(Contract::division_arithmetics_mod(n, d), true);
+    ]
+    .par_iter()
+    .map(|(n, d, q)| {
+        let state = assert_success(Contract::division_arithmetics_mod(*n, *d), true);
         let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
-        assert_eq!(received, q);
+        (received, *q)
+    })
+    .collect::<Vec<_>>()
+    {
+        assert_eq!(received, expected);
     }
 }
 
@@ -368,7 +376,7 @@ fn signed_remainder() {
     let minus_two = I256::try_from(-2).unwrap();
     let five = I256::try_from(5).unwrap();
     let minus_five = I256::try_from(-5).unwrap();
-    for (n, d, q) in [
+    for (received, expected) in [
         (five, five, I256::ZERO),
         (five, one, I256::ZERO),
         (I256::ZERO, I256::MAX, I256::ZERO),
@@ -386,9 +394,15 @@ fn signed_remainder() {
         (minus_two, minus_five, minus_two),
         (I256::MIN, I256::MINUS_ONE, I256::ZERO),
         (I256::ZERO, I256::ZERO, I256::ZERO),
-    ] {
-        let state = assert_success(Contract::division_arithmetics_smod(n, d), true);
+    ]
+    .par_iter()
+    .map(|(n, d, q)| {
+        let state = assert_success(Contract::division_arithmetics_smod(*n, *d), true);
         let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
-        assert_eq!(received, q);
+        (received, *q)
+    })
+    .collect::<Vec<_>>()
+    {
+        assert_eq!(received, expected);
     }
 }

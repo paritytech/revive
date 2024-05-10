@@ -95,6 +95,12 @@ sol!(
     }
 );
 
+sol!(
+    contract MStore8 {
+        function mStore8(uint value) public pure returns (uint256 word);
+    }
+);
+
 impl Contract {
     pub fn baseline() -> Self {
         let code = include_str!("../contracts/Baseline.sol");
@@ -282,10 +288,23 @@ impl Contract {
             calldata: DivisionArithmetics::smodCall::new((n, d)).abi_encode(),
         }
     }
+
+    pub fn mstore8(value: U256) -> Self {
+        let code = include_str!("../contracts/mStore8.sol");
+        let name = "MStore8";
+
+        Self {
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: MStore8::mStore8Call::new((value,)).abi_encode(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use alloy_primitives::U256;
+    use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
     use serde::{de::Deserialize, Serialize};
     use std::{collections::BTreeMap, fs::File};
 
@@ -304,33 +323,37 @@ mod tests {
             })
             .ok();
 
-        let sizes = BTreeMap::from([
-            ("Baseline", Contract::baseline().pvm_runtime.len()),
-            ("Flipper", Contract::flipper().pvm_runtime.len()),
-            ("Computation", Contract::odd_product(0).pvm_runtime.len()),
-            ("Fibonacci", Contract::fib_iterative(0).pvm_runtime.len()),
-            ("ERC20", Contract::erc20().pvm_runtime.len()),
-        ]);
+        let cases: [(&str, Box<dyn Fn() -> Contract + Send + Sync>); 7] = [
+            ("Baseline", Box::new(|| Contract::baseline())),
+            ("Flipper", Box::new(|| Contract::flipper())),
+            ("Computation", Box::new(|| Contract::odd_product(0))),
+            ("Fibonacci", Box::new(|| Contract::fib_iterative(0))),
+            ("ERC20", Box::new(|| Contract::erc20())),
+            ("SHA1", Box::new(|| Contract::sha1(Vec::new()))),
+            (
+                "DivisionArithmetics",
+                Box::new(|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)),
+            ),
+        ];
 
-        for (name, bytes) in sizes.iter() {
-            let change = existing
-                .as_ref()
-                .and_then(|map| map.get(*name))
-                .map(|old| {
-                    let new = *bytes as f32;
-                    let old = *old as f32;
-                    let p = (new - old) / new * 100.0;
-                    format!("({p}% change from {old} bytes)")
-                })
-                .unwrap_or_default();
-
-            println!("{name}: {bytes} bytes {change}");
-        }
-
-        sizes
+        cases
+            .par_iter()
+            .map(|(name, f)| (*name, f().pvm_runtime.len()))
+            .inspect(|(name, bytes)| {
+                let change = existing
+                    .as_ref()
+                    .and_then(|map| map.get(*name))
+                    .map(|old| {
+                        let p = (*bytes - *old) as f32 / *old as f32 * 100.0;
+                        format!("({p}% change from {old} bytes)")
+                    })
+                    .unwrap_or_default();
+                println!("{name}: {bytes} bytes {change}");
+            })
+            .collect::<BTreeMap<_, _>>()
             .serialize(&mut serde_json::Serializer::pretty(
                 File::create(path).unwrap(),
             ))
-            .unwrap_or_else(|err| panic!("can not write codesize data to '{}': {}", path, err));
+            .unwrap_or_else(|err| panic!("can not write codesize data to '{path}': {err}"));
     }
 }

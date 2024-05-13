@@ -1,72 +1,338 @@
 //! Mock environment used for integration tests.
-//! TODO: Switch to drink! once RISCV is ready in polkadot-sdk
 use std::collections::HashMap;
 
-use alloy_primitives::{Keccak256, U256};
+use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
 use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
     ProgramBlob, Trap,
 };
 use revive_llvm_context::polkavm_const::runtime_api;
 
-#[derive(Default, Clone, Debug)]
-pub struct State {
-    pub input: Vec<u8>,
-    pub output: CallOutput,
-    pub value: u128,
-    pub storage: HashMap<U256, U256>,
+/// The mocked blockchain account.
+#[derive(Debug, Default, Clone)]
+struct Account {
+    value: U256,
+    contract: Option<U256>,
+    storage: HashMap<U256, U256>,
 }
 
-#[derive(Clone, Debug)]
-pub struct CallOutput {
-    pub flags: u32,
+/// Emitted event data.
+#[derive(Debug, Default, Clone)]
+pub struct Event {
     pub data: Vec<u8>,
+    pub topics: Vec<U256>,
 }
 
-impl Default for CallOutput {
-    fn default() -> Self {
-        Self {
-            flags: u32::MAX,
-            data: Vec::new(),
+/// The result of the contract call.
+#[derive(Debug, Default, Clone)]
+pub struct CallOutput {
+    /// The return flags.
+    pub flags: ReturnFlags,
+    /// The contract call output.
+    pub data: Vec<u8>,
+    /// The emitted events.
+    pub events: Event,
+}
+
+/// The contract blob export to be called.
+#[derive(Clone, Debug, Default)]
+enum Export {
+    #[default]
+    Call,
+    Deploy(U256),
+}
+
+/// Possible contract call return flags.
+#[derive(Debug, Default, Clone, PartialEq)]
+#[repr(u32)]
+pub enum ReturnFlags {
+    /// The contract execution returned normally.
+    Success = 0,
+    /// The contract execution returned normally but state changes should be reverted.
+    Revert = 1,
+    /// The contract trapped unexpectedly during execution.
+    #[default]
+    Trap = u32::MAX,
+}
+
+impl From<u32> for ReturnFlags {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::Success,
+            1 => Self::Revert,
+            u32::MAX => Self::Trap,
+            _ => panic!("invalid return flag: {value}"),
         }
     }
+}
+
+/// The local context inside the call stack.
+#[derive(Debug, Clone)]
+struct Frame {
+    /// The account that is being executed.
+    callee: Address,
+    /// The caller account.
+    caller: Address,
+    /// The value transferred with this transaction.
+    callvalue: U256,
+    /// The calldata for the contract execution.
+    input: Vec<u8>,
+    // The contract call output.
+    output: CallOutput,
+    /// The export to call.
+    export: Export,
+}
+
+impl Default for Frame {
+    fn default() -> Self {
+        Self {
+            callee: Transaction::default_address(),
+            caller: Transaction::default_address(),
+            callvalue: Default::default(),
+            input: Default::default(),
+            output: Default::default(),
+            export: Default::default(),
+        }
+    }
+}
+
+/// The transaction can modify the state by calling contracts.
+///
+/// Use the [TransactionBuilder] to create new transactions.
+#[derive(Default, Clone, Debug)]
+pub struct Transaction {
+    state: State,
+    stack: Vec<Frame>,
+}
+
+impl Transaction {
+    pub fn default_address() -> Address {
+        Address::default().create2(B256::default(), keccak256([]).0)
+    }
+
+    fn top_frame(&self) -> &Frame {
+        self.stack.last().expect("transactions should have a frame")
+    }
+
+    fn top_frame_mut(&mut self) -> &mut Frame {
+        self.stack
+            .last_mut()
+            .expect("transactions should have a frame")
+    }
+
+    fn top_account_mut(&mut self) -> &mut Account {
+        let account = self.top_frame_mut().callee;
+        self.state
+            .accounts
+            .get_mut(&account)
+            .unwrap_or_else(|| panic!("callee has no associated account: {account}"))
+    }
+
+    fn create2(&self, salt: U256, blob_hash: U256) -> Address {
+        self.top_frame()
+            .callee
+            .create2(salt.to_be_bytes(), blob_hash.to_be_bytes())
+    }
+}
+
+/// Helper to create valid transactions.
+#[derive(Default, Clone, Debug)]
+pub struct TransactionBuilder {
+    context: Transaction,
+    state_before: State,
+}
+
+impl TransactionBuilder {
+    /// Set the caller account.
+    pub fn caller(mut self, account: Address) -> Self {
+        self.context.top_frame_mut().caller = account;
+        self
+    }
+
+    /// Set the callee account.
+    pub fn callee(mut self, account: Address) -> Self {
+        self.context.top_frame_mut().callee = account;
+        self
+    }
+
+    /// Set the transferred callvalue.
+    pub fn callvalue(mut self, amount: U256) -> Self {
+        self.context.top_frame_mut().callvalue = amount;
+        self
+    }
+
+    /// Set the calldata.
+    pub fn calldata(mut self, data: Vec<u8>) -> Self {
+        self.context.top_frame_mut().input = data;
+        self
+    }
+
+    /// Set the transaction to deploy code.
+    pub fn deploy(mut self, code: &[u8]) -> Self {
+        let blob_hash = self.context.state.upload_code(code);
+        self.context.top_frame_mut().export = Export::Deploy(blob_hash);
+        self
+    }
+
+    /// Set the account at [Transaction::default_address] to the given `code`.
+    ///
+    /// Useful helper to spare the deploy transaction.
+    pub fn with_default_account(mut self, code: &[u8]) -> Self {
+        self.context.state.upload_code(code);
+        self.context.state.create_account(
+            Transaction::default_address(),
+            Default::default(),
+            keccak256(code).into(),
+        );
+        self
+    }
+
+    /// Execute the transaction with a default config backend.
+    ///
+    /// Reverts any state changes if the contract reverts or the exuection traps.
+    pub fn call(mut self) -> (State, CallOutput) {
+        let blob_hash = match self.context.top_frame().export {
+            Export::Call => self.context.top_account_mut().contract.unwrap_or_else(|| {
+                panic!(
+                    "not a contract account: {}",
+                    self.context.top_frame().callee
+                )
+            }),
+            Export::Deploy(blob_hash) => blob_hash,
+        };
+        let code = self
+            .context
+            .state
+            .blobs
+            .get(&blob_hash)
+            .unwrap_or_else(|| panic!("contract code not found: {blob_hash}"));
+        let (mut instance, export) = prepare(code, None);
+        self.call_on(&mut instance, export)
+    }
+
+    /// Execute the transaction on a given instance and export.
+    /// The `instance` and `export` are expected to match that of the `Transaction`.
+
+    /// Reverts any state changes if the contract reverts or the exuection traps.
+    pub fn call_on(
+        mut self,
+        instance: &mut Instance<Transaction>,
+        export: ExportIndex,
+    ) -> (State, CallOutput) {
+        let mut state_args = polkavm::StateArgs::default();
+        state_args.set_gas(polkavm::Gas::MAX);
+
+        if let Export::Deploy(blob_hash) = self.context.top_frame().export {
+            self.context.state.create_account(
+                self.context.create2(Default::default(), blob_hash),
+                self.context.top_frame().callvalue,
+                blob_hash,
+            );
+        }
+
+        let callvalue = self.context.top_frame().callvalue;
+        self.context.top_account_mut().value += callvalue;
+
+        let call_args = polkavm::CallArgs::new(&mut self.context, export);
+
+        init_logs();
+
+        match instance.call(state_args, call_args) {
+            Err(polkavm::ExecutionError::Trap(_)) => self.finalize(),
+            Err(other) => panic!("unexpected error: {other}"),
+            Ok(_) => panic!("unexpected return"),
+        }
+    }
+
+    /// Commits or reverts the state changes based on the call flags.
+    fn finalize(mut self) -> (State, CallOutput) {
+        let state = match self.context.top_frame().output.flags {
+            ReturnFlags::Success => self.context.state,
+            _ => self.state_before,
+        };
+        let output = self.context.stack.pop().unwrap().output;
+        (state, output)
+    }
+}
+
+impl From<State> for TransactionBuilder {
+    fn from(state: State) -> Self {
+        TransactionBuilder {
+            state_before: state.clone(),
+            context: Transaction {
+                state,
+                stack: Default::default(),
+            },
+        }
+    }
+}
+
+/// The mocked blockchain state.
+#[derive(Default, Clone, Debug)]
+pub struct State {
+    blobs: HashMap<U256, Vec<u8>>,
+    accounts: HashMap<Address, Account>,
 }
 
 impl State {
-    pub const ADDRESS: [u8; 20] = [1; 20];
     pub const BLOCK_NUMBER: u64 = 123;
     pub const BLOCK_TIMESTAMP: u64 = 456;
-    pub const CALLER: [u8; 20] = [2; 20];
 
-    pub fn new(input: Vec<u8>) -> Self {
-        Self {
-            input,
-            ..Default::default()
+    pub fn transaction(self) -> TransactionBuilder {
+        TransactionBuilder {
+            state_before: self.clone(),
+            context: Transaction {
+                state: self,
+                stack: vec![Default::default()],
+            },
         }
     }
 
-    pub fn reset_output(&mut self) {
-        self.output = Default::default();
+    pub fn upload_code(&mut self, code: &[u8]) -> U256 {
+        let blob_hash = keccak256(code).into();
+        self.blobs.insert(blob_hash, code.to_vec());
+        blob_hash
     }
 
-    pub fn assert_storage_key(&self, at: U256, expect: U256) {
-        assert_eq!(self.storage[&at], expect);
+    pub fn assert_storage_key(&self, account: Address, key: U256, expected: U256) {
+        assert_eq!(
+            self.accounts
+                .get(&account)
+                .unwrap_or_else(|| panic!("unknown account: {account}"))
+                .storage
+                .get(&key)
+                .copied()
+                .unwrap_or_default(),
+            expected
+        );
+    }
+
+    pub fn create_account(&mut self, address: Address, value: U256, blob_hash: U256) {
+        self.accounts.insert(
+            address,
+            Account {
+                value,
+                contract: Some(blob_hash),
+                storage: HashMap::new(),
+            },
+        );
     }
 }
 
-fn link_host_functions(engine: &Engine) -> Linker<State> {
+fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
     let mut linker = Linker::new(engine);
 
     linker
         .func_wrap(
             runtime_api::INPUT,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
-                let (mut caller, state) = caller.split();
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
 
-                assert!(state.input.len() <= caller.read_u32(out_len_ptr).unwrap() as usize);
+                let input = &transaction.top_frame().input;
+                assert!(input.len() <= caller.read_u32(out_len_ptr).unwrap() as usize);
 
-                caller.write_memory(out_ptr, &state.input)?;
-                caller.write_memory(out_len_ptr, &(state.input.len() as u32).to_le_bytes())?;
+                caller.write_memory(out_ptr, input)?;
+                caller.write_memory(out_len_ptr, &(input.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },
@@ -76,11 +342,16 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::RETURN,
-            |caller: Caller<State>, flags: u32, data_ptr: u32, data_len: u32| -> Result<(), Trap> {
-                let (caller, state) = caller.split();
+            |caller: Caller<Transaction>,
+             flags: u32,
+             data_ptr: u32,
+             data_len: u32|
+             -> Result<(), Trap> {
+                let (caller, transaction) = caller.split();
 
-                state.output.flags = flags;
-                state.output.data = caller.read_memory_into_vec(data_ptr, data_len)?;
+                let frame = transaction.top_frame_mut();
+                frame.output.flags = flags.into();
+                frame.output.data = caller.read_memory_into_vec(data_ptr, data_len)?;
 
                 Err(Default::default())
             },
@@ -90,8 +361,8 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::VALUE_TRANSFERRED,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
-                let (mut caller, state) = caller.split();
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
 
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
                 assert_eq!(
@@ -100,8 +371,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                     "spurious output buffer size: {out_len}"
                 );
 
-                let value = state.value.to_le_bytes();
-
+                let value = transaction.top_frame().callvalue.as_le_bytes();
                 caller.write_memory(out_ptr, &value)?;
                 caller.write_memory(out_len_ptr, &(value.len() as u32).to_le_bytes())?;
 
@@ -113,7 +383,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             "debug_message",
-            |caller: Caller<State>, str_ptr: u32, str_len: u32| -> Result<u32, Trap> {
+            |caller: Caller<Transaction>, str_ptr: u32, str_len: u32| -> Result<u32, Trap> {
                 let (caller, _) = caller.split();
 
                 let data = caller.read_memory_into_vec(str_ptr, str_len)?;
@@ -127,13 +397,13 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::SET_STORAGE,
-            |caller: Caller<State>,
+            |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
              value_ptr: u32,
              value_len: u32|
              -> Result<u32, Trap> {
-                let (caller, state) = caller.split();
+                let (caller, transaction) = caller.split();
 
                 assert_eq!(
                     key_len as usize,
@@ -149,7 +419,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let value = caller.read_memory_into_vec(value_ptr, value_len)?;
 
-                state.storage.insert(
+                transaction.top_account_mut().storage.insert(
                     U256::from_be_bytes::<32>(key.try_into().unwrap()),
                     U256::from_be_bytes::<32>(value.try_into().unwrap()),
                 );
@@ -162,13 +432,13 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::GET_STORAGE,
-            |caller: Caller<State>,
+            |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
              out_ptr: u32,
              out_len_ptr: u32|
              -> Result<u32, Trap> {
-                let (mut caller, state) = caller.split();
+                let (mut caller, transaction) = caller.split();
 
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
@@ -178,7 +448,8 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
                     "spurious output buffer size: {out_len}"
                 );
 
-                let value = state
+                let value = transaction
+                    .top_account_mut()
                     .storage
                     .get(&U256::from_be_bytes::<32>(key.try_into().unwrap()))
                     .map(U256::to_be_bytes::<32>)
@@ -195,7 +466,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::HASH_KECCAK_256,
-            |caller: Caller<State>,
+            |caller: Caller<Transaction>,
              input_ptr: u32,
              input_len: u32,
              out_ptr: u32|
@@ -216,7 +487,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::NOW,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
@@ -237,7 +508,7 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::BLOCK_NUMBER,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
@@ -258,18 +529,19 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::ADDRESS,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
-                let (mut caller, _) = caller.split();
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, transaction) = caller.split();
 
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
                 assert_eq!(
                     out_len,
-                    revive_common::BYTE_LENGTH_WORD,
+                    revive_common::BYTE_LENGTH_ETH_ADDRESS,
                     "spurious output buffer size: {out_len}"
                 );
 
-                caller.write_memory(out_ptr, &State::ADDRESS)?;
-                caller.write_memory(out_len_ptr, &(State::ADDRESS.len() as u32).to_le_bytes())?;
+                let address = transaction.top_frame().callee.as_slice();
+                caller.write_memory(out_ptr, address)?;
+                caller.write_memory(out_len_ptr, &(address.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },
@@ -279,18 +551,19 @@ fn link_host_functions(engine: &Engine) -> Linker<State> {
     linker
         .func_wrap(
             runtime_api::CALLER,
-            |caller: Caller<State>, out_ptr: u32, out_len_ptr: u32| {
-                let (mut caller, _) = caller.split();
+            |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
+                let (mut caller, transaction) = caller.split();
 
                 let out_len = caller.read_u32(out_len_ptr)? as usize;
                 assert_eq!(
                     out_len,
-                    revive_common::BYTE_LENGTH_WORD,
+                    revive_common::BYTE_LENGTH_ETH_ADDRESS,
                     "spurious output buffer size: {out_len}"
                 );
 
-                caller.write_memory(out_ptr, &State::CALLER)?;
-                caller.write_memory(out_len_ptr, &(State::CALLER.len() as u32).to_le_bytes())?;
+                let address = transaction.top_frame().caller.as_slice();
+                caller.write_memory(out_ptr, address)?;
+                caller.write_memory(out_len_ptr, &(address.len() as u32).to_le_bytes())?;
 
                 Ok(())
             },
@@ -311,7 +584,10 @@ pub fn recompile_code(code: &[u8], engine: &Engine) -> Module {
     Module::new(engine, &module_config, code).unwrap()
 }
 
-pub fn instantiate_module(module: &Module, engine: &Engine) -> (Instance<State>, ExportIndex) {
+pub fn instantiate_module(
+    module: &Module,
+    engine: &Engine,
+) -> (Instance<Transaction>, ExportIndex) {
     let export = module.lookup_export(runtime_api::CALL).unwrap();
     let func = link_host_functions(engine).instantiate_pre(module).unwrap();
     let instance = func.instantiate().unwrap();
@@ -319,7 +595,7 @@ pub fn instantiate_module(module: &Module, engine: &Engine) -> (Instance<State>,
     (instance, export)
 }
 
-pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<State>, ExportIndex) {
+pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, ExportIndex) {
     let blob = ProgramBlob::parse(code).unwrap();
 
     let engine = Engine::new(&config.unwrap_or_default()).unwrap();
@@ -335,23 +611,6 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<State>, ExportI
     let instance = func.instantiate().unwrap();
 
     (instance, export)
-}
-
-pub fn call(mut state: State, on: &mut Instance<State>, export: ExportIndex) -> State {
-    state.reset_output();
-
-    let mut state_args = polkavm::StateArgs::default();
-    state_args.set_gas(polkavm::Gas::MAX);
-
-    let call_args = polkavm::CallArgs::new(&mut state, export);
-
-    init_logs();
-
-    match on.call(state_args, call_args) {
-        Err(polkavm::ExecutionError::Trap(_)) => state,
-        Err(other) => panic!("unexpected error: {other}"),
-        Ok(_) => panic!("unexpected return"),
-    }
 }
 
 fn init_logs() {

@@ -172,7 +172,7 @@ where
     D: Dependency + Clone,
 {
     let (output_pointer, output_length_pointer) =
-        context.build_stack_parameter(revive_common::BIT_LENGTH_WORD, "address_output");
+        context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_output");
     context.build_runtime_call(
         runtime_api::ADDRESS,
         &[
@@ -180,7 +180,11 @@ where
             output_length_pointer.to_int(context).into(),
         ],
     );
-    context.build_load(output_pointer, "address")
+    let value = context.build_byte_swap(context.build_load(output_pointer, "address")?)?;
+    Ok(context
+        .builder()
+        .build_int_z_extend(value.into_int_value(), context.word_type(), "address_zext")?
+        .into())
 }
 
 /// Translates the `caller` instruction.
@@ -191,7 +195,7 @@ where
     D: Dependency + Clone,
 {
     let (output_pointer, output_length_pointer) =
-        context.build_stack_parameter(revive_common::BIT_LENGTH_WORD, "caller_output");
+        context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "caller_output");
     context.build_runtime_call(
         runtime_api::CALLER,
         &[
@@ -199,5 +203,9 @@ where
             output_length_pointer.to_int(context).into(),
         ],
     );
-    context.build_load(output_pointer, "caller")
+    let value = context.build_byte_swap(context.build_load(output_pointer, "caller")?)?;
+    Ok(context
+        .builder()
+        .build_int_z_extend(value.into_int_value(), context.word_type(), "caller_zext")?
+        .into())
 }

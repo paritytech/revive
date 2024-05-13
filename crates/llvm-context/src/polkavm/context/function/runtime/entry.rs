@@ -95,12 +95,12 @@ impl Entry {
         );
 
         context.set_global(
-            crate::polkavm::GLOBAL_I128_SIZE,
+            crate::polkavm::GLOBAL_I160_SIZE,
             context.xlen_type(),
             AddressSpace::Stack,
             context.integer_const(
                 crate::polkavm::XLEN,
-                revive_common::BYTE_LENGTH_X64 as u64 * 2,
+                revive_common::BYTE_LENGTH_X64 as u64 * 2 + revive_common::BYTE_LENGTH_X32 as u64,
             ),
         );
 

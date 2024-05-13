@@ -16,7 +16,9 @@ pub struct Intrinsics<'ctx> {
     /// The memory copy from a generic page.
     pub memory_copy_from_generic: FunctionDeclaration<'ctx>,
     /// Performs endianness swaps on i256 values
-    pub byte_swap: FunctionDeclaration<'ctx>,
+    pub byte_swap_word: FunctionDeclaration<'ctx>,
+    /// Performs endianness swaps on i160 values
+    pub byte_swap_eth_address: FunctionDeclaration<'ctx>,
 }
 
 impl<'ctx> Intrinsics<'ctx> {
@@ -30,7 +32,10 @@ impl<'ctx> Intrinsics<'ctx> {
     pub const FUNCTION_MEMORY_COPY_FROM_GENERIC: &'static str = "llvm.memcpy.p3.p1.i256";
 
     /// The corresponding intrinsic function name.
-    pub const FUNCTION_BYTE_SWAP: &'static str = "llvm.bswap.i256";
+    pub const FUNCTION_BYTE_SWAP_WORD: &'static str = "llvm.bswap.i256";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_BYTE_SWAP_ETH_ADDRESS: &'static str = "llvm.bswap.i160";
 
     /// A shortcut constructor.
     pub fn new(
@@ -40,6 +45,7 @@ impl<'ctx> Intrinsics<'ctx> {
         let void_type = llvm.void_type();
         let bool_type = llvm.bool_type();
         let word_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
+        let address_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32);
         let _stack_field_pointer_type = llvm.ptr_type(AddressSpace::Stack.into());
         let heap_field_pointer_type = llvm.ptr_type(AddressSpace::Heap.into());
         let generic_byte_pointer_type = llvm.ptr_type(AddressSpace::Generic.into());
@@ -78,18 +84,25 @@ impl<'ctx> Intrinsics<'ctx> {
                 false,
             ),
         );
-        let byte_swap = Self::declare(
+        let byte_swap_word = Self::declare(
             llvm,
             module,
-            Self::FUNCTION_BYTE_SWAP,
+            Self::FUNCTION_BYTE_SWAP_WORD,
             word_type.fn_type(&[word_type.as_basic_type_enum().into()], false),
+        );
+        let byte_swap_eth_address = Self::declare(
+            llvm,
+            module,
+            Self::FUNCTION_BYTE_SWAP_ETH_ADDRESS,
+            address_type.fn_type(&[address_type.as_basic_type_enum().into()], false),
         );
 
         Self {
             trap,
             memory_copy,
             memory_copy_from_generic,
-            byte_swap,
+            byte_swap_word,
+            byte_swap_eth_address,
         }
     }
 
@@ -131,7 +144,12 @@ impl<'ctx> Intrinsics<'ctx> {
                     .as_basic_type_enum(),
                 word_type.as_basic_type_enum(),
             ],
-            name if name == Self::FUNCTION_BYTE_SWAP => vec![word_type.as_basic_type_enum()],
+            name if name == Self::FUNCTION_BYTE_SWAP_WORD => vec![word_type.as_basic_type_enum()],
+            name if name == Self::FUNCTION_BYTE_SWAP_ETH_ADDRESS => {
+                vec![llvm
+                    .custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32)
+                    .as_basic_type_enum()]
+            }
             _ => vec![],
         }
     }

@@ -46,7 +46,7 @@ pub static GLOBAL_VERBATIM_GETTER_PREFIX: &str = "get_global::";
 pub static GLOBAL_I256_SIZE: &str = "i256_size";
 
 /// The static value size.
-pub static GLOBAL_I128_SIZE: &str = "i128_size";
+pub static GLOBAL_I160_SIZE: &str = "i160_size";
 
 /// The static i64 size.
 pub static GLOBAL_I64_SIZE: &str = "i64_size";

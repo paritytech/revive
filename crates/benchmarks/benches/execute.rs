@@ -31,14 +31,14 @@ where
         #[cfg(feature = "bench-pvm-interpreter")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = revive_benchmarks::prepare_pvm(
+            let (transaction, mut instance, export) = revive_benchmarks::prepare_pvm(
                 &contract.pvm_runtime,
-                &contract.calldata,
+                contract.calldata,
                 polkavm::BackendKind::Interpreter,
             );
             group.bench_with_input(BenchmarkId::new("PVMInterpreter", l), p, |b, _| {
                 b.iter(|| {
-                    revive_integration::mock_runtime::call(state.clone(), &mut instance, export);
+                    transaction.clone().call_on(&mut instance, export);
                 });
             });
         }
@@ -46,14 +46,14 @@ where
         #[cfg(feature = "bench-pvm")]
         {
             let contract = contract(p.clone());
-            let (state, mut instance, export) = revive_benchmarks::prepare_pvm(
+            let (transaction, mut instance, export) = revive_benchmarks::prepare_pvm(
                 &contract.pvm_runtime,
-                &contract.calldata,
+                contract.calldata,
                 polkavm::BackendKind::Compiler,
             );
             group.bench_with_input(BenchmarkId::new("PVM", l), p, |b, _| {
                 b.iter(|| {
-                    revive_integration::mock_runtime::call(state.clone(), &mut instance, export);
+                    transaction.clone().call_on(&mut instance, export);
                 });
             });
         }

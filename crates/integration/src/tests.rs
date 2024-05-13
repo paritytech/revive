@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, FixedBytes, Keccak256, I256, U256};
+use alloy_primitives::{keccak256, Address, FixedBytes, I256, U256};
 use alloy_sol_types::{sol, SolCall};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
@@ -6,7 +6,7 @@ use sha1::Digest;
 use crate::{
     assert_success,
     cases::Contract,
-    mock_runtime::{self, State},
+    mock_runtime::{self, ReturnFlags, State, Transaction},
 };
 
 #[test]
@@ -18,8 +18,8 @@ fn fibonacci() {
         Contract::fib_iterative(parameter),
         Contract::fib_binet(parameter),
     ] {
-        let state = assert_success(contract, true);
-        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&contract, true);
+        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
         let expected = U256::from(8);
         assert_eq!(received, expected);
     }
@@ -28,15 +28,15 @@ fn fibonacci() {
 #[test]
 fn flipper() {
     let contract = Contract::flipper();
-    let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
+    let address = Transaction::default_address();
 
-    let state = crate::mock_runtime::call(State::new(contract.calldata), &mut instance, export);
-    assert_eq!(state.output.flags, 0);
-    assert_eq!(state.storage[&U256::ZERO], U256::try_from(1).unwrap());
+    let (state, output) = contract.execute();
+    assert_eq!(output.flags, ReturnFlags::Success);
+    state.assert_storage_key(address, U256::ZERO, U256::from(1));
 
-    let state = crate::mock_runtime::call(state, &mut instance, export);
-    assert_eq!(state.output.flags, 0);
-    assert_eq!(state.storage[&U256::ZERO], U256::ZERO);
+    let (state, output) = state.transaction().calldata(contract.calldata).call();
+    assert_eq!(output.flags, ReturnFlags::Success);
+    state.assert_storage_key(address, U256::ZERO, U256::ZERO);
 }
 
 #[test]
@@ -57,16 +57,16 @@ fn hash_keccak_256() {
     let param = "hello";
     let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
 
-    let state = State::new(input);
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
-    let state = crate::mock_runtime::call(state, &mut instance, export);
+    let (_, output) = State::default()
+        .transaction()
+        .with_default_account(&code)
+        .calldata(input)
+        .call();
 
-    assert_eq!(state.output.flags, 0);
+    assert_eq!(output.flags, ReturnFlags::Success);
 
-    let mut hasher = Keccak256::new();
-    hasher.update(param);
-    let expected = hasher.finalize();
-    let received = FixedBytes::<32>::from_slice(&state.output.data);
+    let expected = keccak256(param.as_bytes());
+    let received = FixedBytes::<32>::from_slice(&output.data);
     assert_eq!(received, expected);
 }
 
@@ -77,16 +77,16 @@ fn erc20() {
 
 #[test]
 fn triangle_number() {
-    let state = assert_success(Contract::triangle_number(13), true);
-    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let (_, output) = assert_success(&Contract::triangle_number(13), true);
+    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     let expected = U256::try_from(91).unwrap();
     assert_eq!(received, expected);
 }
 
 #[test]
 fn odd_product() {
-    let state = assert_success(Contract::odd_product(5), true);
-    let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let (_, output) = assert_success(&Contract::odd_product(5), true);
+    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
     let expected = I256::try_from(945i64).unwrap();
     assert_eq!(received, expected);
 }
@@ -105,16 +105,19 @@ fn msize_plain() {
         false,
         revive_solidity::SolcPipeline::EVMLA,
     );
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
 
     let input = MSize::mSizeCall::new(()).abi_encode();
-    let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
+    let (_, output) = State::default()
+        .transaction()
+        .calldata(input)
+        .with_default_account(&code)
+        .call();
 
-    assert_eq!(state.output.flags, 0);
+    assert_eq!(output.flags, ReturnFlags::Success);
 
     // Solidity always stores the "free memory pointer" (32 byte int) at offset 64.
     let expected = U256::try_from(64 + 32).unwrap();
-    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     assert_eq!(received, expected);
 }
 
@@ -126,16 +129,18 @@ fn transferred_value() {
         }
     );
     let code = crate::compile_blob("Value", include_str!("../contracts/Value.sol"));
-    let mut state = State::new(Value::valueCall::SELECTOR.to_vec());
-    state.value = 123;
 
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
-    let state = crate::mock_runtime::call(state, &mut instance, export);
+    let (_, output) = State::default()
+        .transaction()
+        .calldata(Value::valueCall::SELECTOR.to_vec())
+        .callvalue(U256::from(123))
+        .with_default_account(&code)
+        .call();
 
-    assert_eq!(state.output.flags, 0);
+    assert_eq!(output.flags, ReturnFlags::Success);
 
-    let expected = I256::try_from(state.value).unwrap();
-    let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let expected = I256::try_from(123).unwrap();
+    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
     assert_eq!(received, expected);
 }
 
@@ -153,18 +158,21 @@ fn msize_non_word_sized_access() {
         false,
         revive_solidity::SolcPipeline::Yul,
     );
-    let (mut instance, export) = mock_runtime::prepare(&code, None);
 
     let input = MSize::mStore100Call::new(()).abi_encode();
-    let state = crate::mock_runtime::call(State::new(input), &mut instance, export);
+    let (_, output) = State::default()
+        .transaction()
+        .with_default_account(&code)
+        .calldata(input)
+        .call();
 
-    assert_eq!(state.output.flags, 0);
+    assert_eq!(output.flags, ReturnFlags::Success);
 
     // https://docs.zksync.io/build/developer-reference/differences-with-ethereum.html#mstore-mload
     // "Unlike EVM, where the memory growth is in words, on zkEVM the memory growth is counted in bytes."
     // "For example, if you write mstore(100, 0) the msize on zkEVM will be 132, but on the EVM it will be 160."
     let expected = U256::try_from(132).unwrap();
-    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     assert_eq!(received, expected);
 }
 
@@ -232,8 +240,8 @@ fn mstore8() {
     ]
     .par_iter()
     .map(|(parameter, expected)| {
-        let state = assert_success(Contract::mstore8(*parameter), true);
-        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&Contract::mstore8(*parameter), true);
+        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
         (received, *expected)
     })
     .collect::<Vec<_>>()
@@ -249,41 +257,42 @@ fn sha1() {
     hasher.update(&pre);
     let hash = hasher.finalize();
 
-    let state = assert_success(Contract::sha1(pre), true);
+    let (_, output) = assert_success(&Contract::sha1(pre), true);
     let expected = FixedBytes::<20>::from_slice(&hash[..]);
-    let received = FixedBytes::<20>::from_slice(&state.output.data[..20]);
+    let received = FixedBytes::<20>::from_slice(&output.data[..20]);
     assert_eq!(received, expected);
 }
 
 #[test]
 fn block_number() {
-    let state = assert_success(Contract::block_number(), true);
-    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let (_, output) = assert_success(&Contract::block_number(), true);
+    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     let expected = U256::from(mock_runtime::State::BLOCK_NUMBER);
     assert_eq!(received, expected);
 }
 
 #[test]
 fn block_timestamp() {
-    let state = assert_success(Contract::block_timestamp(), true);
-    let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+    let (_, output) = assert_success(&Contract::block_timestamp(), true);
+    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     let expected = U256::from(mock_runtime::State::BLOCK_TIMESTAMP);
     assert_eq!(received, expected);
 }
 
 #[test]
 fn address() {
-    let state = assert_success(Contract::context_address(), true);
-    let received = Address::from_slice(&state.output.data[12..]);
-    let expected = Address::from(&mock_runtime::State::ADDRESS);
+    let contract = Contract::context_address();
+    let (_, output) = assert_success(&contract, true);
+    let received = Address::from_slice(&output.data[12..]);
+    let expected = Transaction::default_address();
     assert_eq!(received, expected);
 }
 
 #[test]
 fn caller() {
-    let state = assert_success(Contract::context_caller(), true);
-    let received = Address::from_slice(&state.output.data[12..]);
-    let expected = Address::from(&mock_runtime::State::CALLER);
+    let (_, output) = assert_success(&Contract::context_caller(), true);
+    let received = Address::from_slice(&output.data[12..]);
+    let expected = Transaction::default_address();
     assert_eq!(received, expected);
 }
 
@@ -301,8 +310,8 @@ fn unsigned_division() {
     ]
     .par_iter()
     .map(|(n, d, q)| {
-        let state = assert_success(Contract::division_arithmetics_div(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&Contract::division_arithmetics_div(*n, *d), true);
+        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
         (received, *q)
     })
     .collect::<Vec<_>>()
@@ -333,8 +342,8 @@ fn signed_division() {
     ]
     .par_iter()
     .map(|(n, d, q)| {
-        let state = assert_success(Contract::division_arithmetics_sdiv(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&Contract::division_arithmetics_sdiv(*n, *d), true);
+        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
         (received, *q)
     })
     .collect::<Vec<_>>()
@@ -359,8 +368,8 @@ fn unsigned_remainder() {
     ]
     .par_iter()
     .map(|(n, d, q)| {
-        let state = assert_success(Contract::division_arithmetics_mod(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&Contract::division_arithmetics_mod(*n, *d), true);
+        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
         (received, *q)
     })
     .collect::<Vec<_>>()
@@ -397,8 +406,8 @@ fn signed_remainder() {
     ]
     .par_iter()
     .map(|(n, d, q)| {
-        let state = assert_success(Contract::division_arithmetics_smod(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(state.output.data.try_into().unwrap());
+        let (_, output) = assert_success(&Contract::division_arithmetics_smod(*n, *d), true);
+        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
         (received, *q)
     })
     .collect::<Vec<_>>()

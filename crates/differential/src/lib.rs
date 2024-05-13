@@ -1,3 +1,4 @@
+use alloy_primitives::{keccak256, Address, B256};
 use evm_interpreter::{
     interpreter::{EtableInterpreter, RunInterpreter},
     trap::CallCreateTrap,
@@ -123,10 +124,13 @@ pub struct PreparedEvm {
 }
 
 pub fn prepare(code: Vec<u8>, data: Vec<u8>) -> PreparedEvm {
+    let address = Address::default().create2(B256::default(), keccak256([]).0);
+    let caller = Address::default().create2(B256::default(), keccak256([]).0);
+
     let state = RuntimeState {
         context: Context {
-            address: H160::from_slice(&[1u8; 20]),
-            caller: H160::from_slice(&[2u8; 20]),
+            address: H160::from(address.0 .0),
+            caller: H160::from(caller.0 .0),
             apparent_value: U256::default(),
         },
         transaction_context: TransactionContext {

@@ -19,7 +19,7 @@ pub const BYTE_LENGTH_ETH_ADDRESS: usize = 20;
 pub const BYTE_LENGTH_WORD: usize = 32;
 
 /// Byte length of the runtime value type.
-pub const BYTE_LENGTH_VALUE: usize = 16;
+pub const BYTE_LENGTH_VALUE: usize = 32;
 
 /// Byte length of the runtime block number type.
 pub const BYTE_LENGTH_BLOCK_NUMBER: usize = 8;

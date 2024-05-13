@@ -1,5 +1,7 @@
 use cases::Contract;
-use mock_runtime::State;
+use mock_runtime::{CallOutput, State};
+
+use crate::mock_runtime::ReturnFlags;
 
 pub mod cases;
 pub mod mock_runtime;
@@ -73,15 +75,15 @@ pub fn compile_blob_with_options(
     hex::decode(bytecode).expect("hex encoding should always be valid")
 }
 
-pub fn assert_success(contract: Contract, differential: bool) -> State {
-    let (mut instance, export) = mock_runtime::prepare(&contract.pvm_runtime, None);
-    let state = mock_runtime::call(State::new(contract.calldata.clone()), &mut instance, export);
-    assert_eq!(state.output.flags, 0);
+pub fn assert_success(contract: &Contract, differential: bool) -> (State, CallOutput) {
+    let (state, output) = contract.execute();
+    assert_eq!(output.flags, ReturnFlags::Success);
 
     if differential {
-        let evm = revive_differential::prepare(contract.evm_runtime, contract.calldata);
-        assert_eq!(state.output.data.clone(), revive_differential::execute(evm));
+        let evm =
+            revive_differential::prepare(contract.evm_runtime.clone(), contract.calldata.clone());
+        assert_eq!(output.data.clone(), revive_differential::execute(evm));
     }
 
-    state
+    (state, output)
 }

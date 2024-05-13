@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 evm-interpreter = { workspace = true }
 primitive-types = { workspace = true }
+alloy-primitives = { workspace = true }

@@ -622,9 +622,9 @@ where
         let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
         let symbol = match bit_length {
             revive_common::BIT_LENGTH_WORD => GLOBAL_I256_SIZE,
-            revive_common::BIT_LENGTH_VALUE => GLOBAL_I128_SIZE,
+            revive_common::BIT_LENGTH_ETH_ADDRESS => GLOBAL_I160_SIZE,
             revive_common::BIT_LENGTH_BLOCK_NUMBER => GLOBAL_I64_SIZE,
-            _ => unreachable!("invalid stack parameter bit width: {bit_length}"),
+            _ => panic!("invalid stack parameter bit width: {bit_length}"),
         };
         let length_pointer = self.get_global(symbol).expect("should be declared");
         (buffer_pointer, length_pointer.into())
@@ -837,13 +837,18 @@ where
         &self,
         value: inkwell::values::BasicValueEnum<'ctx>,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        let intrinsic = match value.get_type().into_int_type().get_bit_width() as usize {
+            revive_common::BIT_LENGTH_WORD => self.intrinsics().byte_swap_word.value,
+            revive_common::BIT_LENGTH_ETH_ADDRESS => self.intrinsics().byte_swap_eth_address.value,
+            _ => panic!(
+                "invalid byte swap parameter: {:?} {}",
+                value.get_name(),
+                value.get_type()
+            ),
+        };
         Ok(self
             .builder()
-            .build_call(
-                self.intrinsics().byte_swap.value,
-                &[value.into()],
-                "call_byte_swap",
-            )?
+            .build_call(intrinsic, &[value.into()], "call_byte_swap")?
             .try_as_basic_value()
             .left()
             .unwrap())
@@ -1177,7 +1182,9 @@ where
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
     /// Pointers are represented as opaque 256 bit integer values in EVM.
     /// In practice, they should never exceed a register sized bit value.
-    /// However, we still protect against this possibility here.
+    /// However, we still protect against this possibility here. Heap index
+    /// offsets are generally untrusted and potentially represent valid
+    /// (but wrong) pointers when truncated.
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1191,16 +1198,12 @@ where
             "expected XLEN or WORD sized int type for memory offset",
         );
 
-        let truncated = self.builder().build_int_truncate_or_bit_cast(
-            value,
-            self.xlen_type(),
-            "offset_truncated",
-        )?;
-        let extended = self.builder().build_int_z_extend_or_bit_cast(
-            truncated,
-            self.word_type(),
-            "offset_extended",
-        )?;
+        let truncated =
+            self.builder()
+                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
+        let extended =
+            self.builder()
+                .build_int_z_extend(truncated, self.word_type(), "offset_extended")?;
         let is_overflow = self.builder().build_int_compare(
             inkwell::IntPredicate::NE,
             value,
@@ -1208,15 +1211,15 @@ where
             "compare_truncated_extended",
         )?;
 
-        let continue_block = self.append_basic_block("offset_pointer_ok");
-        let trap_block = self.append_basic_block("offset_pointer_overflow");
-        self.build_conditional_branch(is_overflow, trap_block, continue_block)?;
+        let block_continue = self.append_basic_block("offset_pointer_ok");
+        let block_trap = self.append_basic_block("offset_pointer_overflow");
+        self.build_conditional_branch(is_overflow, block_trap, block_continue)?;
 
-        self.set_basic_block(trap_block);
+        self.set_basic_block(block_trap);
         self.build_call(self.intrinsics().trap, &[], "invalid_trap");
         self.build_unreachable();
 
-        self.set_basic_block(continue_block);
+        self.set_basic_block(block_continue);
         Ok(truncated)
     }
 

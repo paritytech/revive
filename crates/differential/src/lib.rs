@@ -10,7 +10,10 @@ use primitive_types::{H160, H256, U256};
 static RUNTIME_ETABLE: Etable<RuntimeState, UnimplementedHandler, CallCreateTrap> =
     Etable::runtime();
 
-pub struct UnimplementedHandler;
+#[derive(Default)]
+pub struct UnimplementedHandler {
+    logs: Vec<Log>,
+}
 
 impl RuntimeEnvironment for UnimplementedHandler {
     fn block_hash(&self, _number: U256) -> H256 {
@@ -87,8 +90,9 @@ impl RuntimeBackend for UnimplementedHandler {
     fn set_storage(&mut self, _address: H160, _index: H256, _value: H256) -> Result<(), ExitError> {
         unimplemented!()
     }
-    fn log(&mut self, _log: Log) -> Result<(), ExitError> {
-        unimplemented!()
+    fn log(&mut self, log: Log) -> Result<(), ExitError> {
+        self.logs.push(log);
+        Ok(())
     }
     fn mark_delete(&mut self, _address: H160) {
         unimplemented!()
@@ -147,12 +151,9 @@ pub fn prepare(code: Vec<u8>, data: Vec<u8>) -> PreparedEvm {
     }
 }
 
-pub fn execute(pre: PreparedEvm) -> Vec<u8> {
+pub fn execute(pre: PreparedEvm) -> (Vec<u8>, Vec<Log>) {
     let mut vm = EtableInterpreter::new_valid(pre.vm, &RUNTIME_ETABLE, pre.valids);
-    vm.run(&mut UnimplementedHandler {})
-        .exit()
-        .unwrap()
-        .unwrap();
-
-    vm.retval.clone()
+    let mut handler = UnimplementedHandler::default();
+    vm.run(&mut handler).exit().unwrap().unwrap();
+    (vm.retval.clone(), handler.logs)
 }

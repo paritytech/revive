@@ -415,3 +415,9 @@ fn signed_remainder() {
         assert_eq!(received, expected);
     }
 }
+
+#[test]
+fn events() {
+    assert_success(&Contract::event(U256::ZERO), true);
+    assert_success(&Contract::event(U256::from(123)), true);
+}

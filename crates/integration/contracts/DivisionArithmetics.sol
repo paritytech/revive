@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8;
+
 contract DivisionArithmetics {
     function div(uint n, uint d) public pure returns (uint q) {
         assembly {

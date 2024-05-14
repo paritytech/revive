@@ -1,72 +1,80 @@
 //! Translates a log or event call.
 
+use inkwell::values::BasicValue;
+
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
 
 /// Translates a log or event call.
-/// The decoding logic is implemented in a system contract, which is called from here.
-/// There are several cases of the translation for the sake of efficiency, since the front-end
-/// emits topics and values sequentially by one, but the LLVM intrinsic and bytecode instruction
-/// accept two at once.
+///
+/// TODO: Splitting up into dedicated functions (log0..log4)
+/// could potentially decrease code sizes (LLVM can still decide to inline).
+/// However, passing many i256 parameters could also hurt a bit.
+/// Should be reviewed after 64bit support.
 pub fn log<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
-    _input_offset: inkwell::values::IntValue<'ctx>,
-    _input_length: inkwell::values::IntValue<'ctx>,
-    _topics: Vec<inkwell::values::IntValue<'ctx>>,
+    context: &mut Context<'ctx, D>,
+    input_offset: inkwell::values::IntValue<'ctx>,
+    input_length: inkwell::values::IntValue<'ctx>,
+    topics: Vec<inkwell::values::IntValue<'ctx>>,
 ) -> anyhow::Result<()>
 where
     D: Dependency + Clone,
 {
-    /*
-    let failure_block = context.append_basic_block("event_failure_block");
-    let join_block = context.append_basic_block("event_join_block");
-
-    let gas = crate::polkavm::evm::ether_gas::gas(context)?.into_int_value();
-    let abi_data = crate::polkavm::utils::abi_data(
-        context,
-        input_offset,
-        input_length,
-        Some(gas),
-        AddressSpace::Heap,
-        true,
-    )?;
-    let mut extra_abi_data = Vec::with_capacity(1 + topics.len());
-    extra_abi_data.push(context.field_const(topics.len() as u64));
-    extra_abi_data.extend(topics);
-
-    let result = context
-        .build_call(
-            context.llvm_runtime().far_call,
-            crate::polkavm::utils::external_call_arguments(
-                context,
-                abi_data.as_basic_value_enum(),
-                context.field_const(zkevm_opcode_defs::ADDRESS_EVENT_WRITER as u64),
-                extra_abi_data,
-                None,
-            )
-            .as_slice(),
-            "event_writer_call_external",
-        )
-        .expect("Always returns a value");
-
-    let result_status_code_boolean = context
-        .builder()
-        .build_extract_value(
-            result.into_struct_value(),
-            1,
-            "event_writer_external_result_status_code_boolean",
-        )
-        .expect("Always exists");
-    context.build_conditional_branch(
-        result_status_code_boolean.into_int_value(),
-        join_block,
-        failure_block,
+    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
+    let input_length = context.safe_truncate_int_to_xlen(input_length)?;
+    let input_pointer = context.builder().build_ptr_to_int(
+        context.build_heap_gep(input_offset, input_length)?.value,
+        context.xlen_type(),
+        "event_input_offset",
     )?;
 
-    context.set_basic_block(failure_block);
-    crate::polkavm::evm::r#return::revert(context, context.field_const(0), context.field_const(0))?;
+    let arguments = if topics.is_empty() {
+        [
+            context.xlen_type().const_zero().as_basic_value_enum(),
+            context.xlen_type().const_zero().as_basic_value_enum(),
+            input_pointer.as_basic_value_enum(),
+            input_length.as_basic_value_enum(),
+        ]
+    } else {
+        let topics_buffer_size = topics.len() * revive_common::BYTE_LENGTH_WORD;
+        let topics_buffer_pointer = context.build_alloca(
+            context.byte_type().array_type(topics_buffer_size as u32),
+            "topics_buffer",
+        );
+        for (n, topic) in topics.iter().enumerate() {
+            let topic_buffer_offset = context
+                .xlen_type()
+                .const_int((n * revive_common::BYTE_LENGTH_WORD) as u64, false);
+            context.build_store(
+                context.build_gep(
+                    topics_buffer_pointer,
+                    &[context.xlen_type().const_zero(), topic_buffer_offset],
+                    context.byte_type(),
+                    "topic_buffer_gep",
+                ),
+                context.build_byte_swap(topic.as_basic_value_enum())?,
+            )?;
+        }
+        [
+            context
+                .builder()
+                .build_ptr_to_int(
+                    topics_buffer_pointer.value,
+                    context.xlen_type(),
+                    "event_topics_offset",
+                )?
+                .as_basic_value_enum(),
+            context
+                .xlen_type()
+                .const_int(topics_buffer_size as u64, false)
+                .as_basic_value_enum(),
+            input_pointer.as_basic_value_enum(),
+            input_length.as_basic_value_enum(),
+        ]
+    };
 
-    context.set_basic_block(join_block);
-    */
+    let _ = context.build_runtime_call(runtime_api::DEPOSIT_EVENT, &arguments);
+
     Ok(())
 }

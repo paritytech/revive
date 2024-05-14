@@ -1,7 +1,8 @@
+use alloy_primitives::{Address, U256};
 use cases::Contract;
 use mock_runtime::{CallOutput, State};
 
-use crate::mock_runtime::ReturnFlags;
+use crate::mock_runtime::{Event, ReturnFlags};
 
 pub mod cases;
 pub mod mock_runtime;
@@ -82,7 +83,25 @@ pub fn assert_success(contract: &Contract, differential: bool) -> (State, CallOu
     if differential {
         let evm =
             revive_differential::prepare(contract.evm_runtime.clone(), contract.calldata.clone());
-        assert_eq!(output.data.clone(), revive_differential::execute(evm));
+        let (evm_output, evm_log) = revive_differential::execute(evm);
+
+        assert_eq!(output.data.clone(), evm_output);
+        assert_eq!(output.events.len(), evm_log.len());
+        assert_eq!(
+            output.events,
+            evm_log
+                .iter()
+                .map(|log| Event {
+                    address: Address::from_slice(log.address.as_bytes()),
+                    data: log.data.clone(),
+                    topics: log
+                        .topics
+                        .iter()
+                        .map(|topic| U256::from_be_bytes(topic.0))
+                        .collect(),
+                })
+                .collect::<Vec<_>>()
+        );
     }
 
     (state, output)

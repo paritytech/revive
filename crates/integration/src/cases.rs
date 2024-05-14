@@ -104,6 +104,15 @@ sol!(
     }
 );
 
+sol!(
+    contract Events {
+        event A(uint) anonymous;
+        event E(uint indexed, uint indexed, uint indexed);
+
+        function emitEvent(uint topics) public;
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -338,6 +347,18 @@ impl Contract {
             calldata: MStore8::mStore8Call::new((value,)).abi_encode(),
         }
     }
+
+    pub fn event(topics: U256) -> Self {
+        let code = include_str!("../contracts/Events.sol");
+        let name = "Events";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Events::emitEventCall::new((topics,)).abi_encode(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -389,6 +410,7 @@ mod tests {
             Contract::erc20 as fn() -> Contract,
             (|| Contract::sha1(Vec::new())) as fn() -> Contract,
             (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,
+            (|| Contract::event(U256::ZERO)) as fn() -> Contract,
         ]
         .into_par_iter()
         .map(extract_code_size)

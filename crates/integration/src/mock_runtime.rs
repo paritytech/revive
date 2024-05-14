@@ -17,8 +17,9 @@ struct Account {
 }
 
 /// Emitted event data.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Event {
+    pub address: Address,
     pub data: Vec<u8>,
     pub topics: Vec<U256>,
 }
@@ -31,7 +32,7 @@ pub struct CallOutput {
     /// The contract call output.
     pub data: Vec<u8>,
     /// The emitted events.
-    pub events: Event,
+    pub events: Vec<Event>,
 }
 
 /// The contract blob export to be called.
@@ -564,6 +565,43 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 let address = transaction.top_frame().caller.as_slice();
                 caller.write_memory(out_ptr, address)?;
                 caller.write_memory(out_len_ptr, &(address.len() as u32).to_le_bytes())?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::DEPOSIT_EVENT,
+            |caller: Caller<Transaction>,
+             topics_ptr: u32,
+             topics_len: u32,
+             data_ptr: u32,
+             data_len: u32| {
+                let (caller, transaction) = caller.split();
+
+                let address = transaction.top_frame().callee;
+                let data = if data_len != 0 {
+                    caller.read_memory_into_vec(data_ptr, data_len)?
+                } else {
+                    Default::default()
+                };
+                let topics = if topics_len != 0 {
+                    caller
+                        .read_memory_into_vec(topics_ptr, topics_len)?
+                        .chunks(32)
+                        .map(|chunk| U256::from_be_slice(chunk))
+                        .collect()
+                } else {
+                    Default::default()
+                };
+
+                transaction.top_frame_mut().output.events.push(Event {
+                    address,
+                    data,
+                    topics,
+                });
 
                 Ok(())
             },

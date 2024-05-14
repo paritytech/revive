@@ -1198,29 +1198,61 @@ where
             "expected XLEN or WORD sized int type for memory offset",
         );
 
-        let truncated =
-            self.builder()
-                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
-        let extended =
-            self.builder()
-                .build_int_z_extend(truncated, self.word_type(), "offset_extended")?;
-        let is_overflow = self.builder().build_int_compare(
-            inkwell::IntPredicate::NE,
-            value,
-            extended,
-            "compare_truncated_extended",
-        )?;
+        let name = "__safe_trunc_xlen";
+        let function = self.module().get_function(name).unwrap_or_else(|| {
+            let position = self.basic_block();
 
-        let block_continue = self.append_basic_block("offset_pointer_ok");
-        let block_trap = self.append_basic_block("offset_pointer_overflow");
-        self.build_conditional_branch(is_overflow, block_trap, block_continue)?;
+            let function = self.module().add_function(
+                name,
+                self.xlen_type().fn_type(&[self.word_type().into()], false),
+                None,
+            );
+            let block_entry = self.llvm().append_basic_block(function, "entry");
+            self.set_basic_block(block_entry);
 
-        self.set_basic_block(block_trap);
-        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
-        self.build_unreachable();
+            let value = function.get_first_param().unwrap().into_int_value();
+            let truncated = self
+                .builder()
+                .build_int_truncate(value, self.xlen_type(), "offset_truncated")
+                .unwrap();
+            let extended = self
+                .builder()
+                .build_int_z_extend(truncated, self.word_type(), "offset_extended")
+                .unwrap();
+            let is_overflow = self
+                .builder()
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    value,
+                    extended,
+                    "compare_truncated_extended",
+                )
+                .unwrap();
 
-        self.set_basic_block(block_continue);
-        Ok(truncated)
+            let block_continue = self.llvm().append_basic_block(function, "offset_ok");
+            let block_trap = self.llvm().append_basic_block(function, "offset_overflow");
+            self.build_conditional_branch(is_overflow, block_trap, block_continue)
+                .unwrap();
+
+            self.set_basic_block(block_trap);
+            self.build_call(self.intrinsics().trap, &[], "invalid_trap");
+            self.build_unreachable();
+
+            self.set_basic_block(block_continue);
+            self.builder().build_return(Some(&truncated)).unwrap();
+
+            self.set_basic_block(position);
+
+            function
+        });
+
+        Ok(self
+            .builder()
+            .build_direct_call(function, &[value.into()], name)?
+            .try_as_basic_value()
+            .left()
+            .expect("returns a value")
+            .into_int_value())
     }
 
     /// Build a call to PolkaVM `sbrk` for extending the heap by `size`.

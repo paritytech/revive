@@ -10,7 +10,8 @@ use crate::polkavm_const::runtime_api;
 ///
 /// TODO: Splitting up into dedicated functions (log0..log4)
 /// could potentially decrease code sizes (LLVM can still decide to inline).
-/// However, passing many i256 parameters could also hurt a bit.
+/// However, passing i256 parameters is counter productive and
+/// I've found that splitting it up actualy increases code size.
 /// Should be reviewed after 64bit support.
 pub fn log<'ctx, D>(
     context: &mut Context<'ctx, D>,

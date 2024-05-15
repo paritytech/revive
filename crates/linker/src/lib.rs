@@ -24,7 +24,6 @@ fn polkavm_linker<T: AsRef<[u8]>>(code: T) -> anyhow::Result<Vec<u8>> {
     config.set_strip(true);
 
     polkavm_linker::program_from_elf(config, code.as_ref())
-        .map(|blob| blob.as_bytes().to_vec())
         .map_err(|reason| anyhow::anyhow!("polkavm linker failed: {}", reason))
 }
 

@@ -30,7 +30,7 @@ pub fn build_assembly_text(
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: Option<&DebugConfig>,
 ) -> anyhow::Result<Build> {
-    let program_blob = ProgramBlob::parse(bytecode)
+    let program_blob = ProgramBlob::parse(bytecode.into())
         .map_err(anyhow::Error::msg)
         .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
 

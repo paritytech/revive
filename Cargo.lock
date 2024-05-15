@@ -1408,7 +1408,7 @@ dependencies = [
 [[package]]
 name = "polkavm"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 dependencies = [
  "libc",
  "log",
@@ -1420,7 +1420,7 @@ dependencies = [
 [[package]]
 name = "polkavm-assembler"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 dependencies = [
  "log",
 ]
@@ -1428,7 +1428,7 @@ dependencies = [
 [[package]]
 name = "polkavm-common"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 dependencies = [
  "log",
 ]
@@ -1436,7 +1436,7 @@ dependencies = [
 [[package]]
 name = "polkavm-disassembler"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 dependencies = [
  "clap 4.5.4",
  "iced-x86",
@@ -1448,7 +1448,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linker"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 dependencies = [
  "gimli",
  "hashbrown 0.14.5",
@@ -1462,7 +1462,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.10.0"
-source = "git+https://github.com/koute/polkavm.git?rev=266658b#266658b328975ec07ec389f8d966a894f37a8916"
+source = "git+https://github.com/koute/polkavm.git?rev=360029e#360029ec34863591e043012e1a76c767aa507657"
 
 [[package]]
 name = "ppv-lite86"
@@ -2011,18 +2011,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.201"
+version = "1.0.202"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "780f1cebed1629e4753a1a38a3c72d30b97ec044f0aef68cb26650a3c5cf363c"
+checksum = "226b61a0d411b2ba5ff6d7f73a476ac4f8bb900373459cd00fab8512828ba395"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.201"
+version = "1.0.202"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5e405930b9796f1c00bee880d03fc7e0bb4b9a11afc776885ffe84320da2865"
+checksum = "6048858004bcff69094cd972ed40a32500f153bd3be9f716b2eed2e8217c4838"
 dependencies = [
  "proc-macro2",
  "quote",

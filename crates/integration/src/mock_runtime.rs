@@ -619,7 +619,7 @@ pub fn recompile_code(code: &[u8], engine: &Engine) -> Module {
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
-    Module::new(engine, &module_config, code).unwrap()
+    Module::new(engine, &module_config, code.into()).unwrap()
 }
 
 pub fn instantiate_module(
@@ -634,14 +634,14 @@ pub fn instantiate_module(
 }
 
 pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, ExportIndex) {
-    let blob = ProgramBlob::parse(code).unwrap();
+    let blob = ProgramBlob::parse(code.into()).unwrap();
 
     let engine = Engine::new(&config.unwrap_or_default()).unwrap();
 
     let mut module_config = ModuleConfig::new();
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
-    let module = Module::from_blob(&engine, &module_config, &blob).unwrap();
+    let module = Module::from_blob(&engine, &module_config, blob).unwrap();
     let export = module.lookup_export(runtime_api::CALL).unwrap();
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)

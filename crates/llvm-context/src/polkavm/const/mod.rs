@@ -33,9 +33,6 @@ pub static GLOBAL_CALL_FLAGS: &str = "call_flags";
 /// The extra ABI data global variable name.
 pub static GLOBAL_EXTRA_ABI_DATA: &str = "extra_abi_data";
 
-/// The active pointer global variable name.
-pub static GLOBAL_ACTIVE_POINTER: &str = "ptr_active";
-
 /// The constant array global variable name prefix.
 pub static GLOBAL_CONST_ARRAY_PREFIX: &str = "const_array_";
 

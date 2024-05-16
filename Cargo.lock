@@ -500,9 +500,9 @@ dependencies = [
 
 [[package]]
 name = "const-hex"
-version = "1.11.3"
+version = "1.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba00838774b4ab0233e355d26710fbfc8327a05c017f6dc4873f876d1f79f78"
+checksum = "70ff96486ccc291d36a958107caf2c0af8c78c0af7d31ae2f35ce055130de1a6"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1029,7 +1029,7 @@ dependencies = [
 [[package]]
 name = "inkwell"
 version = "0.4.0"
-source = "git+https://github.com/TheDan64/inkwell.git#6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
+source = "git+https://github.com/TheDan64/inkwell.git?rev=6c0fb56b3554e939f9ca61b465043d6a84fb7b95#6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
 dependencies = [
  "either",
  "inkwell_internals",
@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "inkwell_internals"
 version = "0.9.0"
-source = "git+https://github.com/TheDan64/inkwell.git#6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
+source = "git+https://github.com/TheDan64/inkwell.git?rev=6c0fb56b3554e939f9ca61b465043d6a84fb7b95#6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2287,9 +2287,9 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.5"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
+checksum = "4badfd56924ae69bcc9039335b2e017639ce3f9b001c393c1b2d1ef846ce2cbf"
 
 [[package]]
 name = "toml_edit"

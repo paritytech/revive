@@ -1,10 +1,7 @@
 //! Translates the return data instructions.
 
-use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 
-use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -15,13 +12,19 @@ pub fn size<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    match context.get_global_value(crate::polkavm::GLOBAL_RETURN_DATA_SIZE) {
-        Ok(global) => Ok(global),
-        Err(_error) => Ok(context.word_const(0).as_basic_value_enum()),
-    }
+    let value = context
+        .get_global_value(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?
+        .into_int_value();
+    Ok(context
+        .builder()
+        .build_int_z_extend(value, context.word_type(), "calldatasize_extended")?
+        .as_basic_value_enum())
 }
 
-/// Translates the return data copy.
+/// Translates the return data copy, trapping if
+/// - Destination, offset or size exceed the VM register size (XLEN)
+/// - `source_offset + size` overflows (in XLEN)
+/// - `source_offset + size` is beyond `RETURNDATASIZE`
 pub fn copy<'ctx, D>(
     context: &mut Context<'ctx, D>,
     destination_offset: inkwell::values::IntValue<'ctx>,
@@ -31,57 +34,59 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let error_block = context.append_basic_block("return_data_copy_error_block");
-    let join_block = context.append_basic_block("return_data_copy_join_block");
+    let source_offset = context.safe_truncate_int_to_xlen(source_offset)?;
+    let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;
+    let size = context.safe_truncate_int_to_xlen(size)?;
 
-    let return_data_size = self::size(context)?.into_int_value();
-    let copy_slice_end =
-        context
-            .builder()
-            .build_int_add(source_offset, size, "return_data_copy_slice_end")?;
-    let is_copy_out_of_bounds = context.builder().build_int_compare(
+    let block_copy = context.append_basic_block("copy_block");
+    let block_trap = context.append_basic_block("trap_block");
+    let block_check_out_of_bounds = context.append_basic_block("check_out_of_bounds_block");
+    let is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
-        copy_slice_end,
-        return_data_size,
-        "return_data_copy_is_out_of_bounds",
+        source_offset,
+        context.builder().build_int_sub(
+            context.xlen_type().const_all_ones(),
+            size,
+            "offset_plus_size_max_value",
+        )?,
+        "is_returndata_size_out_of_bounds",
     )?;
-    context.build_conditional_branch(is_copy_out_of_bounds, error_block, join_block)?;
+    context.build_conditional_branch(is_overflow, block_trap, block_check_out_of_bounds)?;
 
-    context.set_basic_block(error_block);
-    crate::polkavm::evm::r#return::revert(context, context.word_const(0), context.word_const(0))?;
+    context.set_basic_block(block_check_out_of_bounds);
+    let is_out_of_bounds = context.builder().build_int_compare(
+        inkwell::IntPredicate::UGT,
+        context.builder().build_int_add(
+            source_offset,
+            context
+                .get_global_value(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?
+                .into_int_value(),
+            "returndata_end_pointer",
+        )?,
+        context
+            .xlen_type()
+            .const_int(crate::PolkaVMEntryFunction::MAX_CALLDATA_SIZE as u64, false),
+        "is_return_data_copy_overflow",
+    )?;
+    context.build_conditional_branch(is_out_of_bounds, block_trap, block_copy)?;
 
-    context.set_basic_block(join_block);
-    let destination = Pointer::new_with_offset(
-        context,
-        AddressSpace::Heap,
-        context.byte_type(),
-        destination_offset,
-        "return_data_copy_destination_pointer",
-    );
+    context.set_basic_block(block_trap);
+    context.build_call(context.intrinsics().trap, &[], "invalid_returndata_copy");
+    context.build_unreachable();
 
-    let return_data_pointer_global =
-        context.get_global(crate::polkavm::GLOBAL_RETURN_DATA_POINTER)?;
-    let return_data_pointer_pointer = return_data_pointer_global.into();
-    let return_data_pointer =
-        context.build_load(return_data_pointer_pointer, "return_data_pointer")?;
-    let source = context.build_gep(
-        Pointer::new(
-            context.byte_type(),
-            return_data_pointer_pointer.address_space,
-            return_data_pointer.into_pointer_value(),
-        ),
-        &[source_offset],
-        context.byte_type().as_basic_type_enum(),
-        "return_data_source_pointer",
-    );
-
+    context.set_basic_block(block_copy);
     context.build_memcpy(
         context.intrinsics().memory_copy_from_generic,
-        destination,
-        source,
+        context.build_heap_gep(destination_offset, size)?,
+        context.build_gep(
+            context
+                .get_global(crate::polkavm::GLOBAL_RETURN_DATA_POINTER)?
+                .into(),
+            &[context.xlen_type().const_zero(), source_offset],
+            context.byte_type(),
+            "source_offset_gep",
+        ),
         size,
         "return_data_copy_memcpy_from_return_data",
-    )?;
-
-    todo!("Build heap GEP to allocate if necessary")
+    )
 }

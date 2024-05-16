@@ -10,8 +10,8 @@ use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// The `deployer_call` function.
-/// Calls the deployer system contract, which returns the newly deployed contract address or 0.
-/// The address is returned in the first 32-byte word of the return data. If it is 0, the 0 is
+/// Calls the instantiate API, which returns the newly deployed contract address or 0.
+/// The address is returned in the first 32-byte word of the return data. If it is 0, 0 is
 /// returned. If the entire call has failed, there is also a 0 returned.
 #[derive(Debug)]
 pub struct DeployerCall {
@@ -304,10 +304,6 @@ where
             context.byte_type(),
             AddressSpace::Generic,
             result_abi_data.into_pointer_value(),
-        );
-        context.write_abi_pointer(
-            result_abi_data_pointer,
-            crate::polkavm::GLOBAL_RETURN_DATA_POINTER,
         );
         context.write_abi_data_size(
             result_abi_data_pointer,

@@ -10,7 +10,7 @@ use revive_llvm_context::polkavm_const::runtime_api;
 
 /// The mocked blockchain account.
 #[derive(Debug, Default, Clone)]
-struct Account {
+pub struct Account {
     value: U256,
     contract: Option<U256>,
     storage: HashMap<U256, U256>,
@@ -207,7 +207,12 @@ impl TransactionBuilder {
             .blobs
             .get(&blob_hash)
             .unwrap_or_else(|| panic!("contract code not found: {blob_hash}"));
-        let (mut instance, export) = prepare(code, None);
+        let (mut instance, _) = prepare(code, None);
+        let export = match self.context.top_frame().export {
+            Export::Call => runtime_api::CALL,
+            Export::Deploy(_) => runtime_api::DEPLOY,
+        };
+        let export = instance.module().lookup_export(export).unwrap();
         self.call_on(&mut instance, export)
     }
 
@@ -224,8 +229,10 @@ impl TransactionBuilder {
         state_args.set_gas(polkavm::Gas::MAX);
 
         if let Export::Deploy(blob_hash) = self.context.top_frame().export {
+            let address = self.context.create2(Default::default(), blob_hash);
+            self.context.top_frame_mut().callee = address;
             self.context.state.create_account(
-                self.context.create2(Default::default(), blob_hash),
+                address,
                 self.context.top_frame().callvalue,
                 blob_hash,
             );
@@ -279,6 +286,19 @@ impl State {
     pub const BLOCK_NUMBER: u64 = 123;
     pub const BLOCK_TIMESTAMP: u64 = 456;
 
+    pub fn new_deployed(contract: crate::Contract) -> (Self, Address) {
+        let (state, output) = State::default()
+            .transaction()
+            .deploy(&contract.pvm_runtime)
+            .calldata(contract.calldata)
+            .call();
+        assert_eq!(output.flags, ReturnFlags::Success);
+
+        let address = *state.accounts().keys().into_iter().next().unwrap();
+
+        (state, address)
+    }
+
     pub fn transaction(self) -> TransactionBuilder {
         TransactionBuilder {
             state_before: self.clone(),
@@ -317,6 +337,10 @@ impl State {
                 storage: HashMap::new(),
             },
         );
+    }
+
+    pub fn accounts(&self) -> &HashMap<Address, Account> {
+        &self.accounts
     }
 }
 

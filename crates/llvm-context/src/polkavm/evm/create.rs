@@ -45,7 +45,6 @@ where
 }
 
 /// Translates the contract `create2` instruction.
-/// The instruction is simulated by a call to a system contract.
 pub fn create2<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,

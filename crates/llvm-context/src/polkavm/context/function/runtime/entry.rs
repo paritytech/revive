@@ -1,6 +1,7 @@
 //! The entry function.
 
 use inkwell::types::BasicType;
+use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime::Runtime;
@@ -8,7 +9,6 @@ use crate::polkavm::context::Context;
 use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
-use crate::PolkaVMPointer as Pointer;
 
 /// The entry function.
 /// The function is a wrapper managing the runtime and deploy code calling logic.
@@ -23,8 +23,11 @@ impl Entry {
     /// The number of mandatory arguments.
     pub const MANDATORY_ARGUMENTS_COUNT: usize = 2;
 
-    /// Reserve 1kb for calldata.
-    pub const MAX_CALLDATA_SIZE: usize = 1024;
+    /// Reserve 1mb for calldata.
+    pub const MAX_CALLDATA_SIZE: usize = 1024 * 1024;
+
+    /// Reserve 1mb for returndata.
+    pub const MAX_RETURNDATA_SIZE: usize = 1024 * 1024;
 
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
@@ -38,6 +41,14 @@ impl Entry {
             calldata_type,
             AddressSpace::Stack,
             calldata_type.get_undef(),
+        );
+
+        let returndata_type = context.array_type(context.byte_type(), Self::MAX_RETURNDATA_SIZE);
+        context.set_global(
+            crate::polkavm::GLOBAL_RETURN_DATA_POINTER,
+            returndata_type,
+            AddressSpace::Stack,
+            returndata_type.get_undef(),
         );
 
         context.set_global(
@@ -61,9 +72,9 @@ impl Entry {
         );
         context.set_global(
             crate::polkavm::GLOBAL_RETURN_DATA_SIZE,
-            context.word_type(),
+            context.xlen_type(),
             AddressSpace::Stack,
-            context.word_const(0),
+            context.xlen_type().const_zero().as_basic_value_enum(),
         );
 
         context.set_global(
@@ -161,27 +172,6 @@ impl Entry {
             AddressSpace::Stack,
             calldata_size_casted,
         );
-
-        // Store calldata end pointer
-        let input_pointer = Pointer::new(
-            input_pointer.get_type(),
-            AddressSpace::Generic,
-            input_pointer,
-        );
-        let calldata_end_pointer = context.build_gep(
-            input_pointer,
-            &[calldata_size_casted],
-            context
-                .llvm()
-                .ptr_type(AddressSpace::Generic.into())
-                .as_basic_type_enum(),
-            "return_data_abi_initializer",
-        );
-        context.write_abi_pointer(
-            calldata_end_pointer,
-            crate::polkavm::GLOBAL_RETURN_DATA_POINTER,
-        );
-        context.write_abi_pointer(calldata_end_pointer, crate::polkavm::GLOBAL_ACTIVE_POINTER);
 
         Ok(())
     }

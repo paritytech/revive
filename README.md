@@ -36,3 +36,4 @@ The project is in a very early PoC phase. Don't yet expect the produced code to 
 - [ ] Document differences from EVM
 - [ ] Audit for bugs and correctness
 - [x] Rebranding
+- [ ] Remove support for vyper

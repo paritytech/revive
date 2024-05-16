@@ -27,16 +27,24 @@ fn fibonacci() {
 
 #[test]
 fn flipper() {
+    let (state, address) = State::new_deployed(Contract::flipper_constructor(true));
+
     let contract = Contract::flipper();
-    let address = Transaction::default_address();
-
-    let (state, output) = contract.execute();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::from(1));
-
-    let (state, output) = state.transaction().calldata(contract.calldata).call();
+    let (state, output) = state
+        .transaction()
+        .calldata(contract.calldata.clone())
+        .callee(address)
+        .call();
     assert_eq!(output.flags, ReturnFlags::Success);
     state.assert_storage_key(address, U256::ZERO, U256::ZERO);
+
+    let (state, output) = state
+        .transaction()
+        .calldata(contract.calldata)
+        .callee(address)
+        .call();
+    assert_eq!(output.flags, ReturnFlags::Success);
+    state.assert_storage_key(address, U256::ZERO, U256::from(1));
 }
 
 #[test]

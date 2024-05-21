@@ -24,6 +24,8 @@ pub static HASH_KECCAK_256: &str = "hash_keccak_256";
 
 pub static INPUT: &str = "input";
 
+pub static INSTANTIATE: &str = "instantiate";
+
 pub static NOW: &str = "now";
 
 pub static RETURN: &str = "seal_return";

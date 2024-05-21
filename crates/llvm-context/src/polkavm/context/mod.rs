@@ -136,7 +136,9 @@ where
         module: &inkwell::module::Module<'ctx>,
     ) {
         module
-            .link_in_module(pallet_contracts_pvm_llapi::module(llvm, "polkavm_guest").unwrap())
+            .link_in_module(
+                pallet_contracts_pvm_llapi::polkavm_guest::module(llvm, "polkavm_guest").unwrap(),
+            )
             .expect("the PolkaVM guest API module should be linkable");
 
         for export in runtime_api::EXPORTS {
@@ -164,7 +166,7 @@ where
         size: u32,
     ) {
         module
-            .link_in_module(pallet_contracts_pvm_llapi::min_stack_size(
+            .link_in_module(pallet_contracts_pvm_llapi::polkavm_guest::min_stack_size(
                 llvm,
                 "polkavm_stack_size",
                 size,
@@ -1139,26 +1141,13 @@ where
         self.builder.build_unreachable().unwrap();
     }
 
-    /// Builds a long contract exit sequence.
-    /// The deploy code does not return the runtime code like in EVM. Instead, it returns some
-    /// additional contract metadata, e.g. the array of immutables.
-    /// The deploy code uses the auxiliary heap for the return, because otherwise it is not possible
-    /// to allocate memory together with the Yul allocator safely.
+    /// Builds a contract exit sequence.
     pub fn build_exit(
         &self,
         flags: inkwell::values::IntValue<'ctx>,
         offset: inkwell::values::IntValue<'ctx>,
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<()> {
-        // TODO:
-        //let return_forward_mode = if self.code_type() == Some(CodeType::Deploy)
-        //    && return_function == self.llvm_runtime().r#return
-        //{
-        //    zkevm_opcode_defs::RetForwardPageType::UseAuxHeap
-        //} else {
-        //    zkevm_opcode_defs::RetForwardPageType::UseHeap
-        //};
-
         let offset_truncated = self.safe_truncate_int_to_xlen(offset)?;
         let length_truncated = self.safe_truncate_int_to_xlen(length)?;
         let offset_into_heap = self.build_heap_gep(offset_truncated, length_truncated)?;

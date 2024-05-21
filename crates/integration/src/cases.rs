@@ -117,6 +117,12 @@ sol!(
     }
 );
 
+sol!(
+    contract CreateB {
+        fallback() external payable;
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -373,6 +379,30 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Events::emitEventCall::new((topics,)).abi_encode(),
+        }
+    }
+
+    pub fn create_a() -> Self {
+        let code = include_str!("../contracts/Create.sol");
+        let name = "CreateA";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: vec![0; 4],
+        }
+    }
+
+    pub fn create_b() -> Self {
+        let code = include_str!("../contracts/Create.sol");
+        let name = "CreateB";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: vec![0; 4],
         }
     }
 }

@@ -429,3 +429,19 @@ fn events() {
     assert_success(&Contract::event(U256::ZERO), true);
     assert_success(&Contract::event(U256::from(123)), true);
 }
+
+#[test]
+fn create() {
+    let mut state = State::default();
+    state.upload_code(&Contract::create_a().pvm_runtime);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(state.accounts().len(), 2);
+}

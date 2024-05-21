@@ -633,6 +633,76 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .unwrap();
 
     linker
+        .func_wrap(
+            runtime_api::INSTANTIATE,
+            |caller: Caller<Transaction>, argument_ptr: u32| {
+                let (mut caller, transaction) = caller.split();
+
+                #[derive(Debug)]
+                #[repr(packed)]
+                struct Arguments {
+                    code_hash_ptr: u32,
+                    ref_time_limit: u64,
+                    proof_size_limit: u64,
+                    deposit_ptr: u32,
+                    value_ptr: u32,
+                    input_data_ptr: u32,
+                    input_data_len: u32,
+                    address_ptr: u32,
+                    address_len_ptr: u32,
+                    output_ptr: u32,
+                    output_len_ptr: u32,
+                    salt_ptr: u32,
+                    salt_len: u32,
+                }
+                let mut buffer = [0; std::mem::size_of::<Arguments>()];
+                caller.read_memory_into_slice(argument_ptr, &mut buffer)?;
+                let arguments: Arguments = unsafe { std::mem::transmute(buffer) };
+
+                assert_eq!({ arguments.ref_time_limit }, 0);
+                assert_eq!({ arguments.proof_size_limit }, 0);
+                assert_eq!({ arguments.deposit_ptr }, u32::MAX);
+                assert_eq!({ arguments.output_ptr }, u32::MAX);
+                assert_eq!({ arguments.output_len_ptr }, u32::MAX);
+
+                let blob_hash = caller.read_memory_into_vec(arguments.code_hash_ptr, 32)?;
+                let blob_hash = U256::from_be_slice(&blob_hash);
+                let value = caller.read_memory_into_vec(arguments.value_ptr, 20)?;
+                let input_data = caller
+                    .read_memory_into_vec(arguments.input_data_ptr, arguments.input_data_len)?;
+
+                let address_len = caller.read_u32(arguments.address_len_ptr)?;
+                assert_eq!(address_len, 20);
+                let salt_len = arguments.salt_len;
+                assert_eq!(salt_len, 32);
+                let salt = caller.read_memory_into_vec(arguments.salt_ptr, salt_len)?;
+
+                let address = transaction.create2(U256::from_be_slice(&salt), blob_hash);
+                let amount = U256::from_be_slice(&value);
+                // check if enough value
+                let (state, output) = transaction
+                    .state
+                    .clone()
+                    .transaction()
+                    .callee(address)
+                    .deploy(transaction.state.blobs.get(&blob_hash).unwrap())
+                    .callvalue(amount)
+                    .calldata(input_data)
+                    .call();
+                let result = if output.flags == ReturnFlags::Success {
+                    transaction.state = state;
+                    address
+                } else {
+                    Address::ZERO
+                };
+                caller.write_memory(arguments.address_ptr, &result.0 .0)?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
 }
 
 pub fn setup(config: Option<Config>) -> Engine {
@@ -658,7 +728,8 @@ pub fn instantiate_module(
 }
 
 pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, ExportIndex) {
-    let blob = ProgramBlob::parse(code.into()).unwrap();
+    let blob = ProgramBlob::parse(code.into())
+        .unwrap_or_else(|err| panic!("{err}\n{}", hex::encode(code)));
 
     let engine = Engine::new(&config.unwrap_or_default()).unwrap();
 

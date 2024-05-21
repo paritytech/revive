@@ -1,6 +1,7 @@
 //! The `deployer_call` function.
 
 use inkwell::types::BasicType;
+use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::Function;
@@ -79,6 +80,7 @@ where
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
         context.set_current_function(Self::FUNCTION_NAME)?;
 
+        /*
         let value = context
             .current_function()
             .borrow()
@@ -314,6 +316,11 @@ where
         context.set_basic_block(context.current_function().borrow().return_block());
         let result = context.build_load(result_pointer, "deployer_call_result")?;
         context.build_return(Some(&result));
+        */
+        context.set_basic_block(context.current_function().borrow().entry_block());
+        context.build_unconditional_branch(context.current_function().borrow().return_block);
+        context.set_basic_block(context.current_function().borrow().return_block);
+        context.build_return(Some(&context.word_const(0)));
 
         Ok(())
     }

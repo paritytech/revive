@@ -1,13 +1,9 @@
 //! Translates the transaction return operations.
 
-use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::code_type::CodeType;
-use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
 /// Translates the `return` instruction.
-/// Unlike in EVM, zkSync constructors return the array of contract immutables.
 pub fn r#return<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
@@ -16,66 +12,15 @@ pub fn r#return<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    match context.code_type() {
-        None => {
-            anyhow::bail!("Return is not available if the contract part is undefined");
-        }
-        Some(CodeType::Deploy) => {
-            let immutables_offset_pointer = Pointer::new_with_offset(
-                context,
-                AddressSpace::HeapAuxiliary,
-                context.word_type(),
-                context.word_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
-                "immutables_offset_pointer",
-            );
-            context.build_store(
-                immutables_offset_pointer,
-                context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
-            )?;
-
-            let immutables_number_pointer = Pointer::new_with_offset(
-                context,
-                AddressSpace::HeapAuxiliary,
-                context.word_type(),
-                context.word_const(
-                    crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
-                        + (revive_common::BYTE_LENGTH_WORD as u64),
-                ),
-                "immutables_number_pointer",
-            );
-            let immutable_values_size = context.immutables_size()?;
-            context.build_store(
-                immutables_number_pointer,
-                context
-                    .word_const((immutable_values_size / revive_common::BYTE_LENGTH_WORD) as u64),
-            )?;
-            let immutables_size = context.builder().build_int_mul(
-                context.word_const(immutable_values_size as u64),
-                context.word_const(2),
-                "immutables_size",
-            )?;
-            let return_data_length = context.builder().build_int_add(
-                immutables_size,
-                context.word_const((revive_common::BYTE_LENGTH_WORD * 2) as u64),
-                "return_data_length",
-            )?;
-
-            context.build_exit(
-                context.integer_const(crate::polkavm::XLEN, 0),
-                context.word_const(crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA),
-                return_data_length,
-            )?;
-        }
-        Some(CodeType::Runtime) => {
-            context.build_exit(
-                context.integer_const(crate::polkavm::XLEN, 0),
-                offset,
-                length,
-            )?;
-        }
+    if context.code_type().is_none() {
+        anyhow::bail!("Return is not available if the contract part is undefined");
     }
 
-    Ok(())
+    context.build_exit(
+        context.integer_const(crate::polkavm::XLEN, 0),
+        offset,
+        length,
+    )
 }
 
 /// Translates the `revert` instruction.

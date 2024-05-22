@@ -5,9 +5,9 @@ use num::Zero;
 
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::code_type::CodeType;
-use crate::polkavm::context::function::runtime::Runtime;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
 
 /// Translates the contract `create` instruction.
 /// The instruction is simulated by a call to a system contract.
@@ -20,32 +20,10 @@ pub fn create<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let signature_hash_string =
-        crate::polkavm::utils::keccak256(crate::polkavm::DEPLOYER_SIGNATURE_CREATE.as_bytes());
-    let signature_hash = context.word_const_str_hex(signature_hash_string.as_str());
-
-    let salt = context.word_const(0);
-
-    let function = Runtime::deployer_call(context);
-    let result = context
-        .build_call(
-            function,
-            &[
-                value.as_basic_value_enum(),
-                input_offset.as_basic_value_enum(),
-                input_length.as_basic_value_enum(),
-                signature_hash.as_basic_value_enum(),
-                salt.as_basic_value_enum(),
-            ],
-            "create_deployer_call",
-        )
-        .expect("Always exists");
-
-    Ok(result)
+    self::create2(context, value, input_offset, input_length, None)
 }
 
 /// Translates the contract `create2` instruction.
-/// The instruction is simulated by a call to a system contract.
 pub fn create2<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
@@ -56,28 +34,72 @@ pub fn create2<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let signature_hash_string =
-        crate::polkavm::utils::keccak256(crate::polkavm::DEPLOYER_SIGNATURE_CREATE2.as_bytes());
-    let signature_hash = context.word_const_str_hex(signature_hash_string.as_str());
+    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
+    let input_length = context.safe_truncate_int_to_xlen(input_length)?;
 
-    let salt = salt.unwrap_or_else(|| context.word_const(0));
+    let value_pointer = context.build_alloca(context.value_type(), "value");
+    context.build_store(value_pointer, value)?;
 
-    let function = Runtime::deployer_call(context);
-    let result = context
-        .build_call(
-            function,
-            &[
-                value.as_basic_value_enum(),
-                input_offset.as_basic_value_enum(),
-                input_length.as_basic_value_enum(),
-                signature_hash.as_basic_value_enum(),
-                salt.as_basic_value_enum(),
-            ],
-            "create2_deployer_call",
-        )
-        .expect("Always exists");
+    let code_hash_pointer = context.build_heap_gep(input_offset, input_length)?;
 
-    Ok(result)
+    let input_data_pointer = context.build_gep(
+        code_hash_pointer,
+        &[context
+            .xlen_type()
+            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false)],
+        context.byte_type(),
+        "value_ptr_parameter_offset",
+    );
+
+    let salt_pointer = context.build_alloca(context.word_type(), "salt");
+    context.build_store(salt_pointer, salt.unwrap_or_else(|| context.word_const(0)))?;
+
+    let (address_pointer, address_length_pointer) =
+        context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_pointer");
+
+    let sentinel = context
+        .xlen_type()
+        .const_all_ones()
+        .const_to_pointer(context.llvm().ptr_type(Default::default()));
+
+    let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
+        context.builder(),
+        pallet_contracts_pvm_llapi::calling_convention::instantiate(context.llvm()),
+        "create2_arguments",
+    )?
+    .next(code_hash_pointer.value)?
+    .skip()
+    .skip()
+    .next(sentinel)?
+    .next(value_pointer.value)?
+    .next(input_data_pointer.value)?
+    .next(input_length)?
+    .next(address_pointer.value)?
+    .next(address_length_pointer.value)?
+    .next(sentinel)?
+    .next(sentinel)?
+    .next(salt_pointer.value)?
+    .next(
+        context
+            .xlen_type()
+            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+    )?
+    .done();
+
+    context.builder().build_direct_call(
+        context.runtime_api_method(runtime_api::INSTANTIATE),
+        &[context
+            .builder()
+            .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
+            .into()],
+        "create2",
+    )?;
+
+    context.build_load_word(
+        address_pointer,
+        revive_common::BIT_LENGTH_ETH_ADDRESS,
+        "address",
+    )
 }
 
 /// Translates the contract hash instruction, which is actually used to set the hash of the contract
@@ -121,15 +143,8 @@ where
     Ok(Argument::new_with_original(hash_value, hash_string))
 }
 
-/// Translates the deployer call header size instruction, Usually, the header consists of:
-/// - the deployer contract method signature
-/// - the salt if the call is `create2`, or zero if the call is `create1`
-/// - the hash of the bytecode of the contract whose instance is being created
-/// - the offset of the constructor arguments
-/// - the length of the constructor arguments
-/// If the call is `create1`, the space for the salt is still allocated, because the memory for the
-/// header is allocated by the Yul or EVM legacy assembly before it is known which version of
-/// `create` is going to be used.
+/// Translates the deploy call header size instruction. the header consists of
+/// the hash of the bytecode of the contract whose instance is being created.
 /// Represents `datasize` in Yul and `PUSH #[$]` in the EVM legacy assembly.
 pub fn header_size<'ctx, D>(
     context: &mut Context<'ctx, D>,

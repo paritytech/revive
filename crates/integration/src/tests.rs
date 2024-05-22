@@ -1,4 +1,4 @@
-use alloy_primitives::{keccak256, Address, FixedBytes, I256, U256};
+use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
 use alloy_sol_types::{sol, SolCall};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
@@ -27,16 +27,24 @@ fn fibonacci() {
 
 #[test]
 fn flipper() {
+    let (state, address) = State::new_deployed(Contract::flipper_constructor(true));
+
     let contract = Contract::flipper();
-    let address = Transaction::default_address();
-
-    let (state, output) = contract.execute();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::from(1));
-
-    let (state, output) = state.transaction().calldata(contract.calldata).call();
+    let (state, output) = state
+        .transaction()
+        .calldata(contract.calldata.clone())
+        .callee(address)
+        .call();
     assert_eq!(output.flags, ReturnFlags::Success);
     state.assert_storage_key(address, U256::ZERO, U256::ZERO);
+
+    let (state, output) = state
+        .transaction()
+        .calldata(contract.calldata)
+        .callee(address)
+        .call();
+    assert_eq!(output.flags, ReturnFlags::Success);
+    state.assert_storage_key(address, U256::ZERO, U256::from(1));
 }
 
 #[test]
@@ -420,4 +428,82 @@ fn signed_remainder() {
 fn events() {
     assert_success(&Contract::event(U256::ZERO), true);
     assert_success(&Contract::event(U256::from(123)), true);
+}
+
+#[test]
+fn create2() {
+    let mut state = State::default();
+    let contract_a = Contract::create_a();
+    state.upload_code(&contract_a.pvm_runtime);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(state.accounts().len(), 2);
+
+    for address in state.accounts().keys() {
+        if *address != Transaction::default_address() {
+            let derived_address = Transaction::default_address().create2(
+                B256::from(U256::from(1)),
+                keccak256(&contract_a.pvm_runtime).0,
+            );
+            assert_eq!(*address, derived_address);
+        }
+    }
+}
+
+#[test]
+fn create2_failure() {
+    let mut state = State::default();
+    let contract_a = Contract::create_a();
+    state.upload_code(&contract_a.pvm_runtime);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata.clone())
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+
+    // The address already exists, which should cause the contract to revert
+
+    let (_, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Revert);
+}
+
+#[test]
+fn create_with_value() {
+    let mut state = State::default();
+    state.upload_code(&Contract::create_a().pvm_runtime);
+    let amount = U256::from(123);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .callvalue(amount)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(state.accounts().len(), 2);
+
+    for (address, account) in state.accounts() {
+        if *address == Transaction::default_address() {
+            assert_eq!(account.value, U256::ZERO);
+        } else {
+            assert_eq!(account.value, amount);
+        }
+    }
 }

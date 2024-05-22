@@ -7,6 +7,7 @@ pub mod metadata_hash;
 pub mod utils;
 
 pub use self::r#const::*;
+use self::utils::keccak256;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
@@ -56,7 +57,7 @@ pub fn build_assembly_text(
         assembly_text.to_owned(),
         metadata_hash,
         bytecode.to_owned(),
-        Default::default(),
+        keccak256(bytecode),
     ))
 }
 

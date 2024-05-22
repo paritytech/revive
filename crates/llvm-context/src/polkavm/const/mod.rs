@@ -33,9 +33,6 @@ pub static GLOBAL_CALL_FLAGS: &str = "call_flags";
 /// The extra ABI data global variable name.
 pub static GLOBAL_EXTRA_ABI_DATA: &str = "extra_abi_data";
 
-/// The active pointer global variable name.
-pub static GLOBAL_ACTIVE_POINTER: &str = "ptr_active";
-
 /// The constant array global variable name prefix.
 pub static GLOBAL_CONST_ARRAY_PREFIX: &str = "const_array_";
 
@@ -74,10 +71,5 @@ pub const NO_SYSTEM_CALL_BIT: bool = false;
 pub const SYSTEM_CALL_BIT: bool = true;
 
 /// The deployer call header size that consists of:
-/// - selector (4 bytes)
-/// - salt (32 bytes)
 /// - bytecode hash (32 bytes)
-/// - constructor arguments offset (32 bytes)
-/// - constructor arguments length (32 bytes)
-pub const DEPLOYER_CALL_HEADER_SIZE: usize =
-    revive_common::BYTE_LENGTH_X32 + (revive_common::BYTE_LENGTH_WORD * 4);
+pub const DEPLOYER_CALL_HEADER_SIZE: usize = revive_common::BYTE_LENGTH_WORD;

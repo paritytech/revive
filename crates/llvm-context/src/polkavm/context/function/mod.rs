@@ -128,7 +128,7 @@ impl<'ctx> Function<'ctx> {
     ) {
         for attribute_kind in attributes.into_iter() {
             match attribute_kind {
-                Attribute::Memory => todo!("`memory` attributes are not yet implemented"),
+                Attribute::Memory => unimplemented!("`memory` attributes are not implemented"),
                 attribute_kind @ Attribute::AlwaysInline if force => {
                     let is_optimize_none_set = declaration
                         .value

@@ -875,16 +875,9 @@ impl FunctionCall {
             }
             Name::DataCopy => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
-                let offset = context.builder().build_int_add(
-                    arguments[0].into_int_value(),
-                    context.word_const(
-                        (revive_common::BYTE_LENGTH_X32 + revive_common::BYTE_LENGTH_WORD) as u64,
-                    ),
-                    "datacopy_contract_hash_offset",
-                )?;
                 revive_llvm_context::polkavm_evm_memory::store(
                     context,
-                    offset,
+                    arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
                 )
                 .map(|_| None)

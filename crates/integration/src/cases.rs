@@ -1,5 +1,5 @@
 use alloy_primitives::{I256, U256};
-use alloy_sol_types::{sol, SolCall};
+use alloy_sol_types::{sol, SolCall, SolConstructor};
 
 use crate::mock_runtime::{CallOutput, State};
 
@@ -13,7 +13,11 @@ pub struct Contract {
 
 sol!(contract Baseline { function baseline() public payable; });
 
-sol!(contract Flipper { function flip() public; });
+sol!(contract Flipper {
+    constructor (bool);
+
+    function flip() public;
+});
 
 sol!(contract Computation {
     function odd_product(int32 n) public pure returns (int64);
@@ -110,6 +114,12 @@ sol!(
         event E(uint indexed, uint indexed, uint indexed);
 
         function emitEvent(uint topics) public;
+    }
+);
+
+sol!(
+    contract CreateB {
+        fallback() external payable;
     }
 );
 
@@ -225,6 +235,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Flipper::flipCall::new(()).abi_encode(),
+        }
+    }
+
+    pub fn flipper_constructor(coin: bool) -> Self {
+        let code = include_str!("../contracts/flipper.sol");
+        let name = "Flipper";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Flipper::constructorCall::new((coin,)).abi_encode(),
         }
     }
 
@@ -357,6 +379,30 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Events::emitEventCall::new((topics,)).abi_encode(),
+        }
+    }
+
+    pub fn create_a() -> Self {
+        let code = include_str!("../contracts/Create.sol");
+        let name = "CreateA";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: vec![0; 4],
+        }
+    }
+
+    pub fn create_b() -> Self {
+        let code = include_str!("../contracts/Create.sol");
+        let name = "CreateB";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: vec![0; 4],
         }
     }
 }

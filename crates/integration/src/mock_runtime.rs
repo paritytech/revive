@@ -10,10 +10,10 @@ use revive_llvm_context::polkavm_const::runtime_api;
 
 /// The mocked blockchain account.
 #[derive(Debug, Default, Clone)]
-struct Account {
-    value: U256,
-    contract: Option<U256>,
-    storage: HashMap<U256, U256>,
+pub struct Account {
+    pub value: U256,
+    pub contract: Option<B256>,
+    pub storage: HashMap<U256, U256>,
 }
 
 /// Emitted event data.
@@ -40,7 +40,7 @@ pub struct CallOutput {
 enum Export {
     #[default]
     Call,
-    Deploy(U256),
+    Deploy(B256),
 }
 
 /// Possible contract call return flags.
@@ -107,6 +107,8 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub const CALL_STACK_SIZE: usize = 1024;
+
     pub fn default_address() -> Address {
         Address::default().create2(B256::default(), keccak256([]).0)
     }
@@ -129,10 +131,8 @@ impl Transaction {
             .unwrap_or_else(|| panic!("callee has no associated account: {account}"))
     }
 
-    fn create2(&self, salt: U256, blob_hash: U256) -> Address {
-        self.top_frame()
-            .callee
-            .create2(salt.to_be_bytes(), blob_hash.to_be_bytes())
+    fn create2(&self, salt: B256, blob_hash: B256) -> Address {
+        self.top_frame().callee.create2(salt, blob_hash)
     }
 }
 
@@ -168,10 +168,26 @@ impl TransactionBuilder {
         self
     }
 
-    /// Set the transaction to deploy code.
-    pub fn deploy(mut self, code: &[u8]) -> Self {
+    /// Helper to setup the transaction for deploy code.
+    /// - Simulate an upload of the `code`
+    /// - Set the export to `deploy`
+    /// - Derive address based on the caller and `salt` value
+    /// - Set the callee to the derived address
+    /// - Create a new default account at the derived address
+    pub fn deploy(mut self, code: &[u8], salt: Option<B256>) -> Self {
         let blob_hash = self.context.state.upload_code(code);
+        let address = self
+            .context
+            .top_frame()
+            .caller
+            .create2(salt.unwrap_or_default(), blob_hash);
+
         self.context.top_frame_mut().export = Export::Deploy(blob_hash);
+        self.context.top_frame_mut().callee = address;
+        self.context
+            .state
+            .create_account(address, Default::default(), blob_hash);
+
         self
     }
 
@@ -183,7 +199,7 @@ impl TransactionBuilder {
         self.context.state.create_account(
             Transaction::default_address(),
             Default::default(),
-            keccak256(code).into(),
+            keccak256(code),
         );
         self
     }
@@ -193,12 +209,11 @@ impl TransactionBuilder {
     /// Reverts any state changes if the contract reverts or the exuection traps.
     pub fn call(mut self) -> (State, CallOutput) {
         let blob_hash = match self.context.top_frame().export {
-            Export::Call => self.context.top_account_mut().contract.unwrap_or_else(|| {
-                panic!(
-                    "not a contract account: {}",
-                    self.context.top_frame().callee
-                )
-            }),
+            Export::Call => self
+                .context
+                .top_account_mut()
+                .contract
+                .expect("balance transfer"),
             Export::Deploy(blob_hash) => blob_hash,
         };
         let code = self
@@ -207,7 +222,12 @@ impl TransactionBuilder {
             .blobs
             .get(&blob_hash)
             .unwrap_or_else(|| panic!("contract code not found: {blob_hash}"));
-        let (mut instance, export) = prepare(code, None);
+        let (mut instance, _) = prepare(code, None);
+        let export = match self.context.top_frame().export {
+            Export::Call => runtime_api::CALL,
+            Export::Deploy(_) => runtime_api::DEPLOY,
+        };
+        let export = instance.module().lookup_export(export).unwrap();
         self.call_on(&mut instance, export)
     }
 
@@ -222,14 +242,6 @@ impl TransactionBuilder {
     ) -> (State, CallOutput) {
         let mut state_args = polkavm::StateArgs::default();
         state_args.set_gas(polkavm::Gas::MAX);
-
-        if let Export::Deploy(blob_hash) = self.context.top_frame().export {
-            self.context.state.create_account(
-                self.context.create2(Default::default(), blob_hash),
-                self.context.top_frame().callvalue,
-                blob_hash,
-            );
-        }
 
         let callvalue = self.context.top_frame().callvalue;
         self.context.top_account_mut().value += callvalue;
@@ -271,13 +283,26 @@ impl From<State> for TransactionBuilder {
 /// The mocked blockchain state.
 #[derive(Default, Clone, Debug)]
 pub struct State {
-    blobs: HashMap<U256, Vec<u8>>,
+    blobs: HashMap<B256, Vec<u8>>,
     accounts: HashMap<Address, Account>,
 }
 
 impl State {
     pub const BLOCK_NUMBER: u64 = 123;
     pub const BLOCK_TIMESTAMP: u64 = 456;
+
+    pub fn new_deployed(contract: crate::Contract) -> (Self, Address) {
+        let (state, output) = State::default()
+            .transaction()
+            .deploy(&contract.pvm_runtime, None)
+            .calldata(contract.calldata)
+            .call();
+        assert_eq!(output.flags, ReturnFlags::Success);
+
+        let address = *state.accounts().keys().next().unwrap();
+
+        (state, address)
+    }
 
     pub fn transaction(self) -> TransactionBuilder {
         TransactionBuilder {
@@ -289,8 +314,8 @@ impl State {
         }
     }
 
-    pub fn upload_code(&mut self, code: &[u8]) -> U256 {
-        let blob_hash = keccak256(code).into();
+    pub fn upload_code(&mut self, code: &[u8]) -> B256 {
+        let blob_hash = keccak256(code);
         self.blobs.insert(blob_hash, code.to_vec());
         blob_hash
     }
@@ -308,7 +333,7 @@ impl State {
         );
     }
 
-    pub fn create_account(&mut self, address: Address, value: U256, blob_hash: U256) {
+    pub fn create_account(&mut self, address: Address, value: U256, blob_hash: B256) {
         self.accounts.insert(
             address,
             Account {
@@ -317,6 +342,10 @@ impl State {
                 storage: HashMap::new(),
             },
         );
+    }
+
+    pub fn accounts(&self) -> &HashMap<Address, Account> {
+        &self.accounts
     }
 }
 
@@ -609,6 +638,99 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .unwrap();
 
     linker
+        .func_wrap(
+            runtime_api::INSTANTIATE,
+            |caller: Caller<Transaction>, argument_ptr: u32| {
+                let (mut caller, transaction) = caller.split();
+
+                #[derive(Debug)]
+                #[repr(packed)]
+                struct Arguments {
+                    code_hash_ptr: u32,
+                    ref_time_limit: u64,
+                    proof_size_limit: u64,
+                    deposit_ptr: u32,
+                    value_ptr: u32,
+                    input_data_ptr: u32,
+                    input_data_len: u32,
+                    address_ptr: u32,
+                    address_len_ptr: u32,
+                    output_ptr: u32,
+                    output_len_ptr: u32,
+                    salt_ptr: u32,
+                    salt_len: u32,
+                }
+                let mut buffer = [0; std::mem::size_of::<Arguments>()];
+                caller.read_memory_into_slice(argument_ptr, &mut buffer)?;
+                let arguments: Arguments = unsafe { std::mem::transmute(buffer) };
+
+                assert_eq!({ arguments.ref_time_limit }, 0);
+                assert_eq!({ arguments.proof_size_limit }, 0);
+                assert_eq!({ arguments.deposit_ptr }, u32::MAX);
+                assert_eq!({ arguments.output_ptr }, u32::MAX);
+                assert_eq!({ arguments.output_len_ptr }, u32::MAX);
+                assert_eq!({ arguments.salt_len }, 32);
+
+                if transaction.stack.len() >= Transaction::CALL_STACK_SIZE {
+                    log::info!("deployment faild: maximum stack depth reached");
+                    caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                    return Ok(());
+                }
+
+                let blob_hash = caller.read_memory_into_vec(arguments.code_hash_ptr, 32)?;
+                let blob_hash = B256::from_slice(&blob_hash);
+                let value = caller.read_memory_into_vec(arguments.value_ptr, 20)?;
+                let input_data = caller
+                    .read_memory_into_vec(arguments.input_data_ptr, arguments.input_data_len)?;
+
+                let address_len = caller.read_u32(arguments.address_len_ptr)?;
+                assert_eq!(address_len, 20);
+
+                let salt = caller.read_memory_into_vec(arguments.salt_ptr, arguments.salt_len)?;
+                let salt = B256::from_slice(&salt);
+                let address = transaction.create2(salt, blob_hash);
+                if transaction.state.accounts.contains_key(&address) {
+                    log::info!("deployment failed: address {address} already exists");
+                    caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                    return Ok(());
+                }
+
+                let amount = U256::from_le_slice(&value);
+                match transaction.top_account_mut().value.checked_sub(amount) {
+                    Some(deducted) => transaction.top_account_mut().value = deducted,
+                    None => {
+                        log::info!("deployment failed: insufficient balance {amount}");
+                        caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                        return Ok(());
+                    }
+                }
+
+                let (state, output) = transaction
+                    .state
+                    .clone()
+                    .transaction()
+                    .callee(address)
+                    .deploy(transaction.state.blobs.get(&blob_hash).unwrap(), Some(salt))
+                    .callvalue(amount)
+                    .calldata(input_data)
+                    .call();
+
+                let result = if output.flags == ReturnFlags::Success {
+                    log::info!("deployment succeeded");
+                    transaction.state = state;
+                    address
+                } else {
+                    log::info!("deployment failed: callee reverted {:?}", output.flags);
+                    Address::ZERO
+                };
+                caller.write_memory(arguments.address_ptr, &result.0 .0)?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
 }
 
 pub fn setup(config: Option<Config>) -> Engine {
@@ -634,7 +756,8 @@ pub fn instantiate_module(
 }
 
 pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, ExportIndex) {
-    let blob = ProgramBlob::parse(code.into()).unwrap();
+    let blob = ProgramBlob::parse(code.into())
+        .unwrap_or_else(|err| panic!("{err}\n{}", hex::encode(code)));
 
     let engine = Engine::new(&config.unwrap_or_default()).unwrap();
 

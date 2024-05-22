@@ -36,6 +36,7 @@ alloy-sol-types = "0.6"
 env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
+log = { version = "0.4" }
 
 # Benchmarking against EVM
 primitive-types = { version = "0.12", features = ["codec"] }
@@ -43,7 +44,7 @@ evm-interpreter = { git = "https://github.com/xermicus/evm.git", branch = "separ
 
 [workspace.dependencies.inkwell]
 git = "https://github.com/TheDan64/inkwell.git"
-commit = "d916c66"
+rev = "6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 

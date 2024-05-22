@@ -1,7 +1,7 @@
 //! Mock environment used for integration tests.
 use std::collections::HashMap;
 
-use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
+use alloy_primitives::{keccak256, Address, Keccak256, Uint, B256, U256};
 use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
     ProgramBlob, Trap,
@@ -107,6 +107,8 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub const CALL_STACK_SIZE: usize = 1024;
+
     pub fn default_address() -> Address {
         Address::default().create2(B256::default(), keccak256([]).0)
     }
@@ -665,6 +667,12 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 assert_eq!({ arguments.output_ptr }, u32::MAX);
                 assert_eq!({ arguments.output_len_ptr }, u32::MAX);
 
+                if transaction.stack.len() >= Transaction::CALL_STACK_SIZE {
+                    log::info!("deployment faild: maximum stack depth reached");
+                    caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                    return Ok(());
+                }
+
                 let blob_hash = caller.read_memory_into_vec(arguments.code_hash_ptr, 32)?;
                 let blob_hash = U256::from_be_slice(&blob_hash);
                 let value = caller.read_memory_into_vec(arguments.value_ptr, 20)?;
@@ -673,13 +681,27 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
                 let address_len = caller.read_u32(arguments.address_len_ptr)?;
                 assert_eq!(address_len, 20);
+
                 let salt_len = arguments.salt_len;
                 assert_eq!(salt_len, 32);
                 let salt = caller.read_memory_into_vec(arguments.salt_ptr, salt_len)?;
-
                 let address = transaction.create2(U256::from_be_slice(&salt), blob_hash);
+                if transaction.state.accounts.contains_key(&address) {
+                    log::info!("deployment failed: address {address} already exists");
+                    caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                    return Ok(());
+                }
+
                 let amount = U256::from_be_slice(&value);
-                // check if enough value
+                match transaction.top_account_mut().value.checked_sub(amount) {
+                    Some(deducted) => transaction.top_account_mut().value = deducted,
+                    None => {
+                        log::info!("deployment failed: insufficient balance {amount}");
+                        caller.write_memory(arguments.address_ptr, &Address::ZERO.0 .0)?;
+                        return Ok(());
+                    }
+                }
+
                 let (state, output) = transaction
                     .state
                     .clone()
@@ -689,10 +711,13 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     .callvalue(amount)
                     .calldata(input_data)
                     .call();
+
                 let result = if output.flags == ReturnFlags::Success {
+                    log::info!("deployment succeeded");
                     transaction.state = state;
                     address
                 } else {
+                    log::info!("deployment failed: callee reverted {:?}", output.flags);
                     Address::ZERO
                 };
                 caller.write_memory(arguments.address_ptr, &result.0 .0)?;

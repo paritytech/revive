@@ -36,6 +36,7 @@ alloy-sol-types = "0.6"
 env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
+log = { version = "0.4" }
 
 # Benchmarking against EVM
 primitive-types = { version = "0.12", features = ["codec"] }

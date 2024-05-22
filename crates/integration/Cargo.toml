@@ -11,6 +11,7 @@ alloy-primitives = { workspace = true }
 alloy-sol-types = { workspace = true }
 hex = { workspace = true }
 env_logger = { workspace = true }
+log = { workspace = true }
 
 revive-solidity = { path = "../solidity" }
 revive-differential = { path = "../differential" }

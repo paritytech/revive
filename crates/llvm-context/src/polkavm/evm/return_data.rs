@@ -31,14 +31,18 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let entry_block = context.append_basic_block("return_data_copy_entry_block");
     let error_block = context.append_basic_block("return_data_copy_error_block");
     let join_block = context.append_basic_block("return_data_copy_join_block");
+
+    context.set_basic_block(entry_block);
 
     let return_data_size = self::size(context)?.into_int_value();
     let copy_slice_end =
         context
             .builder()
             .build_int_add(source_offset, size, "return_data_copy_slice_end")?;
+
     let is_copy_out_of_bounds = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         copy_slice_end,
@@ -83,5 +87,30 @@ where
         "return_data_copy_memcpy_from_return_data",
     )?;
 
-    todo!("Build heap GEP to allocate if necessary")
+    let heap_pointer = context.get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?;
+    let heap_pointer_pointer = heap_pointer.into();
+    let heap_pointer_value =
+        context.build_load(heap_pointer_pointer, "return_data_copy_heap_pointer")?;
+
+    let heap_pointer_int = context.builder().build_ptr_to_int(
+        heap_pointer_value.into_pointer_value(),
+        context.word_type(),
+        "heap_pointer_int",
+    )?;
+
+    let new_heap_pointer = context.builder().build_int_add(
+        heap_pointer_int,
+        size,
+        "return_data_copy_new_heap_pointer",
+    )?;
+
+    let new_heap_pointer_ptr = context.builder().build_int_to_ptr(
+        new_heap_pointer,
+        heap_pointer_pointer.value.get_type(),
+        "new_heap_pointer_ptr",
+    )?;
+
+    context.build_store(heap_pointer_pointer, new_heap_pointer_ptr)?;
+
+    Ok(())
 }

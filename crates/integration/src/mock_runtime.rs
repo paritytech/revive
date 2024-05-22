@@ -731,6 +731,30 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .unwrap();
 
     linker
+        .func_wrap(
+            runtime_api::CODE_SIZE,
+            |caller: Caller<Transaction>, address_ptr: u32| {
+                let (caller, transaction) = caller.split();
+
+                let bytes = caller.read_memory_into_vec(address_ptr, 32)?;
+                let word = U256::from_le_slice(&bytes);
+                let address = Address::from_word(word.into());
+
+                log::info!("{}", address);
+
+                Ok(transaction
+                    .state
+                    .accounts
+                    .get(&address)
+                    .and_then(|account| account.contract)
+                    .and_then(|blob_hash| transaction.state.blobs.get(&blob_hash))
+                    .map(|code| code.len())
+                    .unwrap_or_default() as u32)
+            },
+        )
+        .unwrap();
+
+    linker
 }
 
 pub fn setup(config: Option<Config>) -> Engine {

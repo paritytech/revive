@@ -1,4 +1,4 @@
-use alloy_primitives::{I256, U256};
+use alloy_primitives::{Address, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
 use crate::mock_runtime::{CallOutput, State};
@@ -120,6 +120,12 @@ sol!(
 sol!(
     contract CreateB {
         fallback() external payable;
+    }
+);
+
+sol!(
+    contract ExtCode {
+        function ExtCodeSize(address who) public view returns (uint ret);
     }
 );
 
@@ -403,6 +409,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: vec![0; 4],
+        }
+    }
+
+    pub fn ext_code_size(address: Address) -> Self {
+        let code = include_str!("../contracts/ExtCode.sol");
+        let name = "ExtCode";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
         }
     }
 }

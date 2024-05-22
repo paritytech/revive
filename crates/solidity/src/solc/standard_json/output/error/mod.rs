@@ -87,9 +87,9 @@ impl Error {
 │ usually needed in the following cases:                                                           │
 │   1. To detect whether an address belongs to a smart contract.                                   │
 │   2. To detect whether the deploy code execution has finished.                                   │
-│ zkSync Era comes with native account abstraction support (so accounts are smart contracts,       │
-│ including private-key controlled EOAs), and you should avoid differentiating between contracts   │
-│ and non-contract addresses.                                                                      │
+│ Polkadot comes with native account abstraction support (so smart contracts are just accounts     │
+│ coverned by code), and you should avoid differentiating between contracts and non-contract       |
+| addresses.                                                                                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
             .to_owned();
 

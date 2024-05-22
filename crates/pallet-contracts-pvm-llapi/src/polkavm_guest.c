@@ -73,6 +73,8 @@ POLKAVM_IMPORT(uint32_t, is_contract, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, code_hash, uint32_t, uint32_t, uint32_t)
 
+POLKAVM_IMPORT(uint32_t, code_size, uint32_t)
+
 POLKAVM_IMPORT(void, own_code_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, caller_is_origin)

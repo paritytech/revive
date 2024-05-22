@@ -507,3 +507,18 @@ fn create_with_value() {
         }
     }
 }
+
+#[test]
+fn ext_code_size() {
+    let contract = Contract::ext_code_size(Transaction::default_address());
+    let (_, output) = assert_success(&contract, false);
+    let received = U256::from_be_slice(&output.data);
+    let expected = U256::from(contract.pvm_runtime.len());
+    assert_eq!(received, expected);
+
+    let contract = Contract::ext_code_size(Default::default());
+    let (_, output) = assert_success(&contract, false);
+    let received = U256::from_be_slice(&output.data);
+    let expected = U256::ZERO;
+    assert_eq!(received, expected);
+}

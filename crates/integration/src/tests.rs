@@ -1,4 +1,4 @@
-use alloy_primitives::{keccak256, Address, FixedBytes, I256, U256};
+use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
 use alloy_sol_types::{sol, SolCall};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
@@ -431,9 +431,10 @@ fn events() {
 }
 
 #[test]
-fn create() {
+fn create2() {
     let mut state = State::default();
-    state.upload_code(&Contract::create_a().pvm_runtime);
+    let contract_a = Contract::create_a();
+    state.upload_code(&contract_a.pvm_runtime);
 
     let contract = Contract::create_b();
     let (state, output) = state
@@ -444,4 +445,65 @@ fn create() {
 
     assert_eq!(output.flags, ReturnFlags::Success);
     assert_eq!(state.accounts().len(), 2);
+
+    for address in state.accounts().keys() {
+        if *address != Transaction::default_address() {
+            let derived_address = Transaction::default_address().create2(
+                B256::from(U256::from(1)),
+                keccak256(&contract_a.pvm_runtime).0,
+            );
+            assert_eq!(*address, derived_address);
+        }
+    }
+}
+
+#[test]
+fn create2_failure() {
+    let mut state = State::default();
+    let contract_a = Contract::create_a();
+    state.upload_code(&contract_a.pvm_runtime);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata.clone())
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+
+    // The address already exists, which should cause the contract to revert
+
+    let (_, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Revert);
+}
+
+#[test]
+fn create_with_value() {
+    let mut state = State::default();
+    state.upload_code(&Contract::create_a().pvm_runtime);
+    let amount = U256::from(123);
+
+    let contract = Contract::create_b();
+    let (state, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .callvalue(amount)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(state.accounts().len(), 2);
+
+    for (address, account) in state.accounts() {
+        if *address == Transaction::default_address() {
+            assert_eq!(account.value, U256::ZERO);
+        } else {
+            assert_eq!(account.value, amount);
+        }
+    }
 }

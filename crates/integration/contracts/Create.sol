@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.24;
 
 contract CreateA {
     address creator;
 
-    constructor() {
+    constructor() payable {
         creator = msg.sender;
     }
 }
 
 contract CreateB {
-    receive() external payable {}
+    receive() external payable {
+        new CreateA{value: msg.value}();
+    }
 
-    fallback() external payable {
-        new CreateA();
+    fallback() external {
+        new CreateA{salt: hex"01"}();
     }
 }

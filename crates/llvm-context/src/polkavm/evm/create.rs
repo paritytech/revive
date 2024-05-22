@@ -143,8 +143,8 @@ where
     Ok(Argument::new_with_original(hash_value, hash_string))
 }
 
-/// Translates the deployer call header size instruction, Usually, the header consists of:
-/// - the hash of the bytecode of the contract whose instance is being created
+/// Translates the deploy call header size instruction. the header consists of
+/// the hash of the bytecode of the contract whose instance is being created.
 /// Represents `datasize` in Yul and `PUSH #[$]` in the EVM legacy assembly.
 pub fn header_size<'ctx, D>(
     context: &mut Context<'ctx, D>,

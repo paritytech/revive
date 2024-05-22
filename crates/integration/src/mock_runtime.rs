@@ -1,7 +1,7 @@
 //! Mock environment used for integration tests.
 use std::collections::HashMap;
 
-use alloy_primitives::{keccak256, Address, Keccak256, Uint, B256, U256};
+use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
 use polkavm::{
     Caller, Config, Engine, ExportIndex, GasMeteringKind, Instance, Linker, Module, ModuleConfig,
     ProgramBlob, Trap,
@@ -296,7 +296,7 @@ impl State {
             .call();
         assert_eq!(output.flags, ReturnFlags::Success);
 
-        let address = *state.accounts().keys().into_iter().next().unwrap();
+        let address = *state.accounts().keys().next().unwrap();
 
         (state, address)
     }

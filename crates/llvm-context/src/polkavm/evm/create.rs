@@ -3,10 +3,8 @@
 use inkwell::values::BasicValue;
 use num::Zero;
 
-use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::code_type::CodeType;
-use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm_const::runtime_api;
@@ -66,7 +64,7 @@ where
 
     let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
         context.builder(),
-        pallet_contracts_pvm_llapi::calling_convention::instantiate(&context.llvm()),
+        pallet_contracts_pvm_llapi::calling_convention::instantiate(context.llvm()),
         "create2_arguments",
     )?
     .next(code_hash_pointer.value)?

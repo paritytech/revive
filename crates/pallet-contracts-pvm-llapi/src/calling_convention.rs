@@ -55,7 +55,7 @@ impl<'ctx> Spill<'ctx> {
     }
 }
 
-pub fn instantiate<'ctx>(context: &'ctx Context) -> StructType<'ctx> {
+pub fn instantiate(context: &Context) -> StructType {
     context.struct_type(
         &[
             // code_hash_ptr: u32,

@@ -87,7 +87,7 @@ where
     .done();
 
     context.builder().build_direct_call(
-        context.runtime_api_method(runtime_api::INSTANTIATE),
+        context.runtime_api_method(runtime_api::imports::INSTANTIATE),
         &[context
             .builder()
             .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?

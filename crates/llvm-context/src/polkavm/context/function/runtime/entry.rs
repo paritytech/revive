@@ -153,7 +153,7 @@ impl Entry {
             context.integer_const(crate::polkavm::XLEN, Self::MAX_CALLDATA_SIZE as u64),
         )?;
         context.build_runtime_call(
-            runtime_api::INPUT,
+            runtime_api::imports::INPUT,
             &[input_pointer_casted.into(), length_pointer_casted.into()],
         );
 
@@ -235,7 +235,7 @@ where
         let entry_function_type = context.function_type(entry_arguments, 0, false);
         context.add_function(Runtime::FUNCTION_ENTRY, entry_function_type, 0, None)?;
 
-        for symbol in runtime_api::EXPORTS {
+        for symbol in runtime_api::exports::EXPORTS {
             context.declare_extern_function(symbol)?;
         }
 
@@ -258,7 +258,7 @@ where
             true,
         );
 
-        context.set_current_function(runtime_api::DEPLOY)?;
+        context.set_current_function(runtime_api::exports::DEPLOY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context
@@ -268,7 +268,7 @@ where
         context.set_basic_block(context.current_function().borrow().return_block);
         context.build_unreachable();
 
-        context.set_current_function(runtime_api::CALL)?;
+        context.set_current_function(runtime_api::exports::CALL)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         assert!(context

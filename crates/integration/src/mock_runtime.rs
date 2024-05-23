@@ -224,8 +224,8 @@ impl TransactionBuilder {
             .unwrap_or_else(|| panic!("contract code not found: {blob_hash}"));
         let (mut instance, _) = prepare(code, None);
         let export = match self.context.top_frame().export {
-            Export::Call => runtime_api::CALL,
-            Export::Deploy(_) => runtime_api::DEPLOY,
+            Export::Call => runtime_api::exports::CALL,
+            Export::Deploy(_) => runtime_api::exports::DEPLOY,
         };
         let export = instance.module().lookup_export(export).unwrap();
         self.call_on(&mut instance, export)
@@ -354,7 +354,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::INPUT,
+            runtime_api::imports::INPUT,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, transaction) = caller.split();
 
@@ -371,7 +371,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::RETURN,
+            runtime_api::imports::RETURN,
             |caller: Caller<Transaction>,
              flags: u32,
              data_ptr: u32,
@@ -390,7 +390,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::VALUE_TRANSFERRED,
+            runtime_api::imports::VALUE_TRANSFERRED,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, transaction) = caller.split();
 
@@ -426,7 +426,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::SET_STORAGE,
+            runtime_api::imports::SET_STORAGE,
             |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
@@ -461,7 +461,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::GET_STORAGE,
+            runtime_api::imports::GET_STORAGE,
             |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
@@ -495,7 +495,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::HASH_KECCAK_256,
+            runtime_api::imports::HASH_KECCAK_256,
             |caller: Caller<Transaction>,
              input_ptr: u32,
              input_len: u32,
@@ -516,7 +516,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::NOW,
+            runtime_api::imports::NOW,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
@@ -537,7 +537,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::BLOCK_NUMBER,
+            runtime_api::imports::BLOCK_NUMBER,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
@@ -558,7 +558,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::ADDRESS,
+            runtime_api::imports::ADDRESS,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -580,7 +580,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::CALLER,
+            runtime_api::imports::CALLER,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -602,7 +602,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::DEPOSIT_EVENT,
+            runtime_api::imports::DEPOSIT_EVENT,
             |caller: Caller<Transaction>,
              topics_ptr: u32,
              topics_len: u32,
@@ -639,7 +639,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::INSTANTIATE,
+            runtime_api::imports::INSTANTIATE,
             |caller: Caller<Transaction>, argument_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -732,7 +732,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::CODE_SIZE,
+            runtime_api::imports::CODE_SIZE,
             |caller: Caller<Transaction>, address_ptr: u32| {
                 let (caller, transaction) = caller.split();
 
@@ -772,7 +772,7 @@ pub fn instantiate_module(
     module: &Module,
     engine: &Engine,
 ) -> (Instance<Transaction>, ExportIndex) {
-    let export = module.lookup_export(runtime_api::CALL).unwrap();
+    let export = module.lookup_export(runtime_api::imports::CALL).unwrap();
     let func = link_host_functions(engine).instantiate_pre(module).unwrap();
     let instance = func.instantiate().unwrap();
 
@@ -789,7 +789,7 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, E
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
     let module = Module::from_blob(&engine, &module_config, blob).unwrap();
-    let export = module.lookup_export(runtime_api::CALL).unwrap();
+    let export = module.lookup_export(runtime_api::imports::CALL).unwrap();
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)
         .unwrap();

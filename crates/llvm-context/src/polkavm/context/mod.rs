@@ -141,7 +141,7 @@ where
             )
             .expect("the PolkaVM guest API module should be linkable");
 
-        for export in runtime_api::EXPORTS {
+        for export in runtime_api::exports::EXPORTS {
             module
                 .get_function(export)
                 .expect("should be declared")
@@ -151,7 +151,7 @@ where
                 );
         }
 
-        for import in runtime_api::IMPORTS {
+        for import in runtime_api::imports::IMPORTS {
             module
                 .get_function(import)
                 .expect("should be declared")
@@ -705,7 +705,7 @@ where
                     .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
 
                 self.build_runtime_call(
-                    runtime_api::GET_STORAGE,
+                    runtime_api::imports::GET_STORAGE,
                     &[
                         storage_key_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
@@ -809,7 +809,7 @@ where
                     .build_store(storage_value_pointer.value, storage_value_value)?;
 
                 self.build_runtime_call(
-                    runtime_api::SET_STORAGE,
+                    runtime_api::imports::SET_STORAGE,
                     &[
                         storage_key_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
@@ -1160,7 +1160,7 @@ where
         )?;
 
         self.build_runtime_call(
-            runtime_api::RETURN,
+            runtime_api::imports::RETURN,
             &[flags.into(), offset_pointer.into(), length_pointer.into()],
         );
         self.build_unreachable();

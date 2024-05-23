@@ -75,7 +75,7 @@ where
         ]
     };
 
-    let _ = context.build_runtime_call(runtime_api::DEPOSIT_EVENT, &arguments);
+    let _ = context.build_runtime_call(runtime_api::imports::DEPOSIT_EVENT, &arguments);
 
     Ok(())
 }

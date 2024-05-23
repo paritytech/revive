@@ -19,7 +19,7 @@ where
     let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
 
     context.build_runtime_call(
-        runtime_api::HASH_KECCAK_256,
+        runtime_api::imports::HASH_KECCAK_256,
         &[
             input_pointer.to_int(context).into(),
             length_casted.into(),

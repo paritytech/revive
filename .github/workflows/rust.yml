@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-ubuntu-x86:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install solc
+      run: |
+        mkdir -p solc
+        curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.25/solc-static-linux
+        chmod +x solc/solc
+        echo "$(pwd)/solc/" >> $GITHUB_PATH
+
+    - name: Install LLVM
+      run: |
+        curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        tar Jxf llvm.tar.xz
+        mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
+        echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
+
+    - name: Install apt dependencies
+      run: sudo apt update && sudo apt install -y libtinfo5
+
+    - name: Format
+      run: make format
+
+    - name: Clippy
+      run: make clippy
+
+    - name: Integration
+      run: make test-integration

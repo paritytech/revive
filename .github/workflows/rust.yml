@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-ubuntu-x86:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install LLVM
+      run: curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+    - name: Extract LLVM
+      run: tar Jxf llvm.tar.xz
+    - name: Add LLVM to Path
+      run: echo "$(pwd)/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04/bin" >> $GITHUB_PATH
+    - name: Format
+      run: make format
+    - name: Clippy
+      run: make clippy
+    - name: Integration
+      run: make test-integration

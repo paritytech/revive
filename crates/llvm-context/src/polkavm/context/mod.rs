@@ -433,8 +433,6 @@ where
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
-        value.set_personality_function(self.llvm_runtime.personality.value);
-
         let r#return = match return_values_length {
             0 => FunctionReturn::none(),
             1 => {
@@ -957,106 +955,6 @@ where
         call_site_value.try_as_basic_value().left()
     }
 
-    /// Builds an invoke.
-    /// Is defaulted to a call if there is no global exception handler.
-    pub fn build_invoke(
-        &self,
-        function: FunctionDeclaration<'ctx>,
-        arguments: &[inkwell::values::BasicValueEnum<'ctx>],
-        name: &str,
-    ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
-        if !self
-            .functions
-            .contains_key(Function::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER)
-        {
-            return self.build_call(function, arguments, name);
-        }
-
-        let return_pointer = if let Some(r#type) = function.r#type.get_return_type() {
-            let pointer = self.build_alloca(r#type, "invoke_return_pointer");
-            self.build_store(pointer, r#type.const_zero()).unwrap();
-            Some(pointer)
-        } else {
-            None
-        };
-
-        let success_block = self.append_basic_block("invoke_success_block");
-        let catch_block = self.append_basic_block("invoke_catch_block");
-        let current_block = self.basic_block();
-
-        self.set_basic_block(catch_block);
-        let landing_pad_type = self.structure_type(&[
-            self.llvm()
-                .ptr_type(AddressSpace::Stack.into())
-                .as_basic_type_enum(),
-            self.integer_type(revive_common::BIT_LENGTH_X32)
-                .as_basic_type_enum(),
-        ]);
-        self.builder
-            .build_landing_pad(
-                landing_pad_type,
-                self.llvm_runtime.personality.value,
-                &[self
-                    .llvm()
-                    .ptr_type(AddressSpace::Stack.into())
-                    .const_zero()
-                    .as_basic_value_enum()],
-                false,
-                "invoke_catch_landing",
-            )
-            .unwrap();
-        crate::polkavm::utils::throw(self);
-
-        self.set_basic_block(current_block);
-        let call_site_value = self
-            .builder
-            .build_indirect_invoke(
-                function.r#type,
-                function.value.as_global_value().as_pointer_value(),
-                arguments,
-                success_block,
-                catch_block,
-                name,
-            )
-            .unwrap();
-        self.modify_call_site_value(arguments, call_site_value, function);
-
-        self.set_basic_block(success_block);
-        if let (Some(return_pointer), Some(mut return_value)) =
-            (return_pointer, call_site_value.try_as_basic_value().left())
-        {
-            if let Some(return_type) = function.r#type.get_return_type() {
-                if return_type.is_pointer_type() {
-                    return_value = self
-                        .builder()
-                        .build_int_to_ptr(
-                            return_value.into_int_value(),
-                            return_type.into_pointer_type(),
-                            format!("{name}_invoke_return_pointer_casted").as_str(),
-                        )
-                        .unwrap()
-                        .as_basic_value_enum();
-                }
-            }
-            self.build_store(return_pointer, return_value).unwrap();
-        }
-        return_pointer.map(|pointer| self.build_load(pointer, "invoke_result").unwrap())
-    }
-
-    /// Builds an invoke of local call covered with an exception handler.
-    /// Yul does not the exception handling, so the user can declare a special handling function
-    /// called (see constant `ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER`. If the enclosed function
-    /// panics, the control flow will be transferred to the exception handler.
-    pub fn build_invoke_near_call_abi(
-        &self,
-        _function: FunctionDeclaration<'ctx>,
-        _arguments: Vec<inkwell::values::BasicValueEnum<'ctx>>,
-        _name: &str,
-    ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
-        unimplemented!()
-    }
-
-    /// Builds a memory copy call.
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
     pub fn build_memcpy(
         &self,

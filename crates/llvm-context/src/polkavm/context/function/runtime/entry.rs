@@ -215,11 +215,11 @@ impl Entry {
             .ok_or_else(|| anyhow::anyhow!("Contract runtime code not found"))?;
 
         context.set_basic_block(deploy_code_call_block);
-        context.build_invoke(deploy_code.borrow().declaration, &[], "deploy_code_call");
+        context.build_call(deploy_code.borrow().declaration, &[], "deploy_code_call");
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
         context.set_basic_block(runtime_code_call_block);
-        context.build_invoke(runtime_code.borrow().declaration, &[], "runtime_code_call");
+        context.build_call(runtime_code.borrow().declaration, &[], "runtime_code_call");
         context.build_unconditional_branch(context.current_function().borrow().return_block());
 
         Ok(())

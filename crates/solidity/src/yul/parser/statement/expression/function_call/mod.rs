@@ -155,7 +155,7 @@ impl FunctionCall {
                     );
                 }
 
-                let return_value = context.build_invoke(
+                let return_value = context.build_call(
                     function.borrow().declaration(),
                     values.as_slice(),
                     format!("{name}_call").as_str(),
@@ -777,19 +777,7 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                revive_llvm_context::polkavm_evm_call::default(
-                    context,
-                    context.llvm_runtime().static_call,
-                    gas,
-                    address,
-                    None,
-                    input_offset,
-                    input_size,
-                    output_offset,
-                    output_size,
-                    simulation_address,
-                )
-                .map(Some)
+                todo!()
             }
             Name::DelegateCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
@@ -806,19 +794,7 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                revive_llvm_context::polkavm_evm_call::default(
-                    context,
-                    context.llvm_runtime().delegate_call,
-                    gas,
-                    address,
-                    None,
-                    input_offset,
-                    input_size,
-                    output_offset,
-                    output_size,
-                    simulation_address,
-                )
-                .map(Some)
+                todo!()
             }
 
             Name::Create => {

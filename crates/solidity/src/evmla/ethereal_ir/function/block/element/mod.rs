@@ -1036,21 +1036,6 @@ where
                 let _output_size = arguments.remove(0).into_int_value();
 
                 todo!()
-                /*
-                revive_llvm_context::polkavm_evm_call::default(
-                    context,
-                    context.llvm_runtime().far_call,
-                    gas,
-                    address,
-                    Some(value),
-                    input_offset,
-                    input_size,
-                    output_offset,
-                    output_size,
-                    vec![],
-                )
-                .map(Some)
-                */
             }
             InstructionName::STATICCALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
@@ -1062,19 +1047,8 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::default(
-                    context,
-                    context.llvm_runtime().static_call,
-                    gas,
-                    address,
-                    None,
-                    input_offset,
-                    input_size,
-                    output_offset,
-                    output_size,
-                    vec![],
-                )
-                .map(Some)
+                revive_llvm_context::polkavm_evm_call::default(context, function, gas, address, value, input_offset, input_length, output_offset, output_length, constants)
+                todo!()
             }
             InstructionName::DELEGATECALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
@@ -1086,19 +1060,7 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::default(
-                    context,
-                    context.llvm_runtime().delegate_call,
-                    gas,
-                    address,
-                    None,
-                    input_offset,
-                    input_size,
-                    output_offset,
-                    output_size,
-                    vec![],
-                )
-                .map(Some)
+                todo!()
             }
 
             InstructionName::CREATE | InstructionName::ZK_CREATE => {

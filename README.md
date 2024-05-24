@@ -1,3 +1,5 @@
+![CI](https://github.com/xermicus/revive/actions/workflows/rust.yml/badge.svg)
+
 # revive
 
 YUL and EVM bytecode recompiler to LLVM, targetting RISC-V on PolkaVM.

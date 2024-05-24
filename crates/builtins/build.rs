@@ -13,9 +13,12 @@ fn main() {
         .read_to_string(&mut llvm_lib_dir)
         .expect("llvm-config output should be utf8");
 
-    let lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
+    let mut lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
         .join("linux")
         .join(lib);
+    if !lib_path.exists() {
+        lib_path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join(lib);
+    }
     let archive = fs::read(lib_path).expect("clang builtins for riscv32 not found");
 
     let out_dir = env::var_os("OUT_DIR").expect("has OUT_DIR");

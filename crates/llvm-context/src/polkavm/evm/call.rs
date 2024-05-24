@@ -6,10 +6,19 @@ use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
+/// The contracts pallet provides a single API for calls where
+/// call behaviour is controlled via call flags.
+pub enum CallFlags {
+    Call,
+    Static,
+    Delegate,
+}
+
 /// Translates a contract call.
-/// If the `simulation_address` is specified, the call is substituted with another instruction
-/// according to the specification.
-pub fn default<'ctx, D>(
+///
+/// If the `simulation_address` is specified, the call is
+/// substituted with another instruction according to the specification.
+pub fn call<'ctx, D>(
     _context: &mut Context<'ctx, D>,
     _gas: inkwell::values::IntValue<'ctx>,
     _address: inkwell::values::IntValue<'ctx>,
@@ -19,6 +28,7 @@ pub fn default<'ctx, D>(
     _output_offset: inkwell::values::IntValue<'ctx>,
     _output_length: inkwell::values::IntValue<'ctx>,
     _constants: Vec<Option<num::BigUint>>,
+    _flags: CallFlags,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,

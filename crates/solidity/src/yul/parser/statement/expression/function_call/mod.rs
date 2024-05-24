@@ -6,6 +6,7 @@ pub mod verbatim;
 use std::collections::HashSet;
 
 use inkwell::values::BasicValue;
+use revive_llvm_context::polkavm_evm_call::CallFlags;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -732,24 +733,21 @@ impl FunctionCall {
             Name::Call => {
                 let arguments = self.pop_arguments::<D, 7>(context)?;
 
-                let _gas = arguments[0].value.into_int_value();
-                let _address = arguments[1].value.into_int_value();
-                let _value = arguments[2].value.into_int_value();
-                let _input_offset = arguments[3].value.into_int_value();
-                let _input_size = arguments[4].value.into_int_value();
-                let _output_offset = arguments[5].value.into_int_value();
-                let _output_size = arguments[6].value.into_int_value();
+                let gas = arguments[0].value.into_int_value();
+                let address = arguments[1].value.into_int_value();
+                let value = arguments[2].value.into_int_value();
+                let input_offset = arguments[3].value.into_int_value();
+                let input_size = arguments[4].value.into_int_value();
+                let output_offset = arguments[5].value.into_int_value();
+                let output_size = arguments[6].value.into_int_value();
 
-                let _simulation_address: Vec<Option<num::BigUint>> = arguments
+                let simulation_address: Vec<Option<num::BigUint>> = arguments
                     .into_iter()
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                todo!()
-                /*
-                revive_llvm_context::polkavm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::call(
                     context,
-                    context.llvm_runtime().far_call,
                     gas,
                     address,
                     Some(value),
@@ -758,9 +756,9 @@ impl FunctionCall {
                     output_offset,
                     output_size,
                     simulation_address,
+                    CallFlags::Call,
                 )
                 .map(Some)
-                */
             }
             Name::StaticCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
@@ -777,7 +775,19 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                todo!()
+                revive_llvm_context::polkavm_evm_call::call(
+                    context,
+                    gas,
+                    address,
+                    None,
+                    input_offset,
+                    input_size,
+                    output_offset,
+                    output_size,
+                    simulation_address,
+                    CallFlags::Static,
+                )
+                .map(Some)
             }
             Name::DelegateCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
@@ -794,7 +804,19 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                todo!()
+                revive_llvm_context::polkavm_evm_call::call(
+                    context,
+                    gas,
+                    address,
+                    None,
+                    input_offset,
+                    input_size,
+                    output_offset,
+                    output_size,
+                    simulation_address,
+                    CallFlags::Delegate,
+                )
+                .map(Some)
             }
 
             Name::Create => {

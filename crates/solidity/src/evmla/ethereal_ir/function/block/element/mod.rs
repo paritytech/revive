@@ -3,6 +3,7 @@
 pub mod stack;
 
 use inkwell::values::BasicValue;
+use revive_llvm_context::polkavm_evm_call::CallFlags;
 
 use crate::evmla::assembly::instruction::codecopy;
 use crate::evmla::assembly::instruction::name::Name as InstructionName;
@@ -1027,15 +1028,27 @@ where
             InstructionName::CALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
 
-                let _gas = arguments.remove(0).into_int_value();
-                let _address = arguments.remove(0).into_int_value();
-                let _value = arguments.remove(0).into_int_value();
-                let _input_offset = arguments.remove(0).into_int_value();
-                let _input_size = arguments.remove(0).into_int_value();
-                let _output_offset = arguments.remove(0).into_int_value();
-                let _output_size = arguments.remove(0).into_int_value();
+                let gas = arguments.remove(0).into_int_value();
+                let address = arguments.remove(0).into_int_value();
+                let value = arguments.remove(0).into_int_value();
+                let input_offset = arguments.remove(0).into_int_value();
+                let input_size = arguments.remove(0).into_int_value();
+                let output_offset = arguments.remove(0).into_int_value();
+                let output_size = arguments.remove(0).into_int_value();
 
-                todo!()
+                revive_llvm_context::polkavm_evm_call::call(
+                    context,
+                    gas,
+                    address,
+                    Some(value),
+                    input_offset,
+                    input_size,
+                    output_offset,
+                    output_size,
+                    vec![],
+                    CallFlags::Call,
+                )
+                .map(Some)
             }
             InstructionName::STATICCALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
@@ -1047,8 +1060,19 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::default(context, function, gas, address, value, input_offset, input_length, output_offset, output_length, constants)
-                todo!()
+                revive_llvm_context::polkavm_evm_call::call(
+                    context,
+                    gas,
+                    address,
+                    None,
+                    input_offset,
+                    input_size,
+                    output_offset,
+                    output_size,
+                    vec![],
+                    CallFlags::Static,
+                )
+                .map(Some)
             }
             InstructionName::DELEGATECALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
@@ -1060,7 +1084,19 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                todo!()
+                revive_llvm_context::polkavm_evm_call::call(
+                    context,
+                    gas,
+                    address,
+                    None,
+                    input_offset,
+                    input_size,
+                    output_offset,
+                    output_size,
+                    vec![],
+                    CallFlags::Delegate,
+                )
+                .map(Some)
             }
 
             InstructionName::CREATE | InstructionName::ZK_CREATE => {

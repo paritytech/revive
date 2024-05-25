@@ -3,7 +3,6 @@
 pub mod stack;
 
 use inkwell::values::BasicValue;
-use revive_llvm_context::polkavm_evm_call::CallFlags;
 
 use crate::evmla::assembly::instruction::codecopy;
 use crate::evmla::assembly::instruction::name::Name as InstructionName;
@@ -1046,7 +1045,7 @@ where
                     output_offset,
                     output_size,
                     vec![],
-                    CallFlags::Call,
+                    false,
                 )
                 .map(Some)
             }
@@ -1070,7 +1069,7 @@ where
                     output_offset,
                     output_size,
                     vec![],
-                    CallFlags::Static,
+                    true,
                 )
                 .map(Some)
             }
@@ -1084,7 +1083,7 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::call(
+                revive_llvm_context::polkavm_evm_call::delegate_call(
                     context,
                     gas,
                     address,
@@ -1094,7 +1093,6 @@ where
                     output_offset,
                     output_size,
                     vec![],
-                    CallFlags::Delegate,
                 )
                 .map(Some)
             }

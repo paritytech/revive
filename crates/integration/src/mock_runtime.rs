@@ -82,6 +82,8 @@ struct Frame {
     output: CallOutput,
     /// The export to call.
     export: Export,
+    /// The returndata from the last contract call.
+    returndata: Vec<u8>,
 }
 
 impl Default for Frame {
@@ -93,6 +95,7 @@ impl Default for Frame {
             input: Default::default(),
             output: Default::default(),
             export: Default::default(),
+            returndata: Default::default(),
         }
     }
 }
@@ -732,6 +735,102 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
+            runtime_api::imports::CALL,
+            |caller: Caller<Transaction>, argument_ptr: u32| -> Result<u32, Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                #[derive(Debug)]
+                #[repr(packed)]
+                struct Arguments {
+                    _flags: u32,
+                    address_ptr: u32,
+                    _ref_time_limit: u64,
+                    proof_size_limit: u64,
+                    deposit_ptr: u32,
+                    value_ptr: u32,
+                    input_data_ptr: u32,
+                    input_data_len: u32,
+                    output_ptr: u32,
+                    output_len_ptr: u32,
+                }
+                let mut buffer = [0; std::mem::size_of::<Arguments>()];
+                caller.read_memory_into_slice(argument_ptr, &mut buffer)?;
+                let arguments: Arguments = unsafe { std::mem::transmute(buffer) };
+
+                assert_eq!({ arguments.proof_size_limit }, 0);
+                assert_eq!({ arguments.deposit_ptr }, u32::MAX);
+
+                let value = caller.read_memory_into_vec(arguments.value_ptr, 20)?;
+                let amount = U256::from_le_slice(&value);
+                match transaction.top_account_mut().value.checked_sub(amount) {
+                    Some(deducted) => transaction.top_account_mut().value = deducted,
+                    None => {
+                        log::info!("call failed: insufficient balance {amount}");
+                        return Ok(0);
+                    }
+                }
+
+                let address = caller.read_memory_into_vec(arguments.address_ptr, 32)?;
+                let address = Address::from_word(B256::from_slice(&address));
+                log::info!("{address}");
+
+                if !transaction.state.accounts.contains_key(&address) {
+                    log::info!(
+                        "balance transfer {amount} from {} to {address}",
+                        transaction.top_frame().callee
+                    );
+
+                    transaction
+                        .state
+                        .accounts
+                        .entry(address)
+                        .or_insert_with(|| Account {
+                            value: amount,
+                            contract: None,
+                            storage: Default::default(),
+                        });
+
+                    return Ok(1);
+                }
+
+                if transaction.stack.len() >= Transaction::CALL_STACK_SIZE {
+                    log::info!("deployment faild: maximum stack depth reached");
+                    return Ok(0);
+                }
+
+                let calldata = caller
+                    .read_memory_into_vec(arguments.input_data_ptr, arguments.input_data_len)?;
+
+                let (state, output) = transaction
+                    .state
+                    .clone()
+                    .transaction()
+                    .callee(address)
+                    .callvalue(amount)
+                    .calldata(calldata)
+                    .call();
+
+                let returndata_size = caller.read_u32(arguments.output_len_ptr)?;
+                let output_len = (returndata_size as usize).min(output.data.len());
+                transaction.top_frame_mut().returndata = output.data[..output_len].to_vec();
+                caller.write_memory(arguments.output_ptr, &transaction.top_frame().returndata)?;
+
+                let success = if output.flags == ReturnFlags::Success {
+                    log::info!("call succeeded");
+                    transaction.state = state;
+                    1
+                } else {
+                    log::info!("call failed: callee reverted {:?}", output.flags);
+                    0
+                };
+
+                Ok(success)
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
             runtime_api::imports::CODE_SIZE,
             |caller: Caller<Transaction>, address_ptr: u32| {
                 let (caller, transaction) = caller.split();
@@ -789,7 +888,7 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, E
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
     let module = Module::from_blob(&engine, &module_config, blob).unwrap();
-    let export = module.lookup_export(runtime_api::imports::CALL).unwrap();
+    let export = module.lookup_export(runtime_api::exports::CALL).unwrap();
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)
         .unwrap();

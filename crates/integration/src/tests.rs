@@ -522,3 +522,12 @@ fn ext_code_size() {
     let expected = U256::ZERO;
     assert_eq!(received, expected);
 }
+
+#[test]
+fn value_transfer() {
+    // Succeeds in remix (shanghai) but traps the interpreter
+    let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);
+
+    assert_eq!(state.accounts().len(), 2);
+    assert!(state.accounts().get(&Address::default()).is_some());
+}

@@ -129,6 +129,12 @@ sol!(
     }
 );
 
+sol!(
+    contract Call {
+        function value_transfer(address payable destination) public payable;
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -421,6 +427,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
+        }
+    }
+
+    pub fn call_value_transfer(destination: Address) -> Self {
+        let code = include_str!("../contracts/Call.sol");
+        let name = "Call";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Call::value_transferCall::new((destination,)).abi_encode(),
         }
     }
 }

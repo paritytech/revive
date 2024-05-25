@@ -6,7 +6,6 @@ pub mod verbatim;
 use std::collections::HashSet;
 
 use inkwell::values::BasicValue;
-use revive_llvm_context::polkavm_evm_call::CallFlags;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -756,7 +755,7 @@ impl FunctionCall {
                     output_offset,
                     output_size,
                     simulation_address,
-                    CallFlags::Call,
+                    false,
                 )
                 .map(Some)
             }
@@ -785,7 +784,7 @@ impl FunctionCall {
                     output_offset,
                     output_size,
                     simulation_address,
-                    CallFlags::Static,
+                    true,
                 )
                 .map(Some)
             }
@@ -804,7 +803,7 @@ impl FunctionCall {
                     .map(|mut argument| argument.constant.take())
                     .collect();
 
-                revive_llvm_context::polkavm_evm_call::call(
+                revive_llvm_context::polkavm_evm_call::delegate_call(
                     context,
                     gas,
                     address,
@@ -814,7 +813,6 @@ impl FunctionCall {
                     output_offset,
                     output_size,
                     simulation_address,
-                    CallFlags::Delegate,
                 )
                 .map(Some)
             }

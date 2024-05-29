@@ -531,3 +531,19 @@ fn value_transfer() {
     assert_eq!(state.accounts().len(), 2);
     assert!(state.accounts().get(&Address::default()).is_some());
 }
+
+#[test]
+fn echo() {
+    let (state, address) = State::new_deployed(Contract::call_constructor());
+
+    let payload = vec![1, 2, 3, 4, 5];
+    let contract = Contract::call_call(address, payload.clone());
+    let (state, output) = state
+        .transaction()
+        .calldata(contract.calldata)
+        .callee(address)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(output.data, payload);
+}

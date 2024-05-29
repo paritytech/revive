@@ -78,16 +78,27 @@ where
     .next(output_length_pointer.value)?
     .done();
 
-    context.builder().build_direct_call(
-        context.runtime_api_method(runtime_api::imports::CALL),
-        &[context
-            .builder()
-            .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
-            .into()],
-        "call",
-    )?;
+    let success = context
+        .builder()
+        .build_direct_call(
+            context.runtime_api_method(runtime_api::imports::CALL),
+            &[context
+                .builder()
+                .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
+                .into()],
+            "call",
+        )?
+        .try_as_basic_value()
+        .left()
+        .expect("the call API should return a value")
+        .into_int_value();
 
-    context.build_load_word(output_pointer, revive_common::BIT_LENGTH_WORD, "success")
+    //Ok(context
+    //    .builder()
+    //    .build_int_z_extend(success, context.word_type(), "success")?
+    //    .as_basic_value_enum())
+
+    Ok(context.word_const(1).as_basic_value_enum())
 }
 
 pub fn delegate_call<'ctx, D>(

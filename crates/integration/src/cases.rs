@@ -132,6 +132,13 @@ sol!(
 sol!(
     contract Call {
         function value_transfer(address payable destination) public payable;
+
+        function echo(bytes memory payload) public payable returns (bytes memory);
+
+        function call(
+            address callee,
+            bytes memory payload
+        ) public payable returns (bytes memory);
     }
 );
 
@@ -439,6 +446,30 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Call::value_transferCall::new((destination,)).abi_encode(),
+        }
+    }
+
+    pub fn call_call(callee: Address, payload: Vec<u8>) -> Self {
+        let code = include_str!("../contracts/Call.sol");
+        let name = "Call";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Call::callCall::new((callee, payload)).abi_encode(),
+        }
+    }
+
+    pub fn call_constructor() -> Self {
+        let code = include_str!("../contracts/Call.sol");
+        let name = "Call";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Default::default(),
         }
     }
 }

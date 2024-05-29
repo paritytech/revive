@@ -459,7 +459,6 @@ impl FunctionCall {
                 );
 
                 context.build_memcpy(
-                    context.intrinsics().memory_copy,
                     destination,
                     source,
                     arguments[2].into_int_value(),

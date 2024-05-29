@@ -76,7 +76,6 @@ where
 
     context.set_basic_block(block_copy);
     context.build_memcpy(
-        context.intrinsics().memory_copy_from_generic,
         context.build_heap_gep(destination_offset, size)?,
         context.build_gep(
             context

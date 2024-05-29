@@ -1060,63 +1060,35 @@ where
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
     pub fn build_memcpy(
         &self,
-        _function: FunctionDeclaration<'ctx>,
-        destination: Pointer<'ctx>,
-        source: Pointer<'ctx>,
-        size: inkwell::values::IntValue<'ctx>,
-        _name: &str,
-    ) -> anyhow::Result<()> {
-        let _ = self
-            .builder()
-            .build_memcpy(destination.value, 1, source.value, 1, size)?;
-
-        Ok(())
-    }
-
-    /// Builds a memory copy call for the return data.
-    /// Sets the output length to `min(output_length, return_data_size` and calls the default
-    /// generic page memory copy builder.
-    pub fn build_memcpy_return_data(
-        &self,
-        function: FunctionDeclaration<'ctx>,
         destination: Pointer<'ctx>,
         source: Pointer<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
         name: &str,
     ) -> anyhow::Result<()> {
-        let pointer_casted = self.builder.build_ptr_to_int(
-            source.value,
-            self.word_type(),
-            format!("{name}_pointer_casted").as_str(),
-        )?;
-        let return_data_size_shifted = self.builder.build_right_shift(
-            pointer_casted,
-            self.word_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
-            false,
-            format!("{name}_return_data_size_shifted").as_str(),
-        )?;
-        let return_data_size_truncated = self.builder.build_and(
-            return_data_size_shifted,
-            self.word_const(u32::MAX as u64),
-            format!("{name}_return_data_size_truncated").as_str(),
-        )?;
-        let is_return_data_size_lesser = self.builder.build_int_compare(
-            inkwell::IntPredicate::ULT,
-            return_data_size_truncated,
-            size,
-            format!("{name}_is_return_data_size_lesser").as_str(),
-        )?;
-        let min_size = self
-            .builder
-            .build_select(
-                is_return_data_size_lesser,
-                return_data_size_truncated,
-                size,
-                format!("{name}_min_size").as_str(),
-            )?
-            .into_int_value();
+        let size = self.safe_truncate_int_to_xlen(size)?;
 
-        self.build_memcpy(function, destination, source, min_size, name)?;
+        let destination = if destination.address_space == AddressSpace::Heap {
+            self.build_heap_gep(
+                self.builder()
+                    .build_ptr_to_int(destination.value, self.xlen_type(), name)?,
+                size,
+            )?
+        } else {
+            destination
+        };
+
+        let source = if source.address_space == AddressSpace::Heap {
+            self.build_heap_gep(
+                self.builder()
+                    .build_ptr_to_int(source.value, self.xlen_type(), name)?,
+                size,
+            )?
+        } else {
+            source
+        };
+
+        self.builder()
+            .build_memmove(destination.value, 1, source.value, 1, size)?;
 
         Ok(())
     }

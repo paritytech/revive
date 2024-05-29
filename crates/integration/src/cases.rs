@@ -129,6 +129,12 @@ sol!(
     }
 );
 
+sol!(
+    contract MCopy {
+        function memcpy(bytes memory payload) public pure returns (bytes memory);
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -421,6 +427,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
+        }
+    }
+
+    pub fn memcpy(payload: Vec<u8>) -> Self {
+        let code = include_str!("../contracts/MCopy.sol");
+        let name = "MCopy";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: MCopy::memcpyCall::new((payload,)).abi_encode(),
         }
     }
 }

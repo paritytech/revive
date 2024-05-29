@@ -66,11 +66,5 @@ where
         "calldata_pointer_with_offset",
     );
 
-    context.build_memcpy(
-        context.intrinsics().memory_copy_from_generic,
-        destination,
-        source,
-        size,
-        "calldata_copy_memcpy_from_child",
-    )
+    context.build_memcpy(destination, source, size, "calldata_copy_memcpy_from_child")
 }

@@ -1,5 +1,5 @@
 use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
-use alloy_sol_types::{sol, SolCall};
+use alloy_sol_types::{sol, SolCall, SolValue};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
 
@@ -521,4 +521,16 @@ fn ext_code_size() {
     let received = U256::from_be_slice(&output.data);
     let expected = U256::ZERO;
     assert_eq!(received, expected);
+}
+
+#[test]
+fn mcopy() {
+    let expected = vec![1, 2, 3];
+
+    let (_, output) = assert_success(&Contract::memcpy(expected.clone()), false);
+
+    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
+        .unwrap()
+        .to_vec();
+    assert_eq!(expected, received);
 }

@@ -44,7 +44,7 @@ where
         .const_all_ones()
         .const_to_pointer(context.llvm().ptr_type(Default::default()));
 
-    let address_pointer = context.build_alloca(context.value_type(), "address_ptr");
+    let address_pointer = context.build_alloca(context.word_type(), "address_ptr");
     context.build_store(address_pointer, address)?;
 
     let value_pointer = if let Some(value) = value {
@@ -58,8 +58,8 @@ where
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;
 
-    let output_length_pointer = context.build_alloca(context.xlen_type(), "output_len_pointer");
-    context.build_store(output_length_pointer, output_length)?;
+    let output_length_pointer = context.get_global(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?;
+    context.build_store(output_length_pointer.into(), output_length)?;
 
     let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
         context.builder(),
@@ -91,14 +91,13 @@ where
         .try_as_basic_value()
         .left()
         .expect("the call API should return a value")
-        .into_int_value();
+        .into_int_value()
+        .clone();
 
-    //Ok(context
-    //    .builder()
-    //    .build_int_z_extend(success, context.word_type(), "success")?
-    //    .as_basic_value_enum())
-
-    Ok(context.word_const(1).as_basic_value_enum())
+    Ok(context
+        .builder()
+        .build_int_z_extend(success, context.word_type(), "success")?
+        .as_basic_value_enum())
 }
 
 pub fn delegate_call<'ctx, D>(

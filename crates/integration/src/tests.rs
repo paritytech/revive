@@ -536,16 +536,20 @@ fn value_transfer() {
 fn echo() {
     let (state, address) = State::new_deployed(Contract::call_constructor());
 
-    let payload = vec![1, 2, 3, 4, 5];
-    let contract = Contract::call_call(address, payload.clone());
+    let expected = vec![1, 2, 3, 4, 5];
+    let contract = Contract::call_call(address, expected.clone());
     let (state, output) = state
         .transaction()
+        .with_default_account(&contract.pvm_runtime)
         .calldata(contract.calldata)
-        .callee(address)
         .call();
 
     assert_eq!(output.flags, ReturnFlags::Success);
-    assert_eq!(output.data, payload);
+
+    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
+        .unwrap()
+        .to_vec();
+    assert_eq!(expected, received);
 }
 
 #[test]

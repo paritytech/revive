@@ -760,8 +760,13 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 assert_eq!({ arguments.proof_size_limit }, 0);
                 assert_eq!({ arguments.deposit_ptr }, u32::MAX);
 
-                let value = caller.read_memory_into_vec(arguments.value_ptr, 20)?;
-                let amount = U256::from_le_slice(&value);
+                let amount = if arguments.value_ptr != u32::MAX {
+                    let value = caller.read_memory_into_vec(arguments.value_ptr, 32)?;
+                    U256::from_le_slice(&value)
+                } else {
+                    U256::ZERO
+                };
+
                 match transaction.top_account_mut().value.checked_sub(amount) {
                     Some(deducted) => transaction.top_account_mut().value = deducted,
                     None => {
@@ -770,9 +775,10 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     }
                 }
 
-                let address = caller.read_memory_into_vec(arguments.address_ptr, 32)?;
-                let address = Address::from_word(B256::from_slice(&address));
-                log::info!("{address}");
+                let bytes = caller.read_memory_into_vec(arguments.address_ptr, 32)?;
+                let word = U256::from_le_slice(&bytes);
+                let address = Address::from_word(word.into());
+                log::info!("call {address}");
 
                 if !transaction.state.accounts.contains_key(&address) {
                     log::info!(
@@ -810,10 +816,23 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     .calldata(calldata)
                     .call();
 
-                let returndata_size = caller.read_u32(arguments.output_len_ptr)?;
-                let output_len = (returndata_size as usize).min(output.data.len());
-                transaction.top_frame_mut().returndata = output.data[..output_len].to_vec();
-                caller.write_memory(arguments.output_ptr, &transaction.top_frame().returndata)?;
+                let bytes_to_copy = caller.read_u32(arguments.output_len_ptr)? as usize;
+                let output_size = output.data.len();
+                assert!(
+                    bytes_to_copy <= output_size,
+                    "output buffer of {bytes_to_copy}b too small for {output_size}b"
+                );
+
+                transaction.top_frame_mut().returndata = output.data.to_vec();
+                caller.write_memory(
+                    arguments.output_ptr,
+                    &transaction.top_frame().returndata[..bytes_to_copy],
+                )?;
+                caller.write_memory(arguments.output_len_ptr, &output.data.len().to_le_bytes())?;
+                assert_eq!(
+                    transaction.top_frame().returndata.len(),
+                    caller.read_u32(arguments.output_len_ptr)? as usize
+                );
 
                 let success = if output.flags == ReturnFlags::Success {
                     log::info!("call succeeded");
@@ -849,6 +868,36 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     .and_then(|blob_hash| transaction.state.blobs.get(&blob_hash))
                     .map(|code| code.len())
                     .unwrap_or_default() as u32)
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::imports::RETURNDATACOPY,
+            |caller: Caller<Transaction>,
+             destination_ptr: u32,
+             offset: u32,
+             size: u32|
+             -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                let offset = offset as usize;
+                let slice_end = offset
+                    .checked_add(size as usize)
+                    .expect("offset + size overflows");
+
+                assert!(
+                    slice_end <= transaction.top_frame().returndata.len(),
+                    "offset + size is larger than RETURNDATASIZE"
+                );
+
+                caller.write_memory(
+                    destination_ptr,
+                    &transaction.top_frame().returndata[offset..slice_end],
+                )?;
+
+                Ok(())
             },
         )
         .unwrap();

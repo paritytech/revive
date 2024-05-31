@@ -37,13 +37,15 @@ pub mod imports {
 
     pub static RETURN: &str = "seal_return";
 
+    pub static RETURNDATACOPY: &str = "returndatacopy";
+
     pub static SET_STORAGE: &str = "set_storage";
 
     pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 14] = [
+    pub static IMPORTS: [&str; 15] = [
         ADDRESS,
         BLOCK_NUMBER,
         CALL,
@@ -56,6 +58,7 @@ pub mod imports {
         INSTANTIATE,
         NOW,
         RETURN,
+        RETURNDATACOPY,
         SET_STORAGE,
         VALUE_TRANSFERRED,
     ];

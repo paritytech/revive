@@ -1026,19 +1026,16 @@ where
             InstructionName::CALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
 
-                let _gas = arguments.remove(0).into_int_value();
-                let _address = arguments.remove(0).into_int_value();
-                let _value = arguments.remove(0).into_int_value();
-                let _input_offset = arguments.remove(0).into_int_value();
-                let _input_size = arguments.remove(0).into_int_value();
-                let _output_offset = arguments.remove(0).into_int_value();
-                let _output_size = arguments.remove(0).into_int_value();
+                let gas = arguments.remove(0).into_int_value();
+                let address = arguments.remove(0).into_int_value();
+                let value = arguments.remove(0).into_int_value();
+                let input_offset = arguments.remove(0).into_int_value();
+                let input_size = arguments.remove(0).into_int_value();
+                let output_offset = arguments.remove(0).into_int_value();
+                let output_size = arguments.remove(0).into_int_value();
 
-                todo!()
-                /*
-                revive_llvm_context::polkavm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::call(
                     context,
-                    context.llvm_runtime().far_call,
                     gas,
                     address,
                     Some(value),
@@ -1047,9 +1044,9 @@ where
                     output_offset,
                     output_size,
                     vec![],
+                    false,
                 )
                 .map(Some)
-                */
             }
             InstructionName::STATICCALL => {
                 let mut arguments = self.pop_arguments_llvm(context);
@@ -1061,9 +1058,8 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::call(
                     context,
-                    context.llvm_runtime().static_call,
                     gas,
                     address,
                     None,
@@ -1072,6 +1068,7 @@ where
                     output_offset,
                     output_size,
                     vec![],
+                    true,
                 )
                 .map(Some)
             }
@@ -1085,9 +1082,8 @@ where
                 let output_offset = arguments.remove(0).into_int_value();
                 let output_size = arguments.remove(0).into_int_value();
 
-                revive_llvm_context::polkavm_evm_call::default(
+                revive_llvm_context::polkavm_evm_call::delegate_call(
                     context,
-                    context.llvm_runtime().delegate_call,
                     gas,
                     address,
                     None,

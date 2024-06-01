@@ -37,7 +37,7 @@ where
                 .integer_type(revive_common::BIT_LENGTH_BOOLEAN)
                 .const_int(0, false),
         };
-        context.build_invoke(
+        context.build_call(
             target,
             &[is_deploy_code.as_basic_value_enum()],
             format!("call_link_{}", EtherealIR::DEFAULT_ENTRY_FUNCTION_NAME).as_str(),

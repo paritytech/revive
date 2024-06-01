@@ -3,7 +3,6 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::function::llvm_runtime::LLVMRuntime;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -38,23 +37,6 @@ where
     context.set_basic_block(join_block);
     let result = context.build_load(pointer, name)?;
     Ok(result.into_int_value())
-}
-
-/// Generates an exception.
-pub fn throw<D>(context: &Context<D>)
-where
-    D: Dependency + Clone,
-{
-    context.build_call(
-        context.llvm_runtime().cxa_throw,
-        &[context
-            .llvm()
-            .ptr_type(AddressSpace::Stack.into())
-            .get_undef()
-            .as_basic_value_enum(); 3],
-        LLVMRuntime::FUNCTION_CXA_THROW,
-    );
-    context.build_unreachable();
 }
 
 /// Returns the full list of arguments for an external call.

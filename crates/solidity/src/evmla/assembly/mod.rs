@@ -191,11 +191,6 @@ where
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
 
-        let mut runtime = revive_llvm_context::PolkaVMRuntime::new(
-            revive_llvm_context::PolkaVMAddressSpace::Heap,
-        );
-        runtime.declare(context)?;
-
         revive_llvm_context::PolkaVMDeployCodeFunction::new(
             revive_llvm_context::PolkaVMDummyLLVMWritable::default(),
         )
@@ -206,8 +201,6 @@ where
         .declare(context)?;
 
         entry.into_llvm(context)?;
-
-        runtime.into_llvm(context)?;
 
         Ok(())
     }

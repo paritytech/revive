@@ -56,11 +56,7 @@ where
 
     let (address_pointer, address_length_pointer) =
         context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_pointer");
-
-    let sentinel = context
-        .xlen_type()
-        .const_all_ones()
-        .const_to_pointer(context.llvm().ptr_type(Default::default()));
+    context.build_store(address_pointer, context.word_const(0))?;
 
     let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
         context.builder(),
@@ -70,14 +66,14 @@ where
     .next(code_hash_pointer.value)?
     .skip()
     .skip()
-    .next(sentinel)?
+    .next(context.sentinel_pointer())?
     .next(value_pointer.value)?
     .next(input_data_pointer.value)?
     .next(input_length)?
     .next(address_pointer.value)?
     .next(address_length_pointer.value)?
-    .next(sentinel)?
-    .next(sentinel)?
+    .next(context.sentinel_pointer())?
+    .next(context.sentinel_pointer())?
     .next(salt_pointer.value)?
     .next(
         context
@@ -86,14 +82,13 @@ where
     )?
     .done();
 
-    context.builder().build_direct_call(
-        context.runtime_api_method(runtime_api::INSTANTIATE),
+    context.build_runtime_call(
+        runtime_api::imports::INSTANTIATE,
         &[context
             .builder()
             .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
             .into()],
-        "create2",
-    )?;
+    );
 
     context.build_load_word(
         address_pointer,

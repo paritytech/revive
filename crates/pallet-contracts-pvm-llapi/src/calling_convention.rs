@@ -5,16 +5,16 @@ use inkwell::{
     values::{BasicValue, PointerValue},
 };
 
-pub struct Spill<'ctx> {
+pub struct Spill<'a, 'ctx> {
     pointer: PointerValue<'ctx>,
-    builder: &'ctx Builder<'ctx>,
+    builder: &'a Builder<'ctx>,
     r#type: StructType<'ctx>,
     current_field: u32,
 }
 
-impl<'ctx> Spill<'ctx> {
+impl<'a, 'ctx> Spill<'a, 'ctx> {
     pub fn new(
-        builder: &'ctx Builder<'ctx>,
+        builder: &'a Builder<'ctx>,
         r#type: StructType<'ctx>,
         name: &str,
     ) -> anyhow::Result<Self> {
@@ -84,6 +84,34 @@ pub fn instantiate(context: &Context) -> StructType {
             context.ptr_type(Default::default()).as_basic_type_enum(),
             // salt_len: u32
             context.i32_type().as_basic_type_enum(),
+        ],
+        true,
+    )
+}
+
+pub fn call(context: &Context) -> StructType {
+    context.struct_type(
+        &[
+            // flags: u32,
+            context.i32_type().as_basic_type_enum(),
+            // address_ptr:
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // ref_time_limit: u64,
+            context.i64_type().as_basic_type_enum(),
+            // proof_size_limit: u64,
+            context.i64_type().as_basic_type_enum(),
+            // deposit_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // value_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // input_data_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // input_data_len: u32,
+            context.i32_type().as_basic_type_enum(),
+            // output_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // output_len_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
         ],
         true,
     )

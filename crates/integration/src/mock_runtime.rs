@@ -82,6 +82,8 @@ struct Frame {
     output: CallOutput,
     /// The export to call.
     export: Export,
+    /// The returndata from the last contract call.
+    returndata: Vec<u8>,
 }
 
 impl Default for Frame {
@@ -93,6 +95,7 @@ impl Default for Frame {
             input: Default::default(),
             output: Default::default(),
             export: Default::default(),
+            returndata: Default::default(),
         }
     }
 }
@@ -224,8 +227,8 @@ impl TransactionBuilder {
             .unwrap_or_else(|| panic!("contract code not found: {blob_hash}"));
         let (mut instance, _) = prepare(code, None);
         let export = match self.context.top_frame().export {
-            Export::Call => runtime_api::CALL,
-            Export::Deploy(_) => runtime_api::DEPLOY,
+            Export::Call => runtime_api::exports::CALL,
+            Export::Deploy(_) => runtime_api::exports::DEPLOY,
         };
         let export = instance.module().lookup_export(export).unwrap();
         self.call_on(&mut instance, export)
@@ -354,7 +357,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::INPUT,
+            runtime_api::imports::INPUT,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, transaction) = caller.split();
 
@@ -371,7 +374,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::RETURN,
+            runtime_api::imports::RETURN,
             |caller: Caller<Transaction>,
              flags: u32,
              data_ptr: u32,
@@ -390,7 +393,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::VALUE_TRANSFERRED,
+            runtime_api::imports::VALUE_TRANSFERRED,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| -> Result<(), Trap> {
                 let (mut caller, transaction) = caller.split();
 
@@ -426,7 +429,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::SET_STORAGE,
+            runtime_api::imports::SET_STORAGE,
             |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
@@ -461,7 +464,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::GET_STORAGE,
+            runtime_api::imports::GET_STORAGE,
             |caller: Caller<Transaction>,
              key_ptr: u32,
              key_len: u32,
@@ -495,7 +498,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::HASH_KECCAK_256,
+            runtime_api::imports::HASH_KECCAK_256,
             |caller: Caller<Transaction>,
              input_ptr: u32,
              input_len: u32,
@@ -516,7 +519,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::NOW,
+            runtime_api::imports::NOW,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
@@ -537,7 +540,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::BLOCK_NUMBER,
+            runtime_api::imports::BLOCK_NUMBER,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, _) = caller.split();
 
@@ -558,7 +561,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::ADDRESS,
+            runtime_api::imports::ADDRESS,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -580,7 +583,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::CALLER,
+            runtime_api::imports::CALLER,
             |caller: Caller<Transaction>, out_ptr: u32, out_len_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -602,7 +605,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::DEPOSIT_EVENT,
+            runtime_api::imports::DEPOSIT_EVENT,
             |caller: Caller<Transaction>,
              topics_ptr: u32,
              topics_len: u32,
@@ -639,7 +642,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::INSTANTIATE,
+            runtime_api::imports::INSTANTIATE,
             |caller: Caller<Transaction>, argument_ptr: u32| {
                 let (mut caller, transaction) = caller.split();
 
@@ -732,7 +735,122 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
     linker
         .func_wrap(
-            runtime_api::CODE_SIZE,
+            runtime_api::imports::CALL,
+            |caller: Caller<Transaction>, argument_ptr: u32| -> Result<u32, Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                #[derive(Debug)]
+                #[repr(packed)]
+                struct Arguments {
+                    _flags: u32,
+                    address_ptr: u32,
+                    _ref_time_limit: u64,
+                    proof_size_limit: u64,
+                    deposit_ptr: u32,
+                    value_ptr: u32,
+                    input_data_ptr: u32,
+                    input_data_len: u32,
+                    output_ptr: u32,
+                    output_len_ptr: u32,
+                }
+                let mut buffer = [0; std::mem::size_of::<Arguments>()];
+                caller.read_memory_into_slice(argument_ptr, &mut buffer)?;
+                let arguments: Arguments = unsafe { std::mem::transmute(buffer) };
+
+                assert_eq!({ arguments.proof_size_limit }, 0);
+                assert_eq!({ arguments.deposit_ptr }, u32::MAX);
+
+                let amount = if arguments.value_ptr != u32::MAX {
+                    let value = caller.read_memory_into_vec(arguments.value_ptr, 32)?;
+                    U256::from_le_slice(&value)
+                } else {
+                    U256::ZERO
+                };
+
+                match transaction.top_account_mut().value.checked_sub(amount) {
+                    Some(deducted) => transaction.top_account_mut().value = deducted,
+                    None => {
+                        log::info!("call failed: insufficient balance {amount}");
+                        return Ok(1);
+                    }
+                }
+
+                let bytes = caller.read_memory_into_vec(arguments.address_ptr, 32)?;
+                let word = U256::from_le_slice(&bytes);
+                let address = Address::from_word(word.into());
+                log::info!("call {address}");
+
+                if !transaction.state.accounts.contains_key(&address) {
+                    log::info!(
+                        "balance transfer {amount} from {} to {address}",
+                        transaction.top_frame().callee
+                    );
+
+                    transaction
+                        .state
+                        .accounts
+                        .entry(address)
+                        .or_insert_with(|| Account {
+                            value: amount,
+                            contract: None,
+                            storage: Default::default(),
+                        });
+
+                    return Ok(0);
+                }
+
+                if transaction.stack.len() >= Transaction::CALL_STACK_SIZE {
+                    log::info!("deployment faild: maximum stack depth reached");
+                    return Ok(1);
+                }
+
+                let calldata = caller
+                    .read_memory_into_vec(arguments.input_data_ptr, arguments.input_data_len)?;
+
+                let (state, output) = transaction
+                    .state
+                    .clone()
+                    .transaction()
+                    .callee(address)
+                    .callvalue(amount)
+                    .calldata(calldata)
+                    .call();
+
+                let bytes_to_copy = caller.read_u32(arguments.output_len_ptr)? as usize;
+                let output_size = output.data.len();
+                assert!(
+                    bytes_to_copy <= output_size,
+                    "output buffer of {bytes_to_copy}b too small for {output_size}b"
+                );
+
+                transaction.top_frame_mut().returndata = output.data.to_vec();
+                caller.write_memory(
+                    arguments.output_ptr,
+                    &transaction.top_frame().returndata[..bytes_to_copy],
+                )?;
+                caller.write_memory(arguments.output_len_ptr, &output.data.len().to_le_bytes())?;
+                assert_eq!(
+                    transaction.top_frame().returndata.len(),
+                    caller.read_u32(arguments.output_len_ptr)? as usize
+                );
+
+                let success = if output.flags == ReturnFlags::Success {
+                    log::info!("call succeeded");
+                    transaction.state = state;
+                    0
+                } else {
+                    log::info!("call failed: callee reverted {:?}", output.flags);
+                    1
+                };
+
+                Ok(success)
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::imports::CODE_SIZE,
             |caller: Caller<Transaction>, address_ptr: u32| {
                 let (caller, transaction) = caller.split();
 
@@ -755,6 +873,36 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .unwrap();
 
     linker
+        .func_wrap(
+            runtime_api::imports::RETURNDATACOPY,
+            |caller: Caller<Transaction>,
+             destination_ptr: u32,
+             offset: u32,
+             size: u32|
+             -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                let offset = offset as usize;
+                let slice_end = offset
+                    .checked_add(size as usize)
+                    .expect("offset + size overflows");
+
+                assert!(
+                    slice_end <= transaction.top_frame().returndata.len(),
+                    "offset + size is larger than RETURNDATASIZE"
+                );
+
+                caller.write_memory(
+                    destination_ptr,
+                    &transaction.top_frame().returndata[offset..slice_end],
+                )?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
 }
 
 pub fn setup(config: Option<Config>) -> Engine {
@@ -772,7 +920,7 @@ pub fn instantiate_module(
     module: &Module,
     engine: &Engine,
 ) -> (Instance<Transaction>, ExportIndex) {
-    let export = module.lookup_export(runtime_api::CALL).unwrap();
+    let export = module.lookup_export(runtime_api::imports::CALL).unwrap();
     let func = link_host_functions(engine).instantiate_pre(module).unwrap();
     let instance = func.instantiate().unwrap();
 
@@ -789,7 +937,7 @@ pub fn prepare(code: &[u8], config: Option<Config>) -> (Instance<Transaction>, E
     module_config.set_gas_metering(Some(GasMeteringKind::Sync));
 
     let module = Module::from_blob(&engine, &module_config, blob).unwrap();
-    let export = module.lookup_export(runtime_api::CALL).unwrap();
+    let export = module.lookup_export(runtime_api::exports::CALL).unwrap();
     let func = link_host_functions(&engine)
         .instantiate_pre(&module)
         .unwrap();

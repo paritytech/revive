@@ -58,7 +58,7 @@ where
         "block_timestamp_output",
     );
     context.build_runtime_call(
-        runtime_api::BLOCK_NUMBER,
+        runtime_api::imports::BLOCK_NUMBER,
         &[
             output_pointer.to_int(context).into(),
             output_length_pointer.to_int(context).into(),
@@ -83,7 +83,7 @@ where
         "block_timestamp_output",
     );
     context.build_runtime_call(
-        runtime_api::NOW,
+        runtime_api::imports::NOW,
         &[
             output_pointer.to_int(context).into(),
             output_length_pointer.to_int(context).into(),
@@ -174,7 +174,7 @@ where
     let (output_pointer, output_length_pointer) =
         context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_output");
     context.build_runtime_call(
-        runtime_api::ADDRESS,
+        runtime_api::imports::ADDRESS,
         &[
             output_pointer.to_int(context).into(),
             output_length_pointer.to_int(context).into(),
@@ -197,7 +197,7 @@ where
     let (output_pointer, output_length_pointer) =
         context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "caller_output");
     context.build_runtime_call(
-        runtime_api::CALLER,
+        runtime_api::imports::CALLER,
         &[
             output_pointer.to_int(context).into(),
             output_length_pointer.to_int(context).into(),

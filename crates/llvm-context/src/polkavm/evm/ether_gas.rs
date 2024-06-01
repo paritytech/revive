@@ -26,7 +26,7 @@ where
     let (output_pointer, output_length_pointer) =
         context.build_stack_parameter(revive_common::BIT_LENGTH_VALUE, "value_transferred_output");
     context.build_runtime_call(
-        runtime_api::VALUE_TRANSFERRED,
+        runtime_api::imports::VALUE_TRANSFERRED,
         &[
             output_pointer.to_int(context).into(),
             output_length_pointer.to_int(context).into(),

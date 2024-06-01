@@ -186,11 +186,6 @@ where
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
 
-        let mut runtime = revive_llvm_context::PolkaVMRuntime::new(
-            revive_llvm_context::PolkaVMAddressSpace::Heap,
-        );
-        runtime.declare(context)?;
-
         revive_llvm_context::PolkaVMDeployCodeFunction::new(
             revive_llvm_context::PolkaVMDummyLLVMWritable::default(),
         )
@@ -226,16 +221,8 @@ where
             revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;
         }
 
-        match self.inner_object {
-            Some(object) => {
-                object.into_llvm(context)?;
-            }
-            None => {
-                let runtime = revive_llvm_context::PolkaVMRuntime::new(
-                    revive_llvm_context::PolkaVMAddressSpace::Heap,
-                );
-                runtime.into_llvm(context)?;
-            }
+        if let Some(object) = self.inner_object {
+            object.into_llvm(context)?;
         }
 
         Ok(())

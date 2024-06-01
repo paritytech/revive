@@ -3,17 +3,104 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::argument::Argument;
-use crate::polkavm::context::function::declaration::Declaration as FunctionDeclaration;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::polkavm_const::runtime_api;
+
+static STATIC_CALL_FLAG: u32 = 0b0001_0000;
 
 /// Translates a contract call.
-/// If the `simulation_address` is specified, the call is substituted with another instruction
-/// according to the specification.
+///
+/// If the `simulation_address` is specified, the call is
+/// substituted with another instruction according to the specification.
 #[allow(clippy::too_many_arguments)]
-pub fn default<'ctx, D>(
+pub fn call<'ctx, D>(
+    context: &mut Context<'ctx, D>,
+    gas: inkwell::values::IntValue<'ctx>,
+    address: inkwell::values::IntValue<'ctx>,
+    value: Option<inkwell::values::IntValue<'ctx>>,
+    input_offset: inkwell::values::IntValue<'ctx>,
+    input_length: inkwell::values::IntValue<'ctx>,
+    output_offset: inkwell::values::IntValue<'ctx>,
+    output_length: inkwell::values::IntValue<'ctx>,
+    _constants: Vec<Option<num::BigUint>>,
+    static_call: bool,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+where
+    D: Dependency + Clone,
+{
+    let address_pointer = context.build_alloca(context.word_type(), "address_ptr");
+    context.build_store(address_pointer, address)?;
+
+    let value_pointer = if let Some(value) = value {
+        let value_pointer = context.build_alloca(context.value_type(), "value");
+        context.build_store(value_pointer, value)?;
+        value_pointer.value
+    } else {
+        context.sentinel_pointer()
+    };
+
+    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
+    let input_length = context.safe_truncate_int_to_xlen(input_length)?;
+    let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
+    let output_length = context.safe_truncate_int_to_xlen(output_length)?;
+
+    let gas = context
+        .builder()
+        .build_int_truncate(gas, context.integer_type(64), "gas")?;
+
+    let flags = if static_call { STATIC_CALL_FLAG } else { 0 };
+
+    let input_pointer = context.build_heap_gep(input_offset, input_length)?;
+    let output_pointer = context.build_heap_gep(output_offset, output_length)?;
+
+    let output_length_pointer = context.get_global(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?;
+    context.build_store(output_length_pointer.into(), output_length)?;
+
+    let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
+        context.builder(),
+        pallet_contracts_pvm_llapi::calling_convention::call(context.llvm()),
+        "call_arguments",
+    )?
+    .next(context.xlen_type().const_int(flags as u64, false))?
+    .next(address_pointer.value)?
+    .next(gas)?
+    .skip()
+    .next(context.sentinel_pointer())?
+    .next(value_pointer)?
+    .next(input_pointer.value)?
+    .next(input_length)?
+    .next(output_pointer.value)?
+    .next(output_length_pointer.value)?
+    .done();
+
+    let name = runtime_api::imports::CALL;
+    let arguments = context.builder().build_ptr_to_int(
+        argument_pointer,
+        context.xlen_type(),
+        "argument_pointer",
+    )?;
+    let success = context
+        .build_runtime_call(name, &[arguments.into()])
+        .unwrap_or_else(|| panic!("{name} should return a value"))
+        .into_int_value();
+
+    let is_success = context.builder().build_int_compare(
+        inkwell::IntPredicate::EQ,
+        success,
+        context.xlen_type().const_zero(),
+        "is_success",
+    )?;
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(is_success, context.word_type(), "success")?
+        .as_basic_value_enum())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn delegate_call<'ctx, D>(
     _context: &mut Context<'ctx, D>,
-    _function: FunctionDeclaration<'ctx>,
     _gas: inkwell::values::IntValue<'ctx>,
     _address: inkwell::values::IntValue<'ctx>,
     _value: Option<inkwell::values::IntValue<'ctx>>,
@@ -26,68 +113,7 @@ pub fn default<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    todo!();
-
-    /*
-    let ordinary_block = context.append_basic_block("contract_call_ordinary_block");
-    let join_block = context.append_basic_block("contract_call_join_block");
-
-    let result_pointer = context.build_alloca(context.field_type(), "contract_call_result_pointer");
-    context.build_store(result_pointer, context.field_const(0));
-
-    context.builder().build_switch(
-        address,
-        ordinary_block,
-        &[(
-            context.field_const(zkevm_opcode_defs::ADDRESS_IDENTITY.into()),
-            identity_block,
-        )],
-    )?;
-
-    {
-        context.set_basic_block(identity_block);
-        let result = identity(context, output_offset, input_offset, output_length)?;
-        context.build_store(result_pointer, result);
-        context.build_unconditional_branch(join_block);
-    }
-
-    context.set_basic_block(ordinary_block);
-    let result = if let Some(value) = value {
-        default_wrapped(
-            context,
-            function,
-            gas,
-            value,
-            address,
-            input_offset,
-            input_length,
-            output_offset,
-            output_length,
-        )?
-    } else {
-        let function = Runtime::default_call(context, function);
-        context
-            .build_call(
-                function,
-                &[
-                    gas.as_basic_value_enum(),
-                    address.as_basic_value_enum(),
-                    input_offset.as_basic_value_enum(),
-                    input_length.as_basic_value_enum(),
-                    output_offset.as_basic_value_enum(),
-                    output_length.as_basic_value_enum(),
-                ],
-                "default_call",
-            )
-            .expect("Always exists")
-    };
-    context.build_store(result_pointer, result);
-    context.build_unconditional_branch(join_block);
-
-    context.set_basic_block(join_block);
-    let result = context.build_load(result_pointer, "contract_call_result");
-    Ok(result)
-    */
+    todo!()
 }
 
 /// Translates the Yul `linkersymbol` instruction.

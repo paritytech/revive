@@ -23,8 +23,11 @@ where
         "address_pointer",
     )?;
     let value = context
-        .build_runtime_call(runtime_api::CODE_SIZE, &[address_pointer_casted.into()])
-        .unwrap_or_else(|| panic!("{} should return a value", runtime_api::CODE_SIZE))
+        .build_runtime_call(
+            runtime_api::imports::CODE_SIZE,
+            &[address_pointer_casted.into()],
+        )
+        .unwrap_or_else(|| panic!("{} should return a value", runtime_api::imports::CODE_SIZE))
         .into_int_value();
 
     Ok(context

@@ -524,6 +524,36 @@ fn ext_code_size() {
 }
 
 #[test]
+fn value_transfer() {
+    // Succeeds in remix (shanghai) but traps the interpreter
+    let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);
+
+    assert_eq!(state.accounts().len(), 2);
+    assert!(state.accounts().get(&Address::default()).is_some());
+}
+
+#[test]
+fn echo() {
+    let (state, address) = State::new_deployed(Contract::call_constructor());
+
+    let expected = vec![1, 2, 3, 4, 5];
+    let contract = Contract::call_call(address, expected.clone());
+    let (_, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .call();
+
+    assert_eq!(output.flags, ReturnFlags::Success);
+
+    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
+        .unwrap()
+        .to_vec();
+
+    assert_eq!(expected, received);
+}
+
+#[test]
 fn mcopy() {
     let expected = vec![1, 2, 3];
 
@@ -532,5 +562,6 @@ fn mcopy() {
     let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
         .unwrap()
         .to_vec();
+
     assert_eq!(expected, received);
 }

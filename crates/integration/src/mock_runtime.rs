@@ -903,6 +903,31 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .unwrap();
 
     linker
+        .func_wrap(
+            runtime_api::imports::BALANCE,
+            |caller: Caller<Transaction>, address_ptr: u32, balance_ptr: u32| -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                let bytes = caller.read_memory_into_vec(address_ptr, 32)?;
+                let word = U256::from_le_slice(&bytes);
+                let address = Address::from_word(word.into());
+                let balance = transaction
+                    .state
+                    .accounts()
+                    .get(&address)
+                    .map(|account| account.value)
+                    .unwrap_or(U256::default());
+
+                caller.write_memory(balance_ptr, &balance.to_le_bytes::<32>())?;
+
+                log::info!("account {address} balance {balance}");
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
 }
 
 pub fn setup(config: Option<Config>) -> Engine {

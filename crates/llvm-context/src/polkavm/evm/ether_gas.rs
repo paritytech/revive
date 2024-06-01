@@ -41,11 +41,31 @@ where
 
 /// Translates the `balance` instructions.
 pub fn balance<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
-    _address: inkwell::values::IntValue<'ctx>,
+    context: &mut Context<'ctx, D>,
+    address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
+    let address_pointer = context.build_alloca(context.word_type(), "address_pointer");
+    context.build_store(address_pointer, address)?;
+
+    let balance = context.builder().build_ptr_to_int(
+        balance_pointer.value,
+        context.xlen_type(),
+        "balance",
+    )?;
+    let address = context.builder().build_ptr_to_int(
+        address_pointer.value,
+        context.xlen_type(),
+        "address",
+    )?;
+
+    context.build_runtime_call(
+        runtime_api::imports::BALANCE,
+        &[address.into(), balance.into()],
+    );
+
+    context.build_load(balance_pointer, "balance")
 }

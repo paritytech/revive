@@ -565,3 +565,25 @@ fn mcopy() {
 
     assert_eq!(expected, received);
 }
+
+#[test]
+fn balance() {
+    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
+
+    let expected = U256::ZERO;
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received);
+
+    let expected = U256::from(54589);
+    let (state, address) = State::new_deployed(Contract::call_constructor());
+    let contract = Contract::value_balance_of(address);
+    let (_, output) = state
+        .transaction()
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
+        .callvalue(expected)
+        .call();
+
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received)
+}

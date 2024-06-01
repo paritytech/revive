@@ -549,6 +549,7 @@ fn echo() {
     let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
         .unwrap()
         .to_vec();
+
     assert_eq!(expected, received);
 }
 
@@ -561,5 +562,6 @@ fn mcopy() {
     let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
         .unwrap()
         .to_vec();
+
     assert_eq!(expected, received);
 }

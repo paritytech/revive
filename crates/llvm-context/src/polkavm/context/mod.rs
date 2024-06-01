@@ -1294,6 +1294,13 @@ where
         self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
     }
 
+    /// Returns the register witdh sized type.
+    pub fn sentinel_pointer(&self) -> inkwell::values::PointerValue<'ctx> {
+        self.xlen_type()
+            .const_all_ones()
+            .const_to_pointer(self.llvm().ptr_type(Default::default()))
+    }
+
     /// Returns the runtime value width sized type.
     pub fn value_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm

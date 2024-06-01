@@ -29,6 +29,17 @@ pub fn call<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let address_pointer = context.build_alloca(context.word_type(), "address_ptr");
+    context.build_store(address_pointer, address)?;
+
+    let value_pointer = if let Some(value) = value {
+        let value_pointer = context.build_alloca(context.value_type(), "value");
+        context.build_store(value_pointer, value)?;
+        value_pointer.value
+    } else {
+        context.sentinel_pointer()
+    };
+
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
@@ -39,22 +50,6 @@ where
         .build_int_truncate(gas, context.integer_type(64), "gas")?;
 
     let flags = if static_call { STATIC_CALL_FLAG } else { 0 };
-
-    let sentinel = context
-        .xlen_type()
-        .const_all_ones()
-        .const_to_pointer(context.llvm().ptr_type(Default::default()));
-
-    let address_pointer = context.build_alloca(context.word_type(), "address_ptr");
-    context.build_store(address_pointer, address)?;
-
-    let value_pointer = if let Some(value) = value {
-        let value_pointer = context.build_alloca(context.value_type(), "value");
-        context.build_store(value_pointer, value)?;
-        value_pointer.value
-    } else {
-        sentinel
-    };
 
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;
@@ -71,7 +66,7 @@ where
     .next(address_pointer.value)?
     .next(gas)?
     .skip()
-    .next(sentinel)?
+    .next(context.sentinel_pointer())?
     .next(value_pointer)?
     .next(input_pointer.value)?
     .next(input_length)?

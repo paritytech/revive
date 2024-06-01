@@ -13,6 +13,7 @@ static STATIC_CALL_FLAG: u32 = 0b0001_0000;
 ///
 /// If the `simulation_address` is specified, the call is
 /// substituted with another instruction according to the specification.
+#[allow(clippy::too_many_arguments)]
 pub fn call<'ctx, D>(
     context: &mut Context<'ctx, D>,
     gas: inkwell::values::IntValue<'ctx>,
@@ -78,28 +79,31 @@ where
     .next(output_length_pointer.value)?
     .done();
 
+    let name = runtime_api::imports::CALL;
+    let arguments = context.builder().build_ptr_to_int(
+        argument_pointer,
+        context.xlen_type(),
+        "argument_pointer",
+    )?;
     let success = context
-        .builder()
-        .build_direct_call(
-            context.runtime_api_method(runtime_api::imports::CALL),
-            &[context
-                .builder()
-                .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
-                .into()],
-            "call",
-        )?
-        .try_as_basic_value()
-        .left()
-        .expect("the call API should return a value")
-        .into_int_value()
-        .clone();
+        .build_runtime_call(name, &[arguments.into()])
+        .unwrap_or_else(|| panic!("{name} should return a value"))
+        .into_int_value();
+
+    let is_success = context.builder().build_int_compare(
+        inkwell::IntPredicate::EQ,
+        success,
+        context.xlen_type().const_zero(),
+        "is_success",
+    )?;
 
     Ok(context
         .builder()
-        .build_int_z_extend(success, context.word_type(), "success")?
+        .build_int_z_extend(is_success, context.word_type(), "success")?
         .as_basic_value_enum())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn delegate_call<'ctx, D>(
     _context: &mut Context<'ctx, D>,
     _gas: inkwell::values::IntValue<'ctx>,

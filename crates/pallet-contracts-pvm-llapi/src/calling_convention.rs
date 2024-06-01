@@ -5,16 +5,16 @@ use inkwell::{
     values::{BasicValue, PointerValue},
 };
 
-pub struct Spill<'ctx> {
+pub struct Spill<'a, 'ctx> {
     pointer: PointerValue<'ctx>,
-    builder: &'ctx Builder<'ctx>,
+    builder: &'a Builder<'ctx>,
     r#type: StructType<'ctx>,
     current_field: u32,
 }
 
-impl<'ctx> Spill<'ctx> {
+impl<'a, 'ctx> Spill<'a, 'ctx> {
     pub fn new(
-        builder: &'ctx Builder<'ctx>,
+        builder: &'a Builder<'ctx>,
         r#type: StructType<'ctx>,
         name: &str,
     ) -> anyhow::Result<Self> {

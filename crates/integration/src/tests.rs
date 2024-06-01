@@ -538,7 +538,7 @@ fn echo() {
 
     let expected = vec![1, 2, 3, 4, 5];
     let contract = Contract::call_call(address, expected.clone());
-    let (state, output) = state
+    let (_, output) = state
         .transaction()
         .with_default_account(&contract.pvm_runtime)
         .calldata(contract.calldata)

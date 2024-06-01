@@ -771,7 +771,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     Some(deducted) => transaction.top_account_mut().value = deducted,
                     None => {
                         log::info!("call failed: insufficient balance {amount}");
-                        return Ok(0);
+                        return Ok(1);
                     }
                 }
 
@@ -796,12 +796,12 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                             storage: Default::default(),
                         });
 
-                    return Ok(1);
+                    return Ok(0);
                 }
 
                 if transaction.stack.len() >= Transaction::CALL_STACK_SIZE {
                     log::info!("deployment faild: maximum stack depth reached");
-                    return Ok(0);
+                    return Ok(1);
                 }
 
                 let calldata = caller
@@ -837,10 +837,10 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 let success = if output.flags == ReturnFlags::Success {
                     log::info!("call succeeded");
                     transaction.state = state;
-                    1
+                    0
                 } else {
                     log::info!("call failed: callee reverted {:?}", output.flags);
-                    0
+                    1
                 };
 
                 Ok(success)

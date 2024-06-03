@@ -350,6 +350,10 @@ impl State {
     pub fn accounts(&self) -> &HashMap<Address, Account> {
         &self.accounts
     }
+
+    pub fn accounts_mut(&mut self) -> &mut HashMap<Address, Account> {
+        &mut self.accounts
+    }
 }
 
 fn link_host_functions(engine: &Engine) -> Linker<Transaction> {

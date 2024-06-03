@@ -148,6 +148,12 @@ sol!(
     }
 );
 
+sol!(
+    contract Value {
+        function balance_of(address _address) public view returns (uint ret);
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -488,6 +494,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Default::default(),
+        }
+    }
+
+    pub fn value_balance_of(address: Address) -> Self {
+        let code = include_str!("../contracts/Value.sol");
+        let name = "Value";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Value::balance_ofCall::new((address,)).abi_encode(),
         }
     }
 }

@@ -350,6 +350,10 @@ impl State {
     pub fn accounts(&self) -> &HashMap<Address, Account> {
         &self.accounts
     }
+
+    pub fn accounts_mut(&mut self) -> &mut HashMap<Address, Account> {
+        &mut self.accounts
+    }
 }
 
 fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
@@ -896,6 +900,31 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     destination_ptr,
                     &transaction.top_frame().returndata[offset..slice_end],
                 )?;
+
+                Ok(())
+            },
+        )
+        .unwrap();
+
+    linker
+        .func_wrap(
+            runtime_api::imports::BALANCE,
+            |caller: Caller<Transaction>, address_ptr: u32, balance_ptr: u32| -> Result<(), Trap> {
+                let (mut caller, transaction) = caller.split();
+
+                let bytes = caller.read_memory_into_vec(address_ptr, 32)?;
+                let word = U256::from_le_slice(&bytes);
+                let address = Address::from_word(word.into());
+                let balance = transaction
+                    .state
+                    .accounts()
+                    .get(&address)
+                    .map(|account| account.value)
+                    .unwrap_or(U256::default());
+
+                caller.write_memory(balance_ptr, &balance.to_le_bytes::<32>())?;
+
+                log::info!("account {address} balance {balance}");
 
                 Ok(())
             },

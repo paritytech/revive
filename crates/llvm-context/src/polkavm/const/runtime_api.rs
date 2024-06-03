@@ -15,6 +15,8 @@ pub mod exports {
 pub mod imports {
     pub static ADDRESS: &str = "address";
 
+    pub static BALANCE: &str = "balance";
+
     pub static BLOCK_NUMBER: &str = "block_number";
 
     pub static CALL: &str = "seal_call";
@@ -45,8 +47,9 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 15] = [
+    pub static IMPORTS: [&str; 16] = [
         ADDRESS,
+        BALANCE,
         BLOCK_NUMBER,
         CALL,
         CALLER,

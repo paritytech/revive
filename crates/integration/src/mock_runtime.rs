@@ -456,10 +456,12 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 let key = caller.read_memory_into_vec(key_ptr, key_len)?;
                 let value = caller.read_memory_into_vec(value_ptr, value_len)?;
 
-                transaction.top_account_mut().storage.insert(
-                    U256::from_be_bytes::<32>(key.try_into().unwrap()),
-                    U256::from_be_bytes::<32>(value.try_into().unwrap()),
-                );
+                let key = U256::from_le_bytes::<32>(key.try_into().unwrap());
+                let value = U256::from_le_bytes::<32>(value.try_into().unwrap());
+
+                log::info!("set storage {key} = {value}");
+
+                transaction.top_account_mut().storage.insert(key, value);
 
                 Ok(0)
             },
@@ -485,14 +487,17 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                     "spurious output buffer size: {out_len}"
                 );
 
+                let key = U256::from_le_bytes::<32>(key.try_into().unwrap());
                 let value = transaction
                     .top_account_mut()
                     .storage
-                    .get(&U256::from_be_bytes::<32>(key.try_into().unwrap()))
-                    .map(U256::to_be_bytes::<32>)
+                    .get(&key)
+                    .cloned()
                     .unwrap_or_default();
 
-                caller.write_memory(out_ptr, &value[..])?;
+                log::info!("get storage {key} = {value}");
+
+                caller.write_memory(out_ptr, &value.to_le_bytes::<32>())?;
                 caller.write_memory(out_len_ptr, &32u32.to_le_bytes())?;
 
                 Ok(0)

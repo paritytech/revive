@@ -689,8 +689,7 @@ where
                     self.word_type(),
                     "storage_ptr_to_int",
                 )?;
-                let storage_key_pointer =
-                    self.build_alloca(storage_key_value.get_type(), "storage_key");
+                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
                     self.xlen_type(),
@@ -717,7 +716,6 @@ where
                 // If a key doesn't exist the "zero" value is returned.
 
                 self.build_load(storage_value_pointer, "storage_value_load")
-                    .and_then(|value| self.build_byte_swap(value))
             }
             AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
             AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
@@ -776,25 +774,24 @@ where
             }
             AddressSpace::TransientStorage => todo!(),
             AddressSpace::Storage => {
+                assert_eq!(
+                    value.as_basic_value_enum().get_type(),
+                    self.word_type().as_basic_type_enum()
+                );
+
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
                     self.word_type(),
                     "storage_ptr_to_int",
                 )?;
-                let storage_key_pointer =
-                    self.build_alloca(storage_key_value.get_type(), "storage_key");
-
-                let storage_value_value = self
-                    .build_byte_swap(value.as_basic_value_enum())?
-                    .into_int_value();
-                let storage_value_pointer =
-                    self.build_alloca(storage_value_value.get_type(), "storage_value");
-
+                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
                 let storage_key_pointer_casted = self.builder().build_ptr_to_int(
                     storage_key_pointer.value,
                     self.xlen_type(),
                     "storage_key_pointer_casted",
                 )?;
+
+                let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
                     self.xlen_type(),
@@ -804,7 +801,7 @@ where
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
                 self.builder()
-                    .build_store(storage_value_pointer.value, storage_value_value)?;
+                    .build_store(storage_value_pointer.value, value)?;
 
                 self.build_runtime_call(
                     runtime_api::imports::SET_STORAGE,

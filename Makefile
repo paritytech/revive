@@ -11,7 +11,7 @@ install-npm:
 format:
 	cargo fmt --all --check
 
-test: format install test-cli test-workspace
+test: format clippy test-cli test-workspace
 	cargo test --workspace
 
 test-integration: install-bin

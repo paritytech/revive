@@ -40,5 +40,8 @@ jobs:
     - name: Clippy
       run: make clippy
 
-    - name: Integration
-      run: make test-integration
+    - name: Test cargo workspace
+      run: make test-workspace
+
+    - name: Test CLI
+      run: make test-cli

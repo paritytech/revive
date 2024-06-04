@@ -195,7 +195,14 @@ where
     context.build_load(result_pointer, "shift_right_arithmetic_result")
 }
 
-/// Translates the `byte` instruction.
+/// Translates the `byte` instruction, extracting the byte of `operand_2`
+/// found at index `operand_1`, starting from the most significant bit.
+///
+/// Builds a logical `and` with a corresponding bit mask.
+///
+/// Because this opcode returns zero on overflows, the index `operand_1`
+/// is checked for overflow. On overflow, the mask will be all zeros,
+/// resulting in a branchless implementation.
 pub fn byte<'ctx, D>(
     context: &mut Context<'ctx, D>,
     operand_1: inkwell::values::IntValue<'ctx>,
@@ -204,14 +211,61 @@ pub fn byte<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .build_call(
-            context.llvm_runtime().byte,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-            ],
-            "byte_call",
-        )
-        .expect("Always exists"))
+    const MAX_INDEX_BYTES: u64 = 31;
+
+    let is_overflow_bit = context.builder().build_int_compare(
+        inkwell::IntPredicate::ULE,
+        operand_1,
+        context.word_const(MAX_INDEX_BYTES),
+        "is_overflow_bit",
+    )?;
+    let is_overflow_byte = context.builder().build_int_z_extend(
+        is_overflow_bit,
+        context.byte_type(),
+        "is_overflow_byte",
+    )?;
+    let mask_byte = context.builder().build_int_mul(
+        context.byte_type().const_all_ones(),
+        is_overflow_byte,
+        "mask_byte",
+    )?;
+    let mask_byte_word =
+        context
+            .builder()
+            .build_int_z_extend(mask_byte, context.word_type(), "mask_byte_word")?;
+
+    let index_truncated =
+        context
+            .builder()
+            .build_int_truncate(operand_1, context.byte_type(), "index_truncated")?;
+    let index_in_bits = context.builder().build_int_mul(
+        index_truncated,
+        context
+            .byte_type()
+            .const_int(revive_common::BIT_LENGTH_BYTE as u64, false),
+        "index_in_bits",
+    )?;
+    let index_from_most_significant_bit = context.builder().build_int_sub(
+        context.byte_type().const_int(
+            MAX_INDEX_BYTES * revive_common::BIT_LENGTH_BYTE as u64,
+            false,
+        ),
+        index_in_bits,
+        "index_from_msb",
+    )?;
+    let index_extended = context.builder().build_int_z_extend(
+        index_from_most_significant_bit,
+        context.word_type(),
+        "index",
+    )?;
+
+    let mask = context
+        .builder()
+        .build_left_shift(mask_byte_word, index_extended, "mask")?;
+    let masked_value = context.builder().build_and(operand_2, mask, "masked")?;
+    let byte = context
+        .builder()
+        .build_right_shift(masked_value, index_extended, false, "byte")?;
+
+    Ok(byte.as_basic_value_enum())
 }

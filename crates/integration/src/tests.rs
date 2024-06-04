@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolValue};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -589,4 +591,26 @@ fn balance() {
 
     let received = U256::from_be_slice(&output.data);
     assert_eq!(expected, received)
+}
+
+#[test]
+fn bitwise_byte() {
+    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::ZERO), true);
+    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::MAX), true);
+    assert_success(&Contract::bitwise_byte(U256::MAX, U256::ZERO), true);
+    assert_success(
+        &Contract::bitwise_byte(U256::from_str("18446744073709551619").unwrap(), U256::MAX),
+        true,
+    );
+
+    let de_bruijn_sequence =
+        hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
+    let value = U256::from_be_bytes::<32>(de_bruijn_sequence.clone().try_into().unwrap());
+
+    for (index, byte) in de_bruijn_sequence.iter().enumerate() {
+        let (_, output) = assert_success(&Contract::bitwise_byte(U256::from(index), value), true);
+        let expected = U256::from(*byte as i32);
+        let received = U256::abi_decode(&output.data, true).unwrap();
+        assert_eq!(expected, received)
+    }
 }

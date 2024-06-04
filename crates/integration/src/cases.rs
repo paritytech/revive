@@ -154,6 +154,12 @@ sol!(
     }
 );
 
+sol!(
+    contract Bitwise {
+        function opByte(uint i, uint x) public payable returns (uint ret);
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -506,6 +512,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Value::balance_ofCall::new((address,)).abi_encode(),
+        }
+    }
+
+    pub fn bitwise_byte(index: U256, value: U256) -> Self {
+        let code = include_str!("../contracts/Bitwise.sol");
+        let name = "Bitwise";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Bitwise::opByteCall::new((index, value)).abi_encode(),
         }
     }
 }

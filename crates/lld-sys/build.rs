@@ -27,7 +27,10 @@ fn set_rustc_link_flags() {
     }
 
     #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-lib=dylib=stdc++");
+    {
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+        println!("cargo:rustc-link-lib=tinfo");
+    }
 }
 
 fn main() {

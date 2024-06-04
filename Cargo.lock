@@ -1734,6 +1734,7 @@ dependencies = [
  "env_logger",
  "hex",
  "log",
+ "once_cell",
  "polkavm",
  "rayon",
  "revive-common",

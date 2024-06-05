@@ -7,7 +7,6 @@ pub mod intrinsics;
 pub mod llvm_runtime;
 pub mod r#return;
 pub mod runtime;
-pub mod vyper_data;
 pub mod yul_data;
 
 use std::collections::HashMap;
@@ -20,8 +19,6 @@ use crate::polkavm::context::pointer::Pointer;
 use self::declaration::Declaration;
 use self::evmla_data::EVMLAData;
 use self::r#return::Return;
-use self::runtime::Runtime;
-use self::vyper_data::VyperData;
 use self::yul_data::YulData;
 
 /// The LLVM IR generator function.
@@ -48,8 +45,6 @@ pub struct Function<'ctx> {
     yul_data: Option<YulData>,
     /// The EVM legacy assembly compiler data.
     evmla_data: Option<EVMLAData<'ctx>>,
-    /// The Vyper data.
-    vyper_data: Option<VyperData>,
 }
 
 impl<'ctx> Function<'ctx> {
@@ -82,7 +77,6 @@ impl<'ctx> Function<'ctx> {
 
             yul_data: None,
             evmla_data: None,
-            vyper_data: None,
         }
     }
 
@@ -95,9 +89,9 @@ impl<'ctx> Function<'ctx> {
     pub fn is_name_external(name: &str) -> bool {
         name.starts_with("llvm.")
             || (name.starts_with("__")
-                && name != Runtime::FUNCTION_ENTRY
-                && name != Runtime::FUNCTION_DEPLOY_CODE
-                && name != Runtime::FUNCTION_RUNTIME_CODE)
+                && name != self::runtime::FUNCTION_ENTRY
+                && name != self::runtime::FUNCTION_DEPLOY_CODE
+                && name != self::runtime::FUNCTION_RUNTIME_CODE)
     }
 
     /// Checks whether the function is related to the near call ABI.
@@ -328,29 +322,6 @@ impl<'ctx> Function<'ctx> {
         self.evmla_data
             .as_mut()
             .expect("The EVM data must have been initialized")
-    }
-
-    /// Sets the Vyper data.
-    pub fn set_vyper_data(&mut self, data: VyperData) {
-        self.vyper_data = Some(data);
-    }
-
-    /// Returns the Vyper data reference.
-    /// # Panics
-    /// If the Vyper data has not been initialized.
-    pub fn vyper(&self) -> &VyperData {
-        self.vyper_data
-            .as_ref()
-            .expect("The Vyper data must have been initialized")
-    }
-
-    /// Returns the Vyper data mutable reference.
-    /// # Panics
-    /// If the Vyper data has not been initialized.
-    pub fn vyper_mut(&mut self) -> &mut VyperData {
-        self.vyper_data
-            .as_mut()
-            .expect("The Vyper data must have been initialized")
     }
 
     /// Sets the Yul data.

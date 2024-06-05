@@ -42,9 +42,6 @@ impl<'ctx> Global<'ctx> {
             .value
             .set_visibility(inkwell::GlobalVisibility::Default);
         global.value.set_externally_initialized(false);
-        if let AddressSpace::Code = address_space {
-            global.value.set_constant(true);
-        }
         if !r#type.is_pointer_type() {
             global.value.set_initializer(&initializer);
         } else {

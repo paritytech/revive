@@ -36,7 +36,7 @@ where
             )?;
             let immutable_pointer = Pointer::new_with_offset(
                 context,
-                AddressSpace::HeapAuxiliary,
+                AddressSpace::default(),
                 context.word_type(),
                 offset_absolute,
                 "immutable_pointer",
@@ -81,7 +81,7 @@ where
             )?;
             let index_offset_pointer = Pointer::new_with_offset(
                 context,
-                AddressSpace::HeapAuxiliary,
+                AddressSpace::default(),
                 context.word_type(),
                 index_offset_absolute,
                 "immutable_index_pointer",
@@ -95,7 +95,7 @@ where
             )?;
             let value_offset_pointer = Pointer::new_with_offset(
                 context,
-                AddressSpace::HeapAuxiliary,
+                AddressSpace::default(),
                 context.word_type(),
                 value_offset_absolute,
                 "immutable_value_pointer",

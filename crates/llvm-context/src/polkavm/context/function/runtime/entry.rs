@@ -4,7 +4,7 @@ use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::function::runtime::Runtime;
+use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
 use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
@@ -53,7 +53,7 @@ impl Entry {
 
         context.set_global(
             crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER,
-            context.llvm().ptr_type(AddressSpace::Generic.into()),
+            context.llvm().ptr_type(AddressSpace::Heap.into()),
             AddressSpace::Stack,
             context.xlen_type().get_undef(),
         );
@@ -205,12 +205,12 @@ impl Entry {
 
         let deploy_code = context
             .functions
-            .get(Runtime::FUNCTION_DEPLOY_CODE)
+            .get(runtime::FUNCTION_DEPLOY_CODE)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Contract deploy code not found"))?;
         let runtime_code = context
             .functions
-            .get(Runtime::FUNCTION_RUNTIME_CODE)
+            .get(runtime::FUNCTION_RUNTIME_CODE)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Contract runtime code not found"))?;
 
@@ -233,7 +233,7 @@ where
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry_arguments = vec![context.bool_type().as_basic_type_enum()];
         let entry_function_type = context.function_type(entry_arguments, 0, false);
-        context.add_function(Runtime::FUNCTION_ENTRY, entry_function_type, 0, None)?;
+        context.add_function(runtime::FUNCTION_ENTRY, entry_function_type, 0, None)?;
 
         for symbol in runtime_api::exports::EXPORTS {
             context.declare_extern_function(symbol)?;
@@ -247,7 +247,7 @@ where
     /// The `entry` function loads calldata, sets globals and calls the runtime or deploy code.
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry = context
-            .get_function(Runtime::FUNCTION_ENTRY)
+            .get_function(runtime::FUNCTION_ENTRY)
             .expect("the entry function should already be declared")
             .borrow()
             .declaration;
@@ -278,7 +278,7 @@ where
         context.set_basic_block(context.current_function().borrow().return_block);
         context.build_unreachable();
 
-        context.set_current_function(Runtime::FUNCTION_ENTRY)?;
+        context.set_current_function(runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         Self::initialize_globals(context)?;

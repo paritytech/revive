@@ -196,9 +196,9 @@ where
         .declare(context)?;
 
         for name in [
-            revive_llvm_context::PolkaVMRuntime::FUNCTION_DEPLOY_CODE,
-            revive_llvm_context::PolkaVMRuntime::FUNCTION_RUNTIME_CODE,
-            revive_llvm_context::PolkaVMRuntime::FUNCTION_ENTRY,
+            revive_llvm_context::PolkaVMFunctionDeployCode,
+            revive_llvm_context::PolkaVMFunctionRuntimeCode,
+            revive_llvm_context::PolkaVMFunctionEntry,
         ]
         .into_iter()
         {

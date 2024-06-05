@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 use crate::polkavm::context::code_type::CodeType;
-use crate::polkavm::context::function::runtime::Runtime;
+use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
@@ -45,7 +45,7 @@ where
         let function_type =
             context.function_type::<inkwell::types::BasicTypeEnum>(vec![], 0, false);
         context.add_function(
-            Runtime::FUNCTION_RUNTIME_CODE,
+            runtime::FUNCTION_RUNTIME_CODE,
             function_type,
             0,
             Some(inkwell::module::Linkage::External),
@@ -55,7 +55,7 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(Runtime::FUNCTION_RUNTIME_CODE)?;
+        context.set_current_function(runtime::FUNCTION_RUNTIME_CODE)?;
 
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Runtime);

@@ -168,7 +168,9 @@ where
                     crate::evmla::assembly::instruction::stack::push(context, value).map(Some)
                 }
             }
-            InstructionName::PUSHDEPLOYADDRESS => todo!(),
+            InstructionName::PUSHDEPLOYADDRESS => {
+                revive_llvm_context::polkavm_evm_contract_context::address(context).map(Some)
+            }
 
             InstructionName::DUP1 => crate::evmla::assembly::instruction::stack::dup(
                 context,

@@ -12,7 +12,6 @@ pub mod global;
 pub mod r#loop;
 pub mod pointer;
 pub mod solidity_data;
-pub mod vyper_data;
 pub mod yul_data;
 
 #[cfg(test)]
@@ -37,7 +36,6 @@ use self::address_space::AddressSpace;
 use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
-// TODO
 // use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
@@ -49,7 +47,6 @@ use self::global::Global;
 use self::pointer::Pointer;
 use self::r#loop::Loop;
 use self::solidity_data::SolidityData;
-use self::vyper_data::VyperData;
 use self::yul_data::YulData;
 
 /// The LLVM IR generator context.
@@ -99,8 +96,6 @@ where
     yul_data: Option<YulData>,
     /// The EVM legacy assembly data.
     evmla_data: Option<EVMLAData<'ctx>>,
-    /// The Vyper data.
-    vyper_data: Option<VyperData>,
 }
 
 impl<'ctx, D> Context<'ctx, D>
@@ -224,7 +219,6 @@ where
             solidity_data: None,
             yul_data: None,
             evmla_data: None,
-            vyper_data: None,
         }
     }
 
@@ -522,9 +516,6 @@ where
 
     /// Compiles a contract dependency, if the dependency manager is set.
     pub fn compile_dependency(&mut self, name: &str) -> anyhow::Result<String> {
-        if let Some(vyper_data) = self.vyper_data.as_mut() {
-            vyper_data.set_is_forwarder_used();
-        }
         self.dependency_manager
             .to_owned()
             .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
@@ -717,11 +708,6 @@ where
 
                 self.build_load(storage_value_pointer, "storage_value_load")
             }
-            AddressSpace::Code | AddressSpace::HeapAuxiliary => todo!(),
-            AddressSpace::Generic => Ok(self.build_byte_swap(self.build_load(
-                pointer.address_space_cast(self, AddressSpace::Stack, &format!("{}_cast", name))?,
-                name,
-            )?)?),
             AddressSpace::Stack => {
                 let value = self
                     .builder()
@@ -813,11 +799,6 @@ where
                     ],
                 );
             }
-            AddressSpace::Code | AddressSpace::HeapAuxiliary => {}
-            AddressSpace::Generic => self.build_store(
-                pointer.address_space_cast(self, AddressSpace::Stack, "cast")?,
-                self.build_byte_swap(value.as_basic_value_enum())?,
-            )?,
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
                 instruction
@@ -1185,49 +1166,6 @@ where
         ))
     }
 
-    /// Writes the ABI pointer to the global variable.
-    pub fn write_abi_pointer(&mut self, pointer: Pointer<'ctx>, global_name: &str) {
-        self.set_global(
-            global_name,
-            self.llvm().ptr_type(AddressSpace::Generic.into()),
-            AddressSpace::Stack,
-            pointer.value,
-        );
-    }
-
-    /// Writes the ABI data size to the global variable.
-    pub fn write_abi_data_size(&mut self, _pointer: Pointer<'ctx>, _global_name: &str) {
-        /*
-        let abi_pointer_value = self
-            .builder()
-            .build_ptr_to_int(pointer.value, self.field_type(), "abi_pointer_value")
-            .unwrap();
-        let abi_pointer_value_shifted = self
-            .builder()
-        .build_right_shift(
-            abi_pointer_value,
-                self.field_const((revive_common::BIT_LENGTH_X32 * 3) as u64),
-                false,
-                "abi_pointer_value_shifted",
-            )
-            .unwrap();
-        let abi_length_value = self
-            .builder()
-            .build_and(
-                abi_pointer_value_shifted,
-                self.field_const(u32::MAX as u64),
-                "abi_length_value",
-            )
-            .unwrap();
-        self.set_global(
-            global_name,
-            self.field_type(),
-            AddressSpace::Stack,
-            abi_length_value,
-        );
-        */
-    }
-
     /// Returns a boolean type constant.
     pub fn bool_const(&self, value: bool) -> inkwell::values::IntValue<'ctx> {
         self.bool_type().const_int(u64::from(value), false)
@@ -1537,28 +1475,12 @@ where
             .expect("The EVMLA data must have been initialized")
     }
 
-    /// Sets the EVM legacy assembly data.
-    pub fn set_vyper_data(&mut self, data: VyperData) {
-        self.vyper_data = Some(data);
-    }
-
-    /// Returns the Vyper data reference.
-    /// # Panics
-    /// If the Vyper data has not been initialized.
-    pub fn vyper(&self) -> &VyperData {
-        self.vyper_data
-            .as_ref()
-            .expect("The Solidity data must have been initialized")
-    }
-
     /// Returns the current number of immutables values in the contract.
     /// If the size is set manually, then it is returned. Otherwise, the number of elements in
     /// the identifier-to-offset mapping tree is returned.
     pub fn immutables_size(&self) -> anyhow::Result<usize> {
         if let Some(solidity) = self.solidity_data.as_ref() {
             Ok(solidity.immutables_size())
-        } else if let Some(vyper) = self.vyper_data.as_ref() {
-            Ok(vyper.immutables_size())
         } else {
             anyhow::bail!("The immutable size data is not available");
         }

@@ -30,9 +30,6 @@ pub static EXTENSION_SOLIDITY: &str = "sol";
 /// The LLL IR file extension.
 pub static EXTENSION_LLL: &str = "lll";
 
-/// The Vyper file extension.
-pub static EXTENSION_VYPER: &str = "vy";
-
 /// The LLVM source code file extension.
 pub static EXTENSION_LLVM_SOURCE: &str = "ll";
 

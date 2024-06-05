@@ -106,6 +106,7 @@ impl Default for Frame {
 #[derive(Default, Clone, Debug)]
 pub struct Transaction {
     state: State,
+    transient_state: State,
     stack: Vec<Frame>,
 }
 
@@ -136,6 +137,16 @@ impl Transaction {
 
     fn create2(&self, salt: B256, blob_hash: B256) -> Address {
         self.top_frame().callee.create2(salt, blob_hash)
+    }
+
+    fn transient_account_mut(&mut self) -> &mut Account {
+        let address = self.top_frame().callee;
+        let account = self
+            .transient_state
+            .accounts_mut()
+            .entry(address)
+            .or_default();
+        account
     }
 }
 
@@ -277,6 +288,7 @@ impl From<State> for TransactionBuilder {
             state_before: state.clone(),
             context: Transaction {
                 state,
+                transient_state: Default::default(),
                 stack: Default::default(),
             },
         }
@@ -312,6 +324,7 @@ impl State {
             state_before: self.clone(),
             context: Transaction {
                 state: self,
+                transient_state: Default::default(),
                 stack: vec![Default::default()],
             },
         }
@@ -435,6 +448,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .func_wrap(
             runtime_api::imports::SET_STORAGE,
             |caller: Caller<Transaction>,
+             transient: u32,
              key_ptr: u32,
              key_len: u32,
              value_ptr: u32,
@@ -461,7 +475,12 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
 
                 log::info!("set storage {key} = {value}");
 
-                transaction.top_account_mut().storage.insert(key, value);
+                let storage = if transient == 0 {
+                    &mut transaction.top_account_mut().storage
+                } else {
+                    &mut transaction.transient_account_mut().storage
+                };
+                storage.insert(key, value);
 
                 Ok(0)
             },
@@ -472,6 +491,7 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
         .func_wrap(
             runtime_api::imports::GET_STORAGE,
             |caller: Caller<Transaction>,
+             transient: u32,
              key_ptr: u32,
              key_len: u32,
              out_ptr: u32,
@@ -488,12 +508,13 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
                 );
 
                 let key = U256::from_le_bytes::<32>(key.try_into().unwrap());
-                let value = transaction
-                    .top_account_mut()
-                    .storage
-                    .get(&key)
-                    .cloned()
-                    .unwrap_or_default();
+
+                let storage = if transient == 0 {
+                    &transaction.top_account_mut().storage
+                } else {
+                    &transaction.transient_account_mut().storage
+                };
+                let value = storage.get(&key).cloned().unwrap_or_default();
 
                 log::info!("get storage {key} = {value}");
 

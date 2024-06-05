@@ -673,8 +673,7 @@ where
 
                 self.build_byte_swap(value)
             }
-            AddressSpace::TransientStorage => todo!(),
-            AddressSpace::Storage => {
+            AddressSpace::Storage | AddressSpace::TransientStorage => {
                 let storage_key_value = self.builder().build_ptr_to_int(
                     pointer.value,
                     self.word_type(),
@@ -692,9 +691,12 @@ where
                 let (storage_value_pointer, storage_value_length_pointer) = self
                     .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
 
+                let transient = pointer.address_space == AddressSpace::TransientStorage;
+
                 self.build_runtime_call(
                     runtime_api::imports::GET_STORAGE,
                     &[
+                        self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
                         storage_value_pointer.to_int(self).into(),
@@ -758,8 +760,7 @@ where
                     .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                     .expect("Alignment is valid");
             }
-            AddressSpace::TransientStorage => todo!(),
-            AddressSpace::Storage => {
+            AddressSpace::Storage | AddressSpace::TransientStorage => {
                 assert_eq!(
                     value.as_basic_value_enum().get_type(),
                     self.word_type().as_basic_type_enum()
@@ -789,9 +790,12 @@ where
                 self.builder()
                     .build_store(storage_value_pointer.value, value)?;
 
+                let transient = pointer.address_space == AddressSpace::TransientStorage;
+
                 self.build_runtime_call(
                     runtime_api::imports::SET_STORAGE,
                     &[
+                        self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
                         storage_value_pointer_casted.into(),

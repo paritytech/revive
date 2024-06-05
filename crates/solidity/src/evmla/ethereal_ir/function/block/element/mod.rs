@@ -742,12 +742,21 @@ where
                 .map(|_| None)
             }
             InstructionName::TLOAD => {
-                let _arguments = self.pop_arguments_llvm(context);
-                anyhow::bail!("The `TLOAD` instruction is not supported until zkVM v1.5.0");
+                let arguments = self.pop_arguments_llvm(context);
+                revive_llvm_context::polkavm_evm_storage::transient_load(
+                    context,
+                    arguments[0].into_int_value(),
+                )
+                .map(Some)
             }
             InstructionName::TSTORE => {
-                let _arguments = self.pop_arguments_llvm(context);
-                anyhow::bail!("The `TSTORE` instruction is not supported until zkVM v1.5.0");
+                let arguments = self.pop_arguments_llvm(context);
+                revive_llvm_context::polkavm_evm_storage::transient_store(
+                    context,
+                    arguments[0].into_int_value(),
+                    arguments[1].into_int_value(),
+                )
+                .map(|_| None)
             }
             InstructionName::PUSHIMMUTABLE => {
                 let key = self

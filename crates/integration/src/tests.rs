@@ -614,3 +614,16 @@ fn bitwise_byte() {
         assert_eq!(expected, received)
     }
 }
+
+#[test]
+fn transient_storage() {
+    let expected = U256::MAX;
+    let (state, output) = assert_success(&Contract::storage_transient(expected), false);
+    let received = U256::abi_decode(&output.data, true).unwrap();
+    assert_eq!(expected, received);
+
+    assert!(state
+        .accounts()
+        .values()
+        .all(|account| account.storage.is_empty()));
+}

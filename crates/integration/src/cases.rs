@@ -160,6 +160,12 @@ sol!(
     }
 );
 
+sol!(
+    contract Storage {
+        function transient(uint value) public returns (uint ret);
+    }
+);
+
 impl Contract {
     /// Execute the contract.
     ///
@@ -524,6 +530,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: Bitwise::opByteCall::new((index, value)).abi_encode(),
+        }
+    }
+
+    pub fn storage_transient(value: U256) -> Self {
+        let code = include_str!("../contracts/Storage.sol");
+        let name = "Storage";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: Storage::transientCall::new((value,)).abi_encode(),
         }
     }
 }

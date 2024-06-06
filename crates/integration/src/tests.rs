@@ -526,6 +526,15 @@ fn ext_code_size() {
 }
 
 #[test]
+fn code_size() {
+    let contract = Contract::code_size();
+    let (_, output) = assert_success(&contract, false);
+    let expected = U256::from(contract.pvm_runtime.len());
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received);
+}
+
+#[test]
 fn value_transfer() {
     // Succeeds in remix (shanghai) but traps the interpreter
     let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);

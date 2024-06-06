@@ -35,7 +35,7 @@ where
     let value_pointer = if let Some(value) = value {
         let value_pointer = context.build_alloca(context.value_type(), "value");
         context.build_store(value_pointer, value)?;
-        value_pointer.value
+        value_pointer
     } else {
         context.sentinel_pointer()
     };
@@ -66,8 +66,8 @@ where
     .next(address_pointer.value)?
     .next(gas)?
     .skip()
-    .next(context.sentinel_pointer())?
-    .next(value_pointer)?
+    .next(context.sentinel_pointer().value)?
+    .next(value_pointer.value)?
     .next(input_pointer.value)?
     .next(input_length)?
     .next(output_pointer.value)?

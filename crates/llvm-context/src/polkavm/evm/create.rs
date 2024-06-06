@@ -66,14 +66,14 @@ where
     .next(code_hash_pointer.value)?
     .skip()
     .skip()
-    .next(context.sentinel_pointer())?
+    .next(context.sentinel_pointer().value)?
     .next(value_pointer.value)?
     .next(input_data_pointer.value)?
     .next(input_length)?
     .next(address_pointer.value)?
     .next(address_length_pointer.value)?
-    .next(context.sentinel_pointer())?
-    .next(context.sentinel_pointer())?
+    .next(context.sentinel_pointer().value)?
+    .next(context.sentinel_pointer().value)?
     .next(salt_pointer.value)?
     .next(
         context

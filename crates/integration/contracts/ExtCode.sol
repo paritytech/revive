@@ -8,4 +8,10 @@ contract ExtCode {
             ret := extcodesize(who)
         }
     }
+
+    function CodeSize() public pure returns (uint ret) {
+        assembly {
+            ret := codesize()
+        }
+    }
 }

@@ -1234,10 +1234,17 @@ where
     }
 
     /// Returns the register witdh sized type.
-    pub fn sentinel_pointer(&self) -> inkwell::values::PointerValue<'ctx> {
-        self.xlen_type()
+    pub fn sentinel_pointer(&self) -> Pointer<'ctx> {
+        let sentinel_pointer = self
+            .xlen_type()
             .const_all_ones()
-            .const_to_pointer(self.llvm().ptr_type(Default::default()))
+            .const_to_pointer(self.llvm().ptr_type(Default::default()));
+
+        Pointer::new(
+            sentinel_pointer.get_type(),
+            AddressSpace::Stack,
+            sentinel_pointer,
+        )
     }
 
     /// Returns the runtime value width sized type.

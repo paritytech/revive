@@ -126,6 +126,8 @@ sol!(
 sol!(
     contract ExtCode {
         function ExtCodeSize(address who) public view returns (uint ret);
+
+        function CodeSize() public pure returns (uint ret);
     }
 );
 
@@ -458,6 +460,18 @@ impl Contract {
             evm_runtime: crate::compile_evm_bin_runtime(name, code),
             pvm_runtime: crate::compile_blob(name, code),
             calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
+        }
+    }
+
+    pub fn code_size() -> Self {
+        let code = include_str!("../contracts/ExtCode.sol");
+        let name = "ExtCode";
+
+        Self {
+            name,
+            evm_runtime: crate::compile_evm_bin_runtime(name, code),
+            pvm_runtime: crate::compile_blob(name, code),
+            calldata: ExtCode::CodeSizeCall::new(()).abi_encode(),
         }
     }
 

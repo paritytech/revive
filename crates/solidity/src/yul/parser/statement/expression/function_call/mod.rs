@@ -591,7 +591,7 @@ impl FunctionCall {
                         revive_llvm_context::polkavm_evm_calldata::size(context).map(Some)
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
-                        todo!()
+                        revive_llvm_context::polkavm_evm_ext_code::size(context, None).map(Some)
                     }
                 }
             }
@@ -632,7 +632,7 @@ impl FunctionCall {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
                 revive_llvm_context::polkavm_evm_ext_code::size(
                     context,
-                    arguments[0].into_int_value(),
+                    Some(arguments[0].into_int_value()),
                 )
                 .map(Some)
             }

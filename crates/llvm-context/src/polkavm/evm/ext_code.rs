@@ -6,16 +6,23 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm_const::runtime_api;
 
-/// Translates the `extcodesize` instruction.
+/// Translates the `extcodesize` instruction if `address` is `Some`.
+/// Otherwise, translates the `codesize` instruction.
 pub fn size<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    address: inkwell::values::IntValue<'ctx>,
+    address: Option<inkwell::values::IntValue<'ctx>>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    let address_pointer = context.build_alloca(context.word_type(), "value");
-    context.build_store(address_pointer, address)?;
+    let address_pointer = match address {
+        Some(address) => {
+            let address_pointer = context.build_alloca(context.word_type(), "value");
+            context.build_store(address_pointer, address)?;
+            address_pointer
+        }
+        None => context.sentinel_pointer(),
+    };
 
     let address_pointer_casted = context.builder().build_ptr_to_int(
         address_pointer.value,

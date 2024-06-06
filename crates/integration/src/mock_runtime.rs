@@ -884,20 +884,26 @@ fn link_host_functions(engine: &Engine) -> Linker<Transaction> {
             |caller: Caller<Transaction>, address_ptr: u32| {
                 let (caller, transaction) = caller.split();
 
-                let bytes = caller.read_memory_into_vec(address_ptr, 32)?;
-                let word = U256::from_le_slice(&bytes);
-                let address = Address::from_word(word.into());
+                let address = if address_ptr == u32::MAX {
+                    transaction.top_frame().callee
+                } else {
+                    let bytes = caller.read_memory_into_vec(address_ptr, 32)?;
+                    let word = U256::from_le_slice(&bytes);
+                    Address::from_word(word.into())
+                };
 
-                log::info!("{}", address);
-
-                Ok(transaction
+                let code_size = transaction
                     .state
                     .accounts
                     .get(&address)
                     .and_then(|account| account.contract)
                     .and_then(|blob_hash| transaction.state.blobs.get(&blob_hash))
                     .map(|code| code.len())
-                    .unwrap_or_default() as u32)
+                    .unwrap_or_default() as u32;
+
+                log::info!("code size of {address} = {code_size}");
+
+                Ok(code_size)
             },
         )
         .unwrap();

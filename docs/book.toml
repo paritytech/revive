@@ -1,0 +1,6 @@
+[book]
+authors = ["Cyrill Leutwiler <cyrill@parity.io>"]
+language = "en"
+multilingual = false
+src = "src"
+title = "revive documentation"

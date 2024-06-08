@@ -1,4 +1,4 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace clean
+.PHONY: install format test test-solidity test-cli test-integration test-workspace clean docs docs-build
 
 install: install-bin install-npm
 
@@ -47,6 +47,12 @@ bench: install-bin
 
 clippy:
 	cargo clippy --all-features --workspace --tests --benches
+
+docs: docs-build
+	mdbook serve --open docs/
+
+docs-build:
+	mdbook test docs/ && mdbook build docs/
 
 clean:
 	cargo clean ; \

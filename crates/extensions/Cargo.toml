@@ -1,9 +1,0 @@
-[package]
-name = "revive-extensions"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-0"] }

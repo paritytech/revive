@@ -12,6 +12,9 @@ description = "Shared constants of the revive compiler"
 [lib]
 doctest = false
 
+[features]
+riscv-64 = []
+
 [dependencies]
 anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

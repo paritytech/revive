@@ -1,13 +1,33 @@
 use std::{env, fs, path::Path, process::Command};
 
+#[cfg(not(feature = "riscv-64"))]
+const TARGET_TRIPLE_FLAG: &str = "-triple=riscv32-unknown-unknown-elf";
+#[cfg(feature = "riscv-64")]
+const TARGET_TRIPLE_FLAG: &str = "-triple=riscv64-unknown-unknown-elf";
+
+#[cfg(not(feature = "riscv-64"))]
+const TARGET_FLAG: &str = "--target=riscv32";
+#[cfg(feature = "riscv-64")]
+const TARGET_FLAG: &str = "--target=riscv64";
+
+#[cfg(not(feature = "riscv-64"))]
+const TARGET_ARCH_FLAG: &str = "-march=rv32em";
+#[cfg(feature = "riscv-64")]
+const TARGET_ARCH_FLAG: &str = "-march=rv64em";
+
+#[cfg(not(feature = "riscv-64"))]
+const TARGET_ABI_FLAG: &str = "-mabi=ilp32e";
+#[cfg(feature = "riscv-64")]
+const TARGET_ABI_FLAG: &str = "-mabi=lp64e";
+
 fn compile(bitcode_path: &str) {
     let output = Command::new("clang")
         .args([
-            "--target=riscv32",
+            TARGET_FLAG,
             "-Xclang",
-            "-triple=riscv32-unknown-unknown-elf",
-            "-march=rv32em",
-            "-mabi=ilp32e",
+            TARGET_TRIPLE_FLAG,
+            TARGET_ARCH_FLAG,
+            TARGET_ABI_FLAG,
             "-fno-exceptions",
             "-ffreestanding",
             "-Wall",

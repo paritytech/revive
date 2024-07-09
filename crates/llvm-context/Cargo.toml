@@ -14,6 +14,7 @@ doctest = false
 
 [features]
 riscv-zbb = []
+riscv-64 = []
 
 [dependencies]
 anyhow = { workspace = true }

@@ -8,6 +8,16 @@ SECTIONS {
     .text : { KEEP(*(.text.polkavm_export)) *(.text .text.*) }
 }"#;
 
+#[cfg(not(feature = "riscv-64"))]
+const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv32.a";
+#[cfg(feature = "riscv-64")]
+const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
+
+#[cfg(not(feature = "riscv-64"))]
+const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv32";
+#[cfg(feature = "riscv-64")]
+const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv64";
+
 fn invoke_lld(cmd_args: &[&str]) -> bool {
     let c_strings = cmd_args
         .iter()
@@ -32,7 +42,7 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
     let output_path = dir.path().join("out.so");
     let object_path = dir.path().join("out.o");
     let linker_script_path = dir.path().join("linker.ld");
-    let compiler_rt_path = dir.path().join("libclang_rt.builtins-riscv32.a");
+    let compiler_rt_path = dir.path().join(BUILTINS_ARCHIVE_FILE);
 
     fs::write(&object_path, input).map_err(|msg| anyhow::anyhow!("{msg} {object_path:?}"))?;
 
@@ -57,7 +67,7 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
         "--library-path",
         dir.path().to_str().expect("should be utf8"),
         "--library",
-        "clang_rt.builtins-riscv32",
+        BUILTINS_LIB_NAME,
         linker_script_path.to_str().expect("should be utf8"),
         object_path.to_str().expect("should be utf8"),
         "-o",

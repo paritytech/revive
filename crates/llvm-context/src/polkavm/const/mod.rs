@@ -10,10 +10,7 @@ pub const LLVM_VERSION: semver::Version = semver::Version::new(18, 1, 4);
 pub const ZKEVM_VERSION: semver::Version = semver::Version::new(1, 3, 2);
 
 /// The register width sized type
-#[cfg(not(feature = "riscv-64"))]
 pub static XLEN: usize = revive_common::BIT_LENGTH_X32;
-#[cfg(feature = "riscv-64")]
-pub static XLEN: usize = revive_common::BIT_LENGTH_X64;
 
 /// The heap memory pointer pointer global variable name.
 pub static GLOBAL_HEAP_MEMORY_POINTER: &str = "memory_pointer";

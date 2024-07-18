@@ -14,7 +14,9 @@ Discussion around the development is hosted on the [Polkadot Forum](https://foru
 
 ## Installation
 
-TL;DR installing the `resolc` Solidity frontend executable:
+`resolc` depends on the [solc](https://github.com/ethereum/solidity) binary installed on your system.
+
+To install the `resolc` Solidity frontend executable:
 
 ```bash
 bash build-llvm.sh

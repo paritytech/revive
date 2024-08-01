@@ -5,6 +5,9 @@ install: install-bin install-npm
 install-bin:
 	cargo install --path crates/solidity
 
+install-wasm:
+	cargo install --target wasm32-unknown-emscripten --path crates/solidity
+
 install-npm:
 	npm install && npm fund
 

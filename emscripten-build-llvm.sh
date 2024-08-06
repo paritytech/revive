@@ -42,7 +42,7 @@ cmake --build $LLVM_NATIVE/ -- llvm-tblgen clang-tblgen llvm-config
 if [ ! -d $LLVM_WASM/ ]; then
 	EMCC_DEBUG=2 \
     CXXFLAGS="-Dwait4=__syscall_wait4" \
-	LDFLAGS="-s NO_INVOKE_RUN -s EXIT_RUNTIME -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH -s EXPORTED_RUNTIME_METHODS=FS,callMain -s MODULARIZE -s EXPORT_ES6 -s WASM_BIGINT" \
+	LDFLAGS="-lnodefs.js -s NO_INVOKE_RUN -s EXIT_RUNTIME -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH -s EXPORTED_RUNTIME_METHODS=FS,callMain,NODEFS -s MODULARIZE -s EXPORT_ES6 -s WASM_BIGINT" \
 	emcmake cmake -G Ninja \
         -S $LLVM_SRC/llvm/ \
         -B $LLVM_WASM/ \

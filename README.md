@@ -37,6 +37,7 @@ export EMSDK_ROOT=<PATH_TO_EMSCRIPTEN_SDK>
 bash emscripten-build-llvm.sh
 export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
 make install-wasm
+echo '{ "type": "module" }' > ${PWD}/target/wasm32-unknown-emscripten/release/package.json
 ```
 
 ### Development

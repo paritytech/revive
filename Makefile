@@ -29,6 +29,9 @@ test-workspace: install
 test-cli: install
 	npm run test:cli
 
+test-wasm: install-wasm
+	npm run test:wasm
+
 bench-prepare: install-bin
 	cargo criterion --bench prepare --features bench-evm,bench-pvm --message-format=json \
 	| criterion-table > crates/benchmarks/PREPARE.md

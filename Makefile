@@ -1,12 +1,18 @@
 .PHONY: install format test test-solidity test-cli test-integration test-workspace clean docs docs-build
 
+ifeq ($(strip $(WASM_INSTALL_PREFIX)),)
+WASM_INSTALL_PREFIX=$(shell pwd)
+endif
+$(info "WASM_INSTALL_PREFIX=$(WASM_INSTALL_PREFIX))
+
 install: install-bin install-npm
 
 install-bin:
 	cargo install --path crates/solidity
 
 install-wasm:
-	RUSTFLAGS='-Clink-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc -Clink-arg=-sNO_INVOKE_RUN -Clink-arg=-sEXIT_RUNTIME -Clink-arg=-sINITIAL_MEMORY=64MB -Clink-arg=-sALLOW_MEMORY_GROWTH -Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain -Clink-arg=-sMODULARIZE -Clink-arg=-sEXPORT_ES6' cargo install --target wasm32-unknown-emscripten --path crates/solidity
+	RUSTFLAGS='-Clink-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc -Clink-arg=-sNO_INVOKE_RUN -Clink-arg=-sEXIT_RUNTIME -Clink-arg=-sINITIAL_MEMORY=64MB -Clink-arg=-sALLOW_MEMORY_GROWTH -Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain -Clink-arg=-sMODULARIZE -Clink-arg=-sEXPORT_ES6' cargo install --root $(WASM_INSTALL_PREFIX) --target wasm32-unknown-emscripten --path crates/solidity
+	echo '{ "type": "module" }' > $(WASM_INSTALL_PREFIX)/target/wasm32-unknown-emscripten/release/package.json
 
 install-npm:
 	npm install && npm fund

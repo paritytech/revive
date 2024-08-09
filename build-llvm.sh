@@ -77,7 +77,7 @@ build_compiler_rt() {
 	  -DCMAKE_SYSTEM_NAME=unknown \
 	  -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
 	  ..
-	
+
 	ninja
 	ninja install
 }

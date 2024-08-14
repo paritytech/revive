@@ -516,14 +516,14 @@ where
         let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
         let subroutine_type =
             di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
-        let linkage = self
-            .debug_info()
-            .expect("expected debug-info builders")
-            .namespace_as_identifier(Some(name));
+        // let linkage = self
+        //     .debug_info()
+        //     .expect("expected debug-info builders")
+        //     .namespace_as_identifier(Some(name));
         let func_scope = di_builder.create_function(
             di_scope,
             name,
-            Some(linkage.as_str()),
+            None, //Some(linkage.as_str()),
             di_file,
             line_no,
             subroutine_type,

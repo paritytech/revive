@@ -61,14 +61,6 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Deploy);
 
-        if context.debug_info().is_some() {
-            context.builder().unset_current_debug_location();
-            let func_scope = context
-                .set_current_function_debug_info(runtime::FUNCTION_DEPLOY_CODE, 0)?
-                .as_debug_info_scope();
-            context.push_debug_scope(func_scope);
-        }
-
         self.inner.into_llvm(context)?;
         context.set_debug_location(0, 0, None)?;
 

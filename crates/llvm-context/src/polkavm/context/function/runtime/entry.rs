@@ -225,14 +225,6 @@ where
         context.set_current_function(runtime::FUNCTION_ENTRY, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        if context.debug_info().is_some() {
-            context.builder().unset_current_debug_location();
-            let func_scope = context
-                .set_current_function_debug_info(runtime::FUNCTION_ENTRY, 0)?
-                .as_debug_info_scope();
-            context.push_debug_scope(func_scope);
-        }
-
         Self::initialize_globals(context)?;
         Self::load_calldata(context)?;
         Self::leave_entry(context)?;

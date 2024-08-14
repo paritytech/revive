@@ -39,14 +39,6 @@ where
         context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        if context.debug_info().is_some() {
-            context.builder().unset_current_debug_location();
-            let func_scope = context
-                .set_current_function_debug_info(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, 0)?
-                .as_debug_info_scope();
-            context.push_debug_scope(func_scope);
-        }
-
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
             .value

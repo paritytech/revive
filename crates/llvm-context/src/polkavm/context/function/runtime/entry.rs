@@ -9,8 +9,6 @@ use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
-use inkwell::debug_info::AsDIScope;
-
 /// The entry function.
 /// The function is a wrapper managing the runtime and deploy code calling logic.
 /// Is a special runtime function that is only used by the front-end generated code.

@@ -7,8 +7,6 @@ use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
 use crate::polkavm::{runtime_api, Dependency};
 
-use inkwell::debug_info::AsDIScope;
-
 /// A function for requesting the immutable data from the runtime.
 /// This is a special function that is only used by the front-end generated code.
 ///

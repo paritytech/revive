@@ -491,7 +491,7 @@ where
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
         self.current_function = Some(function);
-        if self.debug_info().is_some() {
+        if let Some(_) = self.debug_info() {
             self.builder().unset_current_debug_location();
             let func_scope = self
                 .set_current_function_debug_info(name, line.unwrap_or(0))?
@@ -508,32 +508,35 @@ where
         name: &str,
         line_no: u32,
     ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
-        let dinfo = self.debug_info().expect("expected debug-info builder");
-        let di_scope = dinfo.top_scope().expect("expected a debug-info scope");
-        let di_builder = dinfo.builder();
-        let di_file = dinfo.compilation_unit().get_file();
-        let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
-        let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
-        let subroutine_type =
-            di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
-        // let linkage = self
-        //     .debug_info()
-        //     .expect("expected debug-info builders")
-        //     .namespace_as_identifier(Some(name));
-        let func_scope = di_builder.create_function(
-            di_scope,
-            name,
-            None, //Some(linkage.as_str()),
-            di_file,
-            line_no,
-            subroutine_type,
-            false,
-            true,
-            1,
-            di_flags,
-            false,
-        );
-        Ok(func_scope)
+        if let Some(dinfo) = self.debug_info() {
+            let di_scope = dinfo.top_scope().expect("expected a debug-info scope");
+            let di_builder = dinfo.builder();
+            let di_file = dinfo.compilation_unit().get_file();
+            let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
+            let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
+            let subroutine_type =
+                di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
+            // let linkage = self
+            //     .debug_info()
+            //     .expect("expected debug-info builders")
+            //     .namespace_as_identifier(Some(name));
+            let func_scope = di_builder.create_function(
+                di_scope,
+                name,
+                None, //Some(linkage.as_str()),
+                di_file,
+                line_no,
+                subroutine_type,
+                false,
+                true,
+                1,
+                di_flags,
+                false,
+            );
+            Ok(func_scope)
+        } else {
+            anyhow::bail!("expected debug-info builders")
+        }
     }
 
     /// Adds a debug-info scope to the current function.
@@ -584,31 +587,29 @@ where
 
     /// Pushes a debug-info scope to the stack.
     pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
-        if self.debug_info().is_some() {
-            self.debug_info().unwrap().push_scope(scope);
+        if let Some(dinfo) = self.debug_info() {
+            dinfo.push_scope(scope);
         }
     }
 
     /// Pops the top of the debug-info scope stack.
     pub fn pop_debug_scope(&self) {
-        if self.debug_info().is_some() {
-            self.debug_info().unwrap().pop_scope();
+        if let Some(dinfo) = self.debug_info() {
+            dinfo.pop_scope();
         }
     }
 
     /// Pushes a debug-info scope to the stack.
     pub fn push_debug_namespace(&self, name: &str) {
-        if self.debug_info().is_some() {
-            self.debug_info()
-                .unwrap()
-                .push_namespace(String::from(name));
+        if let Some(dinfo) = self.debug_info() {
+            dinfo.push_namespace(String::from(name));
         }
     }
 
     /// Pops the top of the debug-info scope stack.
     pub fn pop_debug_namespace(&self) {
-        if self.debug_info().is_some() {
-            self.debug_info().unwrap().pop_namespace();
+        if let Some(dinfo) = self.debug_info() {
+            dinfo.pop_namespace();
         }
     }
 

@@ -47,8 +47,6 @@ pub struct DebugInfo<'ctx> {
     builder: inkwell::debug_info::DebugInfoBuilder<'ctx>,
     /// Enclosing debug info scopes.
     scope_stack: RefCell<ScopeStack<'ctx>>,
-    // Names of enclosing objects, functions and other namespaces.
-    namespace_stack: RefCell<Vec<String>>,
 }
 
 impl<'ctx> DebugInfo<'ctx> {
@@ -76,7 +74,6 @@ impl<'ctx> DebugInfo<'ctx> {
             compile_unit,
             builder,
             scope_stack: RefCell::new(ScopeStack::from(compile_unit.as_debug_info_scope())),
-            namespace_stack: RefCell::new(vec![]),
         }
     }
 
@@ -189,41 +186,5 @@ impl<'ctx> DebugInfo<'ctx> {
     /// Return the number of debug-info scopes on the scope stack.
     pub fn num_scopes(&self) -> usize {
         self.scope_stack.borrow().len()
-    }
-
-    /// Push a name onto the namespace stack.
-    pub fn push_namespace(&self, name: String) {
-        self.namespace_stack.borrow_mut().push(name);
-    }
-
-    /// Pop the top name off the namespace stack and return it.
-    pub fn pop_namespace(&self) -> Option<String> {
-        self.namespace_stack.borrow_mut().pop()
-    }
-
-    /// Return the top of the namespace stack.
-    pub fn top_namespace(&self) -> Option<String> {
-        self.namespace_stack.borrow().last().cloned()
-    }
-
-    // Get a string representation of the namespace stack. Optionally append the given name.
-    pub fn namespace_as_identifier(&self, name: Option<&str>) -> String {
-        let separator = "::";
-        let mut ret = String::new();
-        let mut sep = false;
-        for s in self.namespace_stack.borrow().iter() {
-            if sep {
-                ret.push_str(separator);
-            };
-            sep = true;
-            ret.push_str(s)
-        }
-        if let Some(n) = name {
-            if sep {
-                ret.push_str(separator);
-            };
-            ret.push_str(n);
-        }
-        ret
     }
 }

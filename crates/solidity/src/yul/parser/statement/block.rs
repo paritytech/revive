@@ -155,7 +155,7 @@ where
             function.into_llvm(context)?;
         }
 
-        context.set_current_function(current_function.as_str(), None)?;
+        context.set_current_function(current_function.as_str(), Some(self.location.line))?;
 
         if let Some(dinfo) = context.debug_info() {
             let di_builder = dinfo.builder();
@@ -174,7 +174,7 @@ where
 
         context.set_basic_block(current_block);
         for statement in local_statements.into_iter() {
-            context.set_debug_location(self.location.line, 0, None)?;
+            context.set_debug_location(statement.location().line, 0, None)?;
             if context.basic_block().get_terminator().is_some() {
                 break;
             }

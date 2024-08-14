@@ -103,3 +103,30 @@ describe("Run resolc with source debug information enabled", () => {
         expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
     });
 });
+
+describe("Run resolc with source debug information and no solc optimization", () => {
+
+    const command = `resolc --disable-solc-optimizer -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd`;
+    const result = executeCommand(command);
+
+    it("Compiler run successful", () => {
+        expect(result.output).toMatch(/(Compiler run successful.)/i);
+    });
+    it("Exit code = 0", () => {
+        expect(result.exitCode).toBe(0);
+    });
+    it("Output dir is created", () => {
+        expect(isFolderExist(paths.pathToOutputDir)).toBe(true);
+    });
+    xit("Output files are created", () => { // a bug on windows
+        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.binExtension)).toBe(true);
+        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.asmExtension)).toBe(true);
+    });
+    it("the output files are not empty", () => {
+        expect(isFileEmpty(paths.pathToSolBinOutputFile)).toBe(false);
+        expect(isFileEmpty(paths.pathToSolAsmOutputFile)).toBe(false);
+    });
+    it("No 'Error'/'Fail' in the output", () => {
+        expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
+    });
+});

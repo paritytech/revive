@@ -227,7 +227,6 @@ where
                 .expect("expected an existing debug-info scope");
             let object_scope = di_builder.create_namespace(di_parent_scope, object_name, true);
             context.push_debug_scope(object_scope.as_debug_info_scope());
-            context.push_debug_namespace(object_name);
         }
 
         if self.identifier.ends_with("_deployed") {
@@ -243,7 +242,6 @@ where
         }
         context.set_debug_location(self.location.line, 0, None)?;
 
-        context.pop_debug_namespace();
         context.pop_debug_scope();
 
         Ok(())

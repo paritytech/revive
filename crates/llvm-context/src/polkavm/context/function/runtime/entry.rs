@@ -8,8 +8,6 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
-use inkwell::debug_info::AsDIScope;
-
 /// The entry function.
 /// The function is a wrapper managing the runtime and deploy code calling logic.
 /// Is a special runtime function that is only used by the front-end generated code.
@@ -220,14 +218,6 @@ where
 
         context.set_current_function(runtime::FUNCTION_ENTRY, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
-
-        if context.debug_info().is_some() {
-            context.builder().unset_current_debug_location();
-            let func_scope = context
-                .set_current_function_debug_info(runtime::FUNCTION_ENTRY, 0)?
-                .as_debug_info_scope();
-            context.push_debug_scope(func_scope);
-        }
 
         Self::initialize_globals(context)?;
         Self::load_calldata(context)?;

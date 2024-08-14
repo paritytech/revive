@@ -9,6 +9,8 @@ use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+use inkwell::debug_info::AsDIScope;
+
 /// The entry function.
 /// The function is a wrapper managing the runtime and deploy code calling logic.
 /// Is a special runtime function that is only used by the front-end generated code.
@@ -141,6 +143,8 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
+        context.set_debug_location(0, 0, None)?;
+
         let is_deploy = context
             .current_function()
             .borrow()
@@ -221,6 +225,14 @@ where
         context.set_current_function(runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
+        if context.debug_info().is_some() {
+            context.builder().unset_current_debug_location();
+            let func_scope = context
+                .set_current_function_debug_info(runtime::FUNCTION_ENTRY, 0)?
+                .as_debug_info_scope();
+            context.push_debug_scope(func_scope);
+        }
+
         Self::initialize_globals(context)?;
         Self::load_calldata(context)?;
         Self::leave_entry(context)?;
@@ -228,6 +240,8 @@ where
         context.build_unconditional_branch(context.current_function().borrow().return_block());
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_unreachable();
+
+        context.pop_debug_scope();
 
         Ok(())
     }

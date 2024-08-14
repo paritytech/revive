@@ -5,7 +5,7 @@ pub mod argument;
 pub mod attribute;
 pub mod build;
 pub mod code_type;
-// pub mod debug_info;
+pub mod debug_info;
 pub mod evmla_data;
 pub mod function;
 pub mod global;
@@ -21,6 +21,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use inkwell::debug_info::AsDIScope;
+use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 
@@ -36,7 +38,7 @@ use self::address_space::AddressSpace;
 use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
-// use self::debug_info::DebugInfo;
+use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
@@ -86,7 +88,7 @@ where
     /// Whether to append the metadata hash at the end of bytecode.
     include_metadata_hash: bool,
     /// The debug info of the current module.
-    // debug_info: DebugInfo<'ctx>,
+    debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
     debug_config: Option<DebugConfig>,
 
@@ -208,6 +210,7 @@ where
         optimizer: Optimizer,
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
+        debug_info: Option<DebugInfo<'ctx>>,
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
@@ -233,7 +236,8 @@ where
 
             dependency_manager,
             include_metadata_hash,
-            // debug_info,
+
+            debug_info,
             debug_config,
 
             solidity_data: None,
@@ -423,6 +427,14 @@ where
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let value = self.module().add_function(name, r#type, linkage);
 
+        if self.debug_info().is_some() {
+            self.builder().unset_current_debug_location();
+            let func_scope = self.build_function_debug_info(name, 0)?;
+            value.set_subprogram(func_scope);
+            self.push_debug_scope(func_scope.as_debug_info_scope());
+            self.set_debug_location(0, 0, Some(func_scope.as_debug_info_scope()))?;
+        }
+
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
@@ -456,6 +468,8 @@ where
         let function = Rc::new(RefCell::new(function));
         self.functions.insert(name.to_string(), function.clone());
 
+        self.pop_debug_scope();
+
         Ok(function)
     }
 
@@ -478,6 +492,116 @@ where
         })?;
         self.current_function = Some(function);
         Ok(())
+    }
+
+    /// Builds a debug-info scope for a function.
+    pub fn build_function_debug_info(
+        &self,
+        name: &str,
+        line_no: u32,
+    ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
+        let dinfo = self.debug_info().expect("expected debug-info builder");
+        let di_scope = dinfo.top_scope().expect("expected a debug-info scope");
+        let di_builder = dinfo.builder();
+        let di_file = dinfo.compilation_unit().get_file();
+        let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
+        let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
+        let subroutine_type =
+            di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
+        let linkage = self
+            .debug_info()
+            .expect("expected debug-info builders")
+            .namespace_as_identifier(Some(name));
+        let func_scope = di_builder.create_function(
+            di_scope,
+            name,
+            Some(linkage.as_str()),
+            di_file,
+            line_no,
+            subroutine_type,
+            false,
+            true,
+            1,
+            di_flags,
+            false,
+        );
+        Ok(func_scope)
+    }
+
+    /// Adds a debug-info scope to the current function.
+    pub fn set_current_function_debug_info(
+        &mut self,
+        name: &str,
+        line: usize,
+    ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
+        let line_num: u32 = std::cmp::min(line, u32::MAX as usize) as u32;
+        let func_value = self
+            .current_function()
+            .borrow()
+            .declaration()
+            .function_value();
+        let func_scope = match func_value.get_subprogram() {
+            Some(scp) => scp,
+            None => self.build_function_debug_info(name, line_num)?,
+        };
+        func_value.set_subprogram(func_scope);
+        self.set_debug_location(line, 0, Some(func_scope.as_debug_info_scope()))?;
+        Ok(func_scope)
+    }
+
+    pub fn set_debug_location(
+        &self,
+        line: usize,
+        column: usize,
+        scope: Option<DIScope<'ctx>>,
+    ) -> anyhow::Result<()> {
+        if let Some(dinfo) = self.debug_info() {
+            let line_num: u32 = std::cmp::min(line, u32::MAX as usize) as u32;
+            let column_num: u32 = std::cmp::min(column, u32::MAX as usize) as u32;
+            let di_scope = match scope {
+                Some(scp) => scp,
+                None => dinfo.top_scope().expect("expected a debug-info scope"),
+            };
+            let di_loc = dinfo.builder().create_debug_location(
+                self.llvm(),
+                line_num,
+                column_num,
+                di_scope,
+                None,
+            );
+            self.builder().set_current_debug_location(di_loc);
+        }
+        Ok(())
+    }
+
+    /// Pushes a debug-info scope to the stack.
+    pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
+        if self.debug_info().is_some() {
+            self.debug_info().unwrap().push_scope(scope);
+        }
+    }
+
+    /// Pops the top of the debug-info scope stack.
+    pub fn pop_debug_scope(&self) {
+        if self.debug_info().is_some() {
+            self.debug_info().unwrap().pop_scope();
+        }
+    }
+
+    /// Pushes a debug-info scope to the stack.
+    pub fn push_debug_namespace(&self, name: &str) {
+        if self.debug_info().is_some() {
+            self.debug_info()
+                .unwrap()
+                .push_namespace(String::from(name));
+        }
+    }
+
+    /// Pops the top of the debug-info scope stack.
+    pub fn pop_debug_namespace(&self) {
+        if self.debug_info().is_some() {
+            self.debug_info().unwrap().pop_namespace();
+        }
     }
 
     /// Pushes a new loop context to the stack.
@@ -547,6 +671,11 @@ where
         self.dependency_manager
             .take()
             .expect("The dependency manager is unset")
+    }
+
+    /// Returns the debug info.
+    pub fn debug_info(&self) -> Option<&DebugInfo<'ctx>> {
+        self.debug_info.as_ref()
     }
 
     /// Returns the debug config reference.

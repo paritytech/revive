@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
+use inkwell::debug_info::AsDIScope;
 use inkwell::types::BasicType;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -230,13 +232,22 @@ where
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         context.set_current_function(self.identifier.as_str())?;
-        let r#return = context.current_function().borrow().r#return();
-
         context.set_basic_block(context.current_function().borrow().entry_block());
+
+        if context.debug_info().is_some() {
+            context.builder().unset_current_debug_location();
+            let func_scope = context
+                .set_current_function_debug_info(self.identifier.as_str(), self.location.line)?
+                .as_debug_info_scope();
+            context.push_debug_scope(func_scope);
+        }
+
+        let r#return = context.current_function().borrow().r#return();
         match r#return {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
                 let identifier = self.result.pop().expect("Always exists");
+
                 let r#type = identifier.r#type.unwrap_or_default();
                 context.build_store(pointer, r#type.into_llvm(context).const_zero())?;
                 context
@@ -288,6 +299,8 @@ where
         }
 
         self.body.into_llvm(context)?;
+        context.set_debug_location(self.location.line, 0, None)?;
+
         match context
             .basic_block()
             .get_last_instruction()
@@ -313,6 +326,8 @@ where
                 context.build_return(Some(&return_value));
             }
         }
+
+        context.pop_debug_scope();
 
         Ok(())
     }

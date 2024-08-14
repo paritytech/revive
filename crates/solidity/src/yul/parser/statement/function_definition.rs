@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
+use inkwell::debug_info::AsDIScope;
 use inkwell::types::BasicType;
 
 use serde::Deserialize;

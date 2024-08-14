@@ -214,7 +214,6 @@ where
         }
 
         context.pop_debug_scope();
-        context.pop_debug_scope();
 
         Ok(())
     }

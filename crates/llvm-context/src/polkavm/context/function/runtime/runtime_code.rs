@@ -8,6 +8,8 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+use inkwell::debug_info::AsDIScope;
+
 /// The runtime code function.
 /// Is a special function that is only used by the front-end generated code.
 #[derive(Debug)]

@@ -301,7 +301,7 @@ where
                 )
             })?;
 
-        let bytecode = revive_linker::link(buffer.as_slice())?;
+        let bytecode = revive_linker::link(buffer.as_slice(), Some(self.debug_info().is_none()))?;
 
         let build = match crate::polkavm::build_assembly_text(
             contract_path,

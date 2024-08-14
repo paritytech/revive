@@ -106,6 +106,7 @@ fn main_inner() -> anyhow::Result<()> {
     }
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
+    optimizer_settings.emit_debug_info = arguments.emit_source_debug_info;
 
     let include_metadata_hash = match arguments.metadata_hash {
         Some(metadata_hash) => {

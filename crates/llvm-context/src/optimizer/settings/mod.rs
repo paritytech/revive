@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use self::size_level::SizeLevel;
 
-/// The LLVM optimizer settings.
+/// The LLVM optimizer and code-gen settings.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]
 pub struct Settings {
     /// The middle-end optimization level.
@@ -28,6 +28,9 @@ pub struct Settings {
     pub is_verify_each_enabled: bool,
     /// Whether the LLVM `debug logging` option is enabled.
     pub is_debug_logging_enabled: bool,
+
+    /// Whether to generate source-level debug information.
+    pub emit_debug_info: bool,
 }
 
 impl Settings {
@@ -47,6 +50,8 @@ impl Settings {
 
             is_verify_each_enabled: false,
             is_debug_logging_enabled: false,
+
+            emit_debug_info: false,
         }
     }
 
@@ -58,6 +63,8 @@ impl Settings {
 
         is_verify_each_enabled: bool,
         is_debug_logging_enabled: bool,
+
+        emit_debug_info: bool,
     ) -> Self {
         Self {
             level_middle_end,
@@ -69,6 +76,8 @@ impl Settings {
 
             is_verify_each_enabled,
             is_debug_logging_enabled,
+
+            emit_debug_info,
         }
     }
 
@@ -219,6 +228,11 @@ impl Settings {
     /// Whether the system request memoization is disabled.
     pub fn is_system_request_memoization_disabled(&self) -> bool {
         self.is_system_request_memoization_disabled
+    }
+
+    /// Whether source-level debug information should be emitted.
+    pub fn emit_debug_info(&self) -> bool {
+        return self.emit_debug_info;
     }
 }
 

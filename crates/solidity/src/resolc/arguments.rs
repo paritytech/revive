@@ -149,6 +149,11 @@ pub struct Arguments {
     #[structopt(long = "suppress-warnings")]
     pub suppress_warnings: Option<Vec<String>>,
 
+    /// Generate source based debug information in the output code file. This only has an effect
+    /// with the LLVM-IR code generator and is ignored otherwise.
+    #[structopt(short = 'g')]
+    pub emit_source_debug_info: bool,
+
     /// Dump all IRs to files in the specified directory.
     /// Only for testing and debugging.
     #[structopt(long = "debug-output-dir")]

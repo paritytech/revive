@@ -77,56 +77,68 @@ describe("Default run a command from the help", () => {
     });
 });
 
-describe("Run resolc with source debug information enabled", () => {
+describe("Run resolc with source debug information", () => {
+    const commands = [
+        `resolc -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`,
+        `resolc --disable-solc-optimizer -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`
+    ]; // potential issue on resolc with full path on Windows cmd`;
 
-    const command = `resolc -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd`;
-    const result = executeCommand(command);
+    for (var idx in commands) {
+        const command = commands[idx];
+        const result = executeCommand(command);
 
-    it("Compiler run successful", () => {
-        expect(result.output).toMatch(/(Compiler run successful.)/i);
-    });
-    it("Exit code = 0", () => {
-        expect(result.exitCode).toBe(0);
-    });
-    it("Output dir is created", () => {
-        expect(isFolderExist(paths.pathToOutputDir)).toBe(true);
-    });
-    xit("Output files are created", () => { // a bug on windows
-        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.binExtension)).toBe(true);
-        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.asmExtension)).toBe(true);
-    });
-    it("the output files are not empty", () => {
-        expect(isFileEmpty(paths.pathToSolBinOutputFile)).toBe(false);
-        expect(isFileEmpty(paths.pathToSolAsmOutputFile)).toBe(false);
-    });
-    it("No 'Error'/'Fail' in the output", () => {
-        expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
-    });
+        it("Compiler run successful", () => {
+            expect(result.output).toMatch(/(Compiler run successful.)/i);
+        });
+        it("Exit code = 0", () => {
+            expect(result.exitCode).toBe(0);
+        });
+        it("Output dir is created", () => {
+            expect(isFolderExist(paths.pathToOutputDir)).toBe(true);
+        });
+        it("Output files are created", () => { // a bug on windows
+            expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.binExtension)).toBe(true);
+            expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.asmExtension)).toBe(true);
+        });
+        it("the output files are not empty", () => {
+            expect(isFileEmpty(paths.pathToSolBinOutputFile)).toBe(false);
+            expect(isFileEmpty(paths.pathToSolAsmOutputFile)).toBe(false);
+        });
+        it("No 'Error'/'Fail' in the output", () => {
+            expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
+        });
+    }
 });
 
-describe("Run resolc with source debug information and no solc optimization", () => {
+describe("Run resolc with source debug information, check LLVM debug-info", () => {
+    const commands = [
+        `resolc -g ${paths.pathToBasicSolContract} --debug-output-dir="${paths.pathToOutputDir}"`,
+        `resolc -g --disable-solc-optimizer ${paths.pathToBasicSolContract} --debug-output-dir="${paths.pathToOutputDir}"`
+    ]; // potential issue on resolc with full path on Windows cmd`;
 
-    const command = `resolc --disable-solc-optimizer -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd`;
-    const result = executeCommand(command);
+    for (var idx in commands) {
+        const command = commands[idx];
+        const result = executeCommand(command);
 
-    it("Compiler run successful", () => {
-        expect(result.output).toMatch(/(Compiler run successful.)/i);
-    });
-    it("Exit code = 0", () => {
-        expect(result.exitCode).toBe(0);
-    });
-    it("Output dir is created", () => {
-        expect(isFolderExist(paths.pathToOutputDir)).toBe(true);
-    });
-    xit("Output files are created", () => { // a bug on windows
-        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.binExtension)).toBe(true);
-        expect(isFileExist(paths.pathToOutputDir, paths.contractSolFilename, paths.asmExtension)).toBe(true);
-    });
-    it("the output files are not empty", () => {
-        expect(isFileEmpty(paths.pathToSolBinOutputFile)).toBe(false);
-        expect(isFileEmpty(paths.pathToSolAsmOutputFile)).toBe(false);
-    });
-    it("No 'Error'/'Fail' in the output", () => {
-        expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
-    });
+        it("Compiler run successful", () => {
+            expect(result.output).toMatch(/(Compiler run successful.)/i);
+        });
+        it("Exit code = 0", () => {
+            expect(result.exitCode).toBe(0);
+        });
+        it("Output dir is created", () => {
+            expect(isFolderExist(paths.pathToOutputDir)).toBe(true);
+        });
+        it("Output files are created", () => { // a bug on windows
+            expect(isFileExist(paths.pathToOutputDir, paths.contractOptimizedLLVMFilename, paths.llvmExtension)).toBe(true);
+            expect(isFileExist(paths.pathToOutputDir, paths.contractUnoptimizedLLVMFilename, paths.llvmExtension)).toBe(true);
+        });
+        it("the output files are not empty", () => {
+            expect(isFileEmpty(paths.pathToSolBinOutputFile)).toBe(false);
+            expect(isFileEmpty(paths.pathToSolAsmOutputFile)).toBe(false);
+        });
+        it("No 'Error'/'Fail' in the output", () => {
+            expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
+        });
+    }
 });

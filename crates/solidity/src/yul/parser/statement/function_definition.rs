@@ -231,16 +231,8 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        context.set_current_function(self.identifier.as_str())?;
+        context.set_current_function(self.identifier.as_str(), Some(self.location.line))?;
         context.set_basic_block(context.current_function().borrow().entry_block());
-
-        if context.debug_info().is_some() {
-            context.builder().unset_current_debug_location();
-            let func_scope = context
-                .set_current_function_debug_info(self.identifier.as_str(), self.location.line)?
-                .as_debug_info_scope();
-            context.push_debug_scope(func_scope);
-        }
 
         let r#return = context.current_function().borrow().r#return();
         match r#return {

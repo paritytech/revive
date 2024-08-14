@@ -36,7 +36,7 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA)?;
+        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         if context.debug_info().is_some() {

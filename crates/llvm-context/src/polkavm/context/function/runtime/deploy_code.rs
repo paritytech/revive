@@ -56,7 +56,7 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_DEPLOY_CODE)?;
+        context.set_current_function(runtime::FUNCTION_DEPLOY_CODE, None)?;
 
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Deploy);

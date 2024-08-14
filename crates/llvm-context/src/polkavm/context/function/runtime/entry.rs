@@ -222,7 +222,7 @@ where
             true,
         );
 
-        context.set_current_function(runtime::FUNCTION_ENTRY)?;
+        context.set_current_function(runtime::FUNCTION_ENTRY, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         if context.debug_info().is_some() {

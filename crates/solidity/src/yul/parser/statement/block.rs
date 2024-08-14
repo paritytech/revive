@@ -155,7 +155,7 @@ where
             function.into_llvm(context)?;
         }
 
-        context.set_current_function(current_function.as_str())?;
+        context.set_current_function(current_function.as_str(), None)?;
 
         if let Some(dinfo) = context.debug_info() {
             let di_builder = dinfo.builder();
@@ -213,6 +213,7 @@ where
             }
         }
 
+        context.pop_debug_scope();
         context.pop_debug_scope();
 
         Ok(())

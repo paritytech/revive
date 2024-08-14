@@ -485,12 +485,20 @@ where
             .expect("Must be declared before use")
     }
 
-    /// Sets the current active function.
-    pub fn set_current_function(&mut self, name: &str) -> anyhow::Result<()> {
+    /// Sets the current active function. If debug-info generation is enabled, constructs a debug-scope and pushes in on the scope-stack.
+    pub fn set_current_function(&mut self, name: &str, line: Option<usize>) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
         self.current_function = Some(function);
+        if self.debug_info().is_some() {
+            self.builder().unset_current_debug_location();
+            let func_scope = self
+                .set_current_function_debug_info(name, line.unwrap_or(0))?
+                .as_debug_info_scope();
+            self.push_debug_scope(func_scope);
+        }
+
         Ok(())
     }
 

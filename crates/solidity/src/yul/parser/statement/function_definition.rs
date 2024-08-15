@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
+use inkwell::debug_info::AsDIScope;
 use inkwell::types::BasicType;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -260,18 +262,79 @@ where
         Ok(())
     }
 
-    fn into_llvm(
+    fn into_llvm<'ctx>(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<()> {
         context.set_current_function(self.identifier.as_str())?;
-        let r#return = context.current_function().borrow().r#return();
-
         context.set_basic_block(context.current_function().borrow().entry_block());
+
+        if let Some(dinfo) = context.debug_info() {
+            let di_builder = dinfo.builder();
+            context.builder().unset_current_debug_location();
+            let line_num: u32 = std::cmp::min(self.location.line, u32::MAX as usize) as u32;
+            let column: u32 = std::cmp::min(self.location.column, u32::MAX as usize) as u32;
+            let func_value = context
+                .current_function()
+                .borrow()
+                .declaration()
+                .function_value();
+            let func_name: &str = func_value
+                .get_name()
+                .to_str()
+                .unwrap_or(self.identifier.as_str());
+            let linkage_name = dinfo.namespace_as_identifier(Some(func_name).clone());
+            let di_file = dinfo.compilation_unit().get_file();
+            let di_scope = di_file.as_debug_info_scope();
+            let di_func_scope = dinfo.create_function(
+                di_scope,
+                func_name,
+                Some(linkage_name.as_str()),
+                None,
+                &[],
+                di_file,
+                line_num,
+                true,
+                false,
+                false,
+                Some(inkwell::debug_info::DIFlagsConstants::PUBLIC),
+            )?;
+            let _ = func_value.set_subprogram(di_func_scope);
+
+            let lexical_scope = di_builder
+                .create_lexical_block(
+                    di_func_scope.as_debug_info_scope(),
+                    dinfo.compilation_unit().get_file(),
+                    line_num,
+                    column,
+                )
+                .as_debug_info_scope();
+            let _ = dinfo.push_scope(lexical_scope);
+        }
+
+        let r#return = context.current_function().borrow().r#return();
         match r#return {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+                if let Some(dinfo) = context.debug_info() {
+                    let di_builder = dinfo.builder();
+                    let line_num: u32 = std::cmp::min(self.location.line, u32::MAX as usize) as u32;
+                    let di_parent_scope = dinfo
+                        .top_scope()
+                        .expect("expected an existing debug-info scope")
+                        .clone();
+                    let di_loc = di_builder.create_debug_location(
+                        context.llvm(),
+                        line_num,
+                        0,
+                        di_parent_scope,
+                        None,
+                    );
+                    context.builder().set_current_debug_location(di_loc)
+                }
+
                 let identifier = self.result.pop().expect("Always exists");
+
                 let r#type = identifier.r#type.unwrap_or_default();
                 context.build_store(pointer, r#type.into_llvm(context).const_zero())?;
                 context
@@ -365,6 +428,10 @@ where
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
+        }
+
+        if let Some(dinfo) = context.debug_info() {
+            let _ = dinfo.pop_scope();
         }
 
         Ok(())

@@ -9,6 +9,8 @@ use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+use inkwell::debug_info::AsDIScope;
+
 /// The entry function.
 /// The function is a wrapper managing the runtime and deploy code calling logic.
 /// Is a special runtime function that is only used by the front-end generated code.
@@ -126,6 +128,18 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
+        if let Some(dinfo) = context.debug_info() {
+            let di_builder = dinfo.builder();
+            let di_scope = dinfo
+                .top_scope()
+                .expect("expected an existing debug-info scope")
+                .clone();
+            let line_num = 0;
+            let di_loc =
+                di_builder.create_debug_location(context.llvm(), line_num, 0, di_scope, None);
+            context.builder().set_current_debug_location(di_loc)
+        }
+
         let is_deploy = context
             .current_function()
             .borrow()
@@ -206,6 +220,45 @@ where
         context.set_current_function(runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
+        if let Some(dinfo) = context.debug_info() {
+            let di_builder = dinfo.builder();
+            let line_num: u32 = 0;
+            let column: u32 = 0;
+            let func_name: &str = runtime::FUNCTION_ENTRY;
+            let linkage_name = dinfo.namespace_as_identifier(Some(func_name).clone());
+            let di_file = dinfo.compilation_unit().get_file();
+            let di_scope = di_file.as_debug_info_scope();
+            let di_func_scope = dinfo.create_function(
+                di_scope,
+                func_name,
+                Some(linkage_name.as_str()),
+                None,
+                &[],
+                di_file,
+                line_num,
+                true,
+                false,
+                false,
+                Some(inkwell::debug_info::DIFlagsConstants::PUBLIC),
+            )?;
+            let func_value = context
+                .current_function()
+                .borrow()
+                .declaration()
+                .function_value();
+            let _ = func_value.set_subprogram(di_func_scope);
+
+            let lexical_scope = di_builder
+                .create_lexical_block(
+                    di_func_scope.as_debug_info_scope(),
+                    dinfo.compilation_unit().get_file(),
+                    line_num,
+                    column,
+                )
+                .as_debug_info_scope();
+            let _ = dinfo.push_scope(lexical_scope);
+        }
+
         Self::initialize_globals(context)?;
         Self::load_calldata(context)?;
         Self::leave_entry(context)?;
@@ -213,6 +266,10 @@ where
         context.build_unconditional_branch(context.current_function().borrow().return_block());
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_unreachable();
+
+        if let Some(dinfo) = context.debug_info() {
+            let _ = dinfo.pop_scope();
+        }
 
         Ok(())
     }

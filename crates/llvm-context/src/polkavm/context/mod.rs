@@ -5,7 +5,7 @@ pub mod argument;
 pub mod attribute;
 pub mod build;
 pub mod code_type;
-// pub mod debug_info;
+pub mod debug_info;
 pub mod evmla_data;
 pub mod function;
 pub mod global;
@@ -36,7 +36,7 @@ use self::address_space::AddressSpace;
 use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
-// use self::debug_info::DebugInfo;
+use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
@@ -86,7 +86,7 @@ where
     /// Whether to append the metadata hash at the end of bytecode.
     include_metadata_hash: bool,
     /// The debug info of the current module.
-    // debug_info: DebugInfo<'ctx>,
+    debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
     debug_config: Option<DebugConfig>,
 
@@ -196,6 +196,7 @@ where
         optimizer: Optimizer,
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
+        debug_info: Option<DebugInfo<'ctx>>,
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
@@ -221,7 +222,7 @@ where
 
             dependency_manager,
             include_metadata_hash,
-            // debug_info,
+            debug_info,
             debug_config,
 
             solidity_data: None,
@@ -572,6 +573,11 @@ where
         self.dependency_manager
             .take()
             .expect("The dependency manager is unset")
+    }
+
+    /// Returns the debug info.
+    pub fn debug_info(&self) -> Option<&DebugInfo<'ctx>> {
+        self.debug_info.as_ref()
     }
 
     /// Returns the debug config reference.

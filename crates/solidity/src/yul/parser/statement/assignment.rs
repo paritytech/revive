@@ -115,6 +115,22 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
+        if let Some(dinfo) = context.debug_info() {
+            let di_parent_scope = dinfo
+                .top_scope()
+                .expect("expected a debug-info scope")
+                .clone();
+            let line_num: u32 = std::cmp::min(self.location.line, u32::MAX as usize) as u32;
+            let di_loc = dinfo.builder().create_debug_location(
+                context.llvm(),
+                line_num,
+                0,
+                di_parent_scope,
+                None,
+            );
+            context.builder().set_current_debug_location(di_loc)
+        };
+
         let value = match self.initializer.into_llvm(context)? {
             Some(value) => value,
             None => return Ok(()),
@@ -142,6 +158,22 @@ where
         context.build_store(tuple_pointer, value.to_llvm())?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {
+            if let Some(dinfo) = context.debug_info() {
+                let di_parent_scope = dinfo
+                    .top_scope()
+                    .expect("expected a debug-info scope")
+                    .clone();
+                let line_num: u32 = std::cmp::min(self.location.line, u32::MAX as usize) as u32;
+                let di_loc = dinfo.builder().create_debug_location(
+                    context.llvm(),
+                    line_num,
+                    0,
+                    di_parent_scope,
+                    None,
+                );
+                context.builder().set_current_debug_location(di_loc)
+            };
+
             let field_pointer = context.build_gep(
                 tuple_pointer,
                 &[

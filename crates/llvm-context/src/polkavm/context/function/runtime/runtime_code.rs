@@ -8,6 +8,8 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+use inkwell::debug_info::AsDIScope;
+
 /// The runtime code function.
 /// Is a special function that is only used by the front-end generated code.
 #[derive(Debug)]
@@ -59,6 +61,45 @@ where
 
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Runtime);
+        if let Some(dinfo) = context.debug_info() {
+            let di_builder = dinfo.builder();
+            let line_num: u32 = 0;
+            let column: u32 = 0;
+            let func_name: &str = runtime::FUNCTION_RUNTIME_CODE;
+            let linkage_name = dinfo.namespace_as_identifier(Some(func_name).clone());
+            let di_file = dinfo.compilation_unit().get_file();
+            let di_scope = di_file.as_debug_info_scope();
+            let di_func_scope = dinfo.create_function(
+                di_scope,
+                func_name,
+                Some(linkage_name.as_str()),
+                None,
+                &[],
+                di_file,
+                line_num,
+                true,
+                false,
+                false,
+                Some(inkwell::debug_info::DIFlagsConstants::PUBLIC),
+            )?;
+            let func_value = context
+                .current_function()
+                .borrow()
+                .declaration()
+                .function_value();
+            let _ = func_value.set_subprogram(di_func_scope);
+
+            let lexical_scope = di_builder
+                .create_lexical_block(
+                    di_func_scope.as_debug_info_scope(),
+                    dinfo.compilation_unit().get_file(),
+                    line_num,
+                    column,
+                )
+                .as_debug_info_scope();
+            let _ = dinfo.push_scope(lexical_scope);
+        }
+
         self.inner.into_llvm(context)?;
         match context
             .basic_block()
@@ -73,6 +114,10 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_unreachable();
+
+        if let Some(dinfo) = context.debug_info() {
+            let _ = dinfo.pop_scope();
+        }
 
         Ok(())
     }

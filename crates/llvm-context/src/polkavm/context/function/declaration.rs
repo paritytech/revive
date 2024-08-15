@@ -17,4 +17,8 @@ impl<'ctx> Declaration<'ctx> {
     ) -> Self {
         Self { r#type, value }
     }
+
+    pub fn function_value(&self) -> inkwell::values::FunctionValue<'ctx> {
+        self.value
+    }
 }

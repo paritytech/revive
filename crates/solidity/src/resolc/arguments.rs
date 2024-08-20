@@ -164,6 +164,12 @@ pub struct Arguments {
     /// Only for usage from within the compiler.
     #[structopt(long = "recursive-process")]
     pub recursive_process: bool,
+
+    /// Specify the input file to use instead of stdin when --recursive-process is given.
+    /// This is only intended for use when developing the compiler.
+    #[cfg(debug_assertions)]
+    #[structopt(long = "recursive-process-input")]
+    pub recursive_process_input: Option<String>,
 }
 
 impl Default for Arguments {
@@ -185,6 +191,20 @@ impl Arguments {
             anyhow::bail!("No other options are allowed while getting the compiler version.");
         }
 
+        #[cfg(debug_assertions)]
+        if self.recursive_process_input != None && !self.recursive_process {
+            anyhow::bail!("--process-input can be only used when --recursive-process is given");
+        }
+
+        #[cfg(debug_assertions)]
+        if self.recursive_process
+            && ((self.recursive_process_input == None && std::env::args().count() > 2)
+                || (self.recursive_process_input != None && std::env::args().count() > 4))
+        {
+            anyhow::bail!("No other options are allowed in recursive mode.");
+        }
+
+        #[cfg(not(debug_assertions))]
         if self.recursive_process && std::env::args().count() > 2 {
             anyhow::bail!("No other options are allowed in recursive mode.");
         }

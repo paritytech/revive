@@ -94,6 +94,22 @@ impl DebugConfig {
         Ok(())
     }
 
+    /// Dumps the stage output as a json file suitable for use with --recursive-process
+    #[cfg(debug_assertions)]
+    pub fn dump_stage_output(
+        &self,
+        contract_path: &str,
+        contract_suffix: Option<&str>,
+        stage_json: &Vec<u8>,
+    ) -> anyhow::Result<()> {
+        let mut file_path = self.output_directory.to_owned();
+        let full_file_name = Self::full_file_name(contract_path, contract_suffix, IRType::JSON);
+        file_path.push(full_file_name);
+        std::fs::write(file_path, stage_json)?;
+
+        Ok(())
+    }
+
     /// Creates a full file name, given the contract full path, suffix, and extension.
     fn full_file_name(contract_path: &str, suffix: Option<&str>, ir_type: IRType) -> String {
         let mut full_file_name = contract_path.replace('/', "_").replace(':', ".");

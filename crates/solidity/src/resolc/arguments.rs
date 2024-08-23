@@ -4,15 +4,15 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
+use clap::Parser;
 use path_slash::PathExt;
-use structopt::StructOpt;
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
 /// are given or "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
 /// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 #[structopt(name = "The PolkaVM Solidity compiler")]
 pub struct Arguments {
     /// Print the version and exit.
@@ -42,7 +42,7 @@ pub struct Arguments {
     pub allow_paths: Option<String>,
 
     /// Create one file per component and contract/file at the specified directory, if given.
-    #[structopt(short = "o", long = "output-dir")]
+    #[structopt(short = 'o', long = "output-dir")]
     pub output_directory: Option<PathBuf>,
 
     /// Overwrite existing files (used together with -o).
@@ -51,7 +51,7 @@ pub struct Arguments {
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[structopt(short = "O", long = "optimization")]
+    #[structopt(short = 'O', long = "optimization")]
     pub optimization: Option<char>,
 
     /// Try to recompile with -Oz if the bytecode is too large.
@@ -81,7 +81,7 @@ pub struct Arguments {
 
     /// Specify addresses of deployable libraries. Syntax: `<libraryName>=<address> [, or whitespace] ...`.
     /// Addresses are interpreted as hexadecimal strings prefixed with `0x`.
-    #[structopt(short = "l", long = "libraries")]
+    #[structopt(short = 'l', long = "libraries")]
     pub libraries: Vec<String>,
 
     /// Output a single JSON document containing the specified information.
@@ -175,7 +175,7 @@ impl Default for Arguments {
 impl Arguments {
     /// A shortcut constructor.
     pub fn new() -> Self {
-        Self::from_args()
+        Self::parse()
     }
 
     /// Validates the arguments.

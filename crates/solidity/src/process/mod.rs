@@ -17,13 +17,27 @@ use self::output::Output;
 pub static EXECUTABLE: OnceCell<PathBuf> = OnceCell::new();
 
 /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-pub fn run() -> anyhow::Result<()> {
+pub fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
     let mut stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
 
     let mut buffer = Vec::with_capacity(16384);
-    stdin.read_to_end(&mut buffer).expect("Stdin reading error");
+    match input_file {
+        Some(ins) => {
+            if let Err(error) = ins.read_to_end(&mut buffer) {
+                anyhow::bail!("Failed to read recursive process input file: {:?}", error);
+            }
+        }
+        None => {
+            if let Err(error) = stdin.read_to_end(&mut buffer) {
+                anyhow::bail!(
+                    "Failed to read recursive process input from stdin: {:?}",
+                    error
+                )
+            }
+        }
+    }
 
     let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
     if input.enable_test_encoding {
@@ -73,6 +87,19 @@ pub fn call(input: Input) -> anyhow::Result<Output> {
     let process = command.spawn().map_err(|error| {
         anyhow::anyhow!("{:?} subprocess spawning error: {:?}", executable, error)
     })?;
+
+    #[cfg(debug_assertions)]
+    if let Some(dbg_config) = &input.debug_config {
+        let _ = dbg_config
+            .dump_stage_output(&input.contract.path, Some("stage"), &input_json)
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "{:?} failed to log the recursive process output: {:?}",
+                    executable,
+                    error,
+                )
+            })?;
+    }
 
     process
         .stdin

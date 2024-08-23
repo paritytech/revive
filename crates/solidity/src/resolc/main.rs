@@ -47,7 +47,13 @@ fn main_inner() -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM); // TODO: pass from CLI
 
     if arguments.recursive_process {
-        return revive_solidity::run_process();
+        #[cfg(debug_assertions)]
+        if let Some(fname) = arguments.recursive_process_input {
+            let mut infile = std::fs::File::open(fname)?;
+            return revive_solidity::run_process(Some(&mut infile));
+        }
+
+        return revive_solidity::run_process(None);
     }
 
     let debug_config = match arguments.debug_output_directory {

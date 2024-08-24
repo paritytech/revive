@@ -5,6 +5,8 @@ use alloy_sol_types::{sol, SolCall, SolValue};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha1::Digest;
 
+use revive_solidity::test_utils::*;
+
 use crate::{
     assert_success,
     cases::Contract,
@@ -62,7 +64,7 @@ fn hash_keccak_256() {
                 hash = keccak256(bytes(_pre));
             }
         }"#;
-    let code = crate::compile_blob("TestSha3", source);
+    let code = compile_blob("TestSha3", source);
 
     let param = "hello";
     let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
@@ -82,7 +84,7 @@ fn hash_keccak_256() {
 
 #[test]
 fn erc20() {
-    let _ = crate::compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
+    let _ = compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
 }
 
 #[test]
@@ -109,7 +111,7 @@ fn msize_plain() {
             function mSize() public pure returns (uint);
         }
     );
-    let code = crate::compile_blob_with_options(
+    let code = compile_blob_with_options(
         "MSize",
         include_str!("../contracts/MSize.sol"),
         false,
@@ -138,7 +140,7 @@ fn transferred_value() {
             function value() public payable returns (uint);
         }
     );
-    let code = crate::compile_blob("Value", include_str!("../contracts/Value.sol"));
+    let code = compile_blob("Value", include_str!("../contracts/Value.sol"));
 
     let (_, output) = State::default()
         .transaction()
@@ -162,7 +164,7 @@ fn msize_non_word_sized_access() {
             function mStore100() public pure returns (uint);
         }
     );
-    let code = crate::compile_blob_with_options(
+    let code = compile_blob_with_options(
         "MSize",
         include_str!("../contracts/MSize.sol"),
         false,

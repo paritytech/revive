@@ -1,0 +1,13 @@
+[package]
+name = "revive-runner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+codec = { workspace = true, default-features = false }
+scale-info = { workspace = true, default-features = false }
+polkadot-sdk = { workspace = true, features = ["experimental", "runtime"] }
+
+revive-solidity = { path = "../solidity" }

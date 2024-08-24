@@ -1,6 +1,8 @@
 use alloy_primitives::{Address, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
+use revive_solidity::test_utils::*;
+
 use crate::mock_runtime::{CallOutput, State};
 
 #[derive(Clone)]
@@ -193,8 +195,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Baseline::baselineCall::new(()).abi_encode(),
         }
     }
@@ -205,8 +207,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Computation::odd_productCall::new((n,)).abi_encode(),
         }
     }
@@ -217,8 +219,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Computation::triangle_numberCall::new((n,)).abi_encode(),
         }
     }
@@ -229,8 +231,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: FibonacciRecursive::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
@@ -241,8 +243,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: FibonacciIterative::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
@@ -253,8 +255,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: FibonacciBinet::fib3Call::new((U256::from(n),)).abi_encode(),
         }
     }
@@ -265,8 +267,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: SHA1::sha1Call::new((pre,)).abi_encode(),
         }
     }
@@ -277,8 +279,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Flipper::flipCall::new(()).abi_encode(),
         }
     }
@@ -289,8 +291,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Flipper::constructorCall::new((coin,)).abi_encode(),
         }
     }
@@ -301,8 +303,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: IERC20::totalSupplyCall::new(()).abi_encode(),
         }
     }
@@ -313,8 +315,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Block::numberCall::new(()).abi_encode(),
         }
     }
@@ -325,8 +327,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Block::timestampCall::new(()).abi_encode(),
         }
     }
@@ -337,8 +339,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Context::address_thisCall::new(()).abi_encode(),
         }
     }
@@ -349,8 +351,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Context::callerCall::new(()).abi_encode(),
         }
     }
@@ -361,8 +363,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: DivisionArithmetics::divCall::new((n, d)).abi_encode(),
         }
     }
@@ -373,8 +375,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: DivisionArithmetics::sdivCall::new((n, d)).abi_encode(),
         }
     }
@@ -385,8 +387,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: DivisionArithmetics::modCall::new((n, d)).abi_encode(),
         }
     }
@@ -397,8 +399,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: DivisionArithmetics::smodCall::new((n, d)).abi_encode(),
         }
     }
@@ -409,8 +411,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: MStore8::mStore8Call::new((value,)).abi_encode(),
         }
     }
@@ -421,8 +423,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Events::emitEventCall::new((topics,)).abi_encode(),
         }
     }
@@ -433,8 +435,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: vec![0; 4],
         }
     }
@@ -445,8 +447,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: vec![0; 4],
         }
     }
@@ -457,8 +459,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
         }
     }
@@ -469,8 +471,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: ExtCode::CodeSizeCall::new(()).abi_encode(),
         }
     }
@@ -481,8 +483,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: MCopy::memcpyCall::new((payload,)).abi_encode(),
         }
     }
@@ -493,8 +495,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Call::value_transferCall::new((destination,)).abi_encode(),
         }
     }
@@ -505,8 +507,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Call::callCall::new((callee, payload)).abi_encode(),
         }
     }
@@ -517,8 +519,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Default::default(),
         }
     }
@@ -529,8 +531,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Value::balance_ofCall::new((address,)).abi_encode(),
         }
     }
@@ -541,8 +543,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Bitwise::opByteCall::new((index, value)).abi_encode(),
         }
     }
@@ -553,8 +555,8 @@ impl Contract {
 
         Self {
             name,
-            evm_runtime: crate::compile_evm_bin_runtime(name, code),
-            pvm_runtime: crate::compile_blob(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
             calldata: Storage::transientCall::new((value,)).abi_encode(),
         }
     }

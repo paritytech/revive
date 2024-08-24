@@ -1,7 +1,11 @@
 [package]
 name = "pallet-contracts-pvm-llapi"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+repository.authors = true
+descritption = "Implements the low level runtime API bindings with pallet contracts"
 
 [features]
 riscv-64 = []

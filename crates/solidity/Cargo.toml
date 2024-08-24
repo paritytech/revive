@@ -1,13 +1,14 @@
 [package]
 name = "revive-solidity"
-version = "1.4.0"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
 authors = [
     "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
     "Cyrill Leutwiler <cyrill@parity.io>",
 ]
-license = "MIT OR Apache-2.0"
-edition = "2021"
-description = "PolkaVM Solidity frontend"
+description = "Solidity frontend for the revive compiler"
 
 [[bin]]
 name = "resolc"
@@ -37,8 +38,8 @@ sha3 = { workspace = true }
 md5 = { workspace = true }
 inkwell = { workspace = true }
 
-revive-common = { path = "../common" }
-revive-llvm-context = { path = "../llvm-context" }
+revive-common = { workspace = true }
+revive-llvm-context = { workspace = true }
 
 
 [target.'cfg(target_env = "musl")'.dependencies]

@@ -1,7 +1,11 @@
 [package]
 name = "revive-runner"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+repository.authors = true
+descritption = "Execute revive contracts in a simulated blockchain runtime"
 
 [dependencies]
 serde = { workspace = true }
@@ -10,4 +14,4 @@ codec = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
 polkadot-sdk = { workspace = true, features = ["experimental", "runtime"] }
 
-revive-solidity = { path = "../solidity" }
+revive-solidity = { workspace = true }

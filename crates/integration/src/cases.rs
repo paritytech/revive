@@ -3,8 +3,6 @@ use alloy_sol_types::{sol, SolCall, SolConstructor};
 
 use revive_solidity::test_utils::*;
 
-use crate::mock_runtime::{CallOutput, State};
-
 #[derive(Clone)]
 pub struct Contract {
     pub name: &'static str,
@@ -230,24 +228,6 @@ sol!(
 case!("Storage.sol", Storage, transientCall, storage_transient, value: U256);
 
 impl Contract {
-    /// Execute the contract.
-    ///
-    /// Useful helper if the contract state can be ignored,
-    /// as it spares the deploy transaciton.
-    ///
-    /// - Inserts an account with given `code` into a new state.
-    /// - Callee and caller account will be `Transaction::default_address()`.
-    /// - Sets the calldata.
-    /// - Doesn't execute the constructor or deploy code.
-    /// - Calls the "call" export on a default backend config.
-    pub fn execute(&self) -> (State, CallOutput) {
-        State::default()
-            .transaction()
-            .with_default_account(&self.pvm_runtime)
-            .calldata(self.calldata.clone())
-            .call()
-    }
-
     fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,

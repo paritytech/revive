@@ -10,6 +10,7 @@ descritption = "Execute revive contracts in a simulated blockchain runtime"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
 codec = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
 polkadot-sdk = { workspace = true, features = ["experimental", "runtime"] }

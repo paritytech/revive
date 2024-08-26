@@ -6,11 +6,11 @@
 //! ## Example
 //! ```rust
 //! use revive_runner::*;
-//! use SpecsAction::*;
+//! use specs::SpecsAction::*;
 //! run_test(Specs {
 //!     balances: vec![(ALICE, 1_000_000_000)],
 //!     actions: vec![Instantiate {
-//!         origin: ALICE,
+//!         origin: TestAccountId::Alice,
 //!         value: 0,
 //!         gas_limit: Some(GAS_LIMIT),
 //!         storage_deposit_limit: Some(DEPOSIT_LIMIT),
@@ -18,7 +18,7 @@
 //!         data: vec![],
 //!         salt: vec![],
 //!     }],
-//! })
+//! });
 //! ```
 
 use polkadot_sdk::*;
@@ -27,16 +27,21 @@ use polkadot_sdk::{
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
-    sp_runtime::AccountId32,
 };
 use serde::{Deserialize, Serialize};
 
 mod runtime;
-use crate::runtime::*;
+mod specs;
 
-pub const ALICE: AccountId32 = AccountId32::new([1u8; 32]);
-pub const BOB: AccountId32 = AccountId32::new([2u8; 32]);
-pub const CHARLIE: AccountId32 = AccountId32::new([3u8; 32]);
+use crate::runtime::*;
+pub use crate::specs::*;
+
+pub const ALICE: AccountId = AccountId::new([1u8; 32]);
+pub const BOB: AccountId = AccountId::new([2u8; 32]);
+pub const CHARLIE: AccountId = AccountId::new([3u8; 32]);
+
+const SPEC_MARKER_BEGIN: &str = "/* runner.json";
+const SPEC_MARKER_END: &str = "*/";
 
 /// Externalities builder
 #[derive(Default)]
@@ -81,18 +86,19 @@ pub const DEPOSIT_LIMIT: Balance = 10_000_000;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
-    gas_consumed: Option<Weight>,
+    pub gas_consumed: Option<Weight>,
     /// When provided, the expected output
-    output: Option<Vec<u8>>,
+    #[serde(default, with = "hex::serde")]
+    pub output: Vec<u8>,
     ///Expected call result
-    success: bool,
+    pub success: bool,
 }
 
 impl Default for VerifyCallExpectation {
     fn default() -> Self {
         Self {
             gas_consumed: None,
-            output: None,
+            output: vec![],
             success: true,
         }
     }
@@ -100,21 +106,22 @@ impl Default for VerifyCallExpectation {
 
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
-    fn verify(self, result: CallResult) {
-        dbg!(&result);
-        assert_eq!(self.success, result.is_ok());
+    fn verify(self, result: &CallResult) {
+        assert_eq!(
+            self.success,
+            result.is_ok(),
+            "contract execution reverted: {result:?}"
+        );
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
-        if let Some(output) = self.output {
-            assert_eq!(output, result.output());
-        }
+        assert_eq!(self.output, result.output());
     }
 }
 
 /// Result of a call
-#[derive(Debug)]
-enum CallResult {
+#[derive(Clone, Debug)]
+pub enum CallResult {
     Exec(ContractExecResult<Balance, EventRecord>),
     Instantiate(ContractInstantiateResult<AccountId, Balance, EventRecord>),
 }
@@ -166,6 +173,12 @@ pub enum Code {
     Hash(Hash),
 }
 
+impl Default for Code {
+    fn default() -> Self {
+        Self::Bytes(vec![])
+    }
+}
+
 impl From<Code> for pallet_revive::Code<Hash> {
     fn from(val: Code) -> Self {
         match val {
@@ -182,99 +195,38 @@ impl From<Code> for pallet_revive::Code<Hash> {
     }
 }
 
-/// An action to perform in a contract test
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SpecsAction {
-    /// Instantiate a contract
-    Instantiate {
-        origin: AccountId,
-        #[serde(default)]
-        value: Balance,
-        #[serde(default)]
-        gas_limit: Option<Weight>,
-        #[serde(default)]
-        storage_deposit_limit: Option<Balance>,
-        code: Code,
-        #[serde(default)]
-        data: Vec<u8>,
-        #[serde(default)]
-        salt: Vec<u8>,
-    },
-    /// Call a contract
-    Call {
-        origin: AccountId,
-        dest: AccountId,
-        #[serde(default)]
-        value: Balance,
-        #[serde(default)]
-        gas_limit: Option<Weight>,
-        #[serde(default)]
-        storage_deposit_limit: Option<Balance>,
-        #[serde(default)]
-        data: Vec<u8>,
-    },
-    /// Verify the result of the last call, omitting this will simply ensure the last call was successful
-    VerifyCall(VerifyCallExpectation),
-
-    /// Verify the balance of an account
-    VerifyBalance {
-        origin: AccountId,
-        expected: Balance,
-    },
-    /// Verify the storage of a contract
-    VerifyStorage {
-        contract: AccountId,
-        key: Vec<u8>,
-        expected: Option<Vec<u8>>,
-    },
-}
-
-/// Specs for a contract test
-#[derive(Default, Debug, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Specs {
-    /// List of endowments at genesis
-    pub balances: Vec<(AccountId, Balance)>,
-    /// List of actions to perform
-    pub actions: Vec<SpecsAction>,
-}
-
-impl Specs {
-    /// Get the list of actions to perform
-    /// A default [`SpecAction::VerifyCall`] is injected after each Instantiate or Call action when
-    /// missing
-    fn actions(&self) -> Vec<SpecsAction> {
-        self.actions
-            .iter()
-            .enumerate()
-            .flat_map(|(index, item)| {
-                let next_item = self.actions.get(index + 1);
-                if matches!(
-                    item,
-                    SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
-                ) && !matches!(next_item, Some(SpecsAction::VerifyCall(_)))
-                {
-                    return vec![
-                        item.clone(),
-                        SpecsAction::VerifyCall(VerifyCallExpectation::default()),
-                    ];
-                }
-                vec![item.clone()]
-            })
-            .collect()
-    }
-}
-
 /// Run a contract test
 /// The test takes a [`Specs`] and executes the actions in order
-pub fn run_test(specs: Specs) {
+pub fn run_test(specs: Specs) -> Vec<CallResult> {
+    let mut results = vec![];
+
+    let translate_account = |id: &TestAccountId, results: &[CallResult]| -> AccountId {
+        match id {
+            TestAccountId::Alice => ALICE,
+            TestAccountId::Bob => BOB,
+            TestAccountId::Charlie => CHARLIE,
+            TestAccountId::AccountId(account_id) => account_id.clone(),
+            TestAccountId::Instantiated(n) => match results
+                .get(*n as usize)
+                .expect("should provide valid index into call results")
+            {
+                CallResult::Exec(_) => panic!("call #{n} should be an instantiation"),
+                CallResult::Instantiate(res) => res
+                    .result
+                    .as_ref()
+                    .expect("call #{n} reverted")
+                    .account_id
+                    .clone(),
+            },
+        }
+    };
+
     ExtBuilder::default()
         .balance_genesis_config(specs.balances.clone())
         .build()
         .execute_with(|| {
-            use SpecsAction::*;
+            use specs::SpecsAction::*;
 
-            let mut res: Option<CallResult> = None;
             let actions = specs.actions();
 
             for action in actions {
@@ -287,19 +239,17 @@ pub fn run_test(specs: Specs) {
                         code,
                         data,
                         salt,
-                    } => {
-                        res = Some(CallResult::Instantiate(Contracts::bare_instantiate(
-                            RuntimeOrigin::signed(origin),
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            code.into(),
-                            data,
-                            salt,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        )));
-                    }
+                    } => results.push(CallResult::Instantiate(Contracts::bare_instantiate(
+                        RuntimeOrigin::signed(translate_account(&origin, &results)),
+                        value,
+                        gas_limit.unwrap_or(GAS_LIMIT),
+                        storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                        code.into(),
+                        data,
+                        salt,
+                        DebugInfo::Skip,
+                        CollectEvents::Skip,
+                    ))),
                     Call {
                         origin,
                         dest,
@@ -307,54 +257,62 @@ pub fn run_test(specs: Specs) {
                         gas_limit,
                         storage_deposit_limit,
                         data,
-                    } => {
-                        res = Some(CallResult::Exec(Contracts::bare_call(
-                            RuntimeOrigin::signed(origin),
-                            dest,
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            data,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        )));
-                    }
+                    } => results.push(CallResult::Exec(Contracts::bare_call(
+                        RuntimeOrigin::signed(translate_account(&origin, &results)),
+                        translate_account(&dest, &results),
+                        value,
+                        gas_limit.unwrap_or(GAS_LIMIT),
+                        storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                        data,
+                        DebugInfo::Skip,
+                        CollectEvents::Skip,
+                    ))),
                     VerifyCall(expectation) => {
-                        if let Some(res) = res.take() {
-                            expectation.verify(res);
-                        } else {
-                            panic!("No call to verify");
-                        }
+                        expectation.verify(results.last().expect("No call to verify"));
                     }
                     VerifyBalance { origin, expected } => {
-                        assert_eq!(Balances::free_balance(&origin), expected);
+                        let balance = Balances::free_balance(&translate_account(&origin, &results));
+                        assert_eq!(balance, expected);
                     }
                     VerifyStorage {
                         contract,
                         key,
                         expected,
                     } => {
-                        let Ok(storage) = Contracts::get_storage(contract, key) else {
+                        let Ok(storage) = Contracts::get_storage(
+                            translate_account(&contract, &results),
+                            key.clone(),
+                        ) else {
                             panic!("Error reading storage");
                         };
-                        assert_eq!(storage, expected);
+                        let Some(value) = storage else {
+                            panic!("No value for storage key 0x{}", hex::encode(key));
+                        };
+                        assert_eq!(value, expected);
                     }
                 }
             }
         });
+
+    match &results[0] {
+        CallResult::Instantiate(res) => res.result.as_ref().unwrap().account_id.clone(),
+        _ => todo!(),
+    };
+
+    results
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::*;
 
     #[test]
     fn instantiate_works() {
-        use SpecsAction::*;
+        use specs::SpecsAction::*;
         run_test(Specs {
             balances: vec![(ALICE, 1_000_000_000)],
             actions: vec![Instantiate {
-                origin: ALICE,
+                origin: TestAccountId::Alice,
                 value: 0,
                 gas_limit: Some(GAS_LIMIT),
                 storage_deposit_limit: Some(DEPOSIT_LIMIT),
@@ -362,7 +320,7 @@ mod tests {
                 data: vec![],
                 salt: vec![],
             }],
-        })
+        });
     }
 
     #[test]
@@ -376,7 +334,7 @@ mod tests {
         "actions": [
             {
                 "Instantiate": {
-                    "origin": "5C62Ck4UrFPiBtoCmeSrgF7x9yv9mn38446dhCpsi2mLHiFT",
+                    "origin": "Alice",
                     "value": 0,
                     "code": {
                         "Path": "fixtures/Baseline.pvm"
@@ -390,4 +348,36 @@ mod tests {
         .unwrap();
         run_test(specs);
     }
+}
+
+pub fn specs_from_comment(contract_name: &str, solidity: &str) -> Vec<Specs> {
+    let mut json_string = String::with_capacity(solidity.len());
+    let mut is_reading = false;
+    let mut specs = Vec::new();
+
+    for line in solidity.lines() {
+        if line.starts_with(SPEC_MARKER_BEGIN) {
+            is_reading = true;
+            continue;
+        }
+        if line.starts_with(SPEC_MARKER_END) {
+            match serde_json::from_str::<Specs>(&json_string) {
+                Ok(mut spec) => {
+                    spec.replace_empty_code(contract_name, solidity);
+                    specs.push(spec);
+                }
+                Err(e) => panic!("invalid spec JSON: {e}"),
+            }
+            is_reading = false;
+            json_string.clear();
+            continue;
+        }
+        if is_reading {
+            json_string.push_str(line)
+        }
+    }
+
+    assert!(!specs.is_empty(), "source does not contain any test spec");
+
+    specs
 }

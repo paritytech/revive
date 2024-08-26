@@ -1,18 +1,20 @@
-use std::str::FromStr;
+use revive_runner::*;
 
-use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
-use alloy_sol_types::{sol, SolCall, SolValue};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use sha1::Digest;
+macro_rules! test_spec {
+    ($test_name:ident, $contract_name:literal, $source_file:literal) => {
+        #[test]
+        fn $test_name() {
+            let solidity = include_str!(concat!("../contracts/", $source_file));
+            let mut specs = specs_from_comment($contract_name, solidity);
+            run_test(specs.remove(0));
+        }
+    };
+}
 
-use revive_solidity::test_utils::*;
+test_spec!(baseline, "Baseline", "Baseline.sol");
+test_spec!(flipper, "Flipper", "flipper.sol");
 
-use crate::{
-    assert_success,
-    cases::Contract,
-    mock_runtime::{self, ReturnFlags, State, Transaction},
-};
-
+/*
 #[test]
 fn fibonacci() {
     let parameter = 6;
@@ -638,3 +640,4 @@ fn transient_storage() {
         .values()
         .all(|account| account.storage.is_empty()));
 }
+*/

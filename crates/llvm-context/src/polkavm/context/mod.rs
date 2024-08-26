@@ -688,8 +688,14 @@ where
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
 
-                let (storage_value_pointer, storage_value_length_pointer) = self
-                    .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
+                let storage_value_pointer =
+                    self.build_alloca(self.word_type(), "storage_value_pointer");
+                let storage_value_length_pointer =
+                    self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
+                self.build_store(
+                    storage_value_length_pointer,
+                    self.word_const(revive_common::BIT_LENGTH_WORD as u64),
+                )?;
 
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 

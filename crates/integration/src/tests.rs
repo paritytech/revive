@@ -18,9 +18,9 @@ fn fibonacci() {
     let parameter = 6;
 
     for contract in [
-        Contract::fib_recursive(parameter),
-        Contract::fib_iterative(parameter),
-        Contract::fib_binet(parameter),
+        Contract::fib_recursive(U256::from(parameter)),
+        Contract::fib_iterative(U256::from(parameter)),
+        Contract::fib_binet(U256::from(parameter)),
     ] {
         let (_, output) = assert_success(&contract, true);
         let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());

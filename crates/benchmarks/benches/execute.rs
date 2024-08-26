@@ -1,3 +1,4 @@
+use alloy_primitives::U256;
 use criterion::{
     criterion_group, criterion_main, measurement::Measurement, BenchmarkGroup, BenchmarkId,
     Criterion,
@@ -148,28 +149,43 @@ fn bench_triangle_number(c: &mut Criterion) {
 fn bench_fibonacci_recurisve(c: &mut Criterion) {
     let group = group(c, "FibonacciRecursive");
     #[cfg(feature = "bench-extensive")]
-    let parameters = &[24, 27, 31, 36, 39];
+    let parameters = [24, 27, 31, 36, 39]
+        .iter()
+        .map(|p| U256::from(*p))
+        .collect::<Vec<_>>();
     #[cfg(not(feature = "bench-extensive"))]
-    let parameters = &[12, 16, 20];
+    let parameters = [12, 16, 20]
+        .iter()
+        .map(|p| U256::from(*p))
+        .collect::<Vec<_>>();
 
-    bench(group, parameters, parameters, Contract::fib_recursive);
+    bench(group, &parameters, &parameters, Contract::fib_recursive);
 }
 
 fn bench_fibonacci_iterative(c: &mut Criterion) {
     let group = group(c, "FibonacciIterative");
     #[cfg(feature = "bench-extensive")]
-    let parameters = &[256, 162500, 650000, 6500000, 100000000, 400000000];
+    let parameters = [256, 162500, 650000, 6500000, 100000000, 400000000]
+        .iter()
+        .map(|p| U256::from(*p))
+        .collect::<Vec<_>>();
     #[cfg(not(feature = "bench-extensive"))]
-    let parameters = &[64, 128, 256];
+    let parameters = [64, 128, 256]
+        .iter()
+        .map(|p| U256::from(*p))
+        .collect::<Vec<_>>();
 
-    bench(group, parameters, parameters, Contract::fib_iterative);
+    bench(group, &parameters, &parameters, Contract::fib_iterative);
 }
 
 fn bench_fibonacci_binet(c: &mut Criterion) {
     let group = group(c, "FibonacciBinet");
-    let parameters = &[64, 128, 256];
+    let parameters = [64, 128, 256]
+        .iter()
+        .map(|p| U256::from(*p))
+        .collect::<Vec<_>>();
 
-    bench(group, parameters, parameters, Contract::fib_binet);
+    bench(group, &parameters, &parameters, Contract::fib_binet);
 }
 
 fn bench_sha1(c: &mut Criterion) {

@@ -1,3 +1,4 @@
+use alloy_primitives::U256;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use revive_integration::cases::Contract;
@@ -117,9 +118,9 @@ fn bench_fibonacci_recursive(c: &mut Criterion) {
         c,
         "PrepareFibonacciRecursive",
         #[cfg(feature = "bench-evm")]
-        Contract::fib_recursive(0).evm_runtime,
+        Contract::fib_recursive(U256::ZERO).evm_runtime,
         #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
-        Contract::fib_recursive(0).pvm_runtime,
+        Contract::fib_recursive(U256::ZERO).pvm_runtime,
     );
 }
 
@@ -128,9 +129,9 @@ fn bench_fibonacci_iterative(c: &mut Criterion) {
         c,
         "PrepareFibonacciIterative",
         #[cfg(feature = "bench-evm")]
-        Contract::fib_iterative(0).evm_runtime,
+        Contract::fib_iterative(U256::ZERO).evm_runtime,
         #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
-        Contract::fib_iterative(0).pvm_runtime,
+        Contract::fib_iterative(U256::ZERO).pvm_runtime,
     );
 }
 
@@ -139,9 +140,9 @@ fn bench_fibonacci_binet(c: &mut Criterion) {
         c,
         "PrepareFibonacciBinet",
         #[cfg(feature = "bench-evm")]
-        Contract::fib_binet(0).evm_runtime,
+        Contract::fib_binet(U256::ZERO).evm_runtime,
         #[cfg(any(feature = "bench-pvm-interpreter", feature = "bench-pvm"))]
-        Contract::fib_binet(0).pvm_runtime,
+        Contract::fib_binet(U256::ZERO).pvm_runtime,
     );
 }
 

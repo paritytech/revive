@@ -13,45 +13,90 @@ pub struct Contract {
     pub calldata: Vec<u8>,
 }
 
+macro_rules! case {
+    // Arguments:
+    //     1. The file name, expect to live under "../contracts/"
+    //     2. The Solidity contract name
+    //     3. The derived Solidity function call name
+    //     4. The method name on [Contract]
+    //     5. Any parameters to the Solidity functions
+    ($file_name:literal, $contract_name:ident, $contract_method:ident, $method_name:ident, $( $v:ident: $t:ty ),* ) => {
+        impl Contract {
+            pub fn $method_name($($v: $t),*) -> Self {
+                let code = include_str!(concat!("../contracts/", $file_name));
+                let args = $contract_name::$contract_method::new(($($v,)*)).abi_encode();
+                let name = stringify!($contract_name);
+                Contract::build(args, name, code)
+            }
+        }
+    };
+
+    // Arguments:
+    //     1. The file name, expect to live under "../contracts/"
+    //     2. The Solidity contract name
+    //     3. Raw Calldata
+    //     4. The method name on [Contract]
+    ($file_name:literal, $contract_name:literal, $calldata:expr, $method_name:ident) => {
+        impl Contract {
+            pub fn $method_name() -> Self {
+                let code = include_str!(concat!("../contracts/", $file_name));
+                Contract::build($calldata, $contract_name, code)
+            }
+        }
+    };
+}
+
+case!("Create.sol", "CreateA", vec![0; 4], create_a);
+case!("Create.sol", "CreateB", vec![0; 4], create_b);
+
 sol!(contract Baseline { function baseline() public payable; });
+case!("Baseline.sol", Baseline, baselineCall, baseline,);
 
 sol!(contract Flipper {
     constructor (bool);
 
     function flip() public;
 });
+case!("flipper.sol", Flipper, flipCall, flipper,);
+case!("flipper.sol", Flipper, constructorCall, flipper_constructor, coin: bool);
 
 sol!(contract Computation {
     function odd_product(int32 n) public pure returns (int64);
     function triangle_number(int64 n) public pure returns (int64 sum);
 });
+case!("Computation.sol", Computation, odd_productCall, odd_product, n: i32);
+case!("Computation.sol", Computation, triangle_numberCall, triangle_number, n: i64);
 
 sol!(
     contract FibonacciRecursive {
         function fib3(uint n) public pure returns (uint);
     }
 );
+case!("Fibonacci.sol", FibonacciRecursive, fib3Call, fib_recursive, n: U256);
 
 sol!(
     contract FibonacciIterative {
         function fib3(uint n) external pure returns (uint b);
     }
 );
+case!("Fibonacci.sol", FibonacciIterative, fib3Call, fib_iterative, n: U256);
 
 sol!(
     contract FibonacciBinet {
         function fib3(uint n) external pure returns (uint a);
     }
 );
+case!("Fibonacci.sol", FibonacciBinet, fib3Call, fib_binet, n: U256);
 
 sol!(
     contract SHA1 {
         function sha1(bytes memory data) public pure returns (bytes20 ret);
     }
 );
+case!("SHA1.sol", SHA1, sha1Call, sha1, pre: Vec<u8>);
 
 sol!(
-    interface IERC20 {
+    contract ERC20 {
         function totalSupply() external view returns (uint);
 
         function balanceOf(address account) external view returns (uint);
@@ -75,6 +120,7 @@ sol!(
         event Approval(address indexed owner, address indexed spender, uint value);
     }
 );
+case!("ERC20.sol", ERC20, totalSupplyCall, erc20,);
 
 sol!(
     contract Block {
@@ -83,6 +129,8 @@ sol!(
         function number() public view returns (uint ret);
     }
 );
+case!("Block.sol", Block, numberCall, block_number,);
+case!("Block.sol", Block, timestampCall, block_timestamp,);
 
 sol!(
     contract Context {
@@ -91,6 +139,8 @@ sol!(
         function caller() public pure returns (address);
     }
 );
+case!("Context.sol", Context, address_thisCall, context_address,);
+case!("Context.sol", Context, callerCall, context_caller,);
 
 sol!(
     contract DivisionArithmetics {
@@ -103,12 +153,17 @@ sol!(
         function smod(int n, int d) public pure returns (int r);
     }
 );
+case!("DivisionArithmetics.sol", DivisionArithmetics, divCall, division_arithmetics_div, n: U256, d: U256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, sdivCall, division_arithmetics_sdiv, n: I256, d: I256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmetics_mod, n: U256, d: U256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
 
 sol!(
     contract MStore8 {
         function mStore8(uint value) public pure returns (uint256 word);
     }
 );
+case!("mStore8.sol", MStore8, mStore8Call, mstore8, value: U256);
 
 sol!(
     contract Events {
@@ -118,12 +173,7 @@ sol!(
         function emitEvent(uint topics) public;
     }
 );
-
-sol!(
-    contract CreateB {
-        fallback() external payable;
-    }
-);
+case!("Events.sol", Events, emitEventCall, event, topics: U256);
 
 sol!(
     contract ExtCode {
@@ -132,12 +182,15 @@ sol!(
         function CodeSize() public pure returns (uint ret);
     }
 );
+case!("ExtCode.sol", ExtCode, ExtCodeSizeCall, ext_code_size, address: Address);
+case!("ExtCode.sol", ExtCode, CodeSizeCall, code_size,);
 
 sol!(
     contract MCopy {
         function memcpy(bytes memory payload) public pure returns (bytes memory);
     }
 );
+case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Vec<u8>);
 
 sol!(
     contract Call {
@@ -151,24 +204,30 @@ sol!(
         ) public payable returns (bytes memory);
     }
 );
+case!("Call.sol", Call, value_transferCall, call_value_transfer, destination: Address);
+case!("Call.sol", Call, callCall, call_call, destination: Address, payload: Vec<u8>);
+case!("Call.sol", "Call", vec![], call_constructor);
 
 sol!(
     contract Value {
         function balance_of(address _address) public view returns (uint ret);
     }
 );
+case!("Value.sol", Value, balance_ofCall, value_balance_of, address: Address);
 
 sol!(
     contract Bitwise {
         function opByte(uint i, uint x) public payable returns (uint ret);
     }
 );
+case!("Bitwise.sol", Bitwise, opByteCall, bitwise_byte, index: U256, value: U256);
 
 sol!(
     contract Storage {
         function transient(uint value) public returns (uint ret);
     }
 );
+case!("Storage.sol", Storage, transientCall, storage_transient, value: U256);
 
 impl Contract {
     /// Execute the contract.
@@ -189,375 +248,12 @@ impl Contract {
             .call()
     }
 
-    pub fn baseline() -> Self {
-        let code = include_str!("../contracts/Baseline.sol");
-        let name = "Baseline";
-
+    fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,
             evm_runtime: compile_evm_bin_runtime(name, code),
             pvm_runtime: compile_blob(name, code),
-            calldata: Baseline::baselineCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn odd_product(n: i32) -> Self {
-        let code = include_str!("../contracts/Computation.sol");
-        let name = "Computation";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Computation::odd_productCall::new((n,)).abi_encode(),
-        }
-    }
-
-    pub fn triangle_number(n: i64) -> Self {
-        let code = include_str!("../contracts/Computation.sol");
-        let name = "Computation";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Computation::triangle_numberCall::new((n,)).abi_encode(),
-        }
-    }
-
-    pub fn fib_recursive(n: u32) -> Self {
-        let code = include_str!("../contracts/Fibonacci.sol");
-        let name = "FibonacciRecursive";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: FibonacciRecursive::fib3Call::new((U256::from(n),)).abi_encode(),
-        }
-    }
-
-    pub fn fib_iterative(n: u32) -> Self {
-        let code = include_str!("../contracts/Fibonacci.sol");
-        let name = "FibonacciIterative";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: FibonacciIterative::fib3Call::new((U256::from(n),)).abi_encode(),
-        }
-    }
-
-    pub fn fib_binet(n: u32) -> Self {
-        let code = include_str!("../contracts/Fibonacci.sol");
-        let name = "FibonacciBinet";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: FibonacciBinet::fib3Call::new((U256::from(n),)).abi_encode(),
-        }
-    }
-
-    pub fn sha1(pre: Vec<u8>) -> Self {
-        let code = include_str!("../contracts/SHA1.sol");
-        let name = "SHA1";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: SHA1::sha1Call::new((pre,)).abi_encode(),
-        }
-    }
-
-    pub fn flipper() -> Self {
-        let code = include_str!("../contracts/flipper.sol");
-        let name = "Flipper";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Flipper::flipCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn flipper_constructor(coin: bool) -> Self {
-        let code = include_str!("../contracts/flipper.sol");
-        let name = "Flipper";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Flipper::constructorCall::new((coin,)).abi_encode(),
-        }
-    }
-
-    pub fn erc20() -> Self {
-        let code = include_str!("../contracts/ERC20.sol");
-        let name = "ERC20";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: IERC20::totalSupplyCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn block_number() -> Self {
-        let code = include_str!("../contracts/Block.sol");
-        let name = "Block";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Block::numberCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn block_timestamp() -> Self {
-        let code = include_str!("../contracts/Block.sol");
-        let name = "Block";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Block::timestampCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn context_address() -> Self {
-        let code = include_str!("../contracts/Context.sol");
-        let name = "Context";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Context::address_thisCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn context_caller() -> Self {
-        let code = include_str!("../contracts/Context.sol");
-        let name = "Context";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Context::callerCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn division_arithmetics_div(n: U256, d: U256) -> Self {
-        let code = include_str!("../contracts/DivisionArithmetics.sol");
-        let name = "DivisionArithmetics";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: DivisionArithmetics::divCall::new((n, d)).abi_encode(),
-        }
-    }
-
-    pub fn division_arithmetics_sdiv(n: I256, d: I256) -> Self {
-        let code = include_str!("../contracts/DivisionArithmetics.sol");
-        let name = "DivisionArithmetics";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: DivisionArithmetics::sdivCall::new((n, d)).abi_encode(),
-        }
-    }
-
-    pub fn division_arithmetics_mod(n: U256, d: U256) -> Self {
-        let code = include_str!("../contracts/DivisionArithmetics.sol");
-        let name = "DivisionArithmetics";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: DivisionArithmetics::modCall::new((n, d)).abi_encode(),
-        }
-    }
-
-    pub fn division_arithmetics_smod(n: I256, d: I256) -> Self {
-        let code = include_str!("../contracts/DivisionArithmetics.sol");
-        let name = "DivisionArithmetics";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: DivisionArithmetics::smodCall::new((n, d)).abi_encode(),
-        }
-    }
-
-    pub fn mstore8(value: U256) -> Self {
-        let code = include_str!("../contracts/mStore8.sol");
-        let name = "MStore8";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: MStore8::mStore8Call::new((value,)).abi_encode(),
-        }
-    }
-
-    pub fn event(topics: U256) -> Self {
-        let code = include_str!("../contracts/Events.sol");
-        let name = "Events";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Events::emitEventCall::new((topics,)).abi_encode(),
-        }
-    }
-
-    pub fn create_a() -> Self {
-        let code = include_str!("../contracts/Create.sol");
-        let name = "CreateA";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: vec![0; 4],
-        }
-    }
-
-    pub fn create_b() -> Self {
-        let code = include_str!("../contracts/Create.sol");
-        let name = "CreateB";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: vec![0; 4],
-        }
-    }
-
-    pub fn ext_code_size(address: Address) -> Self {
-        let code = include_str!("../contracts/ExtCode.sol");
-        let name = "ExtCode";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: ExtCode::ExtCodeSizeCall::new((address,)).abi_encode(),
-        }
-    }
-
-    pub fn code_size() -> Self {
-        let code = include_str!("../contracts/ExtCode.sol");
-        let name = "ExtCode";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: ExtCode::CodeSizeCall::new(()).abi_encode(),
-        }
-    }
-
-    pub fn memcpy(payload: Vec<u8>) -> Self {
-        let code = include_str!("../contracts/MCopy.sol");
-        let name = "MCopy";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: MCopy::memcpyCall::new((payload,)).abi_encode(),
-        }
-    }
-
-    pub fn call_value_transfer(destination: Address) -> Self {
-        let code = include_str!("../contracts/Call.sol");
-        let name = "Call";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Call::value_transferCall::new((destination,)).abi_encode(),
-        }
-    }
-
-    pub fn call_call(callee: Address, payload: Vec<u8>) -> Self {
-        let code = include_str!("../contracts/Call.sol");
-        let name = "Call";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Call::callCall::new((callee, payload)).abi_encode(),
-        }
-    }
-
-    pub fn call_constructor() -> Self {
-        let code = include_str!("../contracts/Call.sol");
-        let name = "Call";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Default::default(),
-        }
-    }
-
-    pub fn value_balance_of(address: Address) -> Self {
-        let code = include_str!("../contracts/Value.sol");
-        let name = "Value";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Value::balance_ofCall::new((address,)).abi_encode(),
-        }
-    }
-
-    pub fn bitwise_byte(index: U256, value: U256) -> Self {
-        let code = include_str!("../contracts/Bitwise.sol");
-        let name = "Bitwise";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Bitwise::opByteCall::new((index, value)).abi_encode(),
-        }
-    }
-
-    pub fn storage_transient(value: U256) -> Self {
-        let code = include_str!("../contracts/Storage.sol");
-        let name = "Storage";
-
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata: Storage::transientCall::new((value,)).abi_encode(),
+            calldata,
         }
     }
 }
@@ -607,7 +303,7 @@ mod tests {
             Contract::baseline as fn() -> Contract,
             Contract::flipper as fn() -> Contract,
             (|| Contract::odd_product(0)) as fn() -> Contract,
-            (|| Contract::fib_iterative(0)) as fn() -> Contract,
+            (|| Contract::fib_iterative(U256::ZERO)) as fn() -> Contract,
             Contract::erc20 as fn() -> Contract,
             (|| Contract::sha1(Vec::new())) as fn() -> Contract,
             (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,

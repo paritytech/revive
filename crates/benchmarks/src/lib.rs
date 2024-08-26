@@ -12,7 +12,10 @@ pub fn prepare_pvm(
     config.set_sandbox(Some(SandboxKind::Linux));
 
     let (instance, export_index) = mock_runtime::prepare(code, Some(config));
-    let transaction = State::default().transaction().calldata(input);
+    let transaction = State::default()
+        .transaction()
+        .with_default_account(code)
+        .calldata(input);
 
     (transaction, instance, export_index)
 }

@@ -1,4 +1,4 @@
-use alloy_sol_types::SolValue;
+use alloy_sol_types::{SolCall, SolValue};
 use revive_runner::*;
 
 macro_rules! test_spec {
@@ -20,38 +20,9 @@ test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
 test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
 test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
+test_spec!(msize, "MSize", "MSize.sol");
 
 /*
-#[test]
-fn msize_plain() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract MSize {
-            function mSize() public pure returns (uint);
-        }
-    );
-    let code = compile_blob_with_options(
-        "MSize",
-        include_str!("../contracts/MSize.sol"),
-        false,
-        revive_solidity::SolcPipeline::EVMLA,
-    );
-
-    let input = MSize::mSizeCall::new(()).abi_encode();
-    let (_, output) = State::default()
-        .transaction()
-        .calldata(input)
-        .with_default_account(&code)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // Solidity always stores the "free memory pointer" (32 byte int) at offset 64.
-    let expected = U256::try_from(64 + 32).unwrap();
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
-}
-
 #[test]
 fn transferred_value() {
     sol!(
@@ -72,38 +43,6 @@ fn transferred_value() {
 
     let expected = I256::try_from(123).unwrap();
     let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn msize_non_word_sized_access() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract MSize {
-            function mStore100() public pure returns (uint);
-        }
-    );
-    let code = compile_blob_with_options(
-        "MSize",
-        include_str!("../contracts/MSize.sol"),
-        false,
-        revive_solidity::SolcPipeline::Yul,
-    );
-
-    let input = MSize::mStore100Call::new(()).abi_encode();
-    let (_, output) = State::default()
-        .transaction()
-        .with_default_account(&code)
-        .calldata(input)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // https://docs.zksync.io/build/developer-reference/differences-with-ethereum.html#mstore-mload
-    // "Unlike EVM, where the memory growth is in words, on zkEVM the memory growth is counted in bytes."
-    // "For example, if you write mstore(100, 0) the msize on zkEVM will be 132, but on the EVM it will be 160."
-    let expected = U256::try_from(132).unwrap();
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
     assert_eq!(received, expected);
 }
 

@@ -2,7 +2,6 @@
 pragma solidity ^0.8;
 
 /* runner.json
-
 {
   "actions": [
     {
@@ -38,7 +37,6 @@ pragma solidity ^0.8;
     }
   ]
 }
-
 */
 
 contract Flipper {

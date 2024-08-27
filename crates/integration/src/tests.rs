@@ -1,4 +1,3 @@
-use alloy_sol_types::SolValue;
 use revive_runner::*;
 
 macro_rules! test_spec {
@@ -17,45 +16,14 @@ test_spec!(flipper, "Flipper", "flipper.sol");
 test_spec!(fibonacci_recursive, "FibonacciRecursive", "Fibonacci.sol");
 test_spec!(fibonacci_iterative, "FibonacciIterative", "Fibonacci.sol");
 test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
-
-/*
-
-#[test]
-fn hash_keccak_256() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract TestSha3 {
-            function test(string memory _pre) external payable returns (bytes32);
-        }
-    );
-    let source = r#"contract TestSha3 {
-            function test(string memory _pre) external payable returns (bytes32 hash) {
-                hash = keccak256(bytes(_pre));
-            }
-        }"#;
-    let code = compile_blob("TestSha3", source);
-
-    let param = "hello";
-    let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
-
-    let (_, output) = State::default()
-        .transaction()
-        .with_default_account(&code)
-        .calldata(input)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    let expected = keccak256(param.as_bytes());
-    let received = FixedBytes::<32>::from_slice(&output.data);
-    assert_eq!(received, expected);
-}
+test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
 
 #[test]
 fn erc20() {
-    let _ = compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
+    revive_solidity::test_utils::compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
 }
 
+/*
 #[test]
 fn triangle_number() {
     let (_, output) = assert_success(&Contract::triangle_number(13), true);

@@ -162,7 +162,7 @@ impl CallResult {
 pub enum Code {
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
-        path: std::path::PathBuf,
+        path: Option<std::path::PathBuf>,
         contract: String,
     },
     /// Read the contract blob from disk
@@ -183,9 +183,15 @@ impl From<Code> for pallet_revive::Code<Hash> {
     fn from(val: Code) -> Self {
         match val {
             Code::Solidity { path, contract } => {
+                let Some(path) = path else {
+                    panic!("Solidity source of contract '{contract}' missing path");
+                };
+                let Ok(source_code) = std::fs::read_to_string(&path) else {
+                    panic!("Failed to reead source code from {}", path.display());
+                };
                 pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob(
-                    contract.as_str(),
-                    std::fs::read_to_string(path).unwrap().as_str(),
+                    &contract,
+                    &source_code,
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),
@@ -302,6 +308,38 @@ pub fn run_test(specs: Specs) -> Vec<CallResult> {
     results
 }
 
+pub fn specs_from_comment(contract_name: &str, solidity: &str) -> Vec<Specs> {
+    let mut json_string = String::with_capacity(solidity.len());
+    let mut is_reading = false;
+    let mut specs = Vec::new();
+
+    for line in solidity.lines() {
+        if line.starts_with(SPEC_MARKER_BEGIN) {
+            is_reading = true;
+            continue;
+        }
+        if line.starts_with(SPEC_MARKER_END) {
+            match serde_json::from_str::<Specs>(&json_string) {
+                Ok(mut spec) => {
+                    spec.replace_empty_code(contract_name, solidity);
+                    specs.push(spec);
+                }
+                Err(e) => panic!("invalid spec JSON: {e}"),
+            }
+            is_reading = false;
+            json_string.clear();
+            continue;
+        }
+        if is_reading {
+            json_string.push_str(line)
+        }
+    }
+
+    assert!(!specs.is_empty(), "source does not contain any test spec");
+
+    specs
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -348,36 +386,4 @@ mod tests {
         .unwrap();
         run_test(specs);
     }
-}
-
-pub fn specs_from_comment(contract_name: &str, solidity: &str) -> Vec<Specs> {
-    let mut json_string = String::with_capacity(solidity.len());
-    let mut is_reading = false;
-    let mut specs = Vec::new();
-
-    for line in solidity.lines() {
-        if line.starts_with(SPEC_MARKER_BEGIN) {
-            is_reading = true;
-            continue;
-        }
-        if line.starts_with(SPEC_MARKER_END) {
-            match serde_json::from_str::<Specs>(&json_string) {
-                Ok(mut spec) => {
-                    spec.replace_empty_code(contract_name, solidity);
-                    specs.push(spec);
-                }
-                Err(e) => panic!("invalid spec JSON: {e}"),
-            }
-            is_reading = false;
-            json_string.clear();
-            continue;
-        }
-        if is_reading {
-            json_string.push_str(line)
-        }
-    }
-
-    assert!(!specs.is_empty(), "source does not contain any test spec");
-
-    specs
 }

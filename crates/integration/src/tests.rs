@@ -1,3 +1,4 @@
+use alloy_sol_types::SolValue;
 use revive_runner::*;
 
 macro_rules! test_spec {
@@ -13,45 +14,11 @@ macro_rules! test_spec {
 
 test_spec!(baseline, "Baseline", "Baseline.sol");
 test_spec!(flipper, "Flipper", "flipper.sol");
+test_spec!(fibonacci_recursive, "FibonacciRecursive", "Fibonacci.sol");
+test_spec!(fibonacci_iterative, "FibonacciIterative", "Fibonacci.sol");
+test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
 
 /*
-#[test]
-fn fibonacci() {
-    let parameter = 6;
-
-    for contract in [
-        Contract::fib_recursive(U256::from(parameter)),
-        Contract::fib_iterative(U256::from(parameter)),
-        Contract::fib_binet(U256::from(parameter)),
-    ] {
-        let (_, output) = assert_success(&contract, true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        let expected = U256::from(8);
-        assert_eq!(received, expected);
-    }
-}
-
-#[test]
-fn flipper() {
-    let (state, address) = State::new_deployed(Contract::flipper_constructor(true));
-
-    let contract = Contract::flipper();
-    let (state, output) = state
-        .transaction()
-        .calldata(contract.calldata.clone())
-        .callee(address)
-        .call();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::ZERO);
-
-    let (state, output) = state
-        .transaction()
-        .calldata(contract.calldata)
-        .callee(address)
-        .call();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::from(1));
-}
 
 #[test]
 fn hash_keccak_256() {

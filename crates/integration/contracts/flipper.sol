@@ -1,25 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8;
 
-contract Flipper {
-    bool coin;
-
-    constructor(bool _coin) {
-        coin = _coin;
-    }
-
-    function flip() public {
-        coin = !coin;
-    }
-}
-
 /* runner.json
 
 {
   "actions": [
     {
       "Instantiate": {
-        "value": 0,
         "data": "0000000000000000000000000000000000000000000000000000000000000001"
       }
     },
@@ -37,7 +24,6 @@ contract Flipper {
         "dest": {
             "Instantiated": 0
         },
-        "value": 0,
         "data": "cde4efa9"
       }
     },
@@ -54,3 +40,15 @@ contract Flipper {
 }
 
 */
+
+contract Flipper {
+    bool coin;
+
+    constructor(bool _coin) {
+        coin = _coin;
+    }
+
+    function flip() public {
+        coin = !coin;
+    }
+}

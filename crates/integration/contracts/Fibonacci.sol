@@ -4,6 +4,32 @@ pragma solidity ^0.8;
 
 // https://medium.com/coinmonks/fibonacci-in-solidity-8477d907e22a
 
+/* runner.json
+
+{
+    "actions": [
+    {
+      "Instantiate": {}
+    },
+    {
+      "Call": {
+        "dest": {
+            "Instantiated": 0
+        },
+        "data": "6b83dd2e0000000000000000000000000000000000000000000000000000000000000006"
+      }
+    },
+    {
+        "VerifyCall": {
+            "success": true,
+            "output": "0000000000000000000000000000000000000000000000000000000000000008"
+        }
+    }
+  ]
+}
+
+*/
+
 contract FibonacciRecursive {
     function f(uint n) internal pure returns (uint) {
         if (n <= 1) {

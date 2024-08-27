@@ -1,3 +1,4 @@
+use alloy_sol_types::SolValue;
 use revive_runner::*;
 
 macro_rules! test_spec {
@@ -18,24 +19,9 @@ test_spec!(fibonacci_iterative, "FibonacciIterative", "Fibonacci.sol");
 test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
 test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
 test_spec!(erc20, "ERC20", "ERC20.sol");
+test_spec!(computation, "Computation", "Computation.sol");
 
 /*
-#[test]
-fn triangle_number() {
-    let (_, output) = assert_success(&Contract::triangle_number(13), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::try_from(91).unwrap();
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn odd_product() {
-    let (_, output) = assert_success(&Contract::odd_product(5), true);
-    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = I256::try_from(945i64).unwrap();
-    assert_eq!(received, expected);
-}
-
 #[test]
 fn msize_plain() {
     sol!(

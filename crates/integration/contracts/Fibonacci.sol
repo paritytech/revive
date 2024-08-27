@@ -2,8 +2,6 @@
 
 pragma solidity ^0.8;
 
-// https://medium.com/coinmonks/fibonacci-in-solidity-8477d907e22a
-
 /* runner.json
 {
     "actions": [
@@ -60,6 +58,7 @@ contract FibonacciIterative {
     }
 }
 
+// https://medium.com/coinmonks/fibonacci-in-solidity-8477d907e22a
 contract FibonacciBinet {
     function fib3(uint n) external pure returns (uint a) {
         if (n == 0) {

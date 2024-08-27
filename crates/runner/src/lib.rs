@@ -163,6 +163,8 @@ pub enum Code {
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
         path: Option<std::path::PathBuf>,
+        solc_optimizer: Option<bool>,
+        pipeline: Option<revive_solidity::SolcPipeline>,
         contract: String,
     },
     /// Read the contract blob from disk
@@ -182,16 +184,23 @@ impl Default for Code {
 impl From<Code> for pallet_revive::Code<Hash> {
     fn from(val: Code) -> Self {
         match val {
-            Code::Solidity { path, contract } => {
+            Code::Solidity {
+                path,
+                contract,
+                solc_optimizer,
+                pipeline,
+            } => {
                 let Some(path) = path else {
                     panic!("Solidity source of contract '{contract}' missing path");
                 };
                 let Ok(source_code) = std::fs::read_to_string(&path) else {
                     panic!("Failed to reead source code from {}", path.display());
                 };
-                pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob(
+                pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob_with_options(
                     &contract,
                     &source_code,
+                    solc_optimizer.unwrap_or(true),
+                    pipeline.unwrap_or(revive_solidity::SolcPipeline::Yul),
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),

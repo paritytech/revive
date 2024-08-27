@@ -116,16 +116,28 @@ impl Specs {
 
     pub fn replace_empty_code(&mut self, contract_name: &str, contract_source: &str) {
         for action in self.actions.iter_mut() {
-            let SpecsAction::Instantiate {
-                code: Code::Bytes(bytes),
-                ..
-            } = action
-            else {
+            let SpecsAction::Instantiate { code, .. } = action else {
                 continue;
             };
 
-            if bytes.is_empty() {
-                *bytes = compile_blob(contract_name, contract_source);
+            match code {
+                Code::Bytes(bytes) if bytes.is_empty() => {
+                    *bytes = compile_blob(contract_name, contract_source)
+                }
+                Code::Solidity {
+                    path,
+                    solc_optimizer,
+                    pipeline,
+                    contract,
+                } if path.is_none() => {
+                    *code = Code::Bytes(compile_blob_with_options(
+                        contract.as_str(),
+                        contract_source,
+                        solc_optimizer.unwrap_or(true),
+                        pipeline.unwrap_or(revive_solidity::SolcPipeline::Yul),
+                    ));
+                }
+                _ => continue,
             }
         }
     }

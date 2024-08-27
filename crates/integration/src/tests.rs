@@ -17,11 +17,7 @@ test_spec!(fibonacci_recursive, "FibonacciRecursive", "Fibonacci.sol");
 test_spec!(fibonacci_iterative, "FibonacciIterative", "Fibonacci.sol");
 test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
 test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
-
-#[test]
-fn erc20() {
-    revive_solidity::test_utils::compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
-}
+test_spec!(erc20, "ERC20", "ERC20.sol");
 
 /*
 #[test]

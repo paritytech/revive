@@ -54,20 +54,17 @@ polkavm-common = "0.10"
 polkavm-linker = "0.10"
 polkavm-disassembler = "0.10"
 polkavm = "0.10"
-alloy-primitives = "0.6"
-alloy-sol-types = "0.6"
+alloy-primitives = { version = "0.8", features = ["serde"] }
+alloy-sol-types = "0.8"
+alloy-genesis = "0.3"
+alloy-serde = "0.3"
 env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
 log = { version = "0.4" }
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-#polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "559fa1db0594a81d5dbf343613ba2f3fc16708da" }
-polkadot-sdk = { path = "../polkadot-sdk/umbrella" }
-
-# Benchmarking against EVM
-primitive-types = { version = "0.12", features = ["codec"] }
-evm-interpreter = { git = "https://github.com/xermicus/evm.git", branch = "separate-compilation" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "1c4141abeb4c581e503f07af2a3522e6918db591" }
 
 [workspace.dependencies.inkwell]
 version = "0.5"

@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 hex = { workspace = true }
+tempfile = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 alloy-primitives = { workspace = true, features = ["serde"] }

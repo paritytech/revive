@@ -1,4 +1,10 @@
-use std::collections::BTreeMap;
+use core::str;
+use std::{
+    collections::BTreeMap,
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 use alloy_genesis::{Genesis, GenesisAccount};
 use alloy_primitives::{Address, Bytes, B256, U256};
@@ -6,7 +12,18 @@ use alloy_serde::storage::deserialize_storage_map;
 use serde::{Deserialize, Serialize};
 use serde_json::{Deserializer, Value};
 
-pub const GENESIS_JSON: &str = include_str!("../genesis.json");
+const GENESIS_JSON: &str = include_str!("../genesis.json");
+const EXECUTABLE_NAME: &str = "evm";
+const EXECUTABLE_ARGS: [&str; 8] = [
+    "--log.format=json",
+    "run",
+    "--dump",
+    "--nomemory=false",
+    "--noreturndata=false",
+    "--json",
+    "--codefile",
+    "-",
+];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StateDump {
@@ -70,9 +87,7 @@ impl From<&str> for EvmLog {
     fn from(value: &str) -> Self {
         let mut output = None;
         let mut state_dump = None;
-
-        let stream = Deserializer::from_str(value).into_iter::<Value>();
-        for value in stream {
+        for value in Deserializer::from_str(value).into_iter::<Value>() {
             let Ok(value) = value else { continue };
             if let Ok(value @ EvmOutput { .. }) = serde_json::from_value(value.clone()) {
                 output = Some(value);
@@ -90,12 +105,114 @@ impl From<&str> for EvmLog {
     }
 }
 
+#[derive(Debug, Default)]
+struct Evm {
+    genesis_path: Option<PathBuf>,
+    code: Option<Vec<u8>>,
+    input: Option<Bytes>,
+    create: bool,
+}
+
+impl Evm {
+    /// Run the code found in `code_file`
+    pub fn code_file(self, path: PathBuf) -> Self {
+        Self {
+            code: std::fs::read_to_string(&path)
+                .unwrap_or_else(|err| {
+                    panic!("can not read EVM byte code from file {path:?}: {err}")
+                })
+                .into_bytes()
+                .into(),
+            ..self
+        }
+    }
+
+    /// Run the `code`
+    pub fn code_blob(self, blob: Vec<u8>) -> Self {
+        Self {
+            code: Some(blob),
+            ..self
+        }
+    }
+
+    /// Set the calldata
+    pub fn input(self, bytes: Bytes) -> Self {
+        Self {
+            input: Some(bytes),
+            ..self
+        }
+    }
+
+    /// Set the create flag
+    pub fn deploy(self, enable: bool) -> Self {
+        Self {
+            create: enable,
+            ..self
+        }
+    }
+
+    pub fn genesis_json(self, path: PathBuf) -> Self {
+        Self {
+            genesis_path: Some(path),
+            ..self
+        }
+    }
+
+    pub fn run(&self) -> EvmLog {
+        let Some(code) = &self.code else {
+            panic!("no code or code file specified")
+        };
+
+        let genesis_json_path = "/tmp/genesis.json";
+        std::fs::write(genesis_json_path, GENESIS_JSON)
+            .unwrap_or_else(|err| panic!("failed to write genesis.json: {err}"));
+        let mut command = Command::new(PathBuf::from(EXECUTABLE_NAME));
+        command.stdin(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        command.args(EXECUTABLE_ARGS);
+        command.args(["--prestate", genesis_json_path]);
+        if let Some(input) = &self.input {
+            command.args(["--input", hex::encode(input).as_str()]);
+        }
+        if self.create {
+            command.arg("--create");
+        }
+
+        let process = command.spawn().unwrap_or_else(|error| {
+            panic!("{EXECUTABLE_NAME} subprocess spawning error: {error:?}")
+        });
+        process
+            .stdin
+            .as_ref()
+            .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stdin getting error"))
+            .write_all(code)
+            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdin writing error: {err:?}"));
+
+        let output = process
+            .wait_with_output()
+            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} subprocess output error: {err}"));
+
+        assert!(
+            output.status.success(),
+            "{EXECUTABLE_NAME} command failed: {}",
+            output.status
+        );
+
+        str::from_utf8(output.stdout.as_slice())
+            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} output failed to parse: {err}"))
+            .into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use alloy_genesis::Genesis;
-    use alloy_primitives::{B256, U256};
+    use std::str::FromStr;
 
-    use crate::{EvmLog, EvmOutput, StateDump};
+    use alloy_genesis::Genesis;
+    use alloy_primitives::{Bytes, B256, U256};
+
+    use crate::{Evm, EvmLog, EvmOutput, StateDump};
 
     const OUTPUT_OK: &str = r#"{"output":"0000000000000000000000000000000000000000000000000000000000000000","gasUsed":"0x11d"}"#;
     const OUTPUT_REVERTED: &str = r#"{"output":"","gasUsed":"0x2d","error":"execution reverted"}"#;
@@ -117,6 +234,11 @@ mod tests {
         }
     }
 }"#;
+    const EVM_BIN_FIXTURE: &str = "6080604052348015600e575f80fd5b506040516101403803806101408339818101604052810190602e9190607f565b805f806101000a81548160ff0219169083151502179055505060a5565b5f80fd5b5f8115159050919050565b606181604f565b8114606a575f80fd5b50565b5f81519050607981605a565b92915050565b5f602082840312156091576090604b565b5b5f609c84828501606d565b91505092915050565b608f806100b15f395ff3fe6080604052348015600e575f80fd5b50600436106026575f3560e01c8063cde4efa914602a575b5f80fd5b60306032565b005b5f8054906101000a900460ff16155f806101000a81548160ff02191690831515021790555056fea264697066735822122046c92dd2fd612b1ed93d184dad4c49f61c44690722c4a6c7c746ebeb0aadeb4a64736f6c63430008190033";
+    const EVM_BIN_RUNTIME_FIXTURE: &str = "6080604052348015600e575f80fd5b50600436106026575f3560e01c8063cde4efa914602a575b5f80fd5b60306032565b005b5f8054906101000a900460ff16155f806101000a81548160ff02191690831515021790555056fea264697066735822122046c92dd2fd612b1ed93d184dad4c49f61c44690722c4a6c7c746ebeb0aadeb4a64736f6c63430008190033";
+    const EVM_BIN_FIXTURE_INPUT: &str =
+        "0000000000000000000000000000000000000000000000000000000000000001";
+    const EVM_BIN_RUNTIME_FIXTURE_INPUT: &str = "cde4efa9";
 
     #[test]
     fn parse_evm_output_ok() {
@@ -155,5 +277,21 @@ mod tests {
             .get(&B256::ZERO)
             .expect("genesis account should have key 0 occupied");
         assert_eq!(*storage_value, B256::from(U256::from(2)));
+    }
+
+    #[test]
+    fn flipper() {
+        let log_deploy = Evm::default()
+            .code_blob(EVM_BIN_FIXTURE.as_bytes().to_vec())
+            .input(Bytes::from_str(EVM_BIN_FIXTURE_INPUT).unwrap())
+            .deploy(true)
+            .run();
+        assert!(log_deploy.output.error.is_none());
+
+        let log_runtime = Evm::default()
+            .code_blob(EVM_BIN_RUNTIME_FIXTURE.as_bytes().to_vec())
+            .input(Bytes::from_str(EVM_BIN_RUNTIME_FIXTURE_INPUT).unwrap())
+            .run();
+        assert!(log_runtime.output.error.is_none());
     }
 }

@@ -7,7 +7,8 @@
 //! ```rust
 //! use revive_runner::*;
 //! use specs::SpecsAction::*;
-//! run_test(Specs {
+//! Specs {
+//!     differential: true,
 //!     balances: vec![(ALICE, 1_000_000_000)],
 //!     actions: vec![Instantiate {
 //!         origin: TestAccountId::Alice,
@@ -18,7 +19,8 @@
 //!         data: vec![],
 //!         salt: vec![],
 //!     }],
-//! });
+//! }
+//! .run();
 //! ```
 
 use polkadot_sdk::*;
@@ -210,114 +212,11 @@ impl From<Code> for pallet_revive::Code<Hash> {
     }
 }
 
-/// Run a contract test
-/// The test takes a [`Specs`] and executes the actions in order
-pub fn run_test(specs: Specs) -> Vec<CallResult> {
-    let mut results = vec![];
-
-    let translate_account = |id: &TestAccountId, results: &[CallResult]| -> AccountId {
-        match id {
-            TestAccountId::Alice => ALICE,
-            TestAccountId::Bob => BOB,
-            TestAccountId::Charlie => CHARLIE,
-            TestAccountId::AccountId(account_id) => account_id.clone(),
-            TestAccountId::Instantiated(n) => match results
-                .get(*n as usize)
-                .expect("should provide valid index into call results")
-            {
-                CallResult::Exec(_) => panic!("call #{n} should be an instantiation"),
-                CallResult::Instantiate(res) => res
-                    .result
-                    .as_ref()
-                    .expect("call #{n} reverted")
-                    .account_id
-                    .clone(),
-            },
-        }
+pub fn specs_from_comment(contract_name: &str, path: &str) -> Vec<Specs> {
+    let solidity = match std::fs::read_to_string(path) {
+        Err(err) => panic!("unable to read {path}: {err}"),
+        Ok(solidity) => solidity,
     };
-
-    ExtBuilder::default()
-        .balance_genesis_config(specs.balances.clone())
-        .build()
-        .execute_with(|| {
-            use specs::SpecsAction::*;
-
-            let actions = specs.actions();
-
-            for action in actions {
-                match action {
-                    Instantiate {
-                        origin,
-                        value,
-                        gas_limit,
-                        storage_deposit_limit,
-                        code,
-                        data,
-                        salt,
-                    } => results.push(CallResult::Instantiate(Contracts::bare_instantiate(
-                        RuntimeOrigin::signed(translate_account(&origin, &results)),
-                        value,
-                        gas_limit.unwrap_or(GAS_LIMIT),
-                        storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                        code.into(),
-                        data,
-                        salt,
-                        DebugInfo::Skip,
-                        CollectEvents::Skip,
-                    ))),
-                    Call {
-                        origin,
-                        dest,
-                        value,
-                        gas_limit,
-                        storage_deposit_limit,
-                        data,
-                    } => results.push(CallResult::Exec(Contracts::bare_call(
-                        RuntimeOrigin::signed(translate_account(&origin, &results)),
-                        translate_account(&dest, &results),
-                        value,
-                        gas_limit.unwrap_or(GAS_LIMIT),
-                        storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                        data,
-                        DebugInfo::Skip,
-                        CollectEvents::Skip,
-                    ))),
-                    VerifyCall(expectation) => {
-                        expectation.verify(results.last().expect("No call to verify"));
-                    }
-                    VerifyBalance { origin, expected } => {
-                        let balance = Balances::free_balance(&translate_account(&origin, &results));
-                        assert_eq!(balance, expected);
-                    }
-                    VerifyStorage {
-                        contract,
-                        key,
-                        expected,
-                    } => {
-                        let Ok(storage) = Contracts::get_storage(
-                            translate_account(&contract, &results),
-                            key.clone(),
-                        ) else {
-                            panic!("Error reading storage");
-                        };
-                        let Some(value) = storage else {
-                            panic!("No value for storage key 0x{}", hex::encode(key));
-                        };
-                        assert_eq!(value, expected);
-                    }
-                }
-            }
-        });
-
-    match &results[0] {
-        CallResult::Instantiate(res) => res.result.as_ref().unwrap().account_id.clone(),
-        _ => todo!(),
-    };
-
-    results
-}
-
-pub fn specs_from_comment(contract_name: &str, solidity: &str) -> Vec<Specs> {
     let mut json_string = String::with_capacity(solidity.len());
     let mut is_reading = false;
     let mut specs = Vec::new();
@@ -330,7 +229,7 @@ pub fn specs_from_comment(contract_name: &str, solidity: &str) -> Vec<Specs> {
         if line.starts_with(SPEC_MARKER_END) {
             match serde_json::from_str::<Specs>(&json_string) {
                 Ok(mut spec) => {
-                    spec.replace_empty_code(contract_name, solidity);
+                    spec.replace_empty_code(contract_name, path);
                     specs.push(spec);
                 }
                 Err(e) => panic!("invalid spec JSON: {e}"),
@@ -356,7 +255,8 @@ mod tests {
     #[test]
     fn instantiate_works() {
         use specs::SpecsAction::*;
-        run_test(Specs {
+        let specs = Specs {
+            differential: false,
             balances: vec![(ALICE, 1_000_000_000)],
             actions: vec![Instantiate {
                 origin: TestAccountId::Alice,
@@ -367,12 +267,13 @@ mod tests {
                 data: vec![],
                 salt: vec![],
             }],
-        });
+        };
+        specs.run();
     }
 
     #[test]
     fn instantiate_with_json() {
-        let specs = serde_json::from_str::<Specs>(
+        serde_json::from_str::<Specs>(
             r#"
         {
         "balances": [
@@ -392,7 +293,7 @@ mod tests {
         }
     "#,
         )
-        .unwrap();
-        run_test(specs);
+        .unwrap()
+        .run();
     }
 }

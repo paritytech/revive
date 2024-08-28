@@ -5,9 +5,9 @@ macro_rules! test_spec {
     ($test_name:ident, $contract_name:literal, $source_file:literal) => {
         #[test]
         fn $test_name() {
-            let solidity = include_str!(concat!("../contracts/", $source_file));
-            let mut specs = specs_from_comment($contract_name, solidity);
-            run_test(specs.remove(0));
+            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("should always exist");
+            let path = format!("{manifest_dir}/../integration/contracts/{}", $source_file);
+            specs_from_comment($contract_name, &path).remove(0).run();
         }
     };
 }
@@ -21,6 +21,20 @@ test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
 test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
+test_spec!(transferred_value, "Value", "Value.sol");
+
+#[test]
+fn foo() {
+    alloy_sol_types::sol!(
+        contract Value {
+            function value() public payable returns (uint);
+        }
+    );
+
+    dbg!(hex::encode(&crate::cases::Contract::baseline().calldata));
+    dbg!(hex::encode(&Value::valueCall::new(()).abi_encode()));
+    dbg!(hex::encode(&alloy_primitives::U256::from(123).abi_encode()));
+}
 
 /*
 #[test]

@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, I256, U256};
+use alloy_primitives::{Address, Bytes, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
 use revive_solidity::test_utils::*;
@@ -44,8 +44,8 @@ macro_rules! case {
     };
 }
 
-case!("Create.sol", "CreateA", vec![0; 4], create_a);
-case!("Create.sol", "CreateB", vec![0; 4], create_b);
+case!("Create.sol", "CreateA", vec![0; 4].into(), create_a);
+case!("Create.sol", "CreateB", vec![0; 4].into(), create_b);
 
 sol!(contract Baseline { function baseline() public payable; });
 case!("Baseline.sol", Baseline, baselineCall, baseline,);
@@ -91,7 +91,7 @@ sol!(
         function sha1(bytes memory data) public pure returns (bytes20 ret);
     }
 );
-case!("SHA1.sol", SHA1, sha1Call, sha1, pre: Vec<u8>);
+case!("SHA1.sol", SHA1, sha1Call, sha1, pre: Bytes);
 
 sol!(
     contract ERC20 {
@@ -188,7 +188,7 @@ sol!(
         function memcpy(bytes memory payload) public pure returns (bytes memory);
     }
 );
-case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Vec<u8>);
+case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Bytes);
 
 sol!(
     contract Call {
@@ -203,7 +203,7 @@ sol!(
     }
 );
 case!("Call.sol", Call, value_transferCall, call_value_transfer, destination: Address);
-case!("Call.sol", Call, callCall, call_call, destination: Address, payload: Vec<u8>);
+case!("Call.sol", Call, callCall, call_call, destination: Address, payload: Bytes);
 case!("Call.sol", "Call", vec![], call_constructor);
 
 sol!(
@@ -240,7 +240,7 @@ impl Contract {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::U256;
+    use alloy_primitives::{Bytes, U256};
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
     use serde::{de::Deserialize, Serialize};
     use std::{collections::BTreeMap, fs::File};
@@ -285,7 +285,7 @@ mod tests {
             (|| Contract::odd_product(0)) as fn() -> Contract,
             (|| Contract::fib_iterative(U256::ZERO)) as fn() -> Contract,
             Contract::erc20 as fn() -> Contract,
-            (|| Contract::sha1(Vec::new())) as fn() -> Contract,
+            (|| Contract::sha1(Bytes::new())) as fn() -> Contract,
             (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,
             (|| Contract::event(U256::ZERO)) as fn() -> Contract,
         ]

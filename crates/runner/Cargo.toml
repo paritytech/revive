@@ -16,3 +16,4 @@ scale-info = { workspace = true, default-features = false }
 polkadot-sdk = { workspace = true, features = ["experimental", "runtime"] }
 
 revive-solidity = { workspace = true }
+revive-differential = { workspace = true }

@@ -3,9 +3,9 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-use crate::solc::standard_json::output::error::Error as SolcStandardJsonOutputError;
-use crate::solc::version::Version as SolcVersion;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::standard_json::output::error::Error as SolcStandardJsonOutputError;
+use crate::compiler::version::Version as SolcVersion;
 use crate::warning::Warning;
 
 /// The `solc --standard-json` output source.

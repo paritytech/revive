@@ -1,11 +1,9 @@
 [package]
 name = "revive-linker"
-version.workspace = true
-license.workspace = true
-edition.workspace = true
-repository.workspace = true
-authors.workspace = true
-description = "revive compiler linker utils"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 riscv-64 = []
@@ -18,5 +16,5 @@ polkavm-common = { workspace = true }
 libc = { workspace = true }
 anyhow = { workspace = true }
 
-revive-builtins = { workspace = true }
-lld-sys = { workspace = true }
+revive-builtins = { path = "../builtins" }
+lld-sys = { path = "../lld-sys" }

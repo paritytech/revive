@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
 
 /// The `solc --standard-json` expected output selection flag.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]

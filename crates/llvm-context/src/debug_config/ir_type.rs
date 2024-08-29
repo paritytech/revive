@@ -15,9 +15,6 @@ pub enum IRType {
     LLVM,
     /// Whether to dump the assembly code.
     Assembly,
-    /// Whether to jump JSON
-    #[cfg(debug_assertions)]
-    JSON,
 }
 
 impl IRType {
@@ -29,8 +26,6 @@ impl IRType {
             Self::EVMLA => revive_common::EXTENSION_EVMLA,
             Self::LLVM => revive_common::EXTENSION_LLVM_SOURCE,
             Self::Assembly => revive_common::EXTENSION_POLKAVM_ASSEMBLY,
-            #[cfg(debug_assertions)]
-            Self::JSON => revive_common::EXTENSION_JSON,
         }
     }
 }

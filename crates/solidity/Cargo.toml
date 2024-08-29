@@ -1,14 +1,13 @@
 [package]
 name = "revive-solidity"
-version.workspace = true
-license.workspace = true
-edition.workspace = true
-repository.workspace = true
+version = "1.4.0"
 authors = [
     "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
     "Cyrill Leutwiler <cyrill@parity.io>",
 ]
-description = "Solidity frontend for the revive compiler"
+license = "MIT OR Apache-2.0"
+edition = "2021"
+description = "PolkaVM Solidity frontend"
 
 [[bin]]
 name = "resolc"
@@ -18,13 +17,13 @@ path = "src/resolc/main.rs"
 doctest = false
 
 [dependencies]
-clap = { workspace = true }
+structopt = { workspace = true }
 colored = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 which = { workspace = true }
 path-slash = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -38,9 +37,20 @@ sha3 = { workspace = true }
 md5 = { workspace = true }
 inkwell = { workspace = true }
 
-revive-common = { workspace = true }
-revive-llvm-context = { workspace = true }
-
+revive-common = { path = "../common" }
+revive-llvm-context = { path = "../llvm-context" }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "*", default-features = false }
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+libc = { workspace = true }
+inkwell = { workspace = true, features = ["target-riscv", "llvm18-0-no-llvm-linking"]}
+
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+
+#TODO: Use pthreads -C target-feature=+atomics,+bulk-memory -Clink-arg=-pthread in compilation and enable `parallel` feature
+[target.'cfg(target_os = "emscripten")'.features]
+default = []

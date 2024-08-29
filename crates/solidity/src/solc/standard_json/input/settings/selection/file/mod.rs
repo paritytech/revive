@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
 
 use self::flag::Flag as SelectionFlag;
 

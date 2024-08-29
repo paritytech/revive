@@ -1,11 +1,9 @@
 [package]
 name = "revive-integration"
-version.workspace = true
-license.workspace = true
-edition.workspace = true
-repository.workspace = true
-authors.workspace = true
-description = "revive compiler integration test cases"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 polkavm = { workspace = true }
@@ -14,11 +12,12 @@ alloy-sol-types = { workspace = true }
 hex = { workspace = true }
 env_logger = { workspace = true }
 log = { workspace = true }
+once_cell = { workspace = true }
 
-revive-solidity = { workspace = true }
-revive-differential = { workspace = true }
-revive-llvm-context = { workspace = true }
-revive-common = { workspace = true }
+revive-solidity = { path = "../solidity" }
+revive-differential = { path = "../differential" }
+revive-llvm-context = { path = "../llvm-context" }
+revive-common = { path = "../common" }
 
 [dev-dependencies]
 sha1 = { workspace = true }

@@ -1,12 +1,11 @@
 [package]
 name = "lld-sys"
-version.workspace = true
-license.workspace = true
-edition.workspace = true
-repository.workspace = true
-authors.workspace = true
+version = "0.1.0"
+edition = "2021"
 build = "build.rs"
-description = "bindings for ld.lld core"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 libc = { workspace = true }

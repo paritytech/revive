@@ -4,24 +4,20 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
-use clap::Parser;
 use path_slash::PathExt;
+use structopt::StructOpt;
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
 /// are given or "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
 /// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
-#[derive(Debug, Parser)]
+#[derive(Debug, StructOpt)]
 #[structopt(name = "The PolkaVM Solidity compiler")]
 pub struct Arguments {
     /// Print the version and exit.
     #[structopt(long = "version")]
     pub version: bool,
-
-    /// Print the licence and exit.
-    #[structopt(long = "license")]
-    pub license: bool,
 
     /// Specify the input paths and remappings.
     /// If an argument contains a '=', it is considered a remapping.
@@ -46,7 +42,7 @@ pub struct Arguments {
     pub allow_paths: Option<String>,
 
     /// Create one file per component and contract/file at the specified directory, if given.
-    #[structopt(short = 'o', long = "output-dir")]
+    #[structopt(short = "o", long = "output-dir")]
     pub output_directory: Option<PathBuf>,
 
     /// Overwrite existing files (used together with -o).
@@ -55,7 +51,7 @@ pub struct Arguments {
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[structopt(short = 'O', long = "optimization")]
+    #[structopt(short = "O", long = "optimization")]
     pub optimization: Option<char>,
 
     /// Try to recompile with -Oz if the bytecode is too large.
@@ -85,7 +81,7 @@ pub struct Arguments {
 
     /// Specify addresses of deployable libraries. Syntax: `<libraryName>=<address> [, or whitespace] ...`.
     /// Addresses are interpreted as hexadecimal strings prefixed with `0x`.
-    #[structopt(short = 'l', long = "libraries")]
+    #[structopt(short = "l", long = "libraries")]
     pub libraries: Vec<String>,
 
     /// Output a single JSON document containing the specified information.
@@ -168,12 +164,6 @@ pub struct Arguments {
     /// Only for usage from within the compiler.
     #[structopt(long = "recursive-process")]
     pub recursive_process: bool,
-
-    /// Specify the input file to use instead of stdin when --recursive-process is given.
-    /// This is only intended for use when developing the compiler.
-    #[cfg(debug_assertions)]
-    #[structopt(long = "recursive-process-input")]
-    pub recursive_process_input: Option<String>,
 }
 
 impl Default for Arguments {
@@ -185,7 +175,7 @@ impl Default for Arguments {
 impl Arguments {
     /// A shortcut constructor.
     pub fn new() -> Self {
-        Self::parse()
+        Self::from_args()
     }
 
     /// Validates the arguments.
@@ -195,20 +185,6 @@ impl Arguments {
             anyhow::bail!("No other options are allowed while getting the compiler version.");
         }
 
-        #[cfg(debug_assertions)]
-        if self.recursive_process_input != None && !self.recursive_process {
-            anyhow::bail!("--process-input can be only used when --recursive-process is given");
-        }
-
-        #[cfg(debug_assertions)]
-        if self.recursive_process
-            && ((self.recursive_process_input == None && std::env::args().count() > 2)
-                || (self.recursive_process_input != None && std::env::args().count() > 4))
-        {
-            anyhow::bail!("No other options are allowed in recursive mode.");
-        }
-
-        #[cfg(not(debug_assertions))]
         if self.recursive_process && std::env::args().count() > 2 {
             anyhow::bail!("No other options are allowed in recursive mode.");
         }

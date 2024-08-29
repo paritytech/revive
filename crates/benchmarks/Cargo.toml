@@ -1,11 +1,10 @@
 [package]
 name = "revive-benchmarks"
-version.workspace = true
-license.workspace = true
-edition.workspace = true
-repository.workspace = true
-authors.workspace = true
-description = "revive compiler benchmarks"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Cyrill Leutwiler <cyrill@parity.io>",
+]
 
 [features]
 default = ["bench-pvm-interpreter"]
@@ -17,8 +16,8 @@ bench-extensive = []
 [dependencies]
 hex = { workspace = true }
 polkavm = { workspace = true }
-revive-integration = { workspace = true }
-revive-differential = { workspace = true, optional = true }
+revive-integration = { path = "../integration" }
+revive-differential = { path = "../differential", optional = true }
 alloy-primitives = { workspace = true }
 
 [dev-dependencies]

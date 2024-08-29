@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
 
 #[test]
 #[should_panic(expected = "The `CODECOPY` instruction is not supported")]

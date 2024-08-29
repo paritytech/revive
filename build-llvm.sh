@@ -5,25 +5,14 @@ set -euo pipefail
 INSTALL_DIR="${PWD}/llvm18.0"
 mkdir -p ${INSTALL_DIR}
 
-
-# Clone LLVM 18 (any revision after commit bd32aaa is supposed to work)
-if [ ! -d "llvm-project" ]; then
-  git clone --depth 1 --branch release/18.x https://github.com/llvm/llvm-project.git
-fi
-
+./clone-llvm.sh
 
 # Build LLVM, clang
-LLVM_SRC_PREFIX=${PWD}/llvm-project
-LLVM_SRC_DIR=${LLVM_SRC_PREFIX}/llvm
-LLVM_BUILD_DIR=${PWD}/build/llvm
-if [ ! -d ${LLVM_BUILD_DIR} ] ; then
-	mkdir -p ${LLVM_BUILD_DIR}
-fi
+cd llvm-project
 
-cmake -G Ninja \
-  -S ${LLVM_SRC_DIR} \
-  -B ${LLVM_BUILD_DIR} \
-  -DLLVM_ENABLE_ASSERTIONS=On \
+mkdir -p build
+cd build
+cmake -G Ninja -DLLVM_ENABLE_ASSERTIONS=On \
   -DLLVM_ENABLE_TERMINFO=Off \
   -DLLVM_ENABLE_LIBXML2=Off \
   -DLLVM_ENABLE_ZLIB=Off \
@@ -31,17 +20,17 @@ cmake -G Ninja \
   -DLLVM_TARGETS_TO_BUILD='RISCV' \
   -DLLVM_ENABLE_ZSTD=Off \
   -DCMAKE_BUILD_TYPE=MinSizeRel \
-  -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
+  -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
+	../llvm
 
-cmake --build ${LLVM_BUILD_DIR}
-cmake --install ${LLVM_BUILD_DIR}
+ninja
+ninja install
+
 
 # Build compiler builtins
-COMPILER_RT_SRC_DIR=${LLVM_SRC_PREFIX}/compiler-rt
-COMPILER_RT_BUILD_DIR=${PWD}/build/compiler-rt
-if [ ! -d ${COMPILER_RT_BUILD_DIR} ] ; then
-	mkdir -p ${COMPILER_RT_BUILD_DIR}
-fi
+cd ../compiler-rt
+mkdir -p build
+cd build
 
 build_compiler_rt() {
 	case "$1" in
@@ -52,8 +41,6 @@ build_compiler_rt() {
 	CFLAGS="--target=riscv${1} -march=rv${1}em -mabi=${TARGET_ABI} -mcpu=generic-rv${1} -nostdlib -nodefaultlibs"
 
 	cmake -G Ninja \
-	  -S ${COMPILER_RT_SRC_DIR} \
-	  -B ${COMPILER_RT_BUILD_DIR} \
 	  -DCMAKE_BUILD_TYPE=Release \
 	  -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
 	  -DCOMPILER_RT_BUILD_BUILTINS=ON \
@@ -78,10 +65,11 @@ build_compiler_rt() {
 	  -DCOMPILER_RT_TEST_COMPILER=${INSTALL_DIR}/bin/clang \
 	  -DCMAKE_CXX_FLAGS="${CFLAGS}" \
 	  -DCMAKE_SYSTEM_NAME=unknown \
-	  -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON 
+	  -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+	  ..
 	
-	cmake --build ${COMPILER_RT_BUILD_DIR}
-	cmake --install ${COMPILER_RT_BUILD_DIR} 
+	ninja
+	ninja install
 }
 
 build_compiler_rt 32

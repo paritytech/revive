@@ -5,9 +5,9 @@ pub mod contract;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::solc::combined_json::CombinedJson;
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
-use crate::solc::version::Version as SolcVersion;
+use crate::compiler::combined_json::CombinedJson;
+use crate::compiler::standard_json::output::Output as StandardJsonOutput;
+use crate::compiler::version::Version as SolcVersion;
 
 use self::contract::Contract;
 

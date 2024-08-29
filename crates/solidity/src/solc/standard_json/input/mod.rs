@@ -8,15 +8,15 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-use crate::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+use crate::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::warning::Warning;
 
 use self::language::Language;
@@ -64,8 +64,12 @@ impl Input {
         via_ir: bool,
         suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
-        let sources = paths
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let iter = paths.into_par_iter(); // Parallel iterator
+
+        #[cfg(not(feature = "parallel"))]
+        let iter = paths.iter(); // Sequential iterator
+        let sources = iter
             .map(|path| {
                 let source = Source::try_from(path.as_path()).unwrap_or_else(|error| {
                     panic!("Source code file {path:?} reading error: {error}")
@@ -106,8 +110,12 @@ impl Input {
         via_ir: bool,
         suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
-        let sources = sources
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let iter = sources.into_par_iter(); // Parallel iterator
+
+        #[cfg(not(feature = "parallel"))]
+        let iter = sources.into_iter(); // Sequential iterator
+        let sources = iter
             .map(|(path, content)| (path, Source::from(content)))
             .collect();
 

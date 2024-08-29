@@ -2,30 +2,7 @@
 resolver = "2"
 members = ["crates/*"]
 
-[workspace.package]
-version = "0.1.0"
-authors = [
-    "Cyrill Leutwiler <cyrill@parity.io>",
-    "Parity Technologies <admin@parity.io>",
-]
-license = "MIT/Apache-2.0"
-edition = "2021"
-repository = "https://github.com/xermicus/revive"
-
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0", path = "crates/builtins" }
-revive-common = { version = "0.1.0", path = "crates/common" }
-revive-differential = { version = "0.1.0", path = "crates/differential" }
-revive-integration = { version = "0.1.0", path = "crates/integration" }
-revive-linker = { version = "0.1.0", path = "crates/linker" }
-lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0", path = "crates/llvm-context" }
-pallet-contracts-pvm-llapi = { version = "0.1.0", path = "crates/pallet-contracts-pvm-llapi" }
-revive-runner = { version = "0.1.0", path = "crates/runner" }
-revive-solidity = { version = "0.1.0", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
-
 hex = "0.4"
 petgraph = "0.6"
 cc = "1.0"
@@ -48,7 +25,7 @@ thiserror = "1.0"
 which = "5.0"
 path-slash = "0.2"
 rayon = "1.8"
-clap = { version = "4", default-features = false, features = ["derive"] }
+structopt = { version = "0.3", default-features = false }
 rand = "0.8"
 polkavm-common = { git = "https://github.com/koute/polkavm.git", rev = "360029e" } 
 polkavm-linker = { git = "https://github.com/koute/polkavm.git", rev = "360029e" } 
@@ -60,16 +37,14 @@ env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
 log = { version = "0.4" }
-codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
-scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "559fa1db0594a81d5dbf343613ba2f3fc16708da" }
 
 # Benchmarking against EVM
 primitive-types = { version = "0.12", features = ["codec"] }
 evm-interpreter = { git = "https://github.com/xermicus/evm.git", branch = "separate-compilation" }
 
 [workspace.dependencies.inkwell]
-version = "0.5"
+git = "https://github.com/TheDan64/inkwell.git"
+rev = "6c0fb56b3554e939f9ca61b465043d6a84fb7b95"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 

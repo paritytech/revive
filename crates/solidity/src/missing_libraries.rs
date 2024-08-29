@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
-use crate::solc::version::Version as SolcVersion;
+use crate::compiler::standard_json::output::Output as StandardJsonOutput;
+use crate::compiler::version::Version as SolcVersion;
 
 /// The missing Solidity libraries.
 pub struct MissingLibraries {

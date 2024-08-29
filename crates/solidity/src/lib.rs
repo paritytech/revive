@@ -1,45 +1,55 @@
 //! Solidity to PolkaVM compiler library.
 
 pub(crate) mod build;
+#[path = "solc/compiler.rs"]
+pub(crate) mod compiler;
 pub(crate) mod r#const;
 pub(crate) mod evmla;
 pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
-pub(crate) mod solc;
 pub(crate) mod warning;
 pub(crate) mod yul;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
+pub use self::compiler::combined_json::contract::Contract as SolcCombinedJsonContract;
+pub use self::compiler::combined_json::CombinedJson as SolcCombinedJson;
+pub use self::compiler::pipeline::Pipeline as SolcPipeline;
+#[cfg(not(target_os = "emscripten"))]
+pub use self::compiler::solc::SolcCompiler;
+#[cfg(target_os = "emscripten")]
+pub use self::compiler::soljson::SoljsonCompiler;
+pub use self::compiler::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
+pub use self::compiler::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+pub use self::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+pub use self::compiler::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
+pub use self::compiler::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
+pub use self::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+pub use self::compiler::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
+pub use self::compiler::standard_json::input::source::Source as SolcStandardJsonInputSource;
+pub use self::compiler::standard_json::input::Input as SolcStandardJsonInput;
+pub use self::compiler::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
+pub use self::compiler::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
+pub use self::compiler::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
+pub use self::compiler::standard_json::output::Output as SolcStandardJsonOutput;
+pub use self::compiler::version::Version as SolcVersion;
+pub use self::compiler::Compiler;
 pub use self::missing_libraries::MissingLibraries;
 pub use self::process::input::Input as ProcessInput;
+#[cfg(not(target_os = "emscripten"))]
+pub use self::process::native_process::NativeProcess;
 pub use self::process::output::Output as ProcessOutput;
-pub use self::process::run as run_process;
-pub use self::process::EXECUTABLE;
+#[cfg(target_os = "emscripten")]
+pub use self::process::worker_process::WorkerProcess;
+pub use self::process::Process;
 pub use self::project::contract::Contract as ProjectContract;
 pub use self::project::Project;
 pub use self::r#const::*;
-pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
-pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
-pub use self::solc::pipeline::Pipeline as SolcPipeline;
-pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
-pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-pub use self::solc::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
-pub use self::solc::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
-pub use self::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-pub use self::solc::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
-pub use self::solc::standard_json::input::source::Source as SolcStandardJsonInputSource;
-pub use self::solc::standard_json::input::Input as SolcStandardJsonInput;
-pub use self::solc::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
-pub use self::solc::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
-pub use self::solc::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
-pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
-pub use self::solc::version::Version as SolcVersion;
-pub use self::solc::Compiler as SolcCompiler;
 pub use self::warning::Warning;
-
+#[cfg(target_os = "emscripten")]
+pub mod libsolc;
+#[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;
 pub mod tests;
 
@@ -47,9 +57,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// Runs the Yul mode.
-pub fn yul(
+pub fn yul<T: Compiler>(
     input_files: &[PathBuf],
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     is_system_mode: bool,
     include_metadata_hash: bool,
@@ -67,10 +77,10 @@ pub fn yul(
     let solc_validator = if is_system_mode {
         None
     } else {
-        if solc.version()?.default != SolcCompiler::LAST_SUPPORTED_VERSION {
+        if solc.version()?.default != compiler::LAST_SUPPORTED_VERSION {
             anyhow::bail!(
                 "The Yul mode is only supported with the most recent version of the Solidity compiler: {}",
-                SolcCompiler::LAST_SUPPORTED_VERSION,
+                compiler::LAST_SUPPORTED_VERSION,
             );
         }
 
@@ -122,10 +132,10 @@ pub fn llvm_ir(
 
 /// Runs the standard output mode.
 #[allow(clippy::too_many_arguments)]
-pub fn standard_output(
+pub fn standard_output<T: Compiler>(
     input_files: &[PathBuf],
     libraries: Vec<String>,
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -213,8 +223,8 @@ pub fn standard_output(
 
 /// Runs the standard JSON mode.
 #[allow(clippy::too_many_arguments)]
-pub fn standard_json(
-    solc: &mut SolcCompiler,
+pub fn standard_json<T: Compiler>(
+    solc: &mut T,
     detect_missing_libraries: bool,
     force_evmla: bool,
     is_system_mode: bool,
@@ -293,11 +303,11 @@ pub fn standard_json(
 
 /// Runs the combined JSON mode.
 #[allow(clippy::too_many_arguments)]
-pub fn combined_json(
+pub fn combined_json<T: Compiler>(
     format: String,
     input_files: &[PathBuf],
     libraries: Vec<String>,
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,

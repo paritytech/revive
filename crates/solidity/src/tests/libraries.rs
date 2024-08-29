@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
 
 pub const LIBRARY_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT

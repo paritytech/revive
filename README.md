@@ -29,6 +29,21 @@ resolc --version
 
 `revive` requires a build of LLVM 18.1.4 or later including `compiler-rt`. Use the provided [build-llvm.sh](build-llvm.sh) build script to compile a compatible LLVM build locally in `$PWD/llvm18.0` (don't forget to add that to `$PATH` afterwards). 
 
+### Cross-compilation to WASM
+
+Cross-compiles the Revive recompiler to WASM to enable it to run in a Node.js or browser environment.
+
+Install [emscripten](https://emscripten.org/docs/getting_started/downloads.html). Tested on version 3.1.64.
+To build resolc.js execute:
+
+```bash
+export EMSDK_ROOT=<PATH_TO_EMSCRIPTEN_SDK>
+bash emscripten-build-llvm.sh
+source $EMSDK_ROOT/emsdk_env.sh
+export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
+make install-wasm
+```
+
 ### Development
 
 Please consult the [Makefile](Makefile) targets to learn how to run tests and benchmarks. 

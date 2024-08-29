@@ -9,9 +9,9 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::compiler::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::ethereal_ir::entry_link::EntryLink;
 use crate::evmla::ethereal_ir::EtherealIR;
-use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 
 use self::data::Data;
 use self::instruction::name::Name as InstructionName;

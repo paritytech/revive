@@ -1,32 +1,19 @@
 //! Common utility used for in frontend and integration tests.
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Mutex;
 
-use once_cell::sync::Lazy;
-
+use crate::compiler::pipeline::Pipeline as SolcPipeline;
+use crate::compiler::solc::SolcCompiler;
+use crate::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::compiler::standard_json::input::Input as SolcStandardJsonInput;
+use crate::compiler::standard_json::output::contract::evm::bytecode::DeployedBytecode;
+use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
+use crate::compiler::Compiler;
 use crate::project::Project;
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
-use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
-use crate::solc::Compiler as SolcCompiler;
 use crate::warning::Warning;
-
-static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-
-#[derive(Hash, PartialEq, Eq)]
-struct CachedBlob {
-    contract_name: String,
-    solc_optimizer_enabled: bool,
-    pipeline: SolcPipeline,
-}
 
 /// Checks if the required executables are present in `${PATH}`.
 fn check_dependencies() {
@@ -76,7 +63,8 @@ pub fn build_solidity_with_options(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -125,7 +113,8 @@ pub fn build_solidity_with_options_evm(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -176,7 +165,8 @@ pub fn build_solidity_and_detect_missing_libraries(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -221,8 +211,11 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
-    let project =
-        Project::try_from_yul_string(PathBuf::from("test.yul").as_path(), source_code, None)?;
+    let project = Project::try_from_yul_string::<SolcCompiler>(
+        PathBuf::from("test.yul").as_path(),
+        source_code,
+        None,
+    )?;
     let _build = project.compile(optimizer_settings, false, false, false, None)?;
 
     Ok(())
@@ -273,92 +266,4 @@ pub fn check_solidity_warning(
         .any(|error| error.formatted_message.contains(warning_substring));
 
     Ok(contains_warning)
-}
-
-/// Compile the blob of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
-pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_blob_with_options(contract_name, source_code, true, SolcPipeline::Yul)
-}
-
-/// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
-pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
-    let pipeline = SolcPipeline::Yul;
-    let solc_optimizer_enabled = true;
-    let id = CachedBlob {
-        contract_name: contract_name.to_owned(),
-        pipeline,
-        solc_optimizer_enabled,
-    };
-
-    if let Some(blob) = EVM_BLOB_CACHE.lock().unwrap().get(&id) {
-        return blob.clone();
-    }
-
-    let file_name = "contract.sol";
-    let contracts = build_solidity_with_options_evm(
-        [(file_name.into(), source_code.into())].into(),
-        Default::default(),
-        None,
-        pipeline,
-        solc_optimizer_enabled,
-    )
-    .expect("source should compile");
-    let bin_runtime = &contracts
-        .get(contract_name)
-        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name))
-        .object;
-
-    let blob = hex::decode(bin_runtime).expect("bin-runtime shold be hex encoded");
-
-    EVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
-
-    blob
-}
-
-/// Compile the blob of `contract_name` found in given `source_code`.
-pub fn compile_blob_with_options(
-    contract_name: &str,
-    source_code: &str,
-    solc_optimizer_enabled: bool,
-    pipeline: SolcPipeline,
-) -> Vec<u8> {
-    let id = CachedBlob {
-        contract_name: contract_name.to_owned(),
-        solc_optimizer_enabled,
-        pipeline,
-    };
-
-    if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
-        return blob.clone();
-    }
-
-    let file_name = "contract.sol";
-    let contracts = build_solidity_with_options(
-        [(file_name.into(), source_code.into())].into(),
-        Default::default(),
-        None,
-        pipeline,
-        revive_llvm_context::OptimizerSettings::cycles(),
-        solc_optimizer_enabled,
-    )
-    .expect("source should compile")
-    .contracts
-    .expect("source should contain at least one contract");
-
-    let bytecode = contracts[file_name][contract_name]
-        .evm
-        .as_ref()
-        .expect("source should produce EVM output")
-        .bytecode
-        .as_ref()
-        .expect("source should produce assembly text")
-        .object
-        .as_str();
-    let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
-
-    PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
-
-    blob
 }

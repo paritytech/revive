@@ -44,3 +44,9 @@ jobs:
 
       - name: Test CLI
         run: make test-cli
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-resolc
+          path: ./target/release/resolc
+          retention-days: 1

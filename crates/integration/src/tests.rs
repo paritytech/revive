@@ -1,4 +1,5 @@
 use revive_runner::*;
+use sha1::Digest;
 
 macro_rules! test_spec {
     ($test_name:ident, $contract_name:literal, $source_file:literal) => {
@@ -21,6 +22,7 @@ test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(transferred_value, "Value", "Value.sol");
+test_spec!(sha1, "SHA1", "SHA1.sol");
 
 /*
 #[test]
@@ -121,19 +123,6 @@ fn mstore8() {
     {
         assert_eq!(received, expected);
     }
-}
-
-#[test]
-fn sha1() {
-    let pre = vec![0xffu8; 512];
-    let mut hasher = sha1::Sha1::new();
-    hasher.update(&pre);
-    let hash = hasher.finalize();
-
-    let (_, output) = assert_success(&Contract::sha1(pre), true);
-    let expected = FixedBytes::<20>::from_slice(&hash[..]);
-    let received = FixedBytes::<20>::from_slice(&output.data[..20]);
-    assert_eq!(received, expected);
 }
 
 #[test]

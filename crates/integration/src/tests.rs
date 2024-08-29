@@ -23,6 +23,7 @@ test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(transferred_value, "Value", "Value.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
 test_spec!(block, "Block", "Block.sol");
+test_spec!(mcopy, "MCopy", "MCopy.sol");
 
 /*
 #[test]
@@ -392,19 +393,6 @@ fn echo() {
         .call();
 
     assert_eq!(output.flags, ReturnFlags::Success);
-
-    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
-        .unwrap()
-        .to_vec();
-
-    assert_eq!(expected, received);
-}
-
-#[test]
-fn mcopy() {
-    let expected = vec![1, 2, 3];
-
-    let (_, output) = assert_success(&Contract::memcpy(expected.clone()), false);
 
     let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
         .unwrap()

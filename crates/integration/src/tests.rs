@@ -24,9 +24,31 @@ test_spec!(transferred_value, "Value", "Value.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
+test_spec!(events, "Events", "Events.sol");
 
+#[test]
+fn foo() {
+    alloy_sol_types::sol!(
+        contract Value {
+            function value() public payable returns (uint);
+            function balance_of(address _address) public view returns (uint ret);
+        }
+    );
+
+    use crate::cases::Contract;
+    dbg!(hex::encode(
+        &Contract::event(alloy_primitives::U256::ZERO).calldata
+    ));
+    dbg!(hex::encode(
+        &Contract::event(alloy_primitives::U256::from(123)).calldata
+    ));
+}
 /*
 #[test]
+fn events() {
+    assert_success(&Contract::event(U256::ZERO), true);
+    assert_success(&Contract::event(U256::from(123)), true);
+}#[test]
 fn balance() {
     // TODO: We do not have the correct balance API in the pallet yet
     let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
@@ -261,12 +283,6 @@ fn signed_remainder() {
     {
         assert_eq!(received, expected);
     }
-}
-
-#[test]
-fn events() {
-    assert_success(&Contract::event(U256::ZERO), true);
-    assert_success(&Contract::event(U256::from(123)), true);
 }
 
 #[test]

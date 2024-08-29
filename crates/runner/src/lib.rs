@@ -226,19 +226,21 @@ pub fn specs_from_comment(contract_name: &str, path: &str) -> Vec<Specs> {
             is_reading = true;
             continue;
         }
-        if line.starts_with(SPEC_MARKER_END) {
-            match serde_json::from_str::<Specs>(&json_string) {
-                Ok(mut spec) => {
-                    spec.replace_empty_code(contract_name, path);
-                    specs.push(spec);
-                }
-                Err(e) => panic!("invalid spec JSON: {e}"),
-            }
-            is_reading = false;
-            json_string.clear();
-            continue;
-        }
+
         if is_reading {
+            if line.starts_with(SPEC_MARKER_END) {
+                match serde_json::from_str::<Specs>(&json_string) {
+                    Ok(mut spec) => {
+                        spec.replace_empty_code(contract_name, path);
+                        specs.push(spec);
+                    }
+                    Err(e) => panic!("invalid spec JSON: {e}"),
+                }
+                is_reading = false;
+                json_string.clear();
+                continue;
+            }
+
             json_string.push_str(line)
         }
     }

@@ -45,9 +45,6 @@ jobs:
       - name: Test CLI
         run: make test-cli
 
-      - name: Build resolc
-        run: make install-bin
-
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-resolc

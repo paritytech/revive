@@ -60,3 +60,6 @@ clean:
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
 	rm -f package-lock.json
+
+docker:
+	docker build -t resolc:latest .

@@ -1,5 +1,4 @@
 use revive_runner::*;
-use sha1::Digest;
 
 macro_rules! test_spec {
     ($test_name:ident, $contract_name:literal, $source_file:literal) => {
@@ -23,6 +22,7 @@ test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(transferred_value, "Value", "Value.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
+test_spec!(block, "Block", "Block.sol");
 
 /*
 #[test]
@@ -123,22 +123,6 @@ fn mstore8() {
     {
         assert_eq!(received, expected);
     }
-}
-
-#[test]
-fn block_number() {
-    let (_, output) = assert_success(&Contract::block_number(), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::from(mock_runtime::State::BLOCK_NUMBER);
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn block_timestamp() {
-    let (_, output) = assert_success(&Contract::block_timestamp(), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::from(mock_runtime::State::BLOCK_TIMESTAMP);
-    assert_eq!(received, expected);
 }
 
 #[test]

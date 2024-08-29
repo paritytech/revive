@@ -274,7 +274,6 @@ impl Specs {
                         ),
                     };
                     let deploy_code = hex::encode(deploy_code);
-                    println!("CODE: {}", &deploy_code);
                     let mut vm = evm.code_blob(deploy_code.as_bytes().to_vec()).sender(Address::default()).deploy(true);
                     if !data.is_empty() {
                         vm = vm.input(data.into());

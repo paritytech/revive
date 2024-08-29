@@ -329,8 +329,6 @@ fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8>
     let object = &contracts
         .get(contract_name)
         .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name));
-    println!("runtime: {}", object.1.object.as_str());
-    println!("deploy: {}", object.0.object.as_str());
     let code = if runtime {
         object.1.object.as_str()
     } else {

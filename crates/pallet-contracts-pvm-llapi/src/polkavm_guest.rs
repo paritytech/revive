@@ -14,6 +14,7 @@ include!(concat!(env!("OUT_DIR"), "/polkavm_guest.rs"));
 /// The module does:
 /// - Export the `call` and `deploy` functions (which are named thereafter).
 /// - Import (most) `pallet-contracts` runtime API functions.
+///
 /// Returns `Error` if the bitcode fails to parse, which should never happen.
 pub fn module<'context>(
     context: &'context Context,

@@ -4,13 +4,15 @@ use std::{
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
+    str::FromStr,
 };
 
 use alloy_genesis::{Genesis, GenesisAccount};
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloy_primitives::{hex::ToHexExt, Address, Bytes, B256, U256};
 use alloy_serde::storage::deserialize_storage_map;
 use serde::{Deserialize, Serialize};
 use serde_json::{Deserializer, Value};
+use tempfile::NamedTempFile;
 
 const GENESIS_JSON: &str = include_str!("../genesis.json");
 const EXECUTABLE_NAME: &str = "evm";
@@ -25,16 +27,17 @@ const EXECUTABLE_ARGS: [&str; 8] = [
     "-",
 ];
 
+/// The geth EVM state dump structure
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StateDump {
     pub root: Bytes,
     pub accounts: BTreeMap<Address, Account>,
 }
 
-impl Into<Genesis> for StateDump {
-    fn into(self) -> Genesis {
+impl From<StateDump> for Genesis {
+    fn from(value: StateDump) -> Self {
         let mut genesis: Genesis = serde_json::from_str(GENESIS_JSON).unwrap();
-        genesis.alloc = self
+        genesis.alloc = value
             .accounts
             .iter()
             .map(|(address, account)| (*address, account.clone().into()))
@@ -43,6 +46,7 @@ impl Into<Genesis> for StateDump {
     }
 }
 
+/// The geth EVM state dump account structure
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Account {
     pub balance: U256,
@@ -57,18 +61,19 @@ pub struct Account {
     pub key: Option<B256>,
 }
 
-impl Into<GenesisAccount> for Account {
-    fn into(self) -> GenesisAccount {
+impl From<Account> for GenesisAccount {
+    fn from(value: Account) -> Self {
         GenesisAccount {
-            balance: self.balance,
-            nonce: Some(self.nonce),
-            code: self.code,
-            storage: self.storage,
-            private_key: self.key,
+            balance: value.balance,
+            nonce: Some(value.nonce),
+            code: value.code,
+            storage: value.storage,
+            private_key: value.key,
         }
     }
 }
 
+/// Contains the output from geth `emv` invocations
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvmOutput {
     output: Bytes,
@@ -77,8 +82,20 @@ pub struct EvmOutput {
     error: Option<String>,
 }
 
+impl EvmOutput {
+    /// Return if there was no error found and the gas used is non-zero.
+    ///
+    /// It is not sufficient to check for the absence of an error alone,
+    /// i.e. when there was no receiving account no error is reported (but no gas used).
+    pub fn run_success(&self) -> bool {
+        self.error.is_none() && self.gas_used > U256::ZERO
+    }
+}
+
+/// Contains the full log from geth `emv` invocations
 #[derive(Clone, Debug)]
 pub struct EvmLog {
+    pub account_deployed: Option<Address>,
     pub output: EvmOutput,
     pub state_dump: StateDump,
 }
@@ -99,21 +116,42 @@ impl From<&str> for EvmLog {
         }
 
         Self {
+            account_deployed: None,
             output: output.expect("the EVM log should contain the output"),
             state_dump: state_dump.expect("the EVM log should contain the state dump"),
         }
     }
 }
 
-#[derive(Debug, Default)]
-struct Evm {
-    genesis_path: Option<PathBuf>,
+/// Builder for running contracts in geth `evm`
+pub struct Evm {
+    genesis_json: String,
     code: Option<Vec<u8>>,
     input: Option<Bytes>,
+    receiver: Option<String>,
+    sender: String,
     create: bool,
 }
 
+impl Default for Evm {
+    fn default() -> Self {
+        Self {
+            genesis_json: GENESIS_JSON.to_string(),
+            code: None,
+            input: None,
+            receiver: None,
+            sender: Address::default().encode_hex(),
+            create: false,
+        }
+    }
+}
+
 impl Evm {
+    /// Create a new EVM with the given `genesis`
+    pub fn from_genesis(genesis: Genesis) -> Self {
+        Self::default().genesis_json(genesis)
+    }
+
     /// Run the code found in `code_file`
     pub fn code_file(self, path: PathBuf) -> Self {
         Self {
@@ -151,57 +189,109 @@ impl Evm {
         }
     }
 
-    pub fn genesis_json(self, path: PathBuf) -> Self {
+    /// Provide the prestate genesis configuration
+    pub fn genesis_json(self, genesis: Genesis) -> Self {
+        let genesis_json = serde_json::to_string(&genesis).expect("state dump should be valid");
+        // TODO: Investigate
+        let genesis_json = genesis_json.replace("\"0x0\"", "0");
+
         Self {
-            genesis_path: Some(path),
+            genesis_json,
             ..self
         }
     }
 
-    pub fn run(&self) -> EvmLog {
-        let Some(code) = &self.code else {
-            panic!("no code or code file specified")
-        };
+    /// Set the callee address
+    pub fn receiver(self, address: Address) -> Self {
+        Self {
+            receiver: Some(address.encode_hex()),
+            ..self
+        }
+    }
 
-        let genesis_json_path = "/tmp/genesis.json";
-        std::fs::write(genesis_json_path, GENESIS_JSON)
-            .unwrap_or_else(|err| panic!("failed to write genesis.json: {err}"));
+    /// Set the caller address
+    pub fn sender(self, address: Address) -> Self {
+        Self {
+            sender: address.encode_hex(),
+            ..self
+        }
+    }
+
+    /// Calculate the address of the contract account this deploy call would create
+    pub fn expect_account_created(&self) -> Address {
+        assert!(self.create, "expected a deploy call");
+        let sender = Address::from_str(&self.sender).expect("sender address should be valid");
+        let genesis: Genesis = serde_json::from_str(&self.genesis_json).unwrap();
+        let nonce = genesis
+            .alloc
+            .get(&sender)
+            .map(|account| account.nonce.unwrap_or(0))
+            .unwrap_or(0);
+        sender.create(nonce)
+    }
+
+    /// Run the call in a geth `evm` subprocess
+    pub fn run(self) -> EvmLog {
+        // Write genesis.json to disk
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(self.genesis_json.as_bytes()).unwrap();
+        let path = temp_file.into_temp_path();
+        let genesis_json_path = &path.display().to_string();
+
+        // Static args
         let mut command = Command::new(PathBuf::from(EXECUTABLE_NAME));
         command.stdin(Stdio::piped());
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
         command.args(EXECUTABLE_ARGS);
         command.args(["--prestate", genesis_json_path]);
+
+        // Dynamic args
         if let Some(input) = &self.input {
             command.args(["--input", hex::encode(input).as_str()]);
         }
-        if self.create {
+        let account_deployed = if self.create {
             command.arg("--create");
+            self.expect_account_created().into()
+        } else {
+            None
+        };
+        command.args(["--sender", &self.sender]);
+        match (&self.code, &self.receiver) {
+            (Some(_), None) => {}
+            (None, Some(address)) => {
+                command.args(["--receiver", address]);
+            }
+            (Some(_), Some(_)) => panic!("code and receiver specified"),
+            _ => panic!("no code file or receiver specified"),
         }
 
+        // Run the evm subprocess and assert success return value
         let process = command.spawn().unwrap_or_else(|error| {
             panic!("{EXECUTABLE_NAME} subprocess spawning error: {error:?}")
         });
+        let buf = vec![];
         process
             .stdin
             .as_ref()
             .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stdin getting error"))
-            .write_all(code)
+            .write_all(self.code.as_ref().unwrap_or(&buf))
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdin writing error: {err:?}"));
 
         let output = process
             .wait_with_output()
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} subprocess output error: {err}"));
-
         assert!(
             output.status.success(),
-            "{EXECUTABLE_NAME} command failed: {}",
-            output.status
+            "{EXECUTABLE_NAME} command failed: {output:?}",
         );
 
-        str::from_utf8(output.stdout.as_slice())
+        // Set the deployed account
+        let mut log: EvmLog = str::from_utf8(output.stdout.as_slice())
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} output failed to parse: {err}"))
-            .into()
+            .into();
+        log.account_deployed = account_deployed;
+        log
     }
 }
 
@@ -281,17 +371,29 @@ mod tests {
 
     #[test]
     fn flipper() {
+        let log_runtime = Evm::default()
+            .code_blob(EVM_BIN_RUNTIME_FIXTURE.as_bytes().to_vec())
+            .input(Bytes::from_str(EVM_BIN_RUNTIME_FIXTURE_INPUT).unwrap())
+            .run();
+        assert!(log_runtime.output.run_success());
+    }
+
+    #[test]
+    fn prestate() {
         let log_deploy = Evm::default()
             .code_blob(EVM_BIN_FIXTURE.as_bytes().to_vec())
             .input(Bytes::from_str(EVM_BIN_FIXTURE_INPUT).unwrap())
             .deploy(true)
             .run();
-        assert!(log_deploy.output.error.is_none());
+        assert!(log_deploy.output.run_success());
 
+        let address = log_deploy.account_deployed.unwrap();
+        let genesis: Genesis = log_deploy.state_dump.into();
         let log_runtime = Evm::default()
-            .code_blob(EVM_BIN_RUNTIME_FIXTURE.as_bytes().to_vec())
+            .genesis_json(genesis)
+            .receiver(address)
             .input(Bytes::from_str(EVM_BIN_RUNTIME_FIXTURE_INPUT).unwrap())
             .run();
-        assert!(log_runtime.output.error.is_none());
+        assert!(log_runtime.output.run_success(), "{:?}", log_runtime.output);
     }
 }

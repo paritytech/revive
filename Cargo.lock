@@ -7206,6 +7206,7 @@ dependencies = [
 name = "revive-runner"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives 0.8.0",
  "hex",
  "parity-scale-codec",
  "polkadot-sdk",

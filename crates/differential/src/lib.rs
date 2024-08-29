@@ -76,19 +76,20 @@ impl From<Account> for GenesisAccount {
 /// Contains the output from geth `emv` invocations
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvmOutput {
-    output: Bytes,
+    pub output: Bytes,
     #[serde(rename = "gasUsed")]
-    gas_used: U256,
-    error: Option<String>,
+    pub gas_used: U256,
+    pub error: Option<String>,
 }
 
 impl EvmOutput {
-    /// Return if there was no error found and the gas used is non-zero.
+    /// Return if there was no error found.
     ///
-    /// It is not sufficient to check for the absence of an error alone,
-    /// i.e. when there was no receiving account no error is reported (but no gas used).
+    /// Panics if the gas used is zero as this indicates nothing was run, i.e.
+    /// there was no receiving account but still no error is reported.
     pub fn run_success(&self) -> bool {
-        self.error.is_none() && self.gas_used > U256::ZERO
+        assert_ne!(self.gas_used, U256::ZERO, "nothing was executed");
+        self.error.is_none()
     }
 }
 
@@ -130,6 +131,8 @@ pub struct Evm {
     input: Option<Bytes>,
     receiver: Option<String>,
     sender: String,
+    value: Option<u128>,
+    gas: Option<u64>,
     create: bool,
 }
 
@@ -141,6 +144,8 @@ impl Default for Evm {
             input: None,
             receiver: None,
             sender: Address::default().encode_hex(),
+            value: None,
+            gas: None,
             create: false,
         }
     }
@@ -185,6 +190,22 @@ impl Evm {
     pub fn deploy(self, enable: bool) -> Self {
         Self {
             create: enable,
+            ..self
+        }
+    }
+
+    /// Set the transferred value
+    pub fn value(self, value: u128) -> Self {
+        Self {
+            value: Some(value),
+            ..self
+        }
+    }
+
+    /// Set the gas limit
+    pub fn gas(self, limit: u64) -> Self {
+        Self {
+            gas: Some(limit),
             ..self
         }
     }
@@ -264,6 +285,12 @@ impl Evm {
             }
             (Some(_), Some(_)) => panic!("code and receiver specified"),
             _ => panic!("no code file or receiver specified"),
+        }
+        if let Some(gas) = self.gas {
+            command.args(["--gas", &format!("{gas}")]);
+        }
+        if let Some(value) = self.value {
+            command.args(["--value", &format!("{value}")]);
         }
 
         // Run the evm subprocess and assert success return value

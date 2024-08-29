@@ -13,6 +13,7 @@ serde_json = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 codec = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
+alloy-primitives = { workspace = true }
 polkadot-sdk.workspace = true
 polkadot-sdk.features = [
     "experimental",

@@ -1,4 +1,3 @@
-use alloy_sol_types::{SolCall, SolValue};
 use revive_runner::*;
 
 macro_rules! test_spec {
@@ -23,41 +22,31 @@ test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(transferred_value, "Value", "Value.sol");
 
-#[test]
-fn foo() {
-    alloy_sol_types::sol!(
-        contract Value {
-            function value() public payable returns (uint);
-        }
-    );
-
-    dbg!(hex::encode(&crate::cases::Contract::baseline().calldata));
-    dbg!(hex::encode(&Value::valueCall::new(()).abi_encode()));
-    dbg!(hex::encode(&alloy_primitives::U256::from(123).abi_encode()));
-}
-
 /*
 #[test]
-fn transferred_value() {
-    sol!(
-        contract Value {
-            function value() public payable returns (uint);
-        }
-    );
-    let code = compile_blob("Value", include_str!("../contracts/Value.sol"));
+fn balance() {
+    // TODO: We do not have the correct balance API in the pallet yet
+    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
 
-    let (_, output) = State::default()
+    let expected = U256::ZERO;
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received);
+
+    let expected = U256::from(54589);
+    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
+    state.accounts_mut().get_mut(&address).unwrap().value = expected;
+
+    let contract = Contract::value_balance_of(address);
+    let (_, output) = state
         .transaction()
-        .calldata(Value::valueCall::SELECTOR.to_vec())
-        .callvalue(U256::from(123))
-        .with_default_account(&code)
+        .with_default_account(&contract.pvm_runtime)
+        .calldata(contract.calldata)
         .call();
 
-    assert_eq!(output.flags, ReturnFlags::Success);
+    assert_eq!(ReturnFlags::Success, output.flags);
 
-    let expected = I256::try_from(123).unwrap();
-    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received)
 }
 
 #[test]
@@ -449,31 +438,6 @@ fn mcopy() {
         .to_vec();
 
     assert_eq!(expected, received);
-}
-
-#[test]
-fn balance() {
-    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
-
-    let expected = U256::ZERO;
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-
-    let expected = U256::from(54589);
-    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
-    state.accounts_mut().get_mut(&address).unwrap().value = expected;
-
-    let contract = Contract::value_balance_of(address);
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(ReturnFlags::Success, output.flags);
-
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received)
 }
 
 #[test]

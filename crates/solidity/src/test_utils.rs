@@ -120,21 +120,39 @@ pub fn build_solidity_with_options_evm(
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
-    optimzer_settings: revive_llvm_context::OptimizerSettings,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
-    let mut build_unoptimized = build_solidity_with_options(
+    check_dependencies();
+
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+
+    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let solc_version = solc.version()?;
+
+    let input = SolcStandardJsonInput::try_from_sources(
+        None,
         sources.clone(),
-        libraries,
+        libraries.clone(),
         remappings,
-        pipeline,
-        optimzer_settings,
-        solc_optimizer_enabled,
-    )
-    .expect("Build failure");
+        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            None,
+            &solc_version.default,
+            false,
+            false,
+        ),
+        None,
+        pipeline == SolcPipeline::Yul,
+        None,
+    )?;
+
+    let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
 
     let mut contracts = BTreeMap::new();
-    if let Some(files) = build_unoptimized.contracts.as_mut() {
+    if let Some(files) = output.contracts.as_mut() {
         for (_, file) in files.iter_mut() {
             for (name, contract) in file.iter_mut() {
                 if let Some(evm) = contract.evm.as_mut() {
@@ -273,6 +291,8 @@ pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8
     compile_evm(contract_name, source_code, true)
 }
 
+/// Compile the EVM bin of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
 pub fn compile_evm_deploy_code(contract_name: &str, source_code: &str) -> Vec<u8> {
     compile_evm(contract_name, source_code, false)
 }
@@ -296,7 +316,6 @@ fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8>
         Default::default(),
         None,
         pipeline,
-        revive_llvm_context::OptimizerSettings::cycles(),
         solc_optimizer_enabled,
     )
     .expect("source should compile");

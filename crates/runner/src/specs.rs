@@ -1,6 +1,8 @@
+use revive_differential::{Evm, EvmLog};
 use serde::{Deserialize, Serialize};
 
 use crate::*;
+use alloy_primitives::Address;
 use revive_solidity::test_utils::*;
 
 /// An action to perform in a contract test
@@ -55,7 +57,55 @@ pub enum SpecsAction {
     },
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+impl SpecsAction {
+    /// Derive verification actions from the EVM output log
+    pub fn derive_verification(
+        log: &EvmLog,
+        address_evm: Address,
+        account_pvm: TestAccountId,
+    ) -> Vec<Self> {
+        let account = log
+            .state_dump
+            .accounts
+            .get(&address_evm)
+            .unwrap_or_else(|| panic!("account {address_evm} not in state dump"));
+
+        let mut actions = vec![
+            Self::VerifyCall(VerifyCallExpectation {
+                gas_consumed: None,
+                success: log.output.run_success(),
+                output: log.output.output.clone().into(),
+            }),
+            Self::VerifyBalance {
+                origin: account_pvm.clone(),
+                expected: account
+                    .balance
+                    .try_into()
+                    .expect("balance should fit into u128"),
+            },
+        ];
+
+        let Some(storage) = &account.storage else {
+            return actions;
+        };
+
+        for (key, expected) in storage {
+            let mut key = key.to_vec();
+            key.reverse();
+            let mut expected = expected.to_vec();
+            expected.reverse();
+            actions.push(Self::VerifyStorage {
+                contract: account_pvm.clone(),
+                key,
+                expected,
+            });
+        }
+
+        actions
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub enum TestAccountId {
     /// The ALICE account
     #[default]
@@ -65,7 +115,7 @@ pub enum TestAccountId {
     /// The CHARLIE account
     Charlie,
     /// AccountID that was created during the nth call in this run.
-    Instantiated(u32),
+    Instantiated(usize),
     /// Arbitrary AccountID
     AccountId(AccountId),
 }
@@ -78,7 +128,7 @@ impl TestAccountId {
             TestAccountId::Charlie => CHARLIE,
             TestAccountId::AccountId(account_id) => account_id.clone(),
             TestAccountId::Instantiated(n) => match results
-                .get(*n as usize)
+                .get(*n)
                 .expect("should provide valid index into call results")
             {
                 CallResult::Exec(_) => panic!("call #{n} should be an instantiation"),
@@ -119,7 +169,7 @@ impl Default for Specs {
 impl Specs {
     /// Get the list of actions to perform
     /// A default [`SpecAction::VerifyCall`] is injected after each Instantiate or Call action when
-    /// missing
+    /// missing and not in differential mode
     pub fn actions(&self) -> Vec<SpecsAction> {
         self.actions
             .iter()
@@ -129,7 +179,10 @@ impl Specs {
                 if matches!(
                     item,
                     SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
-                ) && !matches!(next_item, Some(SpecsAction::VerifyCall(_)))
+                ) && matches!(
+                    next_item,
+                    Some(SpecsAction::Instantiate { .. }) | Some(SpecsAction::Call { .. })
+                ) && !self.differential
                 {
                     return vec![
                         item.clone(),
@@ -176,13 +229,16 @@ impl Specs {
     }
 
     fn run_on_evm(self) -> Self {
-        let mut specs = Self {
+        let mut derived_specs = Self {
             actions: vec![],
             ..self
         };
 
+        let mut evm = Evm::default();
+        let mut deployed_accounts = vec![];
+
         for action in self.actions {
-            specs.actions.push(action.clone());
+            derived_specs.actions.push(action.clone());
 
             use specs::SpecsAction::*;
             match action {
@@ -204,8 +260,11 @@ impl Specs {
                     else {
                         panic!("the differential runner requires Code::Solidity source");
                     };
+                    assert_ne!(solc_optimizer, Some(false), "solc_optimizer must be enabled in differntial mode");
+                    assert_ne!(pipeline, Some(revive_solidity::SolcPipeline::EVMLA), "yul pipeline must be enabled in differntial mode");
                     assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
                     assert!(salt.is_empty(), "salt is not supported in differential mode");
+                    assert_eq!(origin, TestAccountId::default(), "configuring the origin is not supported in differential mode");
                     let deploy_code = match std::fs::read_to_string(&path) {
                         Ok(solidity_source) => compile_evm_deploy_code(&contract, &solidity_source),
                         Err(err) => panic!(
@@ -214,6 +273,25 @@ impl Specs {
                             err
                         ),
                     };
+                    let deploy_code = hex::encode(deploy_code);
+                    println!("CODE: {}", &deploy_code);
+                    let mut vm = evm.code_blob(deploy_code.as_bytes().to_vec()).sender(Address::default()).deploy(true);
+                    if !data.is_empty() {
+                        vm = vm.input(data.into());
+                    }
+                    if value > 0 {
+                        vm = vm.value(value);
+                    }
+                    if let Some(gas) = gas_limit {
+                        vm = vm.gas(gas.ref_time());
+                    }
+                    let mut log = vm.run();
+                    log.output.output = Default::default(); // PVM will not have constructor output
+                    let deployed_account = log.account_deployed.expect("no account was created");
+                    let account_pvm = TestAccountId::Instantiated(deployed_accounts.len());
+                    deployed_accounts.push(deployed_account);
+                    derived_specs.actions.append(&mut SpecsAction::derive_verification(&log, deployed_account, account_pvm));
+                    evm = Evm::from_genesis(log.state_dump.into());
                 }
                 Call {
                     origin,
@@ -223,15 +301,32 @@ impl Specs {
                     storage_deposit_limit,
                     data,
                 } => {
-                    //let TestAccountId::Instantiated(n) = dest else {
-                    //    panic!("the differential runner requires TestAccountId::Instantiated(n) as dest");
-                    //};
+                    assert_eq!(origin, TestAccountId::default(), "configuring the origin is not supported in differential mode");
+                    assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
+                    let TestAccountId::Instantiated(n) = dest else {
+                        panic!("the differential runner requires TestAccountId::Instantiated(n) as dest");
+                    };
+                    let address = deployed_accounts.get(n).unwrap_or_else(|| panic!("no account at index {n} "));
+                    let mut vm = evm.receiver(*address).sender(Address::default());
+                    if !data.is_empty() {
+                        vm = vm.input(data.into());
+                    }
+                    if value > 0 {
+                        vm = vm.value(value);
+                    }
+                    if let Some(gas) = gas_limit {
+                        vm = vm.gas(gas.ref_time());
+                    }
+
+                    let log = vm.run();
+                    derived_specs.actions.append(&mut SpecsAction::derive_verification(&log, *address, dest));
+                    evm = Evm::from_genesis(log.state_dump.into());
                 }
                 _ => panic!("only instantiate and call action allowed in differential mode, got: {action:?}"),
             }
         }
 
-        specs
+        derived_specs
     }
 
     fn run_on_pallet(self) -> Vec<CallResult> {
@@ -242,8 +337,6 @@ impl Specs {
             .build()
             .execute_with(|| {
                 use specs::SpecsAction::*;
-
-                let actions = self.actions();
 
                 for action in self.actions() {
                     match action {
@@ -287,7 +380,7 @@ impl Specs {
                             expectation.verify(results.last().expect("No call to verify"));
                         }
                         VerifyBalance { origin, expected } => {
-                            let balance = Balances::free_balance(origin.to_account_id(&results));
+                            let balance = Balances::usable_balance(origin.to_account_id(&results));
                             assert_eq!(balance, expected);
                         }
                         VerifyStorage {
@@ -304,7 +397,7 @@ impl Specs {
                             let Some(value) = storage else {
                                 panic!("No value for storage key 0x{}", hex::encode(key));
                             };
-                            assert_eq!(value, expected);
+                            assert_eq!(value, expected, "at key {}", hex::encode(&key));
                         }
                     }
                 }

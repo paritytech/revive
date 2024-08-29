@@ -6,9 +6,9 @@
 //! ## Example
 //! ```rust
 //! use revive_runner::*;
-//! use specs::SpecsAction::*;
+//! use SpecsAction::*;
 //! Specs {
-//!     differential: true,
+//!     differential: false,
 //!     balances: vec![(ALICE, 1_000_000_000)],
 //!     actions: vec![Instantiate {
 //!         origin: TestAccountId::Alice,
@@ -112,7 +112,7 @@ impl VerifyCallExpectation {
         assert_eq!(
             self.success,
             result.is_ok(),
-            "contract execution reverted: {result:?}"
+            "contract execution result mismatch: {result:?}"
         );
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());

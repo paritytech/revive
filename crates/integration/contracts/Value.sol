@@ -27,12 +27,6 @@ pragma solidity ^0.8;
 */
 
 contract Value {
-    uint foo;
-
-    constructor() {
-        foo = 2;
-    }
-
     function value() public payable returns (uint ret) {
         ret = msg.value;
     }

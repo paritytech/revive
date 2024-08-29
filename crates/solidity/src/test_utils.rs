@@ -21,6 +21,8 @@ use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
 static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    Lazy::new(Default::default);
 
 #[derive(Hash, PartialEq, Eq)]
 struct CachedBlob {
@@ -306,7 +308,12 @@ fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8>
         solc_optimizer_enabled,
     };
 
-    if let Some(blob) = EVM_BLOB_CACHE.lock().unwrap().get(&id) {
+    let cache = if runtime {
+        &EVM_RUNTIME_BLOB_CACHE
+    } else {
+        &EVM_BLOB_CACHE
+    };
+    if let Some(blob) = cache.lock().unwrap().get(&id) {
         return blob.clone();
     }
 
@@ -322,6 +329,8 @@ fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8>
     let object = &contracts
         .get(contract_name)
         .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name));
+    println!("runtime: {}", object.1.object.as_str());
+    println!("deploy: {}", object.0.object.as_str());
     let code = if runtime {
         object.1.object.as_str()
     } else {
@@ -329,7 +338,7 @@ fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8>
     };
     let blob = hex::decode(code).expect("code shold be hex encoded");
 
-    EVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+    cache.lock().unwrap().insert(id, blob.clone());
 
     blob
 }

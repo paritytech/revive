@@ -19,6 +19,10 @@ pub struct Arguments {
     #[structopt(long = "version")]
     pub version: bool,
 
+    /// Print the licence and exit.
+    #[structopt(long = "license")]
+    pub license: bool,
+
     /// Specify the input paths and remappings.
     /// If an argument contains a '=', it is considered a remapping.
     /// Multiple Solidity files can be passed in the default Solidity mode.

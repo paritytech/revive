@@ -124,17 +124,36 @@ where
             .expect("the stdlib module should be linkable");
     }
 
-    /// Link in the PolkaVM guest module, containing imported and exported functions,
+    /// Link in the PolkaVM imports module, containing imported functions,
     /// and marking them as external (they need to be relocatable as too).
-    fn link_polkavm_guest_module(
+    fn link_polkavm_imports(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
     ) {
         module
             .link_in_module(
-                pallet_contracts_pvm_llapi::polkavm_guest::module(llvm, "polkavm_guest").unwrap(),
+                revive_runtime_api::polkavm_imports::module(llvm, "polkavm_imports").unwrap(),
             )
-            .expect("the PolkaVM guest API module should be linkable");
+            .expect("the PolkaVM imports module should be linkable");
+
+        for import in runtime_api::imports::IMPORTS {
+            module
+                .get_function(import)
+                .expect("should be declared")
+                .set_linkage(inkwell::module::Linkage::External);
+        }
+    }
+
+    /// Link in the PolkaVM exports module, containing exported functions.
+    fn link_polkavm_exports(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module
+            .link_in_module(
+                revive_runtime_api::polkavm_exports::module(llvm, "polkavm_exports").unwrap(),
+            )
+            .expect("the PolkaVM exports module should be linkable");
 
         for export in runtime_api::exports::EXPORTS {
             module
@@ -145,13 +164,6 @@ where
                     llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
                 );
         }
-
-        for import in runtime_api::imports::IMPORTS {
-            module
-                .get_function(import)
-                .expect("should be declared")
-                .set_linkage(inkwell::module::Linkage::External);
-        }
     }
 
     /// Configure the PolkaVM minimum stack size.
@@ -161,7 +173,7 @@ where
         size: u32,
     ) {
         module
-            .link_in_module(pallet_contracts_pvm_llapi::polkavm_guest::min_stack_size(
+            .link_in_module(revive_runtime_api::calling_convention::min_stack_size(
                 llvm,
                 "polkavm_stack_size",
                 size,
@@ -191,7 +203,8 @@ where
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
-        Self::link_polkavm_guest_module(llvm, &module);
+        Self::link_polkavm_imports(llvm, &module);
+        Self::link_polkavm_exports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
 

@@ -25,25 +25,21 @@ test_spec!(sha1, "SHA1", "SHA1.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(events, "Events", "Events.sol");
+test_spec!(storage, "Storage", "Storage.sol");
 
-#[test]
-fn foo() {
-    alloy_sol_types::sol!(
-        contract Value {
-            function value() public payable returns (uint);
-            function balance_of(address _address) public view returns (uint ret);
-        }
-    );
-
-    use crate::cases::Contract;
-    dbg!(hex::encode(
-        &Contract::event(alloy_primitives::U256::ZERO).calldata
-    ));
-    dbg!(hex::encode(
-        &Contract::event(alloy_primitives::U256::from(123)).calldata
-    ));
-}
 /*
+#[test]
+fn transient_storage() {
+    let expected = U256::MAX;
+    let (state, output) = assert_success(&Contract::storage_transient(expected), false);
+    let received = U256::abi_decode(&output.data, true).unwrap();
+    assert_eq!(expected, received);
+
+    assert!(state
+        .accounts()
+        .values()
+        .all(|account| account.storage.is_empty()));
+}
 #[test]
 fn events() {
     assert_success(&Contract::event(U256::ZERO), true);
@@ -437,18 +433,5 @@ fn bitwise_byte() {
         let received = U256::abi_decode(&output.data, true).unwrap();
         assert_eq!(expected, received)
     }
-}
-
-#[test]
-fn transient_storage() {
-    let expected = U256::MAX;
-    let (state, output) = assert_success(&Contract::storage_transient(expected), false);
-    let received = U256::abi_decode(&output.data, true).unwrap();
-    assert_eq!(expected, received);
-
-    assert!(state
-        .accounts()
-        .values()
-        .all(|account| account.storage.is_empty()));
 }
 */

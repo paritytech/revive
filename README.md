@@ -35,4 +35,4 @@ Please consult the [Makefile](Makefile) targets to learn how to run tests and be
 Ensure that your branch passes `make test` locally when submitting a pull request.
 
 ## Design overview
-`revive` uses [solc](https://github.com/ethereum/solidity/), the Ethereum Solidity compiler, as the [Solidity frontend](crates/solidity/src/lib.rs) to process smart contracts written in Solidity. The YUL IR code (or legacy EVM assembly as a fallback for older `solc` versions) emitted by `solc` is then translated to LLVM IR, targetting a runtime similar to [Polkadots `contracts` pallet](https://docs.rs/pallet-contracts/latest/pallet_contracts/api_doc/trait.Current.html).
+`revive` uses [solc](https://github.com/ethereum/solidity/), the Ethereum Solidity compiler, as the [Solidity frontend](crates/solidity/src/lib.rs) to process smart contracts written in Solidity. The YUL IR code (or legacy EVM assembly as a fallback for older `solc` versions) emitted by `solc` is then translated to LLVM IR, targetting [Polkadots `revive` pallet](https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html).

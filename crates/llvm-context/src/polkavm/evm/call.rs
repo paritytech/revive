@@ -57,9 +57,9 @@ where
     let output_length_pointer = context.get_global(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?;
     context.build_store(output_length_pointer.into(), output_length)?;
 
-    let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
+    let argument_pointer = revive_runtime_api::calling_convention::Spill::new(
         context.builder(),
-        pallet_contracts_pvm_llapi::calling_convention::call(context.llvm()),
+        revive_runtime_api::calling_convention::call(context.llvm()),
         "call_arguments",
     )?
     .next(context.xlen_type().const_int(flags as u64, false))?

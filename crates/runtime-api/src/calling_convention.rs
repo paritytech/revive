@@ -1,9 +1,25 @@
 use inkwell::{
     builder::Builder,
     context::Context,
+    module::Module,
     types::{BasicType, StructType},
     values::{BasicValue, PointerValue},
 };
+
+/// Creates a module that sets the PolkaVM minimum stack size to [`size`] if linked in.
+pub fn min_stack_size<'context>(
+    context: &'context Context,
+    module_name: &str,
+    size: u32,
+) -> Module<'context> {
+    let module = context.create_module(module_name);
+    module.set_inline_assembly(&format!(
+        ".pushsection .polkavm_min_stack_size,\"\",@progbits
+        .word {size}
+        .popsection"
+    ));
+    module
+}
 
 pub struct Spill<'a, 'ctx> {
     pointer: PointerValue<'ctx>,

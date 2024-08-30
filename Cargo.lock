@@ -4592,14 +4592,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-contracts-pvm-llapi"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "inkwell",
-]
-
-[[package]]
 name = "pallet-contracts-uapi"
 version = "5.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk?rev=1c4141abeb4c581e503f07af2a3522e6918db591#1c4141abeb4c581e503f07af2a3522e6918db591"
@@ -7188,13 +7180,13 @@ dependencies = [
  "md5",
  "num",
  "once_cell",
- "pallet-contracts-pvm-llapi",
  "polkavm-common 0.10.0",
  "polkavm-disassembler",
  "regex",
  "revive-builtins",
  "revive-common",
  "revive-linker",
+ "revive-runtime-api",
  "revive-stdlib",
  "semver 1.0.23",
  "serde",
@@ -7215,6 +7207,14 @@ dependencies = [
  "scale-info",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "revive-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "inkwell",
 ]
 
 [[package]]

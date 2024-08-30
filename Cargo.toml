@@ -21,7 +21,7 @@ revive-integration = { version = "0.1.0", path = "crates/integration" }
 revive-linker = { version = "0.1.0", path = "crates/linker" }
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
 revive-llvm-context = { version = "0.1.0", path = "crates/llvm-context" }
-pallet-contracts-pvm-llapi = { version = "0.1.0", path = "crates/pallet-contracts-pvm-llapi" }
+revive-runtime-api = { version = "0.1.0", path = "crates/runtime-api" }
 revive-runner = { version = "0.1.0", path = "crates/runner" }
 revive-solidity = { version = "0.1.0", path = "crates/solidity" }
 revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }

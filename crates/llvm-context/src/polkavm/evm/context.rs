@@ -38,12 +38,12 @@ where
 
 /// Translates the `chain_id` instruction.
 pub fn chain_id<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    Ok(context.word_const(0).as_basic_value_enum())
 }
 
 /// Translates the `block_number` instruction.

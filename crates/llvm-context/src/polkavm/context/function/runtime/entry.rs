@@ -233,11 +233,12 @@ where
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry_arguments = vec![context.bool_type().as_basic_type_enum()];
         let entry_function_type = context.function_type(entry_arguments, 0, false);
-        context.add_function(runtime::FUNCTION_ENTRY, entry_function_type, 0, None)?;
-
-        for symbol in runtime_api::exports::EXPORTS {
-            context.declare_extern_function(symbol)?;
-        }
+        context.add_function(
+            runtime::FUNCTION_ENTRY,
+            entry_function_type,
+            0,
+            Some(inkwell::module::Linkage::External),
+        )?;
 
         Ok(())
     }
@@ -257,26 +258,6 @@ where
             vec![crate::PolkaVMAttribute::NoReturn],
             true,
         );
-
-        context.set_current_function(runtime_api::exports::DEPLOY)?;
-        context.set_basic_block(context.current_function().borrow().entry_block());
-
-        assert!(context
-            .build_call(entry, &[context.bool_const(true).into()], "entry_deploy")
-            .is_none());
-
-        context.set_basic_block(context.current_function().borrow().return_block);
-        context.build_unreachable();
-
-        context.set_current_function(runtime_api::exports::CALL)?;
-        context.set_basic_block(context.current_function().borrow().entry_block());
-
-        assert!(context
-            .build_call(entry, &[context.bool_const(false).into()], "entry_call")
-            .is_none());
-
-        context.set_basic_block(context.current_function().borrow().return_block);
-        context.build_unreachable();
 
         context.set_current_function(runtime::FUNCTION_ENTRY)?;
         context.set_basic_block(context.current_function().borrow().entry_block());

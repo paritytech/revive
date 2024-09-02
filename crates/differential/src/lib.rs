@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     str::FromStr,
+    time::Duration,
 };
 
 use alloy_genesis::{Genesis, GenesisAccount};
@@ -13,6 +14,10 @@ use alloy_serde::storage::deserialize_storage_map;
 use serde::{Deserialize, Serialize};
 use serde_json::{Deserializer, Value};
 use tempfile::NamedTempFile;
+
+pub use self::go_duration::parse_go_duration;
+
+mod go_duration;
 
 const GENESIS_JSON: &str = include_str!("../genesis.json");
 const EXECUTABLE_NAME: &str = "evm";
@@ -26,9 +31,12 @@ const EXECUTABLE_ARGS: [&str; 8] = [
     "--codefile",
     "-",
 ];
+const EXECUTABLE_ARGS_BENCH: [&str; 2] = ["run", "--bench"];
+const GAS_USED_MARKER: &str = "EVM gas used:";
+const REVERT_MARKER: &str = "error: execution reverted";
 
 /// The geth EVM state dump structure
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct StateDump {
     pub root: Bytes,
     pub accounts: BTreeMap<Address, Account>,
@@ -74,7 +82,7 @@ impl From<Account> for GenesisAccount {
 }
 
 /// Contains the output from geth `emv` invocations
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EvmOutput {
     pub output: Bytes,
     #[serde(rename = "gasUsed")]
@@ -99,6 +107,24 @@ pub struct EvmLog {
     pub account_deployed: Option<Address>,
     pub output: EvmOutput,
     pub state_dump: StateDump,
+    pub raw: String,
+}
+
+impl EvmLog {
+    pub const EXECUTION_TIME_MARKER: &'static str = "execution time:";
+
+    pub fn execution_time(&self) -> Result<Duration, String> {
+        for line in self.raw.lines() {
+            if let Some(value) = line.split("execution time:").nth(1) {
+                return parse_go_duration(value.trim());
+            }
+        }
+
+        Err(format!(
+            "execution time marker '{}' not found in raw EVM log",
+            Self::EXECUTION_TIME_MARKER
+        ))
+    }
 }
 
 impl From<&str> for EvmLog {
@@ -116,11 +142,36 @@ impl From<&str> for EvmLog {
             }
         }
 
-        Self {
-            account_deployed: None,
-            output: output.expect("the EVM log should contain the output"),
-            state_dump: state_dump.expect("the EVM log should contain the state dump"),
+        if let (Some(output), Some(state_dump)) = (output, state_dump) {
+            return Self {
+                account_deployed: None,
+                output,
+                state_dump,
+                raw: value.into(),
+            };
         }
+
+        // Expect benchmark output
+        for line in value.lines() {
+            if let Some(gas_line) = line.split(GAS_USED_MARKER).nth(1) {
+                let gas = gas_line.trim().parse::<u64>().unwrap_or_else(|error| {
+                    panic!("invalid output '{value}' for gas used: {error}")
+                });
+
+                return EvmLog {
+                    account_deployed: None,
+                    output: EvmOutput {
+                        gas_used: U256::from(gas),
+                        error: value.find(REVERT_MARKER).map(|_| REVERT_MARKER.to_string()),
+                        ..Default::default()
+                    },
+                    state_dump: Default::default(),
+                    raw: value.into(),
+                };
+            }
+        }
+
+        panic!("neither JSON dump nor benchmark results found");
     }
 }
 
@@ -134,6 +185,7 @@ pub struct Evm {
     value: Option<u128>,
     gas: Option<u64>,
     create: bool,
+    bench: bool,
 }
 
 impl Default for Evm {
@@ -147,6 +199,7 @@ impl Default for Evm {
             value: None,
             gas: None,
             create: false,
+            bench: false,
         }
     }
 }
@@ -238,6 +291,14 @@ impl Evm {
         }
     }
 
+    /// Run as a benchmark
+    pub fn bench(self, flag: bool) -> Self {
+        Self {
+            bench: flag,
+            ..self
+        }
+    }
+
     /// Calculate the address of the contract account this deploy call would create
     pub fn expect_account_created(&self) -> Address {
         assert!(self.create, "expected a deploy call");
@@ -264,7 +325,11 @@ impl Evm {
         command.stdin(Stdio::piped());
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
-        command.args(EXECUTABLE_ARGS);
+        if self.bench {
+            command.args(EXECUTABLE_ARGS_BENCH);
+        } else {
+            command.args(EXECUTABLE_ARGS);
+        };
         command.args(["--prestate", genesis_json_path]);
 
         // Dynamic args
@@ -313,10 +378,11 @@ impl Evm {
             "{EXECUTABLE_NAME} command failed: {output:?}",
         );
 
-        // Set the deployed account
         let mut log: EvmLog = str::from_utf8(output.stdout.as_slice())
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} output failed to parse: {err}"))
             .into();
+
+        // Set the deployed account
         log.account_deployed = account_deployed;
         log
     }
@@ -324,15 +390,16 @@ impl Evm {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{str::FromStr, time::Duration};
 
     use alloy_genesis::Genesis;
     use alloy_primitives::{Bytes, B256, U256};
 
     use crate::{Evm, EvmLog, EvmOutput, StateDump};
 
-    const OUTPUT_OK: &str = r#"{"output":"0000000000000000000000000000000000000000000000000000000000000000","gasUsed":"0x11d"}"#;
-    const OUTPUT_REVERTED: &str = r#"{"output":"","gasUsed":"0x2d","error":"execution reverted"}"#;
+    const OUTPUT_JSON_OK: &str = r#"{"output":"0000000000000000000000000000000000000000000000000000000000000000","gasUsed":"0x11d"}"#;
+    const OUTPUT_JSON_REVERTED: &str =
+        r#"{"output":"","gasUsed":"0x2d","error":"execution reverted"}"#;
     const STATE_DUMP: &str = r#"
 {
     "root": "eb5d51177cb9049b848ea92f87f9a3f00abfb683d0866c2eddecc5692ad27f86",
@@ -356,15 +423,40 @@ mod tests {
     const EVM_BIN_FIXTURE_INPUT: &str =
         "0000000000000000000000000000000000000000000000000000000000000001";
     const EVM_BIN_RUNTIME_FIXTURE_INPUT: &str = "cde4efa9";
+    const OUTPUT_BENCH_OK: &str = r#"EVM gas used:    560071
+execution time:  1.460881ms
+allocations:     29
+allocated bytes: 2558
+"#;
+    const OUTPUT_BENCH_REVERT: &str = r#"EVM gas used:    69
+execution time:  10.11µs
+allocations:     43
+allocated bytes: 3711
+
+ error: execution reverted"#;
 
     #[test]
     fn parse_evm_output_ok() {
-        serde_json::from_str::<EvmOutput>(OUTPUT_OK).unwrap();
+        serde_json::from_str::<EvmOutput>(OUTPUT_JSON_OK).unwrap();
     }
 
     #[test]
     fn parse_evm_output_revert() {
-        serde_json::from_str::<EvmOutput>(OUTPUT_REVERTED).unwrap();
+        serde_json::from_str::<EvmOutput>(OUTPUT_JSON_REVERTED).unwrap();
+    }
+
+    #[test]
+    fn parse_evm_output_bench_ok() {
+        let log = EvmLog::from(OUTPUT_BENCH_OK);
+        assert!(log.output.run_success());
+
+        assert_eq!(log.execution_time().unwrap(), Duration::from_nanos(1460881));
+    }
+
+    #[test]
+    fn parse_evm_output_bench_revert() {
+        let log = EvmLog::from(OUTPUT_BENCH_REVERT);
+        assert!(!log.output.run_success());
     }
 
     #[test]
@@ -374,13 +466,13 @@ mod tests {
 
     #[test]
     fn evm_log_from_str() {
-        let log = format!("{OUTPUT_OK}\n{STATE_DUMP}");
+        let log = format!("{OUTPUT_JSON_OK}\n{STATE_DUMP}");
         let _ = EvmLog::from(log.as_str());
     }
 
     #[test]
     fn generate_genesis() {
-        let log = format!("{OUTPUT_OK}\n{STATE_DUMP}");
+        let log = format!("{OUTPUT_JSON_OK}\n{STATE_DUMP}");
         let log = EvmLog::from(log.as_str());
         let mut genesis: Genesis = log.state_dump.into();
         let storage = genesis

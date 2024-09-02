@@ -31,7 +31,14 @@ const EXECUTABLE_ARGS: [&str; 8] = [
     "--codefile",
     "-",
 ];
-const EXECUTABLE_ARGS_BENCH: [&str; 2] = ["run", "--bench"];
+const EXECUTABLE_ARGS_BENCH: [&str; 6] = [
+    "run",
+    "--bench",
+    "--nomemory=false",
+    "--noreturndata=false",
+    "--codefile",
+    "-",
+];
 const GAS_USED_MARKER: &str = "EVM gas used:";
 const REVERT_MARKER: &str = "error: execution reverted";
 
@@ -107,14 +114,14 @@ pub struct EvmLog {
     pub account_deployed: Option<Address>,
     pub output: EvmOutput,
     pub state_dump: StateDump,
-    pub raw: String,
+    pub stderr: String,
 }
 
 impl EvmLog {
     pub const EXECUTION_TIME_MARKER: &'static str = "execution time:";
 
     pub fn execution_time(&self) -> Result<Duration, String> {
-        for line in self.raw.lines() {
+        for line in self.stderr.lines() {
             if let Some(value) = line.split("execution time:").nth(1) {
                 return parse_go_duration(value.trim());
             }
@@ -124,6 +131,17 @@ impl EvmLog {
             "execution time marker '{}' not found in raw EVM log",
             Self::EXECUTION_TIME_MARKER
         ))
+    }
+
+    fn parse_gas_used_from_bench(&mut self) {
+        for line in self.stderr.lines() {
+            if let Some(gas_line) = line.split(GAS_USED_MARKER).nth(1) {
+                let gas_used = gas_line.trim().parse::<u64>().unwrap_or_else(|error| {
+                    panic!("invalid output '{gas_line}' for gas used: {error}")
+                });
+                self.output.gas_used = U256::from(gas_used);
+            }
+        }
     }
 }
 
@@ -147,31 +165,19 @@ impl From<&str> for EvmLog {
                 account_deployed: None,
                 output,
                 state_dump,
-                raw: value.into(),
+                stderr: value.into(),
             };
         }
 
-        // Expect benchmark output
-        for line in value.lines() {
-            if let Some(gas_line) = line.split(GAS_USED_MARKER).nth(1) {
-                let gas = gas_line.trim().parse::<u64>().unwrap_or_else(|error| {
-                    panic!("invalid output '{value}' for gas used: {error}")
-                });
-
-                return EvmLog {
-                    account_deployed: None,
-                    output: EvmOutput {
-                        gas_used: U256::from(gas),
-                        error: value.find(REVERT_MARKER).map(|_| REVERT_MARKER.to_string()),
-                        ..Default::default()
-                    },
-                    state_dump: Default::default(),
-                    raw: value.into(),
-                };
-            }
-        }
-
-        panic!("neither JSON dump nor benchmark results found");
+        return EvmLog {
+            account_deployed: None,
+            output: EvmOutput {
+                error: value.find(REVERT_MARKER).map(|_| REVERT_MARKER.to_string()),
+                ..Default::default()
+            },
+            state_dump: Default::default(),
+            stderr: Default::default(),
+        };
     }
 }
 
@@ -234,7 +240,7 @@ impl Evm {
     /// Set the calldata
     pub fn input(self, bytes: Bytes) -> Self {
         Self {
-            input: Some(bytes),
+            input: (!bytes.is_empty()).then(|| bytes),
             ..self
         }
     }
@@ -330,9 +336,10 @@ impl Evm {
         } else {
             command.args(EXECUTABLE_ARGS);
         };
-        command.args(["--prestate", genesis_json_path]);
 
         // Dynamic args
+        command.args(["--prestate", genesis_json_path]);
+        command.args(["--sender", &self.sender]);
         if let Some(input) = &self.input {
             command.args(["--input", hex::encode(input).as_str()]);
         }
@@ -342,7 +349,6 @@ impl Evm {
         } else {
             None
         };
-        command.args(["--sender", &self.sender]);
         match (&self.code, &self.receiver) {
             (Some(_), None) => {}
             (None, Some(address)) => {
@@ -378,9 +384,16 @@ impl Evm {
             "{EXECUTABLE_NAME} command failed: {output:?}",
         );
 
-        let mut log: EvmLog = str::from_utf8(output.stdout.as_slice())
-            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} output failed to parse: {err}"))
-            .into();
+        let stdout = str::from_utf8(output.stdout.as_slice())
+            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdout failed to parse: {err}"));
+        let stderr = str::from_utf8(output.stderr.as_slice())
+            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stderr failed to parse: {err}"));
+
+        let mut log: EvmLog = stdout.into();
+        log.stderr = stderr.into();
+        if self.bench {
+            log.parse_gas_used_from_bench();
+        }
 
         // Set the deployed account
         log.account_deployed = account_deployed;
@@ -423,17 +436,16 @@ mod tests {
     const EVM_BIN_FIXTURE_INPUT: &str =
         "0000000000000000000000000000000000000000000000000000000000000001";
     const EVM_BIN_RUNTIME_FIXTURE_INPUT: &str = "cde4efa9";
-    const OUTPUT_BENCH_OK: &str = r#"EVM gas used:    560071
+    const STDERR_BENCH_OK: &str = r#"EVM gas used:    560071
 execution time:  1.460881ms
 allocations:     29
 allocated bytes: 2558
 "#;
-    const OUTPUT_BENCH_REVERT: &str = r#"EVM gas used:    69
+    const STDERR_BENCH_REVERT: &str = r#"EVM gas used:    69
 execution time:  10.11µs
 allocations:     43
-allocated bytes: 3711
-
- error: execution reverted"#;
+allocated bytes: 3711"#;
+    const STDOUT_BENCH_REVERT: &str = r#" error: execution reverted"#;
 
     #[test]
     fn parse_evm_output_ok() {
@@ -447,7 +459,9 @@ allocated bytes: 3711
 
     #[test]
     fn parse_evm_output_bench_ok() {
-        let log = EvmLog::from(OUTPUT_BENCH_OK);
+        let mut log = EvmLog::from("");
+        log.stderr = STDERR_BENCH_OK.into();
+        log.parse_gas_used_from_bench();
         assert!(log.output.run_success());
 
         assert_eq!(log.execution_time().unwrap(), Duration::from_nanos(1460881));
@@ -455,7 +469,9 @@ allocated bytes: 3711
 
     #[test]
     fn parse_evm_output_bench_revert() {
-        let log = EvmLog::from(OUTPUT_BENCH_REVERT);
+        let mut log = EvmLog::from(STDOUT_BENCH_REVERT);
+        log.stderr = STDERR_BENCH_REVERT.into();
+        log.parse_gas_used_from_bench();
         assert!(!log.output.run_success());
     }
 
@@ -514,5 +530,16 @@ allocated bytes: 3711
             .input(Bytes::from_str(EVM_BIN_RUNTIME_FIXTURE_INPUT).unwrap())
             .run();
         assert!(log_runtime.output.run_success(), "{:?}", log_runtime.output);
+    }
+
+    #[test]
+    fn bench_flipper() {
+        let log_runtime = Evm::default()
+            .code_blob(EVM_BIN_RUNTIME_FIXTURE.as_bytes().to_vec())
+            .input(Bytes::from_str(EVM_BIN_RUNTIME_FIXTURE_INPUT).unwrap())
+            .bench(true)
+            .run();
+        assert!(log_runtime.output.run_success());
+        assert!(log_runtime.execution_time().unwrap() > Duration::from_nanos(0));
     }
 }

@@ -23,6 +23,8 @@
 //! .run();
 //! ```
 
+use std::time::Duration;
+
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
@@ -124,27 +126,33 @@ impl VerifyCallExpectation {
 /// Result of a call
 #[derive(Clone, Debug)]
 pub enum CallResult {
-    Exec(ContractExecResult<Balance, EventRecord>),
-    Instantiate(ContractInstantiateResult<AccountId, Balance, EventRecord>),
+    Exec {
+        result: ContractExecResult<Balance, EventRecord>,
+        wall_time: Duration,
+    },
+    Instantiate {
+        result: ContractInstantiateResult<AccountId, Balance, EventRecord>,
+        wall_time: Duration,
+    },
 }
 
 impl CallResult {
     /// Check if the call was successful
     fn is_ok(&self) -> bool {
         match self {
-            Self::Exec(res) => res.result.is_ok(),
-            Self::Instantiate(res) => res.result.is_ok(),
+            Self::Exec { result, .. } => result.result.is_ok(),
+            Self::Instantiate { result, .. } => result.result.is_ok(),
         }
     }
     /// Get the output of the call
     fn output(&self) -> Vec<u8> {
         match self {
-            Self::Exec(res) => res
+            Self::Exec { result, .. } => result
                 .result
                 .as_ref()
                 .map(|r| r.data.clone())
                 .unwrap_or_default(),
-            Self::Instantiate(res) => res
+            Self::Instantiate { result, .. } => result
                 .result
                 .as_ref()
                 .map(|r| r.result.data.clone())
@@ -154,8 +162,8 @@ impl CallResult {
     /// Get the gas consumed by the call
     fn gas_consumed(&self) -> Weight {
         match self {
-            Self::Exec(res) => res.gas_consumed,
-            Self::Instantiate(res) => res.gas_consumed,
+            Self::Exec { result, .. } => result.gas_consumed,
+            Self::Instantiate { result, .. } => result.gas_consumed,
         }
     }
 }

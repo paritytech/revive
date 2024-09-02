@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use revive_differential::{Evm, EvmLog};
 use serde::{Deserialize, Serialize};
 
@@ -131,8 +133,8 @@ impl TestAccountId {
                 .get(*n)
                 .expect("should provide valid index into call results")
             {
-                CallResult::Exec(_) => panic!("call #{n} should be an instantiation"),
-                CallResult::Instantiate(res) => res
+                CallResult::Exec { .. } => panic!("call #{n} should be an instantiation"),
+                CallResult::Instantiate { result, .. } => result
                     .result
                     .as_ref()
                     .expect("call #{n} reverted")
@@ -347,17 +349,25 @@ impl Specs {
                             code,
                             data,
                             salt,
-                        } => results.push(CallResult::Instantiate(Contracts::bare_instantiate(
-                            RuntimeOrigin::signed(origin.to_account_id(&results)),
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            code.into(),
-                            data,
-                            salt,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        ))),
+                        } => {
+                            let origin = RuntimeOrigin::signed(origin.to_account_id(&results));
+                            let time_start = Instant::now();
+                            let result = Contracts::bare_instantiate(
+                                origin,
+                                value,
+                                gas_limit.unwrap_or(GAS_LIMIT),
+                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                code.into(),
+                                data,
+                                salt,
+                                DebugInfo::Skip,
+                                CollectEvents::Skip,
+                            );
+                            results.push(CallResult::Instantiate {
+                                result,
+                                wall_time: time_start.elapsed(),
+                            })
+                        }
                         Call {
                             origin,
                             dest,
@@ -365,16 +375,25 @@ impl Specs {
                             gas_limit,
                             storage_deposit_limit,
                             data,
-                        } => results.push(CallResult::Exec(Contracts::bare_call(
-                            RuntimeOrigin::signed(origin.to_account_id(&results)),
-                            dest.to_account_id(&results),
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            data,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        ))),
+                        } => {
+                            let origin = RuntimeOrigin::signed(origin.to_account_id(&results));
+                            let dest = dest.to_account_id(&results);
+                            let time_start = Instant::now();
+                            let result = Contracts::bare_call(
+                                origin,
+                                dest,
+                                value,
+                                gas_limit.unwrap_or(GAS_LIMIT),
+                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                data,
+                                DebugInfo::Skip,
+                                CollectEvents::Skip,
+                            );
+                            results.push(CallResult::Exec {
+                                result,
+                                wall_time: time_start.elapsed(),
+                            });
+                        }
                         VerifyCall(expectation) => {
                             expectation.verify(results.last().expect("No call to verify"));
                         }
@@ -401,11 +420,6 @@ impl Specs {
                     }
                 }
             });
-
-        match &results[0] {
-            CallResult::Instantiate(res) => res.result.as_ref().unwrap().account_id.clone(),
-            _ => todo!(),
-        };
 
         results
     }

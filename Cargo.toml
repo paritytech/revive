@@ -62,10 +62,13 @@ env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
 log = { version = "0.4" }
+
+# polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
 polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "1c4141abeb4c581e503f07af2a3522e6918db591" }
 
+# llvm
 [workspace.dependencies.inkwell]
 version = "0.5"
 default-features = false

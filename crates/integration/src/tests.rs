@@ -34,22 +34,35 @@ test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
 
-#[test]
-fn bitwise_byte() {
-    let mut actions = vec![Instantiate {
+fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
+    vec![Instantiate {
         origin: TestAccountId::Alice,
         value: 0,
         gas_limit: Some(GAS_LIMIT),
         storage_deposit_limit: None,
         code: Code::Solidity {
-            path: Some("contracts/Bitwise.sol".into()),
-            contract: "Bitwise".to_string(),
+            path: Some(path.into()),
+            contract: contract.to_string(),
             solc_optimizer: None,
             pipeline: None,
         },
         data: vec![],
         salt: vec![],
-    }];
+    }]
+}
+
+fn run_differential(actions: Vec<SpecsAction>) {
+    Specs {
+        differential: true,
+        balances: vec![(ALICE, 1_000_000_000)],
+        actions,
+    }
+    .run();
+}
+
+#[test]
+fn bitwise_byte() {
+    let mut actions = instantiate("contracts/Bitwise.sol", "Bitwise");
 
     let de_bruijn_sequence =
         hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
@@ -76,12 +89,137 @@ fn bitwise_byte() {
         })
     }
 
-    Specs {
-        differential: true,
-        balances: vec![(ALICE, 1_000_000_000)],
-        actions,
+    run_differential(actions);
+}
+
+#[test]
+fn unsigned_division() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
+    let one = U256::from(1);
+    let two = U256::from(2);
+    let five = U256::from(5);
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (five, two),
+        (one, U256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAccountId::Alice,
+            dest: TestAccountId::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_div(n, d).calldata,
+        })
     }
-    .run();
+
+    run_differential(actions);
+}
+
+#[test]
+fn signed_division() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
+    let one = I256::try_from(1).unwrap();
+    let two = I256::try_from(2).unwrap();
+    let minus_two = I256::try_from(-2).unwrap();
+    let five = I256::try_from(5).unwrap();
+    let minus_five = I256::try_from(-5).unwrap();
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::ZERO, I256::MINUS_ONE),
+        (five, two),
+        (five, I256::MINUS_ONE),
+        (I256::MINUS_ONE, minus_two),
+        (minus_five, minus_five),
+        (minus_five, two),
+        (I256::MINUS_ONE, I256::MIN),
+        (one, I256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAccountId::Alice,
+            dest: TestAccountId::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_sdiv(n, d).calldata,
+        })
+    }
+
+    run_differential(actions);
+}
+
+#[test]
+fn unsigned_remainder() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
+    let one = U256::from(1);
+    let two = U256::from(2);
+    let five = U256::from(5);
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (U256::MAX, U256::MAX),
+        (five, two),
+        (two, five),
+        (U256::MAX, U256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAccountId::Alice,
+            dest: TestAccountId::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_mod(n, d).calldata,
+        })
+    }
+
+    run_differential(actions);
+}
+
+#[test]
+fn signed_remainder() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
+    let one = I256::try_from(1).unwrap();
+    let two = I256::try_from(2).unwrap();
+    let minus_two = I256::try_from(-2).unwrap();
+    let five = I256::try_from(5).unwrap();
+    let minus_five = I256::try_from(-5).unwrap();
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::MAX, I256::MAX),
+        (five, two),
+        (two, five),
+        (five, minus_five),
+        (five, I256::MINUS_ONE),
+        (five, minus_two),
+        (minus_five, two),
+        (minus_two, five),
+        (minus_five, minus_five),
+        (minus_five, I256::MINUS_ONE),
+        (minus_five, minus_two),
+        (minus_two, minus_five),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::ZERO, I256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAccountId::Alice,
+            dest: TestAccountId::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_smod(n, d).calldata,
+        })
+    }
 }
 
 /*
@@ -116,7 +254,6 @@ fn balance() {
     assert_eq!(expected, received)
 }
 
-
 #[test]
 fn address() {
     let contract = Contract::context_address();
@@ -132,126 +269,6 @@ fn caller() {
     let received = Address::from_slice(&output.data[12..]);
     let expected = Transaction::default_address();
     assert_eq!(received, expected);
-}
-
-#[test]
-fn unsigned_division() {
-    let one = U256::from(1);
-    let two = U256::from(2);
-    let five = U256::from(5);
-    for (received, expected) in [
-        (five, five, one),
-        (five, one, five),
-        (U256::ZERO, U256::MAX, U256::ZERO),
-        (five, two, two),
-        (one, U256::ZERO, U256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_div(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected)
-    }
-}
-
-#[test]
-fn signed_division() {
-    let one = I256::try_from(1).unwrap();
-    let two = I256::try_from(2).unwrap();
-    let minus_two = I256::try_from(-2).unwrap();
-    let five = I256::try_from(5).unwrap();
-    let minus_five = I256::try_from(-5).unwrap();
-    for (received, expected) in [
-        (five, five, one),
-        (five, one, five),
-        (I256::ZERO, I256::MAX, I256::ZERO),
-        (I256::ZERO, I256::MINUS_ONE, I256::ZERO),
-        (five, two, two),
-        (five, I256::MINUS_ONE, minus_five),
-        (I256::MINUS_ONE, minus_two, I256::ZERO),
-        (minus_five, minus_five, one),
-        (minus_five, two, minus_two),
-        (I256::MINUS_ONE, I256::MIN, I256::ZERO),
-        (one, I256::ZERO, I256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_sdiv(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
-    }
-}
-
-#[test]
-fn unsigned_remainder() {
-    let one = U256::from(1);
-    let two = U256::from(2);
-    let five = U256::from(5);
-    for (received, expected) in [
-        (five, five, U256::ZERO),
-        (five, one, U256::ZERO),
-        (U256::ZERO, U256::MAX, U256::ZERO),
-        (U256::MAX, U256::MAX, U256::ZERO),
-        (five, two, one),
-        (two, five, two),
-        (U256::MAX, U256::ZERO, U256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_mod(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
-    }
-}
-
-#[test]
-fn signed_remainder() {
-    let one = I256::try_from(1).unwrap();
-    let two = I256::try_from(2).unwrap();
-    let minus_two = I256::try_from(-2).unwrap();
-    let five = I256::try_from(5).unwrap();
-    let minus_five = I256::try_from(-5).unwrap();
-    for (received, expected) in [
-        (five, five, I256::ZERO),
-        (five, one, I256::ZERO),
-        (I256::ZERO, I256::MAX, I256::ZERO),
-        (I256::MAX, I256::MAX, I256::ZERO),
-        (five, two, one),
-        (two, five, two),
-        (five, minus_five, I256::ZERO),
-        (five, I256::MINUS_ONE, I256::ZERO),
-        (five, minus_two, one),
-        (minus_five, two, I256::MINUS_ONE),
-        (minus_two, five, minus_two),
-        (minus_five, minus_five, I256::ZERO),
-        (minus_five, I256::MINUS_ONE, I256::ZERO),
-        (minus_five, minus_two, I256::MINUS_ONE),
-        (minus_two, minus_five, minus_two),
-        (I256::MIN, I256::MINUS_ONE, I256::ZERO),
-        (I256::ZERO, I256::ZERO, I256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_smod(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
-    }
 }
 
 #[test]

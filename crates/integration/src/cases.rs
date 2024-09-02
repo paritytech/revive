@@ -161,7 +161,7 @@ sol!(
         function mStore8(uint value) public pure returns (uint256 word);
     }
 );
-case!("mStore8.sol", MStore8, mStore8Call, mstore8, value: U256);
+case!("MStore8.sol", MStore8, mStore8Call, mstore8, value: U256);
 
 sol!(
     contract Events {

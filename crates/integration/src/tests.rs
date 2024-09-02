@@ -1,4 +1,10 @@
+use std::str::FromStr;
+
+use alloy_primitives::*;
 use revive_runner::*;
+use SpecsAction::*;
+
+use crate::cases::Contract;
 
 macro_rules! test_spec {
     ($test_name:ident, $contract_name:literal, $source_file:literal) => {
@@ -26,27 +32,67 @@ test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
+test_spec!(mstore8, "MStore8", "MStore8.sol");
+
+#[test]
+fn bitwise_byte() {
+    let mut actions = vec![Instantiate {
+        origin: TestAccountId::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        code: Code::Solidity {
+            path: Some("contracts/Bitwise.sol".into()),
+            contract: "Bitwise".to_string(),
+            solc_optimizer: None,
+            pipeline: None,
+        },
+        data: vec![],
+        salt: vec![],
+    }];
+
+    let de_bruijn_sequence =
+        hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
+    let value = U256::from_be_bytes::<32>(de_bruijn_sequence.clone().try_into().unwrap());
+    for input in de_bruijn_sequence
+        .iter()
+        .enumerate()
+        .map(|(index, _)| Contract::bitwise_byte(U256::from(index), value).calldata)
+        .chain([
+            Contract::bitwise_byte(U256::ZERO, U256::ZERO).calldata,
+            Contract::bitwise_byte(U256::ZERO, U256::MAX).calldata,
+            Contract::bitwise_byte(U256::MAX, U256::ZERO).calldata,
+            Contract::bitwise_byte(U256::from_str("18446744073709551619").unwrap(), U256::MAX)
+                .calldata,
+        ])
+    {
+        actions.push(Call {
+            origin: TestAccountId::Alice,
+            dest: TestAccountId::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: input,
+        })
+    }
+
+    Specs {
+        differential: true,
+        balances: vec![(ALICE, 1_000_000_000)],
+        actions,
+    }
+    .run();
+}
 
 /*
-#[test]
-fn transient_storage() {
-    let expected = U256::MAX;
-    let (state, output) = assert_success(&Contract::storage_transient(expected), false);
-    let received = U256::abi_decode(&output.data, true).unwrap();
-    assert_eq!(expected, received);
-
-    assert!(state
-        .accounts()
-        .values()
-        .all(|account| account.storage.is_empty()));
-}
 #[test]
 fn events() {
     assert_success(&Contract::event(U256::ZERO), true);
     assert_success(&Contract::event(U256::from(123)), true);
-}#[test]
+}
+
+#[test]
 fn balance() {
-    // TODO: We do not have the correct balance API in the pallet yet
     let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
 
     let expected = U256::ZERO;
@@ -70,79 +116,6 @@ fn balance() {
     assert_eq!(expected, received)
 }
 
-#[test]
-fn mstore8() {
-    for (received, expected) in [
-        (U256::MIN, U256::MIN),
-        (
-            U256::from(1),
-            U256::from_str_radix(
-                "452312848583266388373324160190187140051835877600158453279131187530910662656",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(2),
-            U256::from_str_radix(
-                "904625697166532776746648320380374280103671755200316906558262375061821325312",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(255),
-            U256::from_str_radix(
-                "115339776388732929035197660848497720713218148788040405586178452820382218977280",
-                10,
-            )
-            .unwrap(),
-        ),
-        (U256::from(256), U256::from(0)),
-        (
-            U256::from(257),
-            U256::from_str_radix(
-                "452312848583266388373324160190187140051835877600158453279131187530910662656",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(258),
-            U256::from_str_radix(
-                "904625697166532776746648320380374280103671755200316906558262375061821325312",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(123456789),
-            U256::from_str_radix(
-                "9498569820248594155839807363993929941088553429603327518861754938149123915776",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::MAX,
-            U256::from_str_radix(
-                "115339776388732929035197660848497720713218148788040405586178452820382218977280",
-                10,
-            )
-            .unwrap(),
-        ),
-    ]
-    .par_iter()
-    .map(|(parameter, expected)| {
-        let (_, output) = assert_success(&Contract::mstore8(*parameter), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *expected)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
-    }
-}
 
 #[test]
 fn address() {
@@ -411,27 +384,5 @@ fn echo() {
         .to_vec();
 
     assert_eq!(expected, received);
-}
-
-#[test]
-fn bitwise_byte() {
-    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::ZERO), true);
-    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::MAX), true);
-    assert_success(&Contract::bitwise_byte(U256::MAX, U256::ZERO), true);
-    assert_success(
-        &Contract::bitwise_byte(U256::from_str("18446744073709551619").unwrap(), U256::MAX),
-        true,
-    );
-
-    let de_bruijn_sequence =
-        hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
-    let value = U256::from_be_bytes::<32>(de_bruijn_sequence.clone().try_into().unwrap());
-
-    for (index, byte) in de_bruijn_sequence.iter().enumerate() {
-        let (_, output) = assert_success(&Contract::bitwise_byte(U256::from(index), value), true);
-        let expected = U256::from(*byte as i32);
-        let received = U256::abi_decode(&output.data, true).unwrap();
-        assert_eq!(expected, received)
-    }
 }
 */

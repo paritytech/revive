@@ -74,7 +74,7 @@ version = "0.5"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 
-[profile.benchmark]
+[profile.bench]
 inherits = "release"
 lto = true
 codegen-units = 1

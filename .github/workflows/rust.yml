@@ -31,7 +31,10 @@ jobs:
           echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
 
       - name: Install apt dependencies
-        run: sudo apt update && sudo apt install -y libtinfo5
+        run: |
+          sudo add-apt-repository -y ppa:ethereum/ethereum
+          sudo apt update
+          sudo apt install -y libtinfo5 ethereum
 
       - name: Format
         run: make format

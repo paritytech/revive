@@ -6,7 +6,7 @@ use std::time::Duration;
 /// - https://crates.io/crates/go-parse-duration (fixed an utf8 bug)
 /// - https://github.com/golang/go/blob/master/src/time/format.go
 pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
-    parse_duration(value).map(|ns| Duration::from_nanos(ns.abs() as u64))
+    parse_duration(value).map(|ns| Duration::from_nanos(ns.unsigned_abs()))
 }
 
 fn parse_duration(string: &str) -> Result<i64, String> {
@@ -16,8 +16,8 @@ fn parse_duration(string: &str) -> Result<i64, String> {
     let mut neg = false;
 
     // Consume [-+]?
-    if s != "" {
-        let c = *s.as_bytes().get(0).unwrap();
+    if !s.is_empty() {
+        let c = *s.as_bytes().first().unwrap();
         if c == b'-' || c == b'+' {
             neg = c == b'-';
             s = &s[1..];
@@ -27,10 +27,10 @@ fn parse_duration(string: &str) -> Result<i64, String> {
     if s == "0" {
         return Ok(0);
     }
-    if s == "" {
+    if s.is_empty() {
         return Err(format!("invalid duration: {string}"));
     }
-    while s != "" {
+    while !s.is_empty() {
         // integers before, after decimal point
         let mut v: i64;
         let mut f: i64 = 0;
@@ -38,8 +38,8 @@ fn parse_duration(string: &str) -> Result<i64, String> {
         let mut scale: f64 = 1f64;
 
         // The next character must be [0-9.]
-        let c = *s.as_bytes().get(0).unwrap();
-        if !(c == b'.' || b'0' <= c && c <= b'9') {
+        let c = *s.as_bytes().first().unwrap();
+        if !(c == b'.' || c.is_ascii_digit()) {
             return Err(format!("invalid duration: {string}"));
         }
         // Consume [0-9]*
@@ -57,15 +57,14 @@ fn parse_duration(string: &str) -> Result<i64, String> {
 
         // Consume (\.[0-9]*)?
         let mut post = false;
-        if s != "" && *s.as_bytes().get(0).unwrap() == b'.' {
+        if !s.is_empty() && *s.as_bytes().first().unwrap() == b'.' {
             s = &s[1..];
             let pl = s.len();
-            match leading_fraction(s) {
-                (f_, scale_, s_) => {
-                    f = f_;
-                    scale = scale_;
-                    s = s_;
-                }
+            let (f_, scale_, s_) = leading_fraction(s);
+            {
+                f = f_;
+                scale = scale_;
+                s = s_;
             }
             post = pl != s.len();
         }
@@ -78,7 +77,7 @@ fn parse_duration(string: &str) -> Result<i64, String> {
         let mut i = 0;
         while i < s.len() {
             let c = *s.as_bytes().get(i).unwrap();
-            if c == b'.' || b'0' <= c && c <= b'9' {
+            if c == b'.' || c.is_ascii_digit() {
                 break;
             }
             i += 1;
@@ -101,7 +100,7 @@ fn parse_duration(string: &str) -> Result<i64, String> {
                 return Err(format!("unknown unit {u} in duration {string}"));
             }
         };
-        if v > (1 << 63 - 1) / unit {
+        if v > (1 << (63 - 1)) / unit {
             // overflow
             return Err(format!("invalid duration {string}"));
         }
@@ -132,10 +131,10 @@ fn leading_int(s: &str) -> Result<(i64, &str), String> {
     let mut i = 0;
     while i < s.len() {
         let c = s.chars().nth(i).unwrap();
-        if c < '0' || c > '9' {
+        if !c.is_ascii_digit() {
             break;
         }
-        if x > (1 << 63 - 1) / 10 {
+        if x > (1 << (63 - 1)) / 10 {
             return Err("overflow".into());
         }
         let d = i64::from(c.to_digit(10).unwrap());
@@ -156,13 +155,13 @@ fn leading_fraction(s: &str) -> (i64, f64, &str) {
     let mut overflow = false;
     while i < s.len() {
         let c = s.chars().nth(i).unwrap();
-        if c < '0' || c > '9' {
+        if !c.is_ascii_digit() {
             break;
         }
         if overflow {
             continue;
         }
-        if x > (1 << 63 - 1) / 10 {
+        if x > (1 << (63 - 1)) / 10 {
             // It's possible for overflow to give a positive number, so take care.
             overflow = true;
             continue;
@@ -182,7 +181,7 @@ fn leading_fraction(s: &str) -> (i64, f64, &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::parse_duration;
 
     #[test]
     fn test_parse_duration() {

@@ -25,6 +25,7 @@
 
 use std::time::Duration;
 
+use hex::{FromHex, FromHexError, ToHex};
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
@@ -92,17 +93,55 @@ pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
     pub gas_consumed: Option<Weight>,
     /// When provided, the expected output
-    #[serde(default, with = "hex::serde")]
-    pub output: Vec<u8>,
+    #[serde(default, with = "hex")]
+    pub output: OptionalHex,
     ///Expected call result
     pub success: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OptionalHex(Option<Vec<u8>>);
+
+impl FromHex for OptionalHex {
+    type Error = FromHexError;
+
+    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
+        let value = hex::decode(hex)?;
+        Ok(Self(Some(value)))
+    }
+}
+
+impl ToHex for &OptionalHex {
+    fn encode_hex<T: std::iter::FromIterator<char>>(&self) -> T {
+        match self.0.as_ref() {
+            None => T::from_iter("".chars()),
+            Some(data) => T::from_iter(hex::encode(data).chars()),
+        }
+    }
+
+    fn encode_hex_upper<T: std::iter::FromIterator<char>>(&self) -> T {
+        match self.0.as_ref() {
+            None => T::from_iter("".chars()),
+            Some(data) => T::from_iter(hex::encode_upper(data).chars()),
+        }
+    }
+}
+
+impl Into<OptionalHex> for alloy_primitives::Bytes {
+    fn into(self) -> OptionalHex {
+        if self.is_empty() {
+            OptionalHex(None)
+        } else {
+            OptionalHex(Some(self.into()))
+        }
+    }
 }
 
 impl Default for VerifyCallExpectation {
     fn default() -> Self {
         Self {
             gas_consumed: None,
-            output: vec![],
+            output: OptionalHex(None),
             success: true,
         }
     }
@@ -119,7 +158,9 @@ impl VerifyCallExpectation {
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
-        assert_eq!(self.output, result.output());
+        if let OptionalHex(Some(data)) = self.output {
+            assert_eq!(data, result.output());
+        }
     }
 }
 

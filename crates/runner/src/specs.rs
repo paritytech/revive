@@ -181,10 +181,8 @@ impl Specs {
                 if matches!(
                     item,
                     SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
-                ) && matches!(
-                    next_item,
-                    Some(SpecsAction::Instantiate { .. }) | Some(SpecsAction::Call { .. })
-                ) && !self.differential
+                ) && !matches!(next_item, Some(SpecsAction::VerifyCall { .. }))
+                    && !self.differential
                 {
                     return vec![
                         item.clone(),

@@ -34,7 +34,7 @@ polkavm-disassembler = { workspace = true }
 polkavm-common = { workspace = true }
 
 revive-common = { workspace = true }
-pallet-contracts-pvm-llapi = { workspace = true }
+revive-runtime-api = { workspace = true }
 revive-linker = { workspace = true }
 revive-builtins = { workspace = true }
 revive-stdlib = { workspace = true }

@@ -124,27 +124,17 @@ where
             .expect("the stdlib module should be linkable");
     }
 
-    /// Link in the PolkaVM guest module, containing imported and exported functions,
+    /// Link in the PolkaVM imports module, containing imported functions,
     /// and marking them as external (they need to be relocatable as too).
-    fn link_polkavm_guest_module(
+    fn link_polkavm_imports(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
     ) {
         module
             .link_in_module(
-                pallet_contracts_pvm_llapi::polkavm_guest::module(llvm, "polkavm_guest").unwrap(),
+                revive_runtime_api::polkavm_imports::module(llvm, "polkavm_imports").unwrap(),
             )
-            .expect("the PolkaVM guest API module should be linkable");
-
-        for export in runtime_api::exports::EXPORTS {
-            module
-                .get_function(export)
-                .expect("should be declared")
-                .add_attribute(
-                    inkwell::attributes::AttributeLoc::Function,
-                    llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
-                );
-        }
+            .expect("the PolkaVM imports module should be linkable");
 
         for import in runtime_api::imports::IMPORTS {
             module
@@ -154,6 +144,24 @@ where
         }
     }
 
+    fn link_polkavm_exports(&self, contract_path: &str) -> anyhow::Result<()> {
+        let exports = revive_runtime_api::polkavm_exports::module(self.llvm(), "polkavm_exports")
+            .map_err(|error| {
+            anyhow::anyhow!(
+                "The contract `{}` exports module loading error: {}",
+                contract_path,
+                error
+            )
+        })?;
+        self.module.link_in_module(exports).map_err(|error| {
+            anyhow::anyhow!(
+                "The contract `{}` exports module linking error: {}",
+                contract_path,
+                error
+            )
+        })
+    }
+
     /// Configure the PolkaVM minimum stack size.
     fn set_polkavm_stack_size(
         llvm: &'ctx inkwell::context::Context,
@@ -161,7 +169,7 @@ where
         size: u32,
     ) {
         module
-            .link_in_module(pallet_contracts_pvm_llapi::polkavm_guest::min_stack_size(
+            .link_in_module(revive_runtime_api::calling_convention::min_stack_size(
                 llvm,
                 "polkavm_stack_size",
                 size,
@@ -191,7 +199,7 @@ where
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
-        Self::link_polkavm_guest_module(llvm, &module);
+        Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
 
@@ -229,6 +237,8 @@ where
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     ) -> anyhow::Result<Build> {
         let module_clone = self.module.clone();
+
+        self.link_polkavm_exports(contract_path)?;
 
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         target_machine.set_target_data(self.module());
@@ -688,8 +698,14 @@ where
                 self.builder()
                     .build_store(storage_key_pointer.value, storage_key_value)?;
 
-                let (storage_value_pointer, storage_value_length_pointer) = self
-                    .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
+                let storage_value_pointer =
+                    self.build_alloca(self.word_type(), "storage_value_pointer");
+                let storage_value_length_pointer =
+                    self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
+                self.build_store(
+                    storage_value_length_pointer,
+                    self.word_const(revive_common::BIT_LENGTH_WORD as u64),
+                )?;
 
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 

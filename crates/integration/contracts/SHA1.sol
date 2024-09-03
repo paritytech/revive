@@ -1,6 +1,31 @@
 // SPDX-License-Identifier: BSD-2-Clause
 pragma solidity ^0.8.4;
 
+/* runner.json
+{
+    "differential": true,
+    "actions": [
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "SHA1"
+                    }
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "1605782b00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000200ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            }
+        }
+    ]
+}
+*/
+
 contract SHA1 {
     function sha1(bytes memory data) public pure returns (bytes20 ret) {
         assembly {

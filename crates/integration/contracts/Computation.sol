@@ -2,6 +2,44 @@
 
 pragma solidity ^0.8;
 
+/* runner.json
+{
+    "actions": [
+    {
+      "Instantiate": {}
+    },
+    {
+      "Call": {
+        "dest": {
+            "Instantiated": 0
+        },
+        "data": "0f760610000000000000000000000000000000000000000000000000000000000000000d"
+      }
+    },
+    {
+        "VerifyCall": {
+            "success": true,
+            "output": "000000000000000000000000000000000000000000000000000000000000005b"
+        }
+    },
+    {
+      "Call": {
+        "dest": {
+            "Instantiated": 0
+        },
+        "data": "00261b660000000000000000000000000000000000000000000000000000000000000005"
+      }
+    },
+    {
+        "VerifyCall": {
+            "success": true,
+            "output": "00000000000000000000000000000000000000000000000000000000000003b1"
+        }
+    }
+  ]
+}
+*/
+
 contract Computation {
     function triangle_number(int64 n) public pure returns (int64 sum) {
         unchecked {

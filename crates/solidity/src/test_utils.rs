@@ -13,6 +13,7 @@ use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
+use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::solc::Compiler as SolcCompiler;
@@ -20,6 +21,8 @@ use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
 static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    Lazy::new(Default::default);
 
 #[derive(Hash, PartialEq, Eq)]
 struct CachedBlob {
@@ -113,14 +116,14 @@ pub fn build_solidity_with_options(
     Ok(output)
 }
 
-/// Build a Solidity contract and get the EVM bin-runtime.
+/// Build a Solidity contract and get the EVM code
 pub fn build_solidity_with_options_evm(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
     solc_optimizer_enabled: bool,
-) -> anyhow::Result<BTreeMap<String, DeployedBytecode>> {
+) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
@@ -155,9 +158,12 @@ pub fn build_solidity_with_options_evm(
         for (_, file) in files.iter_mut() {
             for (name, contract) in file.iter_mut() {
                 if let Some(evm) = contract.evm.as_mut() {
-                    if let Some(deployed_bytecode) = evm.deployed_bytecode.as_ref() {
-                        contracts.insert(name.clone(), deployed_bytecode.clone());
-                    }
+                    let (Some(bytecode), Some(deployed_bytecode)) =
+                        (evm.bytecode.as_ref(), evm.deployed_bytecode.as_ref())
+                    else {
+                        continue;
+                    };
+                    contracts.insert(name.clone(), (bytecode.clone(), deployed_bytecode.clone()));
                 }
             }
         }
@@ -284,6 +290,16 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_evm(contract_name, source_code, true)
+}
+
+/// Compile the EVM bin of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_evm_deploy_code(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_evm(contract_name, source_code, false)
+}
+
+fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8> {
     let pipeline = SolcPipeline::Yul;
     let solc_optimizer_enabled = true;
     let id = CachedBlob {
@@ -292,7 +308,12 @@ pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8
         solc_optimizer_enabled,
     };
 
-    if let Some(blob) = EVM_BLOB_CACHE.lock().unwrap().get(&id) {
+    let cache = if runtime {
+        &EVM_RUNTIME_BLOB_CACHE
+    } else {
+        &EVM_BLOB_CACHE
+    };
+    if let Some(blob) = cache.lock().unwrap().get(&id) {
         return blob.clone();
     }
 
@@ -305,14 +326,17 @@ pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8
         solc_optimizer_enabled,
     )
     .expect("source should compile");
-    let bin_runtime = &contracts
+    let object = &contracts
         .get(contract_name)
-        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name))
-        .object;
+        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name));
+    let code = if runtime {
+        object.1.object.as_str()
+    } else {
+        object.0.object.as_str()
+    };
+    let blob = hex::decode(code).expect("code shold be hex encoded");
 
-    let blob = hex::decode(bin_runtime).expect("bin-runtime shold be hex encoded");
-
-    EVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+    cache.lock().unwrap().insert(id, blob.clone());
 
     blob
 }

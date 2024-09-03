@@ -21,7 +21,7 @@ revive-integration = { version = "0.1.0", path = "crates/integration" }
 revive-linker = { version = "0.1.0", path = "crates/linker" }
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
 revive-llvm-context = { version = "0.1.0", path = "crates/llvm-context" }
-pallet-contracts-pvm-llapi = { version = "0.1.0", path = "crates/pallet-contracts-pvm-llapi" }
+revive-runtime-api = { version = "0.1.0", path = "crates/runtime-api" }
 revive-runner = { version = "0.1.0", path = "crates/runner" }
 revive-solidity = { version = "0.1.0", path = "crates/solidity" }
 revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
@@ -50,30 +50,31 @@ path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
 rand = "0.8"
-polkavm-common = { git = "https://github.com/koute/polkavm.git", rev = "360029e" } 
-polkavm-linker = { git = "https://github.com/koute/polkavm.git", rev = "360029e" } 
-polkavm-disassembler = { git = "https://github.com/koute/polkavm.git", rev = "360029e" }
-polkavm = { git = "https://github.com/koute/polkavm.git", rev = "360029e" } 
-alloy-primitives = "0.6"
-alloy-sol-types = "0.6"
+polkavm-common = "0.10"
+polkavm-linker = "0.10"
+polkavm-disassembler = "0.10"
+polkavm = "0.10"
+alloy-primitives = { version = "0.8", features = ["serde"] }
+alloy-sol-types = "0.8"
+alloy-genesis = "0.3"
+alloy-serde = "0.3"
 env_logger = { version = "0.10.0", default-features = false }
 serde_stacker = "0.1"
 criterion = { version = "0.5", features = ["html_reports"] }
 log = { version = "0.4" }
+
+# polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "559fa1db0594a81d5dbf343613ba2f3fc16708da" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "1c4141abeb4c581e503f07af2a3522e6918db591" }
 
-# Benchmarking against EVM
-primitive-types = { version = "0.12", features = ["codec"] }
-evm-interpreter = { git = "https://github.com/xermicus/evm.git", branch = "separate-compilation" }
-
+# llvm
 [workspace.dependencies.inkwell]
 version = "0.5"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 
-[profile.benchmark]
+[profile.bench]
 inherits = "release"
 lto = true
 codegen-units = 1

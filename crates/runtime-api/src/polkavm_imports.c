@@ -48,14 +48,6 @@ void *  __sbrk(uint32_t size) {
     return (void *)address;
 }
 
-// Exports
-
-extern void call();
-POLKAVM_EXPORT(void, call)
-
-extern void deploy();
-POLKAVM_EXPORT(void, deploy)
-
 
 // Imports
 
@@ -77,7 +69,7 @@ POLKAVM_IMPORT(uint32_t, contains_storage, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, take_storage, uint32_t, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, seal_call, uint32_t)
+POLKAVM_IMPORT(uint32_t, call, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, delegate_call, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
 

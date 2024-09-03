@@ -129,7 +129,6 @@ impl Compiler {
                 )
             })?;
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
-        output.remove_evm();
 
         Ok(output)
     }

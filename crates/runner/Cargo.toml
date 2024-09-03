@@ -4,14 +4,25 @@ version.workspace = true
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
-repository.authors = true
-descritption = "Execute revive contracts in a simulated blockchain runtime"
+authors.workspace = true
+description = "Execute revive contracts in a simulated blockchain runtime"
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
 codec = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
-polkadot-sdk = { workspace = true, features = ["experimental", "runtime"] }
+alloy-primitives = { workspace = true }
+polkadot-sdk.workspace = true
+polkadot-sdk.features = [
+    "experimental",
+    "runtime",
+    "polkadot-runtime-common",
+    "pallet-revive",
+    "pallet-balances",
+    "pallet-timestamp"
+]
 
 revive-solidity = { workspace = true }
+revive-differential = { workspace = true }

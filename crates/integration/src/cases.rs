@@ -1,9 +1,7 @@
-use alloy_primitives::{Address, I256, U256};
+use alloy_primitives::{Address, Bytes, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
 use revive_solidity::test_utils::*;
-
-use crate::mock_runtime::{CallOutput, State};
 
 #[derive(Clone)]
 pub struct Contract {
@@ -93,7 +91,7 @@ sol!(
         function sha1(bytes memory data) public pure returns (bytes20 ret);
     }
 );
-case!("SHA1.sol", SHA1, sha1Call, sha1, pre: Vec<u8>);
+case!("SHA1.sol", SHA1, sha1Call, sha1, pre: Bytes);
 
 sol!(
     contract ERC20 {
@@ -163,7 +161,7 @@ sol!(
         function mStore8(uint value) public pure returns (uint256 word);
     }
 );
-case!("mStore8.sol", MStore8, mStore8Call, mstore8, value: U256);
+case!("MStore8.sol", MStore8, mStore8Call, mstore8, value: U256);
 
 sol!(
     contract Events {
@@ -190,7 +188,7 @@ sol!(
         function memcpy(bytes memory payload) public pure returns (bytes memory);
     }
 );
-case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Vec<u8>);
+case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Bytes);
 
 sol!(
     contract Call {
@@ -205,7 +203,7 @@ sol!(
     }
 );
 case!("Call.sol", Call, value_transferCall, call_value_transfer, destination: Address);
-case!("Call.sol", Call, callCall, call_call, destination: Address, payload: Vec<u8>);
+case!("Call.sol", Call, callCall, call_call, destination: Address, payload: Bytes);
 case!("Call.sol", "Call", vec![], call_constructor);
 
 sol!(
@@ -230,24 +228,6 @@ sol!(
 case!("Storage.sol", Storage, transientCall, storage_transient, value: U256);
 
 impl Contract {
-    /// Execute the contract.
-    ///
-    /// Useful helper if the contract state can be ignored,
-    /// as it spares the deploy transaciton.
-    ///
-    /// - Inserts an account with given `code` into a new state.
-    /// - Callee and caller account will be `Transaction::default_address()`.
-    /// - Sets the calldata.
-    /// - Doesn't execute the constructor or deploy code.
-    /// - Calls the "call" export on a default backend config.
-    pub fn execute(&self) -> (State, CallOutput) {
-        State::default()
-            .transaction()
-            .with_default_account(&self.pvm_runtime)
-            .calldata(self.calldata.clone())
-            .call()
-    }
-
     fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,
@@ -260,7 +240,7 @@ impl Contract {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::U256;
+    use alloy_primitives::{Bytes, U256};
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
     use serde::{de::Deserialize, Serialize};
     use std::{collections::BTreeMap, fs::File};
@@ -305,7 +285,7 @@ mod tests {
             (|| Contract::odd_product(0)) as fn() -> Contract,
             (|| Contract::fib_iterative(U256::ZERO)) as fn() -> Contract,
             Contract::erc20 as fn() -> Contract,
-            (|| Contract::sha1(Vec::new())) as fn() -> Contract,
+            (|| Contract::sha1(Bytes::new())) as fn() -> Contract,
             (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,
             (|| Contract::event(U256::ZERO)) as fn() -> Contract,
         ]

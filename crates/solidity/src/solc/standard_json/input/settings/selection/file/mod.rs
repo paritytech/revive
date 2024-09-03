@@ -28,6 +28,7 @@ impl File {
         Self {
             per_file: Some(HashSet::from_iter([SelectionFlag::AST])),
             per_contract: Some(HashSet::from_iter([
+                SelectionFlag::EVMBC,
                 SelectionFlag::EVMDBC,
                 SelectionFlag::MethodIdentifiers,
                 SelectionFlag::Metadata,

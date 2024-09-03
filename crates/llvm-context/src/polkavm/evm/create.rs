@@ -58,9 +58,9 @@ where
         context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_pointer");
     context.build_store(address_pointer, context.word_const(0))?;
 
-    let argument_pointer = pallet_contracts_pvm_llapi::calling_convention::Spill::new(
+    let argument_pointer = revive_runtime_api::calling_convention::Spill::new(
         context.builder(),
-        pallet_contracts_pvm_llapi::calling_convention::instantiate(context.llvm()),
+        revive_runtime_api::calling_convention::instantiate(context.llvm()),
         "create2_arguments",
     )?
     .next(code_hash_pointer.value)?

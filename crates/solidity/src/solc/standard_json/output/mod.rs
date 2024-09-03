@@ -138,19 +138,6 @@ impl Output {
         ))
     }
 
-    /// Removes EVM artifacts to prevent their accidental usage.
-    pub fn remove_evm(&mut self) {
-        if let Some(files) = self.contracts.as_mut() {
-            for (_, file) in files.iter_mut() {
-                for (_, contract) in file.iter_mut() {
-                    if let Some(evm) = contract.evm.as_mut() {
-                        evm.bytecode = None;
-                    }
-                }
-            }
-        }
-    }
-
     /// Traverses the AST and returns the list of additional errors and warnings.
     pub fn preprocess_ast(
         &mut self,

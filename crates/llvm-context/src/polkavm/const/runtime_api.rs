@@ -19,7 +19,7 @@ pub mod imports {
 
     pub static BLOCK_NUMBER: &str = "block_number";
 
-    pub static CALL: &str = "seal_call";
+    pub static CALL: &str = "call";
 
     pub static CALLER: &str = "caller";
 

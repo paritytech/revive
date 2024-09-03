@@ -7102,9 +7102,9 @@ dependencies = [
  "alloy-primitives 0.8.0",
  "criterion",
  "hex",
- "polkavm 0.10.0",
  "revive-differential",
  "revive-integration",
+ "revive-runner",
 ]
 
 [[package]]

@@ -127,12 +127,12 @@ impl ToHex for &OptionalHex {
     }
 }
 
-impl Into<OptionalHex> for alloy_primitives::Bytes {
-    fn into(self) -> OptionalHex {
-        if self.is_empty() {
+impl From<alloy_primitives::Bytes> for OptionalHex {
+    fn from(value: alloy_primitives::Bytes) -> Self {
+        if value.is_empty() {
             OptionalHex(None)
         } else {
-            OptionalHex(Some(self.into()))
+            OptionalHex(Some(value.into()))
         }
     }
 }

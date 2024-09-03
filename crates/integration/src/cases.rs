@@ -44,8 +44,8 @@ macro_rules! case {
     };
 }
 
-case!("Create.sol", "CreateA", vec![0; 4].into(), create_a);
-case!("Create.sol", "CreateB", vec![0; 4].into(), create_b);
+case!("Create.sol", "CreateA", vec![0; 4], create_a);
+case!("Create.sol", "CreateB", vec![0; 4], create_b);
 
 sol!(contract Baseline { function baseline() public payable; });
 case!("Baseline.sol", Baseline, baselineCall, baseline,);

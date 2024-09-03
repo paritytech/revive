@@ -13,7 +13,7 @@ use alloy_primitives::{hex::ToHexExt, Address, Bytes, B256, U256};
 use alloy_serde::storage::deserialize_storage_map;
 use serde::{Deserialize, Serialize};
 use serde_json::{Deserializer, Value};
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempPath};
 
 pub use self::go_duration::parse_go_duration;
 
@@ -120,6 +120,7 @@ pub struct EvmLog {
 impl EvmLog {
     pub const EXECUTION_TIME_MARKER: &'static str = "execution time:";
 
+    /// Parse the reported execution time from stderr (requires --bench)
     pub fn execution_time(&self) -> Result<Duration, String> {
         for line in self.stderr.lines() {
             if let Some(value) = line.split("execution time:").nth(1) {
@@ -169,7 +170,7 @@ impl From<&str> for EvmLog {
             };
         }
 
-        return EvmLog {
+        EvmLog {
             account_deployed: None,
             output: EvmOutput {
                 error: value.find(REVERT_MARKER).map(|_| REVERT_MARKER.to_string()),
@@ -177,13 +178,14 @@ impl From<&str> for EvmLog {
             },
             state_dump: Default::default(),
             stderr: Default::default(),
-        };
+        }
     }
 }
 
 /// Builder for running contracts in geth `evm`
 pub struct Evm {
-    genesis_json: String,
+    genesis_json: Option<String>,
+    genesis_path: Option<PathBuf>,
     code: Option<Vec<u8>>,
     input: Option<Bytes>,
     receiver: Option<String>,
@@ -197,7 +199,8 @@ pub struct Evm {
 impl Default for Evm {
     fn default() -> Self {
         Self {
-            genesis_json: GENESIS_JSON.to_string(),
+            genesis_json: Some(GENESIS_JSON.to_string()),
+            genesis_path: None,
             code: None,
             input: None,
             receiver: None,
@@ -216,19 +219,6 @@ impl Evm {
         Self::default().genesis_json(genesis)
     }
 
-    /// Run the code found in `code_file`
-    pub fn code_file(self, path: PathBuf) -> Self {
-        Self {
-            code: std::fs::read_to_string(&path)
-                .unwrap_or_else(|err| {
-                    panic!("can not read EVM byte code from file {path:?}: {err}")
-                })
-                .into_bytes()
-                .into(),
-            ..self
-        }
-    }
-
     /// Run the `code`
     pub fn code_blob(self, blob: Vec<u8>) -> Self {
         Self {
@@ -240,7 +230,7 @@ impl Evm {
     /// Set the calldata
     pub fn input(self, bytes: Bytes) -> Self {
         Self {
-            input: (!bytes.is_empty()).then(|| bytes),
+            input: (!bytes.is_empty()).then_some(bytes),
             ..self
         }
     }
@@ -273,10 +263,20 @@ impl Evm {
     pub fn genesis_json(self, genesis: Genesis) -> Self {
         let genesis_json = serde_json::to_string(&genesis).expect("state dump should be valid");
         // TODO: Investigate
-        let genesis_json = genesis_json.replace("\"0x0\"", "0");
+        let genesis_json = genesis_json.replace("\"0x0\"", "0").into();
 
         Self {
             genesis_json,
+            genesis_path: None,
+            ..self
+        }
+    }
+
+    /// Provide a path to the genesis file to be used
+    pub fn genesis_path(self, path: PathBuf) -> Self {
+        Self {
+            genesis_path: Some(path),
+            genesis_json: None,
             ..self
         }
     }
@@ -309,7 +309,13 @@ impl Evm {
     pub fn expect_account_created(&self) -> Address {
         assert!(self.create, "expected a deploy call");
         let sender = Address::from_str(&self.sender).expect("sender address should be valid");
-        let genesis: Genesis = serde_json::from_str(&self.genesis_json).unwrap();
+        let genesis: Genesis = match (self.genesis_json.as_ref(), self.genesis_path.as_ref()) {
+            (Some(json), None) => serde_json::from_str(json).unwrap(),
+            (None, Some(path)) => {
+                serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+            }
+            _ => panic!("provided a genesis json and a genesis json path"),
+        };
         let nonce = genesis
             .alloc
             .get(&sender)
@@ -318,19 +324,37 @@ impl Evm {
         sender.create(nonce)
     }
 
-    /// Run the call in a geth `evm` subprocess
+    /// Return the path to the genesis file;
+    /// writes the genesis file into a tmpdir if necessary.
+    ///
+    /// `TempPath`` will delete on drop, so need to keep it around
+    fn write_genesis_file(&self, temp_path: &mut Option<TempPath>) -> String {
+        match (self.genesis_json.as_ref(), self.genesis_path.as_ref()) {
+            (Some(json), None) => {
+                let mut temp_file = NamedTempFile::new().unwrap();
+                temp_file.write_all(json.as_bytes()).unwrap();
+                let path = temp_file.into_temp_path();
+                *temp_path = Some(path);
+                temp_path.as_ref().unwrap().display().to_string()
+            }
+            (None, Some(path)) => path.display().to_string(),
+            _ => panic!("provided a genesis json and a genesis json path"),
+        }
+    }
+
+    /// Run the call in a geth `evm` subprocess.
+    ///
+    /// Definitively not a hairy plumbing function.
     pub fn run(self) -> EvmLog {
-        // Write genesis.json to disk
-        let mut temp_file = NamedTempFile::new().unwrap();
-        temp_file.write_all(self.genesis_json.as_bytes()).unwrap();
-        let path = temp_file.into_temp_path();
-        let genesis_json_path = &path.display().to_string();
+        let mut temp_path = None;
+        let genesis_json_path = &self.write_genesis_file(&mut temp_path);
 
         // Static args
         let mut command = Command::new(PathBuf::from(EXECUTABLE_NAME));
-        command.stdin(Stdio::piped());
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         if self.bench {
             command.args(EXECUTABLE_ARGS_BENCH);
         } else {
@@ -383,6 +407,7 @@ impl Evm {
             output.status.success(),
             "{EXECUTABLE_NAME} command failed: {output:?}",
         );
+        drop(temp_path);
 
         let stdout = str::from_utf8(output.stdout.as_slice())
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdout failed to parse: {err}"));

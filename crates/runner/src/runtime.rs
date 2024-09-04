@@ -7,7 +7,7 @@ use polkadot_sdk::{
 };
 
 pub type Balance = u128;
-pub type AccountId = AccountId32;
+pub type AccountId = pallet_revive::DefaultAddressMapper;
 pub type Block = frame_system::mocking::MockBlock<Runtime>;
 pub type Hash = <Runtime as frame_system::Config>::Hash;
 pub type EventRecord =
@@ -45,7 +45,7 @@ mod runtime {
 #[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
 impl frame_system::Config for Runtime {
     type Block = Block;
-    type AccountId = AccountId;
+    type AccountId = AccountId32;
     type AccountData = pallet_balances::AccountData<<Runtime as pallet_balances::Config>::Balance>;
 }
 
@@ -74,10 +74,10 @@ impl pallet_revive::Config for Runtime {
     type ChainExtension = ();
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
-    type AddressGenerator = pallet_revive::DefaultAddressGenerator;
+    type AddressMapper = AccountId;
     type UnsafeUnstableInterface = UnstableInterface;
-    type UploadOrigin = EnsureSigned<AccountId>;
-    type InstantiateOrigin = EnsureSigned<AccountId>;
+    type UploadOrigin = EnsureSigned<AccountId32>;
+    type InstantiateOrigin = EnsureSigned<AccountId32>;
     type Migrations = ();
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;
     type Debug = ();

@@ -7,7 +7,7 @@ pub fn create_specs(contract: &revive_integration::cases::Contract) -> revive_ru
         actions: vec![
             Instantiate {
                 code: Code::Bytes(contract.pvm_runtime.to_vec()),
-                origin: TestAccountId::Alice,
+                origin: TestAddress::Alice,
                 data: Default::default(),
                 value: Default::default(),
                 gas_limit: Default::default(),
@@ -15,8 +15,8 @@ pub fn create_specs(contract: &revive_integration::cases::Contract) -> revive_ru
                 salt: Default::default(),
             },
             Call {
-                origin: TestAccountId::Alice,
-                dest: TestAccountId::Instantiated(0),
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
                 data: contract.calldata.to_vec(),
                 value: Default::default(),
                 gas_limit: Default::default(),
@@ -59,7 +59,6 @@ pub fn measure_evm(code: &[u8], input: &[u8], iters: u64) -> std::time::Duration
         let log = revive_differential::Evm::default()
             .code_blob(code.as_bytes().to_vec())
             .input(input.to_vec().into())
-            .genesis_path("/tmp/genesis.json".into())
             .bench(true)
             .run();
         assert!(log.output.run_success(), "evm run failed: {log:?}");

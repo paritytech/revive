@@ -714,7 +714,7 @@ where
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
+                        self.xlen_type().const_all_ones().into(),
                         storage_value_pointer.to_int(self).into(),
                         storage_value_length_pointer.to_int(self).into(),
                     ],
@@ -813,7 +813,7 @@ where
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
+                        self.xlen_type().const_all_ones().into(),
                         storage_value_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
                     ],
@@ -1249,7 +1249,7 @@ where
         self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
     }
 
-    /// Returns the register witdh sized type.
+    /// Returns the sentinel pointer value.
     pub fn sentinel_pointer(&self) -> Pointer<'ctx> {
         let sentinel_pointer = self
             .xlen_type()

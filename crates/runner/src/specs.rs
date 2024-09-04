@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use pallet_revive::AddressMapper;
 use revive_differential::{Evm, EvmLog};
 use serde::{Deserialize, Serialize};
 
@@ -7,13 +8,16 @@ use crate::*;
 use alloy_primitives::Address;
 use revive_solidity::test_utils::*;
 
+const SPEC_MARKER_BEGIN: &str = "/* runner.json";
+const SPEC_MARKER_END: &str = "*/";
+
 /// An action to perform in a contract test
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpecsAction {
     /// Instantiate a contract
     Instantiate {
         #[serde(default)]
-        origin: TestAccountId,
+        origin: TestAddress,
         #[serde(default)]
         value: Balance,
         #[serde(default)]
@@ -25,13 +29,13 @@ pub enum SpecsAction {
         #[serde(default, with = "hex::serde")]
         data: Vec<u8>,
         #[serde(default, with = "hex::serde")]
-        salt: Vec<u8>,
+        salt: OptionalHex<[u8; 32]>,
     },
     /// Call a contract
     Call {
         #[serde(default)]
-        origin: TestAccountId,
-        dest: TestAccountId,
+        origin: TestAddress,
+        dest: TestAddress,
         #[serde(default)]
         value: Balance,
         #[serde(default)]
@@ -46,16 +50,16 @@ pub enum SpecsAction {
 
     /// Verify the balance of an account
     VerifyBalance {
-        origin: TestAccountId,
+        origin: TestAddress,
         expected: Balance,
     },
     /// Verify the storage of a contract
     VerifyStorage {
-        contract: TestAccountId,
+        contract: TestAddress,
         #[serde(with = "hex::serde")]
-        key: Vec<u8>,
+        key: [u8; 32],
         #[serde(default, with = "hex::serde")]
-        expected: Vec<u8>,
+        expected: [u8; 32],
     },
 }
 
@@ -64,7 +68,7 @@ impl SpecsAction {
     pub fn derive_verification(
         log: &EvmLog,
         address_evm: Address,
-        account_pvm: TestAccountId,
+        account_pvm: TestAddress,
     ) -> Vec<Self> {
         let account = log
             .state_dump
@@ -76,7 +80,7 @@ impl SpecsAction {
             Self::VerifyCall(VerifyCallExpectation {
                 gas_consumed: None,
                 success: log.output.run_success(),
-                output: log.output.output.clone().into(),
+                output: log.output.output.to_vec().into(),
             }),
             Self::VerifyBalance {
                 origin: account_pvm.clone(),
@@ -92,9 +96,9 @@ impl SpecsAction {
         };
 
         for (key, expected) in storage {
-            let mut key = key.to_vec();
+            let mut key = **key;
+            let mut expected = **expected;
             key.reverse();
-            let mut expected = expected.to_vec();
             expected.reverse();
             actions.push(Self::VerifyStorage {
                 contract: account_pvm.clone(),
@@ -108,7 +112,7 @@ impl SpecsAction {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
-pub enum TestAccountId {
+pub enum TestAddress {
     /// The ALICE account
     #[default]
     Alice,
@@ -119,29 +123,30 @@ pub enum TestAccountId {
     /// AccountID that was created during the nth call in this run.
     Instantiated(usize),
     /// Arbitrary AccountID
-    AccountId(AccountId),
+    AccountId(H160),
 }
 
-impl TestAccountId {
-    fn to_account_id(&self, results: &[CallResult]) -> AccountId {
+impl TestAddress {
+    fn to_eth_addr(&self, results: &[CallResult]) -> H160 {
         match self {
-            TestAccountId::Alice => ALICE,
-            TestAccountId::Bob => BOB,
-            TestAccountId::Charlie => CHARLIE,
-            TestAccountId::AccountId(account_id) => account_id.clone(),
-            TestAccountId::Instantiated(n) => match results
+            TestAddress::Alice => ALICE,
+            TestAddress::Bob => BOB,
+            TestAddress::Charlie => CHARLIE,
+            TestAddress::AccountId(account_id) => *account_id,
+            TestAddress::Instantiated(n) => match results
                 .get(*n)
                 .expect("should provide valid index into call results")
             {
                 CallResult::Exec { .. } => panic!("call #{n} should be an instantiation"),
-                CallResult::Instantiate { result, .. } => result
-                    .result
-                    .as_ref()
-                    .expect("call #{n} reverted")
-                    .account_id
-                    .clone(),
+                CallResult::Instantiate { result, .. } => {
+                    result.result.as_ref().expect("call #{n} reverted").addr
+                }
             },
         }
+    }
+
+    fn to_account_id(&self, results: &[CallResult]) -> AccountId32 {
+        AccountId::to_account_id(&self.to_eth_addr(results))
     }
 }
 
@@ -153,7 +158,7 @@ pub struct Specs {
     #[serde(default)]
     pub differential: bool,
     /// List of endowments at genesis
-    pub balances: Vec<(AccountId, Balance)>,
+    pub balances: Vec<(H160, Balance)>,
     /// List of actions to perform
     pub actions: Vec<SpecsAction>,
 }
@@ -263,8 +268,8 @@ impl Specs {
                     assert_ne!(solc_optimizer, Some(false), "solc_optimizer must be enabled in differntial mode");
                     assert_ne!(pipeline, Some(revive_solidity::SolcPipeline::EVMLA), "yul pipeline must be enabled in differntial mode");
                     assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
-                    assert!(salt.is_empty(), "salt is not supported in differential mode");
-                    assert_eq!(origin, TestAccountId::default(), "configuring the origin is not supported in differential mode");
+                    assert!(salt.0.is_none(), "salt is not supported in differential mode");
+                    assert_eq!(origin, TestAddress::default(), "configuring the origin is not supported in differential mode");
                     let deploy_code = match std::fs::read_to_string(&path) {
                         Ok(solidity_source) => compile_evm_deploy_code(&contract, &solidity_source),
                         Err(err) => panic!(
@@ -287,7 +292,7 @@ impl Specs {
                     let mut log = vm.run();
                     log.output.output = Default::default(); // PVM will not have constructor output
                     let deployed_account = log.account_deployed.expect("no account was created");
-                    let account_pvm = TestAccountId::Instantiated(deployed_accounts.len());
+                    let account_pvm = TestAddress::Instantiated(deployed_accounts.len());
                     deployed_accounts.push(deployed_account);
                     derived_specs.actions.append(&mut SpecsAction::derive_verification(&log, deployed_account, account_pvm));
                     evm = Evm::from_genesis(log.state_dump.into());
@@ -300,9 +305,9 @@ impl Specs {
                     storage_deposit_limit,
                     data,
                 } => {
-                    assert_eq!(origin, TestAccountId::default(), "configuring the origin is not supported in differential mode");
+                    assert_eq!(origin, TestAddress::default(), "configuring the origin is not supported in differential mode");
                     assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
-                    let TestAccountId::Instantiated(n) = dest else {
+                    let TestAddress::Instantiated(n) = dest else {
                         panic!("the differential runner requires TestAccountId::Instantiated(n) as dest");
                     };
                     let address = deployed_accounts.get(n).unwrap_or_else(|| panic!("no account at index {n} "));
@@ -357,7 +362,7 @@ impl Specs {
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
                                 code.into(),
                                 data,
-                                salt,
+                                salt.0,
                                 DebugInfo::Skip,
                                 CollectEvents::Skip,
                             );
@@ -374,12 +379,10 @@ impl Specs {
                             storage_deposit_limit,
                             data,
                         } => {
-                            let origin = RuntimeOrigin::signed(origin.to_account_id(&results));
-                            let dest = dest.to_account_id(&results);
                             let time_start = Instant::now();
                             let result = Contracts::bare_call(
-                                origin,
-                                dest,
+                                RuntimeOrigin::signed(origin.to_account_id(&results)),
+                                dest.to_eth_addr(&results),
                                 value,
                                 gas_limit.unwrap_or(GAS_LIMIT),
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
@@ -404,16 +407,15 @@ impl Specs {
                             key,
                             expected,
                         } => {
-                            let Ok(storage) = Contracts::get_storage(
-                                contract.to_account_id(&results),
-                                key.clone(),
-                            ) else {
-                                panic!("Error reading storage");
+                            let address = contract.to_eth_addr(&results);
+                            dbg!(contract.to_account_id(&results));
+                            let Ok(value) = Contracts::get_storage(address, key) else {
+                                panic!("error reading storage for address {address}");
                             };
-                            let Some(value) = storage else {
-                                panic!("No value for storage key 0x{}", hex::encode(key));
+                            let Some(value) = value else {
+                                panic!("no value at {address} key 0x{}", hex::encode(key));
                             };
-                            assert_eq!(value, expected, "at key {}", hex::encode(&key));
+                            assert_eq!(value, expected, "at key 0x{}", hex::encode(key));
                         }
                     }
                 }
@@ -421,8 +423,42 @@ impl Specs {
 
         results
     }
-}
 
-pub trait SpecsRunner {
-    fn run_action(&mut self, spec: &mut Specs) -> Vec<CallResult>;
+    pub fn from_comment(contract_name: &str, path: &str) -> Vec<Self> {
+        let solidity = match std::fs::read_to_string(path) {
+            Err(err) => panic!("unable to read {path}: {err}"),
+            Ok(solidity) => solidity,
+        };
+        let mut json_string = String::with_capacity(solidity.len());
+        let mut is_reading = false;
+        let mut specs = Vec::new();
+
+        for line in solidity.lines() {
+            if line.starts_with(SPEC_MARKER_BEGIN) {
+                is_reading = true;
+                continue;
+            }
+
+            if is_reading {
+                if line.starts_with(SPEC_MARKER_END) {
+                    match serde_json::from_str::<Specs>(&json_string) {
+                        Ok(mut spec) => {
+                            spec.replace_empty_code(contract_name, path);
+                            specs.push(spec);
+                        }
+                        Err(e) => panic!("invalid spec JSON: {e}"),
+                    }
+                    is_reading = false;
+                    json_string.clear();
+                    continue;
+                }
+
+                json_string.push_str(line)
+            }
+        }
+
+        assert!(!specs.is_empty(), "source does not contain any test spec");
+
+        specs
+    }
 }

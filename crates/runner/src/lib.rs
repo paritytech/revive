@@ -44,6 +44,10 @@ pub use crate::specs::*;
 mod runtime;
 mod specs;
 
+#[cfg(not(feature = "revive-solidity"))]
+pub(crate) const NO_SOLIDITY_FRONTEND: &str =
+    "revive-runner was built without the solidity frontend; please enable the 'solidity' feature!";
+
 /// The alice test account
 pub const ALICE: H160 = H160([1u8; 20]);
 /// The bob test account
@@ -218,6 +222,7 @@ impl CallResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Code {
+    #[cfg(feature = "revive-solidity")]
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
         path: Option<std::path::PathBuf>,
@@ -242,6 +247,7 @@ impl Default for Code {
 impl From<Code> for pallet_revive::Code {
     fn from(val: Code) -> Self {
         match val {
+            #[cfg(feature = "solidity")]
             Code::Solidity {
                 path,
                 contract,

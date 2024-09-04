@@ -1,11 +1,13 @@
 use std::time::Instant;
 
 use pallet_revive::AddressMapper;
-use revive_differential::{Evm, EvmLog};
 use serde::{Deserialize, Serialize};
 
 use crate::*;
 use alloy_primitives::Address;
+#[cfg(feature = "revive-solidity")]
+use revive_differential::{Evm, EvmLog};
+#[cfg(feature = "revive-solidity")]
 use revive_solidity::test_utils::*;
 
 const SPEC_MARKER_BEGIN: &str = "/* runner.json";
@@ -72,6 +74,7 @@ pub enum SpecsAction {
     },
 }
 
+#[cfg(feature = "solidity")]
 impl SpecsAction {
     /// Derive verification actions from the EVM output log
     pub fn derive_verification(
@@ -219,6 +222,7 @@ impl Specs {
             };
 
             match code {
+                #[cfg(feature = "revive-solidity")]
                 Code::Bytes(bytes) if bytes.is_empty() => {
                     let contract_source = match std::fs::read_to_string(contract_path) {
                         Err(err) => panic!("unable to read {contract_path}: {err}"),
@@ -226,6 +230,9 @@ impl Specs {
                     };
                     *bytes = compile_blob(contract_name, &contract_source)
                 }
+                #[cfg(not(feature = "revive-solidity"))]
+                Code::Bytes(_) => panic!("{NO_SOLIDITY_FRONTEND}"),
+                #[cfg(feature = "revive-solidity")]
                 Code::Solidity { path, .. } if path.is_none() => *path = Some(contract_path.into()),
                 _ => continue,
             }
@@ -236,6 +243,9 @@ impl Specs {
     /// The test takes a [`Specs`] and executes the actions in order
     pub fn run(self) -> Vec<CallResult> {
         if self.differential {
+            #[cfg(not(feature = "solidity"))]
+            panic!("{NO_SOLIDITY_FRONTEND}");
+            #[cfg(feature = "solidity")]
             self.run_on_evm()
         } else {
             self
@@ -243,6 +253,7 @@ impl Specs {
         .run_on_pallet()
     }
 
+    #[cfg(feature = "solidity")]
     fn run_on_evm(self) -> Self {
         let mut derived_specs = Self {
             actions: vec![],

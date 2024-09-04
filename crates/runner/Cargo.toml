@@ -7,6 +7,10 @@ repository.workspace = true
 authors.workspace = true
 description = "Execute revive contracts in a simulated blockchain runtime"
 
+[features]
+default = ["solidity"]
+solidity = ["revive-solidity", "revive-differential"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -24,5 +28,5 @@ polkadot-sdk.features = [
     "pallet-timestamp"
 ]
 
-revive-solidity = { workspace = true }
-revive-differential = { workspace = true }
+revive-solidity = { workspace = true, optional = true }
+revive-differential = { workspace = true, optional = true }

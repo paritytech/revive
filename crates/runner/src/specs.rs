@@ -31,6 +31,15 @@ pub enum SpecsAction {
         #[serde(default, with = "hex::serde")]
         salt: OptionalHex<[u8; 32]>,
     },
+    /// Upload contract code without calling the constructor
+    Upload {
+        #[serde(default)]
+        origin: TestAddress,
+        #[serde(default)]
+        code: Code,
+        #[serde(default)]
+        storage_deposit_limit: Option<Balance>,
+    },
     /// Call a contract
     Call {
         #[serde(default)]
@@ -204,8 +213,9 @@ impl Specs {
     /// - Replace `Code::Solidity{ path, ..}` if `path` is not provided: replace `path` with `contract_file`
     pub fn replace_empty_code(&mut self, contract_name: &str, contract_path: &str) {
         for action in self.actions.iter_mut() {
-            let SpecsAction::Instantiate { code, .. } = action else {
-                continue;
+            let code = match action {
+                SpecsAction::Instantiate { code, .. } | SpecsAction::Upload { code, .. } => code,
+                _ => continue,
             };
 
             match code {
@@ -371,6 +381,19 @@ impl Specs {
                                 wall_time: time_start.elapsed(),
                             })
                         }
+                        Upload {
+                            origin,
+                            code,
+                            storage_deposit_limit,
+                        } => Contracts::upload_code(
+                            RuntimeOrigin::signed(origin.to_account_id(&results)),
+                            match pallet_revive::Code::from(code) {
+                                pallet_revive::Code::Existing(_) => continue,
+                                pallet_revive::Code::Upload(bytes) => bytes,
+                            },
+                            storage_deposit_limit.unwrap_or_default(),
+                        )
+                        .unwrap_or_else(|error| panic!("code upload failed: {error:?}")),
                         Call {
                             origin,
                             dest,

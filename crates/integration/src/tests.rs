@@ -36,7 +36,7 @@ test_spec!(mstore8, "MStore8", "MStore8.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
-        origin: TestAccountId::Alice,
+        origin: TestAddress::Alice,
         value: 0,
         gas_limit: Some(GAS_LIMIT),
         storage_deposit_limit: None,
@@ -47,15 +47,15 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
             pipeline: None,
         },
         data: vec![],
-        salt: vec![],
+        salt: OptionalHex::default(),
     }]
 }
 
 fn run_differential(actions: Vec<SpecsAction>) {
     Specs {
         differential: true,
-        balances: vec![(ALICE, 1_000_000_000)],
         actions,
+        ..Default::default()
     }
     .run();
 }
@@ -80,8 +80,8 @@ fn bitwise_byte() {
         ])
     {
         actions.push(Call {
-            origin: TestAccountId::Alice,
-            dest: TestAccountId::Instantiated(0),
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
             value: 0,
             gas_limit: None,
             storage_deposit_limit: None,
@@ -107,8 +107,8 @@ fn unsigned_division() {
         (one, U256::ZERO),
     ] {
         actions.push(Call {
-            origin: TestAccountId::Alice,
-            dest: TestAccountId::Instantiated(0),
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
             value: 0,
             gas_limit: None,
             storage_deposit_limit: None,
@@ -142,8 +142,8 @@ fn signed_division() {
         (one, I256::ZERO),
     ] {
         actions.push(Call {
-            origin: TestAccountId::Alice,
-            dest: TestAccountId::Instantiated(0),
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
             value: 0,
             gas_limit: None,
             storage_deposit_limit: None,
@@ -171,8 +171,8 @@ fn unsigned_remainder() {
         (U256::MAX, U256::ZERO),
     ] {
         actions.push(Call {
-            origin: TestAccountId::Alice,
-            dest: TestAccountId::Instantiated(0),
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
             value: 0,
             gas_limit: None,
             storage_deposit_limit: None,
@@ -212,8 +212,8 @@ fn signed_remainder() {
         (I256::ZERO, I256::ZERO),
     ] {
         actions.push(Call {
-            origin: TestAccountId::Alice,
-            dest: TestAccountId::Instantiated(0),
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
             value: 0,
             gas_limit: None,
             storage_deposit_limit: None,

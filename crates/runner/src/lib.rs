@@ -25,13 +25,15 @@
 
 use std::time::Duration;
 
-use hex::{FromHex, FromHexError, ToHex};
+use hex::{FromHex, ToHex};
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
+    sp_core::H160,
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
+    sp_runtime::AccountId32,
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,9 +43,9 @@ mod specs;
 use crate::runtime::*;
 pub use crate::specs::*;
 
-pub const ALICE: AccountId = AccountId::new([1u8; 32]);
-pub const BOB: AccountId = AccountId::new([2u8; 32]);
-pub const CHARLIE: AccountId = AccountId::new([3u8; 32]);
+pub const ALICE: H160 = H160([1u8; 20]);
+pub const BOB: H160 = H160([2u8; 20]);
+pub const CHARLIE: H160 = H160([3u8; 20]);
 
 const SPEC_MARKER_BEGIN: &str = "/* runner.json";
 const SPEC_MARKER_END: &str = "*/";
@@ -52,12 +54,12 @@ const SPEC_MARKER_END: &str = "*/";
 #[derive(Default)]
 pub struct ExtBuilder {
     /// List of endowments at genesis
-    balance_genesis_config: Vec<(AccountId, Balance)>,
+    balance_genesis_config: Vec<(AccountId32, Balance)>,
 }
 
 impl ExtBuilder {
     /// Set the balance of an account at genesis
-    fn balance_genesis_config(mut self, value: Vec<(AccountId, Balance)>) -> Self {
+    fn balance_genesis_config(mut self, value: Vec<(AccountId32, Balance)>) -> Self {
         self.balance_genesis_config = value;
         self
     }
@@ -94,45 +96,45 @@ pub struct VerifyCallExpectation {
     pub gas_consumed: Option<Weight>,
     /// When provided, the expected output
     #[serde(default, with = "hex")]
-    pub output: OptionalHex,
+    pub output: OptionalHex<Vec<u8>>,
     ///Expected call result
     pub success: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct OptionalHex(Option<Vec<u8>>);
+pub struct OptionalHex<T>(Option<T>);
 
-impl FromHex for OptionalHex {
-    type Error = FromHexError;
+impl<I: FromHex + AsRef<[u8]>> FromHex for OptionalHex<I> {
+    type Error = <I as FromHex>::Error;
 
     fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
-        let value = hex::decode(hex)?;
+        let value = I::from_hex(hex)?;
         Ok(Self(Some(value)))
     }
 }
 
-impl ToHex for &OptionalHex {
+impl<I: AsRef<[u8]>> ToHex for &OptionalHex<I> {
     fn encode_hex<T: std::iter::FromIterator<char>>(&self) -> T {
         match self.0.as_ref() {
             None => T::from_iter("".chars()),
-            Some(data) => T::from_iter(hex::encode(data).chars()),
+            Some(data) => I::encode_hex::<T>(data),
         }
     }
 
     fn encode_hex_upper<T: std::iter::FromIterator<char>>(&self) -> T {
         match self.0.as_ref() {
             None => T::from_iter("".chars()),
-            Some(data) => T::from_iter(hex::encode_upper(data).chars()),
+            Some(data) => I::encode_hex_upper(data),
         }
     }
 }
 
-impl From<alloy_primitives::Bytes> for OptionalHex {
-    fn from(value: alloy_primitives::Bytes) -> Self {
-        if value.is_empty() {
+impl<T: AsRef<[u8]>> From<T> for OptionalHex<T> {
+    fn from(value: T) -> Self {
+        if value.as_ref().is_empty() {
             OptionalHex(None)
         } else {
-            OptionalHex(Some(value.into()))
+            OptionalHex(Some(value))
         }
     }
 }
@@ -172,7 +174,7 @@ pub enum CallResult {
         wall_time: Duration,
     },
     Instantiate {
-        result: ContractInstantiateResult<AccountId, Balance, EventRecord>,
+        result: ContractInstantiateResult<Balance, EventRecord>,
         wall_time: Duration,
     },
 }
@@ -232,7 +234,7 @@ impl Default for Code {
     }
 }
 
-impl From<Code> for pallet_revive::Code<Hash> {
+impl From<Code> for pallet_revive::Code {
     fn from(val: Code) -> Self {
         match val {
             Code::Solidity {
@@ -308,15 +310,15 @@ mod tests {
         use specs::SpecsAction::*;
         let specs = Specs {
             differential: false,
-            balances: vec![(ALICE, 1_000_000_000)],
+            balances: vec![(AccountId::to_account_id(&EHT_ALICE), 1_000_000_000)],
             actions: vec![Instantiate {
-                origin: TestAccountId::Alice,
+                origin: TestAddress::Alice,
                 value: 0,
                 gas_limit: Some(GAS_LIMIT),
                 storage_deposit_limit: Some(DEPOSIT_LIMIT),
                 code: Code::Bytes(include_bytes!("../fixtures/Baseline.pvm").to_vec()),
                 data: vec![],
-                salt: vec![],
+                salt: OptionalHex::default(),
             }],
         };
         specs.run();

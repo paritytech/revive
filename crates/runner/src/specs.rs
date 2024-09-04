@@ -279,7 +279,7 @@ impl Specs {
                         ),
                     };
                     let deploy_code = hex::encode(deploy_code);
-                    let mut vm = evm.code_blob(deploy_code.as_bytes().to_vec()).sender(Address::default()).deploy(true);
+                    let mut vm = evm.code_blob(deploy_code.as_bytes().to_vec()).sender(origin.to_eth_addr(&[]).0.into()).deploy(true);
                     if !data.is_empty() {
                         vm = vm.input(data.into());
                     }
@@ -311,7 +311,7 @@ impl Specs {
                         panic!("the differential runner requires TestAccountId::Instantiated(n) as dest");
                     };
                     let address = deployed_accounts.get(n).unwrap_or_else(|| panic!("no account at index {n} "));
-                    let mut vm = evm.receiver(*address).sender(Address::default());
+                    let mut vm = evm.receiver(*address).sender(origin.to_eth_addr(&[]).0.into());
                     if !data.is_empty() {
                         vm = vm.input(data.into());
                     }

@@ -33,6 +33,7 @@ test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
+test_spec!(address, "Context", "Context.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -252,23 +253,6 @@ fn balance() {
 
     let received = U256::from_be_slice(&output.data);
     assert_eq!(expected, received)
-}
-
-#[test]
-fn address() {
-    let contract = Contract::context_address();
-    let (_, output) = assert_success(&contract, true);
-    let received = Address::from_slice(&output.data[12..]);
-    let expected = Transaction::default_address();
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn caller() {
-    let (_, output) = assert_success(&Contract::context_caller(), true);
-    let received = Address::from_slice(&output.data[12..]);
-    let expected = Transaction::default_address();
-    assert_eq!(received, expected);
 }
 
 #[test]

@@ -11,13 +11,13 @@
 //!     differential: false,
 //!     balances: vec![(ALICE, 1_000_000_000)],
 //!     actions: vec![Instantiate {
-//!         origin: TestAccountId::Alice,
+//!         origin: TestAddress::Alice,
 //!         value: 0,
 //!         gas_limit: Some(GAS_LIMIT),
 //!         storage_deposit_limit: Some(DEPOSIT_LIMIT),
 //!         code: Code::Bytes(include_bytes!("../fixtures/Baseline.pvm").to_vec()),
 //!         data: vec![],
-//!         salt: vec![],
+//!         salt: Default::default(),
 //!     }],
 //! }
 //! .run();
@@ -26,6 +26,7 @@
 use std::time::Duration;
 
 use hex::{FromHex, ToHex};
+use pallet_revive::AddressMapper;
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
@@ -37,18 +38,22 @@ use polkadot_sdk::{
 };
 use serde::{Deserialize, Serialize};
 
-mod runtime;
-mod specs;
-
 use crate::runtime::*;
 pub use crate::specs::*;
 
-pub const ALICE: H160 = H160([1u8; 20]);
-pub const BOB: H160 = H160([2u8; 20]);
-pub const CHARLIE: H160 = H160([3u8; 20]);
+mod runtime;
+mod specs;
 
-const SPEC_MARKER_BEGIN: &str = "/* runner.json";
-const SPEC_MARKER_END: &str = "*/";
+/// The alice test account
+pub const ALICE: H160 = H160([1u8; 20]);
+/// The bob test account
+pub const BOB: H160 = H160([2u8; 20]);
+/// The charlie test account
+pub const CHARLIE: H160 = H160([3u8; 20]);
+/// Default gas limit
+pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000, 3 * 1024 * 1024);
+/// Default deposit limit
+pub const DEPOSIT_LIMIT: Balance = 10_000_000;
 
 /// Externalities builder
 #[derive(Default)]
@@ -59,9 +64,13 @@ pub struct ExtBuilder {
 
 impl ExtBuilder {
     /// Set the balance of an account at genesis
-    fn balance_genesis_config(mut self, value: Vec<(AccountId32, Balance)>) -> Self {
-        self.balance_genesis_config = value;
-        self
+    fn balance_genesis_config(self, value: Vec<(H160, Balance)>) -> Self {
+        Self {
+            balance_genesis_config: value
+                .iter()
+                .map(|(address, balance)| (AccountId::to_account_id(address), *balance))
+                .collect(),
+        }
     }
 
     /// Build the externalities
@@ -82,12 +91,6 @@ impl ExtBuilder {
         ext
     }
 }
-
-/// Default gas limit
-pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000, 3 * 1024 * 1024);
-
-/// Default deposit limit
-pub const DEPOSIT_LIMIT: Balance = 10_000_000;
 
 /// Expectation for a call
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,9 +160,11 @@ impl VerifyCallExpectation {
             result.is_ok(),
             "contract execution result mismatch: {result:?}"
         );
+
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
+
         if let OptionalHex(Some(data)) = self.output {
             assert_eq!(data, result.output());
         }
@@ -211,7 +216,7 @@ impl CallResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Code {
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
@@ -263,44 +268,6 @@ impl From<Code> for pallet_revive::Code {
     }
 }
 
-pub fn specs_from_comment(contract_name: &str, path: &str) -> Vec<Specs> {
-    let solidity = match std::fs::read_to_string(path) {
-        Err(err) => panic!("unable to read {path}: {err}"),
-        Ok(solidity) => solidity,
-    };
-    let mut json_string = String::with_capacity(solidity.len());
-    let mut is_reading = false;
-    let mut specs = Vec::new();
-
-    for line in solidity.lines() {
-        if line.starts_with(SPEC_MARKER_BEGIN) {
-            is_reading = true;
-            continue;
-        }
-
-        if is_reading {
-            if line.starts_with(SPEC_MARKER_END) {
-                match serde_json::from_str::<Specs>(&json_string) {
-                    Ok(mut spec) => {
-                        spec.replace_empty_code(contract_name, path);
-                        specs.push(spec);
-                    }
-                    Err(e) => panic!("invalid spec JSON: {e}"),
-                }
-                is_reading = false;
-                json_string.clear();
-                continue;
-            }
-
-            json_string.push_str(line)
-        }
-    }
-
-    assert!(!specs.is_empty(), "source does not contain any test spec");
-
-    specs
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -310,7 +277,7 @@ mod tests {
         use specs::SpecsAction::*;
         let specs = Specs {
             differential: false,
-            balances: vec![(AccountId::to_account_id(&EHT_ALICE), 1_000_000_000)],
+            balances: vec![(ALICE, 1_000_000_000)],
             actions: vec![Instantiate {
                 origin: TestAddress::Alice,
                 value: 0,
@@ -330,7 +297,7 @@ mod tests {
             r#"
         {
         "balances": [
-            [ "5C62Ck4UrFPiBtoCmeSrgF7x9yv9mn38446dhCpsi2mLHiFT", 1000000000 ]
+            [ "0101010101010101010101010101010101010101", 1000000000 ]
         ],
         "actions": [
             {

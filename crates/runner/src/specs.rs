@@ -8,6 +8,9 @@ use crate::*;
 use alloy_primitives::Address;
 use revive_solidity::test_utils::*;
 
+const SPEC_MARKER_BEGIN: &str = "/* runner.json";
+const SPEC_MARKER_END: &str = "*/";
+
 /// An action to perform in a contract test
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpecsAction {
@@ -155,7 +158,7 @@ pub struct Specs {
     #[serde(default)]
     pub differential: bool,
     /// List of endowments at genesis
-    pub balances: Vec<(AccountId32, Balance)>,
+    pub balances: Vec<(H160, Balance)>,
     /// List of actions to perform
     pub actions: Vec<SpecsAction>,
 }
@@ -164,7 +167,7 @@ impl Default for Specs {
     fn default() -> Self {
         Self {
             differential: false,
-            balances: vec![(AccountId::to_account_id(&ALICE), 1_000_000_000)],
+            balances: vec![(ALICE, 1_000_000_000)],
             actions: Default::default(),
         }
     }
@@ -420,8 +423,42 @@ impl Specs {
 
         results
     }
-}
 
-pub trait SpecsRunner {
-    fn run_action(&mut self, spec: &mut Specs) -> Vec<CallResult>;
+    pub fn from_comment(contract_name: &str, path: &str) -> Vec<Self> {
+        let solidity = match std::fs::read_to_string(path) {
+            Err(err) => panic!("unable to read {path}: {err}"),
+            Ok(solidity) => solidity,
+        };
+        let mut json_string = String::with_capacity(solidity.len());
+        let mut is_reading = false;
+        let mut specs = Vec::new();
+
+        for line in solidity.lines() {
+            if line.starts_with(SPEC_MARKER_BEGIN) {
+                is_reading = true;
+                continue;
+            }
+
+            if is_reading {
+                if line.starts_with(SPEC_MARKER_END) {
+                    match serde_json::from_str::<Specs>(&json_string) {
+                        Ok(mut spec) => {
+                            spec.replace_empty_code(contract_name, path);
+                            specs.push(spec);
+                        }
+                        Err(e) => panic!("invalid spec JSON: {e}"),
+                    }
+                    is_reading = false;
+                    json_string.clear();
+                    continue;
+                }
+
+                json_string.push_str(line)
+            }
+        }
+
+        assert!(!specs.is_empty(), "source does not contain any test spec");
+
+        specs
+    }
 }

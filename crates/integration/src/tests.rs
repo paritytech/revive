@@ -12,7 +12,7 @@ macro_rules! test_spec {
         fn $test_name() {
             let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("should always exist");
             let path = format!("{manifest_dir}/../integration/contracts/{}", $source_file);
-            specs_from_comment($contract_name, &path).remove(0).run();
+            Specs::from_comment($contract_name, &path).remove(0).run();
         }
     };
 }

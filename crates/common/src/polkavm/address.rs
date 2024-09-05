@@ -76,9 +76,6 @@ pub const POLKAVM_ADDRESS_ACTIVE_PTR_PACK: u16 = 0xFFE7;
 pub const POLKAVM_ADDRESS_MULTIPLICATION_HIGH_REGISTER: u16 = 0xFFE6;
 
 /// The corresponding simulation predefined address.
-pub const POLKAVM_ADDRESS_GET_GLOBAL_EXTRA_ABI_DATA: u16 = 0xFFE5;
-
-/// The corresponding simulation predefined address.
 pub const POLKAVM_ADDRESS_ACTIVE_PTR_DATA_LOAD: u16 = 0xFFE4;
 
 /// The corresponding simulation predefined address.

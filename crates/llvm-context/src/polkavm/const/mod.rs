@@ -30,9 +30,6 @@ pub static GLOBAL_RETURN_DATA_SIZE: &str = "returndatasize";
 /// The call flags global variable name.
 pub static GLOBAL_CALL_FLAGS: &str = "call_flags";
 
-/// The extra ABI data global variable name.
-pub static GLOBAL_EXTRA_ABI_DATA: &str = "extra_abi_data";
-
 /// The constant array global variable name prefix.
 pub static GLOBAL_CONST_ARRAY_PREFIX: &str = "const_array_";
 
@@ -54,9 +51,6 @@ pub const HEAP_AUX_OFFSET_EXTERNAL_CALL: u64 = 0;
 /// The constructor return data offset in the auxiliary heap.
 pub const HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA: u64 =
     8 * (revive_common::BYTE_LENGTH_WORD as u64);
-
-/// The number of the extra ABI data arguments.
-pub const EXTRA_ABI_DATA_SIZE: usize = 0;
 
 /// The `create` method deployer signature.
 pub static DEPLOYER_SIGNATURE_CREATE: &str = "create(bytes32,bytes32,bytes)";

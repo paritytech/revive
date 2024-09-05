@@ -84,17 +84,6 @@ impl Entry {
             context.word_const(0),
         );
 
-        let extra_abi_data_type = context.array_type(
-            context.word_type().as_basic_type_enum(),
-            crate::polkavm::EXTRA_ABI_DATA_SIZE,
-        );
-        context.set_global(
-            crate::polkavm::GLOBAL_EXTRA_ABI_DATA,
-            extra_abi_data_type,
-            AddressSpace::Stack,
-            extra_abi_data_type.const_zero(),
-        );
-
         context.set_global(
             crate::polkavm::GLOBAL_I256_SIZE,
             context.xlen_type(),

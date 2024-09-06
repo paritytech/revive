@@ -179,7 +179,11 @@ impl Default for Specs {
     fn default() -> Self {
         Self {
             differential: false,
-            balances: vec![(ALICE, 1_000_000_000)],
+            balances: vec![
+                (ALICE, 1_000_000_000),
+                (BOB, 1_000_000_000),
+                (CHARLIE, 1_000_000_000),
+            ],
             actions: Default::default(),
         }
     }

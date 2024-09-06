@@ -19,6 +19,7 @@ pragma solidity ^0.8;
                 "dest": {
                     "Instantiated": 0
                 },
+                "value": 123,
                 "data": "3fa4f245"
             }
         }

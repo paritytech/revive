@@ -100,10 +100,9 @@ pub struct EvmOutput {
 impl EvmOutput {
     /// Return if there was no error found.
     ///
-    /// Panics if the gas used is zero as this indicates nothing was run, i.e.
-    /// there was no receiving account but still no error is reported.
+    /// Panics if the gas used is zero as this indicates nothing was run.
     pub fn run_success(&self) -> bool {
-        assert_ne!(self.gas_used, U256::ZERO, "nothing was executed");
+        assert_ne!(self.gas_used, U256::ZERO, "nothing was executed: {self:?}");
         self.error.is_none()
     }
 }

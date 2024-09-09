@@ -1159,7 +1159,9 @@ where
                 let address = arguments[0].into_int_value();
                 revive_llvm_context::polkavm_evm_ether_gas::balance(context, address).map(Some)
             }
-            InstructionName::SELFBALANCE => todo!(),
+            InstructionName::SELFBALANCE => {
+                revive_llvm_context::polkavm_evm_ether_gas::self_balance(context).map(Some)
+            }
 
             InstructionName::GASLIMIT => {
                 revive_llvm_context::polkavm_evm_contract_context::gas_limit(context).map(Some)

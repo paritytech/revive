@@ -56,16 +56,32 @@ where
         context.xlen_type(),
         "balance",
     )?;
-    let address = context.builder().build_ptr_to_int(
+    let _address = context.builder().build_ptr_to_int(
         address_pointer.value,
         context.xlen_type(),
         "address",
     )?;
 
-    context.build_runtime_call(
-        runtime_api::imports::BALANCE,
-        &[address.into(), balance.into()],
-    );
+    context.build_runtime_call(runtime_api::imports::BALANCE, &[balance.into()]);
+
+    context.build_load(balance_pointer, "balance")
+}
+
+/// Translates the `selfbalance` instructions.
+pub fn self_balance<'ctx, D>(
+    context: &mut Context<'ctx, D>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+where
+    D: Dependency + Clone,
+{
+    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
+    let balance = context.builder().build_ptr_to_int(
+        balance_pointer.value,
+        context.xlen_type(),
+        "balance",
+    )?;
+
+    context.build_runtime_call(runtime_api::imports::BALANCE, &[balance.into()]);
 
     context.build_load(balance_pointer, "balance")
 }

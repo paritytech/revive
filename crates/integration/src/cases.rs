@@ -209,9 +209,11 @@ case!("Call.sol", "Call", vec![], call_constructor);
 sol!(
     contract Value {
         function balance_of(address _address) public view returns (uint ret);
+        function balance_self() public view returns (uint ret);
     }
 );
 case!("Value.sol", Value, balance_ofCall, value_balance_of, address: Address);
+case!("Value.sol", Value, balance_selfCall, value_balance_self,);
 
 sol!(
     contract Bitwise {

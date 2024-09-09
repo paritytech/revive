@@ -97,7 +97,7 @@ POLKAVM_IMPORT(void, weight_to_fee, uint64_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, gas_left, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(void, balance, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, balance, uint32_t)
 
 POLKAVM_IMPORT(void, now, uint32_t, uint32_t)
 

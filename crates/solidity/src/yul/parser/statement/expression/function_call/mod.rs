@@ -912,7 +912,9 @@ impl FunctionCall {
                 let address = arguments[0].into_int_value();
                 revive_llvm_context::polkavm_evm_ether_gas::balance(context, address).map(Some)
             }
-            Name::SelfBalance => todo!(),
+            Name::SelfBalance => {
+                revive_llvm_context::polkavm_evm_ether_gas::self_balance(context).map(Some)
+            }
 
             Name::GasLimit => {
                 revive_llvm_context::polkavm_evm_contract_context::gas_limit(context).map(Some)

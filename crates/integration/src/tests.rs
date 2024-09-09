@@ -26,7 +26,6 @@ test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
 test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
-test_spec!(transferred_value, "Value", "Value.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
@@ -34,6 +33,7 @@ test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
 test_spec!(address, "Context", "Context.sol");
+test_spec!(balance, "Value", "Value.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

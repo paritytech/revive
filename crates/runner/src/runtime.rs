@@ -78,7 +78,6 @@ impl pallet_revive::Config for Runtime {
     type UnsafeUnstableInterface = UnstableInterface;
     type UploadOrigin = EnsureSigned<AccountId32>;
     type InstantiateOrigin = EnsureSigned<AccountId32>;
-    type Migrations = ();
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;
     type Debug = ();
 }

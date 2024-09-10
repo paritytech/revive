@@ -43,6 +43,7 @@ where
             context.byte_type().array_type(topics_buffer_size as u32),
             "topics_buffer",
         );
+
         for (n, topic) in topics.iter().enumerate() {
             let topic_buffer_offset = context
                 .xlen_type()
@@ -57,6 +58,7 @@ where
                 context.build_byte_swap(topic.as_basic_value_enum())?,
             )?;
         }
+
         [
             context
                 .builder()
@@ -68,7 +70,7 @@ where
                 .as_basic_value_enum(),
             context
                 .xlen_type()
-                .const_int(topics_buffer_size as u64, false)
+                .const_int(topics.len() as u64, false)
                 .as_basic_value_enum(),
             input_pointer.as_basic_value_enum(),
             input_length.as_basic_value_enum(),

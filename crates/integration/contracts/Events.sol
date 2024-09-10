@@ -22,12 +22,7 @@ pragma solidity ^0.8;
                 },
                 "data": "4d43bec90000000000000000000000000000000000000000000000000000000000000000"
             }
-        }
-    ]
-}
-*/
-
-/* TODO when pallet_revive accepts Solidity event topics
+        },
         {
             "Call": {
                 "dest": {
@@ -36,7 +31,8 @@ pragma solidity ^0.8;
                 "data": "4d43bec9000000000000000000000000000000000000000000000000000000000000007b"
             }
         }
-
+    ]
+}
 */
 
 contract Events {

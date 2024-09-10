@@ -58,7 +58,6 @@ pub enum SpecsAction {
     },
     /// Verify the result of the last call, omitting this will simply ensure the last call was successful
     VerifyCall(VerifyCallExpectation),
-
     /// Verify the balance of an account
     VerifyBalance {
         origin: TestAddress,

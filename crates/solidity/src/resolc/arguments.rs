@@ -196,14 +196,14 @@ impl Arguments {
         }
 
         #[cfg(debug_assertions)]
-        if self.recursive_process_input.is_none() && !self.recursive_process {
+        if self.recursive_process_input.is_some() && !self.recursive_process {
             anyhow::bail!("--process-input can be only used when --recursive-process is given");
         }
 
         #[cfg(debug_assertions)]
         if self.recursive_process
             && ((self.recursive_process_input.is_none() && std::env::args().count() > 2)
-                || (self.recursive_process_input.is_none() && std::env::args().count() > 4))
+                || (self.recursive_process_input.is_some() && std::env::args().count() > 4))
         {
             anyhow::bail!("No other options are allowed in recursive mode.");
         }

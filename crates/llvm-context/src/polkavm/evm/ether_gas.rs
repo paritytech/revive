@@ -23,14 +23,11 @@ pub fn value<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let (output_pointer, output_length_pointer) =
-        context.build_stack_parameter(revive_common::BIT_LENGTH_VALUE, "value_transferred_output");
+    let output_pointer = context.build_alloca(context.value_type(), "value_transferred");
+    context.build_store(output_pointer, context.word_const(0))?;
     context.build_runtime_call(
         runtime_api::imports::VALUE_TRANSFERRED,
-        &[
-            output_pointer.to_int(context).into(),
-            output_length_pointer.to_int(context).into(),
-        ],
+        &[output_pointer.to_int(context).into()],
     );
     context.build_load_word(
         output_pointer,

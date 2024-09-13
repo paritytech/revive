@@ -32,6 +32,7 @@ fn invoke_lld(cmd_args: &[&str]) -> bool {
 fn polkavm_linker<T: AsRef<[u8]>>(code: T) -> anyhow::Result<Vec<u8>> {
     let mut config = polkavm_linker::Config::default();
     config.set_strip(true);
+    config.set_optimize(false);
 
     polkavm_linker::program_from_elf(config, code.as_ref())
         .map_err(|reason| anyhow::anyhow!("polkavm linker failed: {}", reason))

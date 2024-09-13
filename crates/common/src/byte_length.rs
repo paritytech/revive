@@ -6,14 +6,11 @@ pub const BYTE_LENGTH_BYTE: usize = 1;
 /// The x86 word byte-length.
 pub const BYTE_LENGTH_X32: usize = 4;
 
-/// Native stack alignment size in bytes
-#[cfg(not(feature = "riscv-64"))]
-pub const BYTE_LENGTH_STACK_ALIGN: usize = 4;
-#[cfg(feature = "riscv-64")]
-pub const BYTE_LENGTH_STACK_ALIGN: usize = 8;
-
 /// The x86_64 word byte-length.
 pub const BYTE_LENGTH_X64: usize = 8;
+
+/// EVM native stack alignment size in bytes
+pub const BYTE_LENGTH_STACK_ALIGN: usize = 32;
 
 /// The ETH address byte-length.
 pub const BYTE_LENGTH_ETH_ADDRESS: usize = 20;

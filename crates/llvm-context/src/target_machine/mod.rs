@@ -39,9 +39,9 @@ impl TargetMachine {
 
     /// LLVM target features.
     #[cfg(feature = "riscv-zbb")]
-    pub const VM_FEATURES: &'static str = "+zbb,+e,+m";
+    pub const VM_FEATURES: &'static str = "+zbb,+e,+m,+c";
     #[cfg(not(feature = "riscv-zbb"))]
-    pub const VM_FEATURES: &'static str = "+e,+m";
+    pub const VM_FEATURES: &'static str = "+e,+m,+c";
 
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.

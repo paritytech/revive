@@ -75,6 +75,9 @@ impl pallet_revive::Config for Runtime {
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
     type AddressMapper = AccountId;
+    type RuntimeMemory = ConstU32<{ 512 * 1024 * 1024 }>;
+    type PVFMemory = ConstU32<{ 1024 * 1024 * 1024 }>;
+    type MaxCodeLen = ConstU32<{ 256 * 1024 }>;
     type UnsafeUnstableInterface = UnstableInterface;
     type UploadOrigin = EnsureSigned<AccountId32>;
     type InstantiateOrigin = EnsureSigned<AccountId32>;

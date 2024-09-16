@@ -275,10 +275,10 @@ impl Specs {
                     origin,
                     value,
                     gas_limit,
-                    storage_deposit_limit,
                     code,
                     data,
                     salt,
+                    ..
                 } => {
                     let Code::Solidity {
                         path: Some(path),
@@ -289,21 +289,41 @@ impl Specs {
                     else {
                         panic!("the differential runner requires Code::Solidity source");
                     };
-                    assert_ne!(solc_optimizer, Some(false), "solc_optimizer must be enabled in differntial mode");
-                    assert_ne!(pipeline, Some(revive_solidity::SolcPipeline::EVMLA), "yul pipeline must be enabled in differntial mode");
-                    assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
-                    assert!(salt.0.is_none(), "salt is not supported in differential mode");
-                    assert_eq!(origin, TestAddress::default(), "configuring the origin is not supported in differential mode");
+
+                    assert_ne!(
+                        solc_optimizer,
+                        Some(false),
+                        "solc_optimizer must be enabled in differntial mode"
+                    );
+                    assert_ne!(
+                        pipeline,
+                        Some(revive_solidity::SolcPipeline::EVMLA),
+                        "yul pipeline must be enabled in differntial mode"
+                    );
+                    assert!(
+                        salt.0.is_none(),
+                        "salt is not supported in differential mode"
+                    );
+                    assert_eq!(
+                        origin,
+                        TestAddress::default(),
+                        "configuring the origin is not supported in differential mode"
+                    );
+
                     let deploy_code = match std::fs::read_to_string(&path) {
-                        Ok(solidity_source) => compile_evm_deploy_code(&contract, &solidity_source),
+                        Ok(solidity_source) => {
+                            hex::encode(compile_evm_deploy_code(&contract, &solidity_source))
+                        }
                         Err(err) => panic!(
                             "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",
                             path.display(),
                             err
                         ),
                     };
-                    let deploy_code = hex::encode(deploy_code);
-                    let mut vm = evm.code_blob(deploy_code.as_bytes().to_vec()).sender(origin.to_eth_addr(&[]).0.into()).deploy(true);
+                    let mut vm = evm
+                        .code_blob(deploy_code.as_bytes().to_vec())
+                        .sender(origin.to_eth_addr(&[]).0.into())
+                        .deploy(true);
                     if !data.is_empty() {
                         vm = vm.input(data.into());
                     }
@@ -318,7 +338,13 @@ impl Specs {
                     let deployed_account = log.account_deployed.expect("no account was created");
                     let account_pvm = TestAddress::Instantiated(deployed_accounts.len());
                     deployed_accounts.push(deployed_account);
-                    derived_specs.actions.append(&mut SpecsAction::derive_verification(&log, deployed_account, account_pvm));
+                    derived_specs
+                        .actions
+                        .append(&mut SpecsAction::derive_verification(
+                            &log,
+                            deployed_account,
+                            account_pvm,
+                        ));
                     evm = Evm::from_genesis(log.state_dump.into());
                 }
                 Call {
@@ -326,16 +352,23 @@ impl Specs {
                     dest,
                     value,
                     gas_limit,
-                    storage_deposit_limit,
                     data,
+                    ..
                 } => {
-                    assert_eq!(origin, TestAddress::default(), "configuring the origin is not supported in differential mode");
-                    assert!(storage_deposit_limit.is_none(), "storage deposit limit is not supported in differential mode");
+                    assert_eq!(
+                        origin,
+                        TestAddress::default(),
+                        "configuring the origin is not supported in differential mode"
+                    );
                     let TestAddress::Instantiated(n) = dest else {
                         panic!("the differential runner requires TestAccountId::Instantiated(n) as dest");
                     };
-                    let address = deployed_accounts.get(n).unwrap_or_else(|| panic!("no account at index {n} "));
-                    let mut vm = evm.receiver(*address).sender(origin.to_eth_addr(&[]).0.into());
+                    let address = deployed_accounts
+                        .get(n)
+                        .unwrap_or_else(|| panic!("no account at index {n} "));
+                    let mut vm = evm
+                        .receiver(*address)
+                        .sender(origin.to_eth_addr(&[]).0.into());
                     if !data.is_empty() {
                         vm = vm.input(data.into());
                     }
@@ -347,10 +380,13 @@ impl Specs {
                     }
 
                     let log = vm.run();
-                    derived_specs.actions.append(&mut SpecsAction::derive_verification(&log, *address, dest));
+                    derived_specs
+                        .actions
+                        .append(&mut SpecsAction::derive_verification(&log, *address, dest));
                     evm = Evm::from_genesis(log.state_dump.into());
                 }
-                _ => panic!("only instantiate and call action allowed in differential mode, got: {action:?}"),
+                Upload { .. } => continue,
+                other => derived_specs.actions.push(other),
             }
         }
 
@@ -405,7 +441,7 @@ impl Specs {
                                 pallet_revive::Code::Existing(_) => continue,
                                 pallet_revive::Code::Upload(bytes) => bytes,
                             },
-                            storage_deposit_limit.unwrap_or_default(),
+                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
                         )
                         .unwrap_or_else(|error| panic!("code upload failed: {error:?}")),
                         Call {
@@ -445,7 +481,6 @@ impl Specs {
                             expected,
                         } => {
                             let address = contract.to_eth_addr(&results);
-                            dbg!(contract.to_account_id(&results));
                             let Ok(value) = Contracts::get_storage(address, key) else {
                                 panic!("error reading storage for address {address}");
                             };

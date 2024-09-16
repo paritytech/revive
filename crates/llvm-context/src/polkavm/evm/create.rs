@@ -9,22 +9,10 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm_const::runtime_api;
 
-/// Translates the contract `create` instruction.
-/// The instruction is simulated by a call to a system contract.
+/// Translates the contract `create` and `create2` instruction.
+///
+/// A `salt` value of `None` is equivalent to `create1`.
 pub fn create<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    value: inkwell::values::IntValue<'ctx>,
-    input_offset: inkwell::values::IntValue<'ctx>,
-    input_length: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    self::create2(context, value, input_offset, input_length, None)
-}
-
-/// Translates the contract `create2` instruction.
-pub fn create2<'ctx, D>(
     context: &mut Context<'ctx, D>,
     value: inkwell::values::IntValue<'ctx>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -37,9 +25,6 @@ where
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
 
-    let value_pointer = context.build_alloca(context.value_type(), "value");
-    context.build_store(value_pointer, value)?;
-
     let code_hash_pointer = context.build_heap_gep(input_offset, input_length)?;
 
     let input_data_pointer = context.build_gep(
@@ -48,46 +33,57 @@ where
             .xlen_type()
             .const_int(revive_common::BYTE_LENGTH_WORD as u64, false)],
         context.byte_type(),
-        "value_ptr_parameter_offset",
+        "input_ptr_parameter_offset",
     );
 
-    let salt_pointer = context.build_alloca(context.word_type(), "salt");
-    context.build_store(salt_pointer, salt.unwrap_or_else(|| context.word_const(0)))?;
+    let value_pointer = context.build_alloca_at_entry(context.value_type(), "transferred_value");
+    context.build_store(value_pointer, value)?;
 
-    let (address_pointer, address_length_pointer) =
-        context.build_stack_parameter(revive_common::BIT_LENGTH_ETH_ADDRESS, "address_pointer");
+    let salt_pointer = match salt {
+        Some(salt) => {
+            let salt_pointer = context.build_alloca_at_entry(context.word_type(), "salt_pointer");
+            context.build_store(salt_pointer, salt)?;
+            salt_pointer
+        }
+        None => context.sentinel_pointer(),
+    };
+
+    let address_pointer = context.build_alloca_at_entry(
+        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
+        "address_pointer",
+    );
     context.build_store(address_pointer, context.word_const(0))?;
 
-    let argument_pointer = revive_runtime_api::calling_convention::Spill::new(
+    let argument_type = revive_runtime_api::calling_convention::instantiate(context.llvm());
+    let argument_pointer = context.build_alloca_at_entry(argument_type, "instantiate_arguments");
+    let arguments = &[
+        code_hash_pointer.value.as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
+        context.sentinel_pointer().value.as_basic_value_enum(),
+        value_pointer.value.as_basic_value_enum(),
+        input_data_pointer.value.as_basic_value_enum(),
+        input_length.as_basic_value_enum(),
+        address_pointer.value.as_basic_value_enum(),
+        context.sentinel_pointer().value.as_basic_value_enum(),
+        context.sentinel_pointer().value.as_basic_value_enum(),
+        salt_pointer.value.as_basic_value_enum(),
+    ];
+    revive_runtime_api::calling_convention::spill(
         context.builder(),
-        revive_runtime_api::calling_convention::instantiate(context.llvm()),
-        "create2_arguments",
-    )?
-    .next(code_hash_pointer.value)?
-    .skip()
-    .skip()
-    .next(context.sentinel_pointer().value)?
-    .next(value_pointer.value)?
-    .next(input_data_pointer.value)?
-    .next(input_length)?
-    .next(address_pointer.value)?
-    .next(address_length_pointer.value)?
-    .next(context.sentinel_pointer().value)?
-    .next(context.sentinel_pointer().value)?
-    .next(salt_pointer.value)?
-    .next(
-        context
-            .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
-    )?
-    .done();
+        argument_pointer.value,
+        argument_type,
+        arguments,
+    )?;
 
+    let argument_pointer = context.builder().build_ptr_to_int(
+        argument_pointer.value,
+        context.xlen_type(),
+        "instantiate_argument_pointer",
+    )?;
     context.build_runtime_call(
         runtime_api::imports::INSTANTIATE,
-        &[context
-            .builder()
-            .build_ptr_to_int(argument_pointer, context.xlen_type(), "argument_pointer")?
-            .into()],
+        &[argument_pointer.into()],
     );
 
     context.build_load_word(

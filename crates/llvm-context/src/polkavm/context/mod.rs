@@ -610,9 +610,8 @@ where
         }
 
         let pointer = self.build_alloca(r#type, name);
-
         self.set_basic_block(current_block);
-        return pointer;
+        pointer
     }
 
     /// Builds an aligned stack allocation at the current position.

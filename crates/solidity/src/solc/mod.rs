@@ -37,7 +37,7 @@ impl Compiler {
     pub const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);
 
     /// The last supported version of `solc`.
-    pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 26);
+    pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 27);
 
     /// A shortcut constructor.
     /// Different tools may use different `executable` names. For example, the integration tester

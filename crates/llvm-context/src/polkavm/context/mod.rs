@@ -441,7 +441,7 @@ where
             0 => FunctionReturn::none(),
             1 => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca_internal(self.word_type(), "return_pointer");
+                let pointer = self.build_alloca(self.word_type(), "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
             size if name.starts_with(Function::ZKSYNC_NEAR_CALL_ABI_PREFIX) => {
@@ -452,7 +452,7 @@ where
             }
             size => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca_internal(
+                let pointer = self.build_alloca(
                     self.structure_type(
                         vec![self.word_type().as_basic_type_enum(); size].as_slice(),
                     ),
@@ -596,7 +596,7 @@ where
     }
 
     /// Builds an aligned stack allocation at the function entry.
-    pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
+    pub fn build_alloca_at_entry<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
         name: &str,
@@ -609,17 +609,16 @@ where
             None => self.builder().position_at_end(entry_block),
         }
 
-        let pointer = self.build_alloca_internal(r#type, name);
+        let pointer = self.build_alloca(r#type, name);
 
         self.set_basic_block(current_block);
         return pointer;
     }
 
-    /// Builds a stack allocation and sets the alignment.
-    ///
-    /// Stack allocations should always happen at the function prelude.
-    /// Only use this when the position is guaranteed to be at the entry!
-    fn build_alloca_internal<T: BasicType<'ctx> + Clone + Copy>(
+    /// Builds an aligned stack allocation at the current position.
+    /// Use this if [`build_alloca_at_entry`] might change program semantics.
+    /// Otherwise, alloca should always be built at the function prelude!
+    pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
         name: &str,

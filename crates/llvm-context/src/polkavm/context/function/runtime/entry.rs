@@ -130,7 +130,7 @@ impl Entry {
             "input_pointer_casted",
         )?;
 
-        let length_pointer = context.build_alloca(context.xlen_type(), "len_ptr");
+        let length_pointer = context.build_alloca_at_entry(context.xlen_type(), "len_ptr");
         let length_pointer_casted = context.builder.build_ptr_to_int(
             length_pointer.value,
             context.xlen_type(),

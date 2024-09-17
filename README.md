@@ -1,4 +1,4 @@
-![CI](https://github.com/xermicus/revive/actions/workflows/rust.yml/badge.svg)
+![CI](https://github.com/paritytech/revive/actions/workflows/rust.yml/badge.svg)
 
 # revive
 

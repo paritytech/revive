@@ -79,7 +79,7 @@ pub struct Arguments {
     pub solc: Option<String>,
 
     /// The EVM target version to generate IR for.
-    /// See https://github.com/xermicus/revive/blob/main/crates/common/src/evm_version.rs for reference.
+    /// See https://github.com/paritytech/revive/blob/main/crates/common/src/evm_version.rs for reference.
     #[structopt(long = "evm-version")]
     pub evm_version: Option<String>,
 

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "title": "resolc CLI Tests",
   "description": "Auto tests for verifying resolc CLI",
-  "repository": "https://github.com/xermicus/revive",
+  "repository": "https://github.com/paritytech/revive",
   "main": "index.js",
   "private": true,
   "scripts": {

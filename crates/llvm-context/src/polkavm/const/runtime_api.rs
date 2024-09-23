@@ -19,6 +19,8 @@ pub mod imports {
 
     pub static BLOCK_NUMBER: &str = "block_number";
 
+    pub static CHAIN_ID: &str = "chain_id";
+
     pub static CALL: &str = "call";
 
     pub static CALLER: &str = "caller";
@@ -47,12 +49,13 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 16] = [
+    pub static IMPORTS: [&str; 17] = [
         ADDRESS,
         BALANCE,
         BLOCK_NUMBER,
         CALL,
         CALLER,
+        CHAIN_ID,
         CODE_SIZE,
         DEPOSIT_EVENT,
         GET_STORAGE,

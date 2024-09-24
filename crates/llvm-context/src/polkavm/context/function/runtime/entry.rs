@@ -23,11 +23,11 @@ impl Entry {
     /// The number of mandatory arguments.
     pub const MANDATORY_ARGUMENTS_COUNT: usize = 2;
 
-    /// Reserve 1mb for calldata.
-    pub const MAX_CALLDATA_SIZE: usize = 1024 * 1024;
+    /// Reserve 1kb for calldata.
+    pub const MAX_CALLDATA_SIZE: usize = 1024;
 
-    /// Reserve 1mb for returndata.
-    pub const MAX_RETURNDATA_SIZE: usize = 1024 * 1024;
+    /// Reserve 1kb for returndata.
+    pub const MAX_RETURNDATA_SIZE: usize = 1024;
 
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.

@@ -77,7 +77,7 @@ POLKAVM_IMPORT(uint32_t, instantiate, uint32_t)
 
 POLKAVM_IMPORT(void, terminate, uint32_t)
 
-POLKAVM_IMPORT(void, caller, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, caller, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, is_contract, uint32_t)
 
@@ -91,7 +91,7 @@ POLKAVM_IMPORT(uint32_t, caller_is_origin)
 
 POLKAVM_IMPORT(uint32_t, caller_is_root)
 
-POLKAVM_IMPORT(void, address, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, address, uint32_t)
 
 POLKAVM_IMPORT(void, weight_to_fee, uint64_t, uint32_t, uint32_t)
 
@@ -99,13 +99,15 @@ POLKAVM_IMPORT(void, gas_left, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, balance, uint32_t)
 
-POLKAVM_IMPORT(void, now, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, chain_id, uint32_t)
+
+POLKAVM_IMPORT(void, now, uint32_t)
 
 POLKAVM_IMPORT(void, minimum_balance, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(void, block_number, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, block_number, uint32_t)
 
 POLKAVM_IMPORT(void, hash_sha2_256, uint32_t, uint32_t, uint32_t)
 

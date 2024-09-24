@@ -950,6 +950,22 @@ where
             .left()
     }
 
+    /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
+    /// This means that the supplied API method just writes back a single word.
+    /// `import` is thus expect to have a single parameter, the 32 bytes output buffer,
+    /// and no return value.
+    pub fn build_runtime_call_to_getter(
+        &self,
+        import: &'static str,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+    where
+        D: Dependency + Clone,
+    {
+        let pointer = self.build_alloca_at_entry(self.word_type(), &format!("{import}_output"));
+        self.build_runtime_call(import, &[pointer.to_int(self).into()]);
+        self.build_load(pointer, import)
+    }
+
     /// Builds a call.
     pub fn build_call(
         &self,

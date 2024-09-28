@@ -632,26 +632,6 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Allocate an int of size `bit_length` on the stack.
-    /// Returns the allocation pointer and the length pointer.
-    ///
-    /// Useful helper for passing runtime API parameters on the stack.
-    pub fn build_stack_parameter(
-        &self,
-        bit_length: usize,
-        name: &str,
-    ) -> (Pointer<'ctx>, Pointer<'ctx>) {
-        let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
-        let symbol = match bit_length {
-            revive_common::BIT_LENGTH_WORD => GLOBAL_I256_SIZE,
-            revive_common::BIT_LENGTH_ETH_ADDRESS => GLOBAL_I160_SIZE,
-            revive_common::BIT_LENGTH_BLOCK_NUMBER => GLOBAL_I64_SIZE,
-            _ => panic!("invalid stack parameter bit width: {bit_length}"),
-        };
-        let length_pointer = self.get_global(symbol).expect("should be declared");
-        (buffer_pointer, length_pointer.into())
-    }
-
     /// Load the integer at given pointer and zero extend it to the VM word size.
     pub fn build_load_word(
         &self,

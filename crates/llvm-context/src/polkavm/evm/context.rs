@@ -43,7 +43,7 @@ pub fn chain_id<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context.word_const(0).as_basic_value_enum())
+    context.build_runtime_call_to_getter(runtime_api::imports::CHAIN_ID)
 }
 
 /// Translates the `block_number` instruction.

@@ -41,7 +41,9 @@ pub mod imports {
 
     pub static RETURN: &str = "seal_return";
 
-    pub static RETURNDATACOPY: &str = "returndatacopy";
+    pub static RETURNDATACOPY: &str = "return_data_copy";
+
+    pub static RETURNDATASIZE: &str = "return_data_size";
 
     pub static SET_STORAGE: &str = "set_storage";
 
@@ -49,7 +51,7 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 17] = [
+    pub static IMPORTS: [&str; 18] = [
         ADDRESS,
         BALANCE,
         BLOCK_NUMBER,
@@ -65,6 +67,7 @@ pub mod imports {
         NOW,
         RETURN,
         RETURNDATACOPY,
+        RETURNDATASIZE,
         SET_STORAGE,
         VALUE_TRANSFERRED,
     ];

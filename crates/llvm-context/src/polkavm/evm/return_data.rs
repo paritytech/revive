@@ -1,7 +1,5 @@
 //! Translates the return data instructions.
 
-use inkwell::values::BasicValue;
-
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm_const::runtime_api;
@@ -13,13 +11,17 @@ pub fn size<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let value = context
-        .get_global_value(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?
-        .into_int_value();
-    Ok(context
-        .builder()
-        .build_int_z_extend(value, context.word_type(), "calldatasize_extended")?
-        .as_basic_value_enum())
+    let output_pointer = context.build_alloca_at_entry(context.word_type(), "return_data_size");
+    let output_pointer_parameter = context.builder().build_ptr_to_int(
+        output_pointer.value,
+        context.xlen_type(),
+        "return_data_copy_output_pointer",
+    )?;
+    context.build_runtime_call(
+        runtime_api::imports::RETURNDATASIZE,
+        &[output_pointer_parameter.into()],
+    );
+    context.build_load(output_pointer, "return_data_size_load")
 }
 
 /// Translates the return data copy, trapping if
@@ -39,16 +41,33 @@ where
     let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;
     let size = context.safe_truncate_int_to_xlen(size)?;
 
-    let destination_offset = context.builder().build_ptr_to_int(
+    let output_pointer = context.builder().build_ptr_to_int(
         context.build_heap_gep(destination_offset, size)?.value,
         context.xlen_type(),
-        "destination_offset",
+        "return_data_copy_output_pointer",
+    )?;
+
+    let output_length_pointer = context.build_alloca_at_entry(
+        context.xlen_type(),
+        "return_data_copy_output_length_pointer",
+    );
+    context.build_store(output_length_pointer, size)?;
+    let output_length_pointer = context.builder().build_ptr_to_int(
+        output_length_pointer.value,
+        context.xlen_type(),
+        "return_data_copy_output_length_pointer_int",
     )?;
 
     context.build_runtime_call(
         runtime_api::imports::RETURNDATACOPY,
-        &[destination_offset.into(), source_offset.into(), size.into()],
+        &[
+            output_pointer.into(),
+            output_length_pointer.into(),
+            source_offset.into(),
+        ],
     );
+
+    // TODO: If executed in EOF code, for out of bound bytes, 0s will be copied.
 
     Ok(())
 }

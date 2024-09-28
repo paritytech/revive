@@ -86,11 +86,15 @@ where
         &[argument_pointer.into()],
     );
 
-    context.build_load_word(
-        address_pointer,
-        revive_common::BIT_LENGTH_ETH_ADDRESS,
-        "address",
-    )
+    let address = context.build_byte_swap(context.build_load(address_pointer, "address")?)?;
+    Ok(context
+        .builder()
+        .build_int_z_extend(
+            address.into_int_value(),
+            context.word_type(),
+            "address_zext",
+        )?
+        .into())
 }
 
 /// Translates the contract hash instruction, which is actually used to set the hash of the contract

@@ -26,9 +26,6 @@ impl Entry {
     /// Reserve 1kb for calldata.
     pub const MAX_CALLDATA_SIZE: usize = 1024;
 
-    /// Reserve 1kb for returndata.
-    pub const MAX_RETURNDATA_SIZE: usize = 1024;
-
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
     pub fn initialize_globals<D>(context: &mut Context<D>) -> anyhow::Result<()>
@@ -41,14 +38,6 @@ impl Entry {
             calldata_type,
             AddressSpace::Stack,
             calldata_type.get_undef(),
-        );
-
-        let returndata_type = context.array_type(context.byte_type(), Self::MAX_RETURNDATA_SIZE);
-        context.set_global(
-            crate::polkavm::GLOBAL_RETURN_DATA_POINTER,
-            returndata_type,
-            AddressSpace::Stack,
-            returndata_type.get_undef(),
         );
 
         context.set_global(
@@ -69,12 +58,6 @@ impl Entry {
             context.word_type(),
             AddressSpace::Stack,
             context.word_undef(),
-        );
-        context.set_global(
-            crate::polkavm::GLOBAL_RETURN_DATA_SIZE,
-            context.xlen_type(),
-            AddressSpace::Stack,
-            context.xlen_type().const_zero().as_basic_value_enum(),
         );
 
         context.set_global(

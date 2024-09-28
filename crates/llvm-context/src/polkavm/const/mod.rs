@@ -21,12 +21,6 @@ pub static GLOBAL_CALLDATA_POINTER: &str = "ptr_calldata";
 /// The calldata size global variable name.
 pub static GLOBAL_CALLDATA_SIZE: &str = "calldatasize";
 
-/// The return data pointer global variable name.
-pub static GLOBAL_RETURN_DATA_POINTER: &str = "ptr_return_data";
-
-/// The return data size pointer global variable name.
-pub static GLOBAL_RETURN_DATA_SIZE: &str = "returndatasize";
-
 /// The call flags global variable name.
 pub static GLOBAL_CALL_FLAGS: &str = "call_flags";
 

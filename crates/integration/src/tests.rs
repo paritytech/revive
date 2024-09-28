@@ -41,6 +41,7 @@ test_spec!(balance, "Value", "Value.sol");
 test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
 test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

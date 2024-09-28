@@ -7,13 +7,14 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm_const::runtime_api;
 
-static STATIC_CALL_FLAG: u32 = 0b0001_0000;
+const STATIC_CALL_FLAG: u32 = 0b0001_0000;
+const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
 
 /// Translates a contract call.
 #[allow(clippy::too_many_arguments)]
 pub fn call<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    gas: inkwell::values::IntValue<'ctx>,
+    _gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     value: Option<inkwell::values::IntValue<'ctx>>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -46,16 +47,19 @@ where
     // TODO: What to supply here? Is there a weight to gas?
     let _gas = context
         .builder()
-        .build_int_truncate(gas, context.integer_type(64), "gas")?;
+        .build_int_truncate(_gas, context.integer_type(64), "gas")?;
 
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;
 
-    // TODO: What should the returndatasize contain if the call fails?
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
     context.build_store(output_length_pointer, output_length)?;
 
-    let flags = if static_call { STATIC_CALL_FLAG } else { 0 };
+    let flags = if static_call {
+        REENTRANT_CALL_FLAG | STATIC_CALL_FLAG
+    } else {
+        REENTRANT_CALL_FLAG
+    };
     let flags = context.xlen_type().const_int(flags as u64, false);
 
     let argument_type = revive_runtime_api::calling_convention::call(context.llvm());

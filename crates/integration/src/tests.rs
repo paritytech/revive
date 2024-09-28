@@ -231,6 +231,8 @@ fn signed_remainder() {
 }
 
 /*
+// These test were implement for the mock-runtime and need to be ported yet.
+
 #[test]
 fn create2_failure() {
     let mut state = State::default();
@@ -305,14 +307,5 @@ fn code_size() {
     let expected = U256::from(contract.pvm_runtime.len());
     let received = U256::from_be_slice(&output.data);
     assert_eq!(expected, received);
-}
-
-#[test]
-fn value_transfer() {
-    // Succeeds in remix (shanghai) but traps the interpreter
-    let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);
-
-    assert_eq!(state.accounts().len(), 2);
-    assert!(state.accounts().get(&Address::default()).is_some());
 }
 */

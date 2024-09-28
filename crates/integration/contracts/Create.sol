@@ -31,6 +31,27 @@ pragma solidity ^0.8;
                 },
                 "value": 10000
             }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                }
+            }
         }
     ]
 }

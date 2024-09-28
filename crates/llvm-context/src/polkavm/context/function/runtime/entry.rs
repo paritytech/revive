@@ -1,7 +1,6 @@
 //! The entry function.
 
 use inkwell::types::BasicType;
-use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;

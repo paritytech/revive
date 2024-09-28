@@ -53,7 +53,7 @@ where
 
     // TODO: What should the returndatasize contain if the call fails?
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
-    context.build_store(output_length_pointer.into(), output_length)?;
+    context.build_store(output_length_pointer, output_length)?;
 
     let flags = if static_call { STATIC_CALL_FLAG } else { 0 };
     let flags = context.xlen_type().const_int(flags as u64, false);

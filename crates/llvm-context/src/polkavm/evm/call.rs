@@ -34,14 +34,9 @@ where
             .build_int_truncate(address, address_type, "address_truncated")?;
     context.build_store(address_pointer, address_truncated)?;
 
-    let value_pointer = match value {
-        Some(value) => {
-            let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
-            context.build_store(value_pointer, value)?;
-            value_pointer
-        }
-        None => context.sentinel_pointer(),
-    };
+    let value = value.unwrap_or_else(|| context.word_const(0));
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
+    context.build_store(value_pointer, value)?;
 
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;

@@ -52,7 +52,7 @@ where
         "return_data_copy_output_length_pointer",
     );
     context.build_store(output_length_pointer, size)?;
-    let output_length_pointer = context.builder().build_ptr_to_int(
+    let output_length_pointer_int = context.builder().build_ptr_to_int(
         output_length_pointer.value,
         context.xlen_type(),
         "return_data_copy_output_length_pointer_int",
@@ -62,12 +62,28 @@ where
         runtime_api::imports::RETURNDATACOPY,
         &[
             output_pointer.into(),
-            output_length_pointer.into(),
+            output_length_pointer_int.into(),
             source_offset.into(),
         ],
     );
 
-    // TODO: If executed in EOF code, for out of bound bytes, 0s will be copied.
+    // Trap on OOB (will be different in EOF code)
+    let overflow_block = context.append_basic_block("return_data_overflow");
+    let non_overflow_block = context.append_basic_block("return_data_non_overflow");
+    let is_overflow = context.builder().build_int_compare(
+        inkwell::IntPredicate::UGT,
+        size,
+        context
+            .build_load(output_length_pointer, "bytes_written")?
+            .into_int_value(),
+        "is_overflow",
+    )?;
+    context.build_conditional_branch(is_overflow, overflow_block, non_overflow_block)?;
 
+    context.set_basic_block(overflow_block);
+    context.build_call(context.intrinsics().trap, &[], "invalid_trap");
+    context.build_unreachable();
+
+    context.set_basic_block(non_overflow_block);
     Ok(())
 }

@@ -149,11 +149,7 @@ where
         runtime_api::imports::ADDRESS,
         &[pointer.to_int(context).into()],
     );
-    let value = context.build_byte_swap(context.build_load(pointer, "address")?)?;
-    Ok(context
-        .builder()
-        .build_int_z_extend(value.into_int_value(), context.word_type(), "address_zext")?
-        .into())
+    context.build_load_address(pointer)
 }
 
 /// Translates the `caller` instruction.
@@ -163,5 +159,13 @@ pub fn caller<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_runtime_call_to_getter(runtime_api::imports::CALLER)
+    let pointer = context.build_alloca_at_entry(
+        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
+        "address_output",
+    );
+    context.build_runtime_call(
+        runtime_api::imports::CALLER,
+        &[pointer.to_int(context).into()],
+    );
+    context.build_load_address(pointer)
 }

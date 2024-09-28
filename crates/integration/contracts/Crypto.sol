@@ -4,30 +4,32 @@ pragma solidity ^0.8.24;
 
 /* runner.json
 {
-    "actions": [
+  "differential": true,
+  "actions": [
     {
-      "Instantiate": {}
+      "Instantiate": {
+        "code": {
+          "Solidity": {
+            "contract": "TestSha3"
+          }
+        }
+      }
     },
     {
       "Call": {
         "dest": {
-            "Instantiated": 0
+          "Instantiated": 0
         },
         "data": "f9fbd5540000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000c68656c6c6f20776f726c64210000000000000000000000000000000000000000"
       }
-    },
-    {
-        "VerifyCall": {
-            "success": true,
-            "output": "57caa176af1ac0433c5df30e8dabcd2ec1af1e92a26eced5f719b88458777cd6"
-        }
     }
   ]
 }
 */
 
 contract TestSha3 {
-    function test(string memory _pre) external payable returns (bytes32 hash) {
-        hash = keccak256(bytes(_pre));
+    function test(string memory _pre) external payable returns (bytes32) {
+        bytes32 hash = keccak256(bytes(_pre));
+        return bytes32(uint(hash) + 1);
     }
 }

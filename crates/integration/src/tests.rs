@@ -6,6 +6,10 @@ use SpecsAction::*;
 
 use crate::cases::Contract;
 
+/// Parameters:
+/// - The function name of the test
+/// - The contract name to fill in empty code based on the file path
+/// - The contract source file
 macro_rules! test_spec {
     ($test_name:ident, $contract_name:literal, $source_file:literal) => {
         #[test]
@@ -34,6 +38,10 @@ test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
 test_spec!(address, "Context", "Context.sol");
 test_spec!(balance, "Value", "Value.sol");
+test_spec!(create, "CreateB", "Create.sol");
+test_spec!(call, "Caller", "Call.sol");
+test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -224,63 +232,7 @@ fn signed_remainder() {
 }
 
 /*
-#[test]
-fn events() {
-    assert_success(&Contract::event(U256::ZERO), true);
-    assert_success(&Contract::event(U256::from(123)), true);
-}
-
-#[test]
-fn balance() {
-    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
-
-    let expected = U256::ZERO;
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-
-    let expected = U256::from(54589);
-    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
-    state.accounts_mut().get_mut(&address).unwrap().value = expected;
-
-    let contract = Contract::value_balance_of(address);
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(ReturnFlags::Success, output.flags);
-
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received)
-}
-
-#[test]
-fn create2() {
-    let mut state = State::default();
-    let contract_a = Contract::create_a();
-    state.upload_code(&contract_a.pvm_runtime);
-
-    let contract = Contract::create_b();
-    let (state, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-    assert_eq!(state.accounts().len(), 2);
-
-    for address in state.accounts().keys() {
-        if *address != Transaction::default_address() {
-            let derived_address = Transaction::default_address().create2(
-                B256::from(U256::from(1)),
-                keccak256(&contract_a.pvm_runtime).0,
-            );
-            assert_eq!(*address, derived_address);
-        }
-    }
-}
+// These test were implement for the mock-runtime and need to be ported yet.
 
 #[test]
 fn create2_failure() {
@@ -308,29 +260,30 @@ fn create2_failure() {
     assert_eq!(output.flags, ReturnFlags::Revert);
 }
 
-#[test]
-fn create_with_value() {
-    let mut state = State::default();
-    state.upload_code(&Contract::create_a().pvm_runtime);
-    let amount = U256::from(123);
 
-    let contract = Contract::create_b();
-    let (state, output) = state
+#[test]
+fn balance() {
+    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
+
+    let expected = U256::ZERO;
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received);
+
+    let expected = U256::from(54589);
+    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
+    state.accounts_mut().get_mut(&address).unwrap().value = expected;
+
+    let contract = Contract::value_balance_of(address);
+    let (_, output) = state
         .transaction()
         .with_default_account(&contract.pvm_runtime)
-        .callvalue(amount)
+        .calldata(contract.calldata)
         .call();
 
-    assert_eq!(output.flags, ReturnFlags::Success);
-    assert_eq!(state.accounts().len(), 2);
+    assert_eq!(ReturnFlags::Success, output.flags);
 
-    for (address, account) in state.accounts() {
-        if *address == Transaction::default_address() {
-            assert_eq!(account.value, U256::ZERO);
-        } else {
-            assert_eq!(account.value, amount);
-        }
-    }
+    let received = U256::from_be_slice(&output.data);
+    assert_eq!(expected, received)
 }
 
 #[test]
@@ -354,36 +307,6 @@ fn code_size() {
     let (_, output) = assert_success(&contract, false);
     let expected = U256::from(contract.pvm_runtime.len());
     let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-}
-
-#[test]
-fn value_transfer() {
-    // Succeeds in remix (shanghai) but traps the interpreter
-    let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);
-
-    assert_eq!(state.accounts().len(), 2);
-    assert!(state.accounts().get(&Address::default()).is_some());
-}
-
-#[test]
-fn echo() {
-    let (state, address) = State::new_deployed(Contract::call_constructor());
-
-    let expected = vec![1, 2, 3, 4, 5];
-    let contract = Contract::call_call(address, expected.clone());
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
-        .unwrap()
-        .to_vec();
-
     assert_eq!(expected, received);
 }
 */

@@ -610,9 +610,8 @@ where
         }
 
         let pointer = self.build_alloca(r#type, name);
-
         self.set_basic_block(current_block);
-        return pointer;
+        pointer
     }
 
     /// Builds an aligned stack allocation at the current position.
@@ -633,43 +632,16 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Allocate an int of size `bit_length` on the stack.
-    /// Returns the allocation pointer and the length pointer.
-    ///
-    /// Useful helper for passing runtime API parameters on the stack.
-    pub fn build_stack_parameter(
-        &self,
-        bit_length: usize,
-        name: &str,
-    ) -> (Pointer<'ctx>, Pointer<'ctx>) {
-        let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
-        let symbol = match bit_length {
-            revive_common::BIT_LENGTH_WORD => GLOBAL_I256_SIZE,
-            revive_common::BIT_LENGTH_ETH_ADDRESS => GLOBAL_I160_SIZE,
-            revive_common::BIT_LENGTH_BLOCK_NUMBER => GLOBAL_I64_SIZE,
-            _ => panic!("invalid stack parameter bit width: {bit_length}"),
-        };
-        let length_pointer = self.get_global(symbol).expect("should be declared");
-        (buffer_pointer, length_pointer.into())
-    }
-
-    /// Load the integer at given pointer and zero extend it to the VM word size.
-    pub fn build_load_word(
+    /// Load the address at given pointer and zero extend it to the VM word size.
+    pub fn build_load_address(
         &self,
         pointer: Pointer<'ctx>,
-        bit_length: usize,
-        name: &str,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let value = self.build_load(
-            pointer.cast(self.integer_type(bit_length)),
-            &format!("load_{name}"),
-        )?;
-        let value_extended = self.builder().build_int_z_extend(
-            value.into_int_value(),
-            self.word_type(),
-            &format!("zext_{name}"),
-        )?;
-        Ok(value_extended.as_basic_value_enum())
+        let address = self.build_byte_swap(self.build_load(pointer, "address_pointer")?)?;
+        Ok(self
+            .builder()
+            .build_int_z_extend(address.into_int_value(), self.word_type(), "address_zext")?
+            .into())
     }
 
     /// Builds a stack load instruction.

@@ -831,6 +831,7 @@ impl FunctionCall {
                     value,
                     input_offset,
                     input_length,
+                    None,
                 )
                 .map(Some)
             }
@@ -842,7 +843,7 @@ impl FunctionCall {
                 let input_length = arguments[2].into_int_value();
                 let salt = arguments[3].into_int_value();
 
-                revive_llvm_context::polkavm_evm_create::create2(
+                revive_llvm_context::polkavm_evm_create::create(
                     context,
                     value,
                     input_offset,

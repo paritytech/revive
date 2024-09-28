@@ -29,11 +29,7 @@ where
         runtime_api::imports::VALUE_TRANSFERRED,
         &[output_pointer.to_int(context).into()],
     );
-    context.build_load_word(
-        output_pointer,
-        revive_common::BIT_LENGTH_VALUE,
-        "value_transferred",
-    )
+    context.build_load(output_pointer, "value_transferred")
 }
 
 /// Translates the `balance` instructions.

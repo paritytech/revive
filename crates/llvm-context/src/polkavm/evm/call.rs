@@ -33,8 +33,8 @@ where
         context
             .builder()
             .build_int_truncate(address, address_type, "address_truncated")?;
-    let address_truncated = context.build_byte_swap(address_truncated.into())?;
-    context.build_store(address_pointer, address_truncated)?;
+    let address_swapped = context.build_byte_swap(address_truncated.into())?;
+    context.build_store(address_pointer, address_swapped)?;
 
     let value = value.unwrap_or_else(|| context.word_const(0));
     let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");

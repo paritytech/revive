@@ -632,23 +632,16 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Load the integer at given pointer and zero extend it to the VM word size.
-    pub fn build_load_word(
+    /// Load the address at given pointer and zero extend it to the VM word size.
+    pub fn build_load_address(
         &self,
         pointer: Pointer<'ctx>,
-        bit_length: usize,
-        name: &str,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let value = self.build_load(
-            pointer.cast(self.integer_type(bit_length)),
-            &format!("load_{name}"),
-        )?;
-        let value_extended = self.builder().build_int_z_extend(
-            value.into_int_value(),
-            self.word_type(),
-            &format!("zext_{name}"),
-        )?;
-        Ok(value_extended.as_basic_value_enum())
+        let address = self.build_byte_swap(self.build_load(pointer, "address_pointer")?)?;
+        Ok(self
+            .builder()
+            .build_int_z_extend(address.into_int_value(), self.word_type(), "address_zext")?
+            .into())
     }
 
     /// Builds a stack load instruction.

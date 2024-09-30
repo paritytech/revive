@@ -1,0 +1,38 @@
+name: Build revive-debian
+on:
+  workflow_dispatch:
+
+env:
+  REVIVE_DEBIAN_PACKAGE: revive-debian-x86
+  DEBIAN_CONTAINER: revive-builder-debian-x86
+  DEBIAN_CONTAINER_BUILDER: build-debian-builder.sh
+  DEBIAN_CONTAINER_RUNNER: run-debian-builder.sh
+  REVIVE_DEBIAN_INSTALL: ${{ github.workspace }}/target/release
+  REVIVE_DEBIAN_BINARY: resolc
+  RUST_VERSION: "1.80"
+
+jobs:
+  build-revive-debian-x86:
+    name: debian-container-x86
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build-container
+        run: |
+          (cd utils && ./${{ env.DEBIAN_CONTAINER_BUILDER}} --build-arg RUST_VERSION=${{ env.RUST_VERSION}} . )
+
+      - name: build-revive-debian
+        run: |
+          rustup show
+          cargo --version
+          rustup +nightly show
+          cargo +nightly --version
+          bash --version
+          utils/${{ env.DEBIAN_CONTAINER_RUNNER }} utils/build-revive.sh -o ${{ env.REVIVE_DEBIAN_INSTALL}}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.REVIVE_DEBIAN_PACKAGE }}
+          path: ${{ env.REVIVE_DEBIAN_INSTALL }}/${{ env.REVIVE_DEBIAN_BINARY }}
+          retention-days: 1

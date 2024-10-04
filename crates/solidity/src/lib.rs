@@ -83,7 +83,6 @@ pub fn yul(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
-        false,
         debug_config,
     )?;
 
@@ -113,7 +112,6 @@ pub fn llvm_ir(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
-        false,
         debug_config,
     )?;
 
@@ -204,7 +202,6 @@ pub fn standard_output(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
-        false,
         debug_config,
     )?;
 
@@ -282,7 +279,6 @@ pub fn standard_json(
             optimizer_settings,
             is_system_mode,
             include_metadata_hash,
-            false,
             debug_config,
         )?;
         build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;

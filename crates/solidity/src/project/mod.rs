@@ -64,7 +64,6 @@ impl Project {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
-        bytecode_encoding_testing: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
@@ -77,7 +76,6 @@ impl Project {
                     project.clone(),
                     is_system_mode,
                     include_metadata_hash,
-                    bytecode_encoding_testing,
                     optimizer_settings.clone(),
                     debug_config.clone(),
                 ));

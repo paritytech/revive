@@ -40,9 +40,6 @@ pub fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
     }
 
     let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
-    if input.enable_test_encoding {
-        todo!()
-    }
     let result = input.contract.compile(
         input.project,
         input.optimizer_settings,

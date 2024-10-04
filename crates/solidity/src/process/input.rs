@@ -18,8 +18,6 @@ pub struct Input {
     pub is_system_mode: bool,
     /// Whether to append the metadata hash.
     pub include_metadata_hash: bool,
-    /// Enables the test bytecode encoding.
-    pub enable_test_encoding: bool,
     /// The optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
@@ -33,7 +31,6 @@ impl Input {
         project: Project,
         is_system_mode: bool,
         include_metadata_hash: bool,
-        enable_test_encoding: bool,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> Self {
@@ -42,7 +39,6 @@ impl Input {
             project,
             is_system_mode,
             include_metadata_hash,
-            enable_test_encoding,
             optimizer_settings,
             debug_config,
         }

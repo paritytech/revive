@@ -106,7 +106,7 @@ pub fn build_solidity_with_options(
 
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
-    let build: crate::Build = project.compile(optimizer_settings, false, false, None)?;
+    let build: crate::Build = project.compile(optimizer_settings, false, false, false, None)?;
     build.write_to_standard_json(
         &mut output,
         &solc_version,
@@ -229,7 +229,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
 
     let project =
         Project::try_from_yul_string(PathBuf::from("test.yul").as_path(), source_code, None)?;
-    let _build = project.compile(optimizer_settings, false, false, None)?;
+    let _build = project.compile(optimizer_settings, false, false, false, None)?;
 
     Ok(())
 }

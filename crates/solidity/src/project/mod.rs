@@ -64,6 +64,7 @@ impl Project {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
+        emit_llvm_ir: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
@@ -77,6 +78,7 @@ impl Project {
                     is_system_mode,
                     include_metadata_hash,
                     optimizer_settings.clone(),
+                    emit_llvm_ir,
                     debug_config.clone(),
                 ));
 
@@ -241,6 +243,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
+        emit_llvm_ir: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<String> {
         let contract_path = project.resolve_path(identifier)?;
@@ -261,6 +264,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
                 optimizer_settings,
                 is_system_mode,
                 include_metadata_hash,
+                emit_llvm_ir,
                 debug_config,
             )
             .map_err(|error| {

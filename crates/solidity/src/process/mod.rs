@@ -45,6 +45,7 @@ pub fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
         input.optimizer_settings,
         input.is_system_mode,
         input.include_metadata_hash,
+        input.emit_llvm_ir,
         input.debug_config,
     );
 

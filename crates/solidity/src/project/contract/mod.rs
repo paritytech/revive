@@ -81,6 +81,7 @@ impl Contract {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
+        emit_llvm_ir: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
@@ -134,6 +135,7 @@ impl Contract {
             optimizer,
             Some(project),
             include_metadata_hash,
+            emit_llvm_ir,
             debug_info,
             debug_config,
         );

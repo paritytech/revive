@@ -53,6 +53,7 @@ pub fn yul(
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     is_system_mode: bool,
     include_metadata_hash: bool,
+    emit_llvm_ir: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
@@ -83,6 +84,7 @@ pub fn yul(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
+        emit_llvm_ir,
         debug_config,
     )?;
 
@@ -112,6 +114,7 @@ pub fn llvm_ir(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
+        false,
         debug_config,
     )?;
 
@@ -135,6 +138,7 @@ pub fn standard_output(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
+    emit_llvm_ir: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
@@ -202,6 +206,7 @@ pub fn standard_output(
         optimizer_settings,
         is_system_mode,
         include_metadata_hash,
+        emit_llvm_ir,
         debug_config,
     )?;
 
@@ -218,6 +223,7 @@ pub fn standard_json(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
+    emit_llvm_ir: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
@@ -279,6 +285,7 @@ pub fn standard_json(
             optimizer_settings,
             is_system_mode,
             include_metadata_hash,
+            emit_llvm_ir,
             debug_config,
         )?;
         build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;
@@ -305,6 +312,7 @@ pub fn combined_json(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
+    emit_llvm_ir: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
     output_directory: Option<PathBuf>,
     overwrite: bool,
@@ -326,6 +334,7 @@ pub fn combined_json(
         allow_paths,
         remappings,
         suppressed_warnings,
+        emit_llvm_ir,
         debug_config,
     )?;
 

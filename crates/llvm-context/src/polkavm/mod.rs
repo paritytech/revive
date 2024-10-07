@@ -99,6 +99,7 @@ pub trait Dependency {
         optimizer_settings: OptimizerSettings,
         is_system_mode: bool,
         include_metadata_hash: bool,
+        emit_llvm_ir: bool,
         debug_config: Option<DebugConfig>,
     ) -> anyhow::Result<String>;
 
@@ -120,6 +121,7 @@ impl Dependency for DummyDependency {
         _optimizer_settings: OptimizerSettings,
         _is_system_mode: bool,
         _include_metadata_hash: bool,
+        _emit_llvm_ir: bool,
         _debug_config: Option<DebugConfig>,
     ) -> anyhow::Result<String> {
         Ok(String::new())

@@ -179,6 +179,12 @@ pub struct Arguments {
     #[cfg(debug_assertions)]
     #[structopt(long = "recursive-process-input")]
     pub recursive_process_input: Option<String>,
+
+    /// Output LLVM-IR of the contracts.
+    /// This is only intended for use when developing the compiler.
+    #[cfg(debug_assertions)]
+    #[structopt(long = "emit-llvm-ir")]
+    pub output_llvm_ir: bool,
 }
 
 impl Default for Arguments {
@@ -216,6 +222,13 @@ impl Arguments {
         #[cfg(not(debug_assertions))]
         if self.recursive_process && std::env::args().count() > 2 {
             anyhow::bail!("No other options are allowed in recursive mode.");
+        }
+
+        #[cfg(debug_assertions)]
+        if self.output_llvm_ir {
+            if self.output_assembly || self.output_binary {
+                anyhow::bail!("Can't output LLVM-IR as well as PolkaVM assembly or bytecode.");
+            }
         }
 
         let modes_count = [

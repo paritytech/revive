@@ -85,6 +85,10 @@ where
     dependency_manager: Option<D>,
     /// Whether to append the metadata hash at the end of bytecode.
     include_metadata_hash: bool,
+
+    /// Whether to emit LLVM-IR only.
+    output_llvm_ir: bool,
+
     /// The debug info of the current module.
     // debug_info: DebugInfo<'ctx>,
     /// The debug configuration telling whether to dump the needed IRs.
@@ -196,6 +200,7 @@ where
         optimizer: Optimizer,
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
+        output_llvm_ir: bool,
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
@@ -221,7 +226,7 @@ where
 
             dependency_manager,
             include_metadata_hash,
-            // debug_info,
+            output_llvm_ir,
             debug_config,
 
             solidity_data: None,
@@ -274,37 +279,42 @@ where
             )
         })?;
 
-        let buffer = target_machine
-            .write_to_memory_buffer(self.module())
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "The contract `{}` assembly generating error: {}",
-                    contract_path,
-                    error
-                )
-            })?;
+        if self.output_llvm_ir {
+            let llvm_ir = self.module().print_to_string().to_string();
+            let build = Build::new(llvm_ir, None, vec![], String::new());
+            Ok(build)
+        } else {
+            let buffer = target_machine
+                .write_to_memory_buffer(self.module())
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "The contract `{}` assembly generating error: {}",
+                        contract_path,
+                        error
+                    )
+                })?;
 
-        let bytecode = revive_linker::link(buffer.as_slice())?;
+            let bytecode = revive_linker::link(buffer.as_slice())?;
 
-        let build = match crate::polkavm::build_assembly_text(
-            contract_path,
-            &bytecode,
-            metadata_hash,
-            self.debug_config(),
-        ) {
-            Ok(build) => build,
-            Err(_error)
-                if self.optimizer.settings() != &OptimizerSettings::size()
-                    && self.optimizer.settings().is_fallback_to_size_enabled() =>
-            {
-                self.optimizer = Optimizer::new(OptimizerSettings::size());
-                self.module = module_clone;
-                self.build(contract_path, metadata_hash)?
-            }
-            Err(error) => Err(error)?,
-        };
-
-        Ok(build)
+            let build = match crate::polkavm::build_assembly_text(
+                contract_path,
+                &bytecode,
+                metadata_hash,
+                self.debug_config(),
+            ) {
+                Ok(build) => build,
+                Err(_error)
+                    if self.optimizer.settings() != &OptimizerSettings::size()
+                        && self.optimizer.settings().is_fallback_to_size_enabled() =>
+                {
+                    self.optimizer = Optimizer::new(OptimizerSettings::size());
+                    self.module = module_clone;
+                    self.build(contract_path, metadata_hash)?
+                }
+                Err(error) => Err(error)?,
+            };
+            Ok(build)
+        }
     }
 
     /// Verifies the current LLVM IR module.
@@ -539,6 +549,7 @@ where
                         .map(|data| data.is_system_mode())
                         .unwrap_or_default(),
                     self.include_metadata_hash,
+                    false,
                     self.debug_config.clone(),
                 )
             })

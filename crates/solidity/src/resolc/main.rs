@@ -116,12 +116,19 @@ fn main_inner() -> anyhow::Result<()> {
         None => true,
     };
 
+    #[cfg(debug_assertions)]
+    let output_llvm_ir = arguments.output_llvm_ir;
+
+    #[cfg(not(debug_assertions))]
+    let output_llvm_ir = false;
+
     let build = if arguments.yul {
         revive_solidity::yul(
             input_files.as_slice(),
             &mut solc,
             optimizer_settings,
             arguments.is_system_mode,
+            output_llvm_ir,
             include_metadata_hash,
             debug_config,
         )
@@ -142,6 +149,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
+            output_llvm_ir,
             debug_config,
         )?;
         return Ok(());
@@ -162,6 +170,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.allow_paths,
             remappings,
             suppressed_warnings,
+            output_llvm_ir,
             debug_config,
             arguments.output_directory,
             arguments.overwrite,
@@ -183,6 +192,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.allow_paths,
             remappings,
             suppressed_warnings,
+            output_llvm_ir,
             debug_config,
         )
     }?;
@@ -216,6 +226,18 @@ fn main_inner() -> anyhow::Result<()> {
             }
         }
     } else {
+        #[cfg(debug_assertions)]
+        if arguments.output_llvm_ir {
+            for (path, contract) in build.contracts.into_iter() {
+                let assembly_text = contract.build.assembly_text;
+
+                println!(";; Contract `{}`:\n\n{}", path, assembly_text);
+            }
+        } else {
+            eprintln!("Compiler run successful. No output requested. Use --asm, --bin or --emit-llvm-ir flags.");
+        }
+
+        #[cfg(not(debug_assertions))]
         eprintln!("Compiler run successful. No output requested. Use --asm and --bin flags.");
     }
 

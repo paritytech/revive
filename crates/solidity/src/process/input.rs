@@ -20,6 +20,8 @@ pub struct Input {
     pub include_metadata_hash: bool,
     /// The optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
+    /// Whether to output LLVM-IR.
+    pub output_llvm_ir: bool,
     /// The debug output config.
     pub debug_config: Option<revive_llvm_context::DebugConfig>,
 }
@@ -32,6 +34,7 @@ impl Input {
         is_system_mode: bool,
         include_metadata_hash: bool,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
+        output_llvm_ir: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> Self {
         Self {
@@ -40,6 +43,7 @@ impl Input {
             is_system_mode,
             include_metadata_hash,
             optimizer_settings,
+            output_llvm_ir,
             debug_config,
         }
     }

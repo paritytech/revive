@@ -6,37 +6,21 @@ pragma solidity ^0.8;
   "differential": true,
   "actions": [
     {
+      "Upload": {
+        "code": {
+          "Solidity": {
+            "contract": "ImmutablesTester"
+          }
+        }
+      }
+    },
+    {
       "Instantiate": {
-	    "code": {
-		  "Solidity": {
-		    "contract": "Immutables"
-		  }
-		},
-        "data": "000000000000000000000000000000000000000000000000000000000000007b"
-      }
-    },
-    {
-      "Call": {
-        "dest": {
-          "Instantiated": 0
-        },
-        "data": "c2985578"
-      }
-    },
-    {
-      "Call": {
-        "dest": {
-          "Instantiated": 0
-        },
-        "data": "febb0f7e"
-      }
-    },
-    {
-      "Call": {
-        "dest": {
-          "Instantiated": 0
-        },
-        "data": "7b6a8777"
+        "code": {
+          "Solidity": {
+            "contract": "Immutables"
+          }
+        }
       }
     },
     {
@@ -50,20 +34,30 @@ pragma solidity ^0.8;
 }
 */
 
-contract Immutables {
+contract ImmutablesTester {
+    // Read should work in the runtime code
     uint public immutable foo;
+    // Read should work in the runtime code
     uint public immutable bar;
+    // Read should work in the runtime code
     uint public immutable zoo;
 
+    // Assign and read should work in the constructor
     constructor(uint _foo) payable {
         foo = _foo;
         bar = foo + 1;
         zoo = bar + 2;
-    }
 
+        assert(zoo == _foo + 3);
+    }
+}
+
+contract Immutables {
     fallback() external {
-        assert(foo > 0);
-        assert(bar == foo + 1);
-        assert(zoo == bar + 2);
+        ImmutablesTester tester = new ImmutablesTester(127);
+
+        assert(tester.foo() == 127);
+        assert(tester.bar() == tester.foo() + 1);
+        assert(tester.zoo() == tester.bar() + 2);
     }
 }

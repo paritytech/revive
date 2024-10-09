@@ -63,7 +63,7 @@ contract Immutables {
 
     fallback() external {
         assert(foo > 0);
-        assert(bar > 0);
-        assert(zoo > 0);
+        assert(bar == foo + 1);
+        assert(zoo == bar + 2);
     }
 }

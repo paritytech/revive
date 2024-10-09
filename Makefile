@@ -46,7 +46,7 @@ bench: install-bin
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
 clippy:
-	cargo clippy --all-features --workspace --tests --benches
+	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
 
 docs: docs-build
 	mdbook serve --open docs/

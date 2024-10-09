@@ -26,35 +26,30 @@ pub static GLOBAL_IMMUTABLE_DATA_SIZE: &str = "__immutable_data_size";
 pub static IMMUTABLE_DATA_MAX_SIZE: u32 = 4 * 1024;
 
 /// Returns the immutable data global type.
-pub fn data_type<'context>(
-    context: &'context inkwell::context::Context,
-    size: u32,
-) -> inkwell::types::ArrayType<'context> {
-    context.custom_width_int_type(256).array_type(size)
+pub fn data_type(context: &inkwell::context::Context, size: u32) -> inkwell::types::ArrayType {
+    context
+        .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
+        .array_type(size)
 }
 
 /// Returns the immutable data size global type.
-pub fn size_type<'context>(
-    context: &'context inkwell::context::Context,
-) -> inkwell::types::IntType<'context> {
-    context.i32_type()
+pub fn size_type(context: &inkwell::context::Context) -> inkwell::types::IntType {
+    context.custom_width_int_type(revive_common::BIT_LENGTH_X32 as u32)
 }
 
-/// Creates a LLVM module with the immutable data and its `size` in bytes (the length).
-pub fn module<'context>(
-    context: &'context inkwell::context::Context,
-    size: u32,
-) -> inkwell::module::Module<'context> {
+/// Creates a LLVM module with the immutable data and its `size` in bytes.
+pub fn module(context: &inkwell::context::Context, size: u32) -> inkwell::module::Module {
     let module = context.create_module(MODULE_NAME);
+    let length = size / revive_common::BYTE_LENGTH_WORD as u32;
 
     let immutable_data = module.add_global(
-        data_type(context, size / 32),
+        data_type(context, length),
         Default::default(),
         GLOBAL_IMMUTABLE_DATA_POINTER,
     );
     immutable_data.set_linkage(inkwell::module::Linkage::External);
     immutable_data.set_visibility(inkwell::GlobalVisibility::Default);
-    immutable_data.set_initializer(&data_type(context, size / 32).get_undef());
+    immutable_data.set_initializer(&data_type(context, length).get_undef());
 
     let immutable_data_size = module.add_global(
         size_type(context),

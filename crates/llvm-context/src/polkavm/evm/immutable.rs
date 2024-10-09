@@ -4,9 +4,10 @@ use inkwell::types::BasicType;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::code_type::CodeType;
+use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-use crate::polkavm::{runtime_api, Dependency};
+use crate::polkavm::Dependency;
 
 /// Translates the contract immutable load.
 ///
@@ -26,63 +27,15 @@ where
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
-            let immutable_data_size_pointer = context
-                .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
-                .value
-                .as_pointer_value();
-            let immutable_data_size = context.build_load(
-                Pointer::new(
-                    context.xlen_type(),
-                    AddressSpace::Stack,
-                    immutable_data_size_pointer,
-                ),
-                "immutable_data_size_load",
-            )?;
-
-            let load_immutable_data_block = context.append_basic_block("load_immutables_block");
-            let join_load_block = context.append_basic_block("join_load_block");
-            let immutable_data_size_is_zero = context.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                context.xlen_type().const_zero(),
-                immutable_data_size.into_int_value(),
-                "immutable_data_size_is_zero",
-            )?;
-            context.build_conditional_branch(
-                immutable_data_size_is_zero,
-                join_load_block,
-                load_immutable_data_block,
-            )?;
-
-            context.set_basic_block(load_immutable_data_block);
-            let output_pointer = context
-                .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
-                .value
-                .as_pointer_value();
-            context.build_runtime_call(
-                runtime_api::imports::GET_IMMUTABLE_DATA,
-                &[
-                    context
-                        .builder()
-                        .build_ptr_to_int(output_pointer, context.xlen_type(), "ptr_to_xlen")?
-                        .into(),
-                    context
-                        .builder()
-                        .build_ptr_to_int(
-                            immutable_data_size_pointer,
-                            context.xlen_type(),
-                            "ptr_to_xlen",
-                        )?
-                        .into(),
-                ],
+            context.build_call(
+                context
+                    .get_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA)
+                    .expect("is always declared for runtime code")
+                    .borrow()
+                    .declaration(),
+                &[],
+                runtime::FUNCTION_LOAD_IMMUTABLE_DATA,
             );
-            // todo: check out length
-            context.builder().build_store(
-                immutable_data_size_pointer,
-                context.xlen_type().const_zero(),
-            )?;
-            context.build_unconditional_branch(join_load_block);
-
-            context.set_basic_block(join_load_block);
             load_from_memory(context, index)
         }
     }

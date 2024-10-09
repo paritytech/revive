@@ -61,7 +61,7 @@ where
                             "immutable_data_pointer_to_xlen",
                         )?
                         .into(),
-                    immutable_data_size.into(),
+                    immutable_data_size,
                 ],
             );
             context.build_unconditional_branch(join_return_block);

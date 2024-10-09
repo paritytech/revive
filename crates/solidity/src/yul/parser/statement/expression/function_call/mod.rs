@@ -520,7 +520,7 @@ impl FunctionCall {
                 })?;
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
-                let index = context.word_const(offset as u64);
+                let index = context.xlen_type().const_int(offset as u64, false);
                 let value = arguments[2].value.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)

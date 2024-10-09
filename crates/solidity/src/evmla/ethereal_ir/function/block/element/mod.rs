@@ -767,7 +767,7 @@ where
                     .get_or_allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
 
-                let index = context.word_const(offset as u64);
+                let index = context.xlen_type().const_int(offset as u64, false);
                 revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
             }
             InstructionName::ASSIGNIMMUTABLE => {
@@ -781,7 +781,7 @@ where
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
 
-                let index = context.word_const(offset as u64);
+                let index = context.xlen_type().const_int(offset as u64, false);
                 let value = arguments.pop().expect("Always exists").into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)

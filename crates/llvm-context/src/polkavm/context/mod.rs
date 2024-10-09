@@ -162,18 +162,6 @@ where
         })
     }
 
-    fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
-        let size = self.solidity().immutables_size() as u32;
-        let exports = revive_runtime_api::immutable_data::module(self.llvm(), size);
-        self.module.link_in_module(exports).map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` immutable data module linking error: {}",
-                contract_path,
-                error
-            )
-        })
-    }
-
     /// Configure the PolkaVM minimum stack size.
     fn set_polkavm_stack_size(
         llvm: &'ctx inkwell::context::Context,
@@ -251,7 +239,6 @@ where
         let module_clone = self.module.clone();
 
         self.link_polkavm_exports(contract_path)?;
-        self.link_immutable_data(contract_path)?;
 
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         target_machine.set_target_data(self.module());
@@ -392,15 +379,6 @@ where
                 self.globals.insert(name.to_owned(), global);
             }
         }
-    }
-
-    /// Declare an external global.
-    pub fn declare_global<T>(&mut self, name: &str, r#type: T, address_space: AddressSpace)
-    where
-        T: BasicType<'ctx> + Clone + Copy,
-    {
-        let global = Global::declare(self, r#type, address_space, name);
-        self.globals.insert(name.to_owned(), global);
     }
 
     /// Returns the LLVM intrinsics collection reference.

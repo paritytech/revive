@@ -59,10 +59,6 @@ POLKAVM_IMPORT(void, return_data_copy, uint32_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, return_data_size, uint32_t)
 
-POLKAVM_IMPORT(void, set_immutable_data, uint32_t, uint32_t);
-
-POLKAVM_IMPORT(void, get_immutable_data, uint32_t, uint32_t);
-
 POLKAVM_IMPORT(void, value_transferred, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, set_storage, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)

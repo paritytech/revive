@@ -1,18 +1,14 @@
 //! Translates the contract immutable operations.
 
-use inkwell::types::BasicType;
-
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-use crate::polkavm::{runtime_api, Dependency};
+use crate::polkavm::Dependency;
 
 /// Translates the contract immutable load.
-///
-/// In deploy code the values are read from the stack.
-///
-/// In runtime code they are loaded lazily with the `get_immutable_data` syscall.
+/// In the deploy code the values are read from the auxiliary heap.
+/// In the runtime code they are requested from the system contract.
 pub fn load<'ctx, D>(
     context: &mut Context<'ctx, D>,
     index: inkwell::values::IntValue<'ctx>,
@@ -24,75 +20,38 @@ where
         None => {
             anyhow::bail!("Immutables are not available if the contract part is undefined");
         }
-        Some(CodeType::Deploy) => load_from_memory(context, index),
-        Some(CodeType::Runtime) => {
-            let immutable_data_size_pointer = context
-                .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
-                .value
-                .as_pointer_value();
-            let immutable_data_size = context.build_load(
-                Pointer::new(
-                    context.xlen_type(),
-                    AddressSpace::Stack,
-                    immutable_data_size_pointer,
+        Some(CodeType::Deploy) => {
+            let index_double = context.builder().build_int_mul(
+                index,
+                context.word_const(2),
+                "immutable_load_index_double",
+            )?;
+            let offset_absolute = context.builder().build_int_add(
+                index_double,
+                context.word_const(
+                    crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
+                        + (3 * revive_common::BYTE_LENGTH_WORD) as u64,
                 ),
-                "immutable_data_size_load",
+                "immutable_offset_absolute",
             )?;
-
-            let load_immutable_data_block = context.append_basic_block("load_immutables_block");
-            let join_load_block = context.append_basic_block("join_load_block");
-            let immutable_data_size_is_zero = context.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                context.xlen_type().const_zero(),
-                immutable_data_size.into_int_value(),
-                "immutable_data_size_is_zero",
-            )?;
-            context.build_conditional_branch(
-                immutable_data_size_is_zero,
-                join_load_block,
-                load_immutable_data_block,
-            )?;
-
-            context.set_basic_block(load_immutable_data_block);
-            let output_pointer = context
-                .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
-                .value
-                .as_pointer_value();
-            context.build_runtime_call(
-                runtime_api::imports::GET_IMMUTABLE_DATA,
-                &[
-                    context
-                        .builder()
-                        .build_ptr_to_int(output_pointer, context.xlen_type(), "ptr_to_xlen")?
-                        .into(),
-                    context
-                        .builder()
-                        .build_ptr_to_int(
-                            immutable_data_size_pointer,
-                            context.xlen_type(),
-                            "ptr_to_xlen",
-                        )?
-                        .into(),
-                ],
+            let immutable_pointer = Pointer::new_with_offset(
+                context,
+                AddressSpace::default(),
+                context.word_type(),
+                offset_absolute,
+                "immutable_pointer",
             );
-            // todo: check out length
-            context.builder().build_store(
-                immutable_data_size_pointer,
-                context.xlen_type().const_zero(),
-            )?;
-            context.build_unconditional_branch(join_load_block);
-
-            context.set_basic_block(join_load_block);
-            load_from_memory(context, index)
+            context.build_load(immutable_pointer, "immutable_value")
+        }
+        Some(CodeType::Runtime) => {
+            todo!()
         }
     }
 }
 
 /// Translates the contract immutable store.
-///
-/// In deploy code the values are written to the stack at the predefined offset,
-/// being prepared for storing them using the `set_immutable_data` syscall.
-///
+/// In the deploy code the values are written to the auxiliary heap at the predefined offset,
+/// being prepared for returning to the system contract for saving.
 /// Ignored in the runtime code.
 pub fn store<'ctx, D>(
     context: &mut Context<'ctx, D>,
@@ -107,48 +66,46 @@ where
             anyhow::bail!("Immutables are not available if the contract part is undefined");
         }
         Some(CodeType::Deploy) => {
-            let immutable_data_pointer = context
-                .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
-                .value
-                .as_pointer_value();
-            let immutable_pointer = context.build_gep(
-                Pointer::new(
-                    context.word_type(),
-                    AddressSpace::Stack,
-                    immutable_data_pointer,
+            let index_double = context.builder().build_int_mul(
+                index,
+                context.word_const(2),
+                "immutable_load_index_double",
+            )?;
+            let index_offset_absolute = context.builder().build_int_add(
+                index_double,
+                context.word_const(
+                    crate::polkavm::HEAP_AUX_OFFSET_CONSTRUCTOR_RETURN_DATA
+                        + (2 * revive_common::BYTE_LENGTH_WORD) as u64,
                 ),
-                &[index],
-                context.word_type().as_basic_type_enum(),
-                "immutable_variable_pointer",
+                "index_offset_absolute",
+            )?;
+            let index_offset_pointer = Pointer::new_with_offset(
+                context,
+                AddressSpace::default(),
+                context.word_type(),
+                index_offset_absolute,
+                "immutable_index_pointer",
             );
-            context.build_store(immutable_pointer, value)
+            context.build_store(index_offset_pointer, index)?;
+
+            let value_offset_absolute = context.builder().build_int_add(
+                index_offset_absolute,
+                context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
+                "value_offset_absolute",
+            )?;
+            let value_offset_pointer = Pointer::new_with_offset(
+                context,
+                AddressSpace::default(),
+                context.word_type(),
+                value_offset_absolute,
+                "immutable_value_pointer",
+            );
+            context.build_store(value_offset_pointer, value)?;
+
+            Ok(())
         }
         Some(CodeType::Runtime) => {
             anyhow::bail!("Immutable writes are not available in the runtime code");
         }
     }
-}
-
-pub fn load_from_memory<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-    index: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    let immutable_data_pointer = context
-        .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
-        .value
-        .as_pointer_value();
-    let immutable_pointer = context.build_gep(
-        Pointer::new(
-            context.word_type(),
-            AddressSpace::Stack,
-            immutable_data_pointer,
-        ),
-        &[index],
-        context.word_type().as_basic_type_enum(),
-        "immutable_variable_pointer",
-    );
-    context.build_load(immutable_pointer, "immutable_value")
 }

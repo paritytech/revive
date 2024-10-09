@@ -29,6 +29,8 @@ pub mod imports {
 
     pub static DEPOSIT_EVENT: &str = "deposit_event";
 
+    pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
+
     pub static GET_STORAGE: &str = "get_storage";
 
     pub static HASH_KECCAK_256: &str = "hash_keccak_256";
@@ -47,11 +49,13 @@ pub mod imports {
 
     pub static SET_STORAGE: &str = "set_storage";
 
+    pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
+
     pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 18] = [
+    pub static IMPORTS: [&str; 20] = [
         ADDRESS,
         BALANCE,
         BLOCK_NUMBER,
@@ -60,6 +64,7 @@ pub mod imports {
         CHAIN_ID,
         CODE_SIZE,
         DEPOSIT_EVENT,
+        GET_IMMUTABLE_DATA,
         GET_STORAGE,
         HASH_KECCAK_256,
         INPUT,
@@ -68,6 +73,7 @@ pub mod imports {
         RETURN,
         RETURNDATACOPY,
         RETURNDATASIZE,
+        SET_IMMUTABLE_DATA,
         SET_STORAGE,
         VALUE_TRANSFERRED,
     ];

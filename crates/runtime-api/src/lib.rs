@@ -7,5 +7,6 @@
 //! [1]: [https://docs.rs/pallet-contracts/26.0.0/pallet_contracts/api_doc/index.html]
 
 pub mod calling_convention;
+pub mod immutable_data;
 pub mod polkavm_exports;
 pub mod polkavm_imports;

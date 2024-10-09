@@ -501,25 +501,30 @@ impl FunctionCall {
                 )
                 .map(|_| None)
             }
-            Name::LoadImmutable => todo!(),
+            Name::LoadImmutable => {
+                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let key = arguments[0].original.take().ok_or_else(|| {
+                    anyhow::anyhow!("{} `load_immutable` literal is missing", location)
+                })?;
+                let offset = context
+                    .solidity_mut()
+                    .get_or_allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
+                let index = context.xlen_type().const_int(offset as u64, false);
+                revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
+            }
             Name::SetImmutable => {
                 let mut arguments = self.pop_arguments::<D, 3>(context)?;
                 let key = arguments[1].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `load_immutable` literal is missing", location)
                 })?;
-
-                if key.as_str() == "library_deploy_address" {
-                    return Ok(None);
-                }
-
-                let offset = context.solidity_mut().allocate_immutable(key.as_str());
-
+                let offset = context.solidity_mut().allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
                 let index = context.word_const(offset as u64);
                 let value = arguments[2].value.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
-
             Name::CallDataLoad => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
 

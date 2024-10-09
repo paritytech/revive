@@ -17,7 +17,7 @@ impl SolidityData {
         Self::default()
     }
 
-    /// Returns the current number of immutables values in the contract.
+    /// Returns the current size of immutable values in the contract.
     pub fn immutables_size(&self) -> usize {
         self.immutables.len() * revive_common::BYTE_LENGTH_WORD
     }

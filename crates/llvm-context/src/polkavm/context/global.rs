@@ -51,4 +51,31 @@ impl<'ctx> Global<'ctx> {
 
         global
     }
+
+    /// Construct an external global.
+    pub fn declare<D, T>(
+        context: &mut Context<'ctx, D>,
+        r#type: T,
+        address_space: AddressSpace,
+        name: &str,
+    ) -> Self
+    where
+        D: PolkaVMDependency + Clone,
+        T: BasicType<'ctx>,
+    {
+        let r#type = r#type.as_basic_type_enum();
+
+        let value = context
+            .module()
+            .add_global(r#type, Some(address_space.into()), name);
+        let global = Self { r#type, value };
+
+        global.value.set_linkage(inkwell::module::Linkage::External);
+        global
+            .value
+            .set_visibility(inkwell::GlobalVisibility::Default);
+        global.value.set_externally_initialized(true);
+
+        global
+    }
 }

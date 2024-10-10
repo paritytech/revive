@@ -970,9 +970,7 @@ impl FunctionCall {
                     location
                 );
             }
-            Name::MSize => {
-                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
-            }
+            Name::MSize => revive_llvm_context::polkavm_evm_memory::msize(context).map(Some),
 
             Name::Verbatim {
                 input_size,

@@ -230,6 +230,8 @@ fn signed_remainder() {
             data: Contract::division_arithmetics_smod(n, d).calldata,
         })
     }
+
+    run_differential(actions);
 }
 
 /*

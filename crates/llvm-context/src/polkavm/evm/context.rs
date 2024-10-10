@@ -107,33 +107,6 @@ where
     Ok(context.word_const(0).as_basic_value_enum())
 }
 
-/// Translates the `msize` instruction.
-pub fn msize<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    let heap_end = context.build_sbrk(context.xlen_type().const_zero())?;
-    let heap_start = context
-        .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
-        .value
-        .as_pointer_value();
-    let heap_size = context.builder().build_int_nuw_sub(
-        context
-            .builder()
-            .build_ptr_to_int(heap_end, context.xlen_type(), "heap_end")?,
-        context
-            .builder()
-            .build_ptr_to_int(heap_start, context.xlen_type(), "heap_start")?,
-        "heap_size",
-    )?;
-    Ok(context
-        .builder()
-        .build_int_z_extend(heap_size, context.word_type(), "heap_size_extended")?
-        .as_basic_value_enum())
-}
-
 /// Translates the `address` instruction.
 pub fn address<'ctx, D>(
     context: &mut Context<'ctx, D>,

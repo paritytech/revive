@@ -3,8 +3,33 @@
 
 #include "polkavm_guest.h"
 
-
 // Missing builtins
+
+#define EVM_WORD_SIZE 32
+#define ALIGN(size) ((size + EVM_WORD_SIZE - 1) & ~(EVM_WORD_SIZE - 1))
+#define MAX_MEMORY_SIZE (64 * 1024)
+static char __memory[MAX_MEMORY_SIZE];
+static uint32_t __memory_size = 0;
+
+void *  __sbrk_internal(uint32_t offset, uint32_t size) {
+    if (offset >= MAX_MEMORY_SIZE || size >= MAX_MEMORY_SIZE) {
+        return NULL;
+    }
+
+    uint32_t new_size = ALIGN(offset + size);
+    if (new_size >= MAX_MEMORY_SIZE) {
+        return NULL;
+    }
+    if (new_size > __memory_size) {
+        __memory_size = new_size;
+    }
+
+    return (void *)&__memory[__memory_size];
+}
+
+uint32_t __msize() {
+    return __memory_size;
+}
 
 void * memset(void *b, int c, size_t len) {
     uint8_t *dest = b;
@@ -36,18 +61,6 @@ void * memmove(void *dst, const void *src, size_t n) {
 
 	return dst;
 }
-
-void *  __sbrk(uint32_t size) {
-    uint32_t address;
-    __asm__ __volatile__(
-            ".insn r 0xb, 1, 0, %[dst], %[sz], zero"
-            : [dst] "=r" (address)
-            : [sz] "ir" (size)
-            :
-    );
-    return (void *)address;
-}
-
 
 // Imports
 

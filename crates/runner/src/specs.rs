@@ -289,16 +289,10 @@ impl Specs {
                     else {
                         panic!("the differential runner requires Code::Solidity source");
                     };
-
-                    assert_ne!(
-                        solc_optimizer,
-                        Some(false),
-                        "solc_optimizer must be enabled in differntial mode"
-                    );
                     assert_ne!(
                         pipeline,
                         Some(revive_solidity::SolcPipeline::EVMLA),
-                        "yul pipeline must be enabled in differntial mode"
+                        "yul pipeline must be enabled in differential mode"
                     );
                     assert!(
                         salt.0.is_none(),
@@ -311,9 +305,11 @@ impl Specs {
                     );
 
                     let deploy_code = match std::fs::read_to_string(&path) {
-                        Ok(solidity_source) => {
-                            hex::encode(compile_evm_deploy_code(&contract, &solidity_source))
-                        }
+                        Ok(solidity_source) => hex::encode(compile_evm_deploy_code(
+                            &contract,
+                            &solidity_source,
+                            solc_optimizer.unwrap_or(true),
+                        )),
                         Err(err) => panic!(
                             "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",
                             path.display(),

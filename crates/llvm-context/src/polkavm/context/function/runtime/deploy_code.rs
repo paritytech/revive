@@ -42,8 +42,7 @@ where
     D: Dependency + Clone,
 {
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        let function_type =
-            context.function_type::<inkwell::types::BasicTypeEnum>(vec![], 0, false);
+        let function_type = context.function_type::<inkwell::types::BasicTypeEnum>(vec![], 0);
         context.add_function(
             runtime::FUNCTION_DEPLOY_CODE,
             function_type,

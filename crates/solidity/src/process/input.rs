@@ -14,8 +14,6 @@ pub struct Input {
     pub contract: Contract,
     /// The project representation.
     pub project: Project,
-    /// The system mode flag.
-    pub is_system_mode: bool,
     /// Whether to append the metadata hash.
     pub include_metadata_hash: bool,
     /// The optimizer settings.
@@ -29,7 +27,6 @@ impl Input {
     pub fn new(
         contract: Contract,
         project: Project,
-        is_system_mode: bool,
         include_metadata_hash: bool,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: Option<revive_llvm_context::DebugConfig>,
@@ -37,7 +34,6 @@ impl Input {
         Self {
             contract,
             project,
-            is_system_mode,
             include_metadata_hash,
             optimizer_settings,
             debug_config,

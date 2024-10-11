@@ -62,10 +62,6 @@ pub struct Arguments {
     #[structopt(long = "fallback-Oz")]
     pub fallback_to_optimizing_for_size: bool,
 
-    /// Disable the system request memoization.
-    #[structopt(long = "disable-system-request-memoization")]
-    pub disable_system_request_memoization: bool,
-
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
     /// Beware that it will prevent libraries from being inlined.
@@ -122,13 +118,6 @@ pub struct Arguments {
     /// and contained more bugs than today.
     #[structopt(long = "force-evmla")]
     pub force_evmla: bool,
-
-    /// Enable system contract compilation mode.
-    /// In this mode PolkaVM extensions are enabled. For example, calls to addresses `0xFFFF` and below
-    /// are substituted by special PolkaVM instructions.
-    /// In the Yul mode, the `verbatim_*` instruction family is available.
-    #[structopt(long = "system-mode")]
-    pub is_system_mode: bool,
 
     /// Set metadata hash mode.
     /// The only supported value is `none` that disables appending the metadata hash.
@@ -267,12 +256,6 @@ impl Arguments {
             if self.solc.is_some() {
                 anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
             }
-
-            if self.is_system_mode {
-                anyhow::bail!(
-                    "System contract mode is not supported in LLVM IR and PolkaVM assembly modes."
-                );
-            }
         }
 
         if self.combined_json.is_some() {
@@ -317,11 +300,6 @@ impl Arguments {
             if self.fallback_to_optimizing_for_size {
                 anyhow::bail!(
                     "Falling back to -Oz must specified in standard JSON input settings."
-                );
-            }
-            if self.disable_system_request_memoization {
-                anyhow::bail!(
-                    "Disabling the system request memoization must specified in standard JSON input settings."
                 );
             }
             if self.metadata_hash.is_some() {

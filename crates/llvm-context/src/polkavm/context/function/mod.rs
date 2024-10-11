@@ -95,12 +95,6 @@ impl<'ctx> Function<'ctx> {
                 && name != self::runtime::FUNCTION_LOAD_IMMUTABLE_DATA)
     }
 
-    /// Checks whether the function is related to the near call ABI.
-    pub fn is_near_call_abi(name: &str) -> bool {
-        name.starts_with(Self::ZKSYNC_NEAR_CALL_ABI_PREFIX)
-            || name == Self::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER
-    }
-
     /// Returns the LLVM function declaration.
     pub fn declaration(&self) -> Declaration<'ctx> {
         self.declaration

@@ -234,12 +234,7 @@ where
             })
             .collect();
 
-        let function_type = context.function_type(
-            argument_types,
-            self.result.len(),
-            self.identifier
-                .starts_with(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX),
-        );
+        let function_type = context.function_type(argument_types, self.result.len());
 
         let function = context.add_function(
             self.identifier.as_str(),
@@ -323,7 +318,6 @@ where
                     context.current_function().borrow().r#return(),
                     revive_llvm_context::PolkaVMFunctionReturn::Compound { .. }
                 )
-                && context.is_system_mode()
             {
                 index += 1;
             }

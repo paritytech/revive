@@ -128,7 +128,7 @@ impl FunctionCall {
             Name::UserDefined(name)
                 if name.starts_with(
                     revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
-                ) && context.is_system_mode() =>
+                ) =>
             {
                 unimplemented!();
             }

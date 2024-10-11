@@ -413,47 +413,14 @@ where
         &self.llvm_runtime
     }
 
-    /// Declare a function already existing in the module.
-    pub fn declare_extern_function(
-        &mut self,
-        name: &str,
-    ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        let function = self.module().get_function(name).ok_or_else(|| {
-            anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
-        })?;
-
-        let basic_block = self.llvm.append_basic_block(function, name);
-        let declaration = FunctionDeclaration::new(
-            self.function_type::<inkwell::types::BasicTypeEnum>(vec![], 0, false),
-            function,
-        );
-        let function = Function::new(
-            name.to_owned(),
-            declaration,
-            FunctionReturn::None,
-            basic_block,
-            basic_block,
-        );
-        Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
-
-        let function = Rc::new(RefCell::new(function));
-        self.functions.insert(name.to_string(), function.clone());
-
-        Ok(function)
-    }
-
     /// Appends a function to the current module.
     pub fn add_function(
         &mut self,
         name: &str,
         r#type: inkwell::types::FunctionType<'ctx>,
         return_values_length: usize,
-        mut linkage: Option<inkwell::module::Linkage>,
+        linkage: Option<inkwell::module::Linkage>,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        if Function::is_near_call_abi(name) && self.is_system_mode() {
-            linkage = Some(inkwell::module::Linkage::External);
-        }
-
         let value = self.module().add_function(name, r#type, linkage);
 
         let entry_block = self.llvm.append_basic_block(value, "entry");
@@ -492,10 +459,6 @@ where
             return_block,
         );
         Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
-        if Function::is_near_call_abi(function.name()) && self.is_system_mode() {
-            Function::set_exception_handler_attributes(self.llvm, function.declaration());
-        }
-
         let function = Rc::new(RefCell::new(function));
         self.functions.insert(name.to_string(), function.clone());
 
@@ -556,10 +519,6 @@ where
                     manager,
                     name,
                     self.optimizer.settings().to_owned(),
-                    self.yul_data
-                        .as_ref()
-                        .map(|data| data.is_system_mode())
-                        .unwrap_or_default(),
                     self.include_metadata_hash,
                     self.debug_config.clone(),
                 )
@@ -1330,12 +1289,11 @@ where
         &self,
         argument_types: Vec<T>,
         return_values_size: usize,
-        is_near_call_abi: bool,
     ) -> inkwell::types::FunctionType<'ctx>
     where
         T: BasicType<'ctx>,
     {
-        let mut argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
+        let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
             .as_slice()
             .iter()
             .map(T::as_basic_type_enum)
@@ -1347,11 +1305,6 @@ where
                 .void_type()
                 .fn_type(argument_types.as_slice(), false),
             1 => self.word_type().fn_type(argument_types.as_slice(), false),
-            _size if is_near_call_abi && self.is_system_mode() => {
-                let return_type = self.llvm().ptr_type(AddressSpace::Stack.into());
-                argument_types.insert(0, return_type.as_basic_type_enum().into());
-                return_type.fn_type(argument_types.as_slice(), false)
-            }
             size => self
                 .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
@@ -1543,13 +1496,5 @@ where
         } else {
             anyhow::bail!("The immutable size data is not available");
         }
-    }
-
-    /// Whether the system mode is enabled.
-    pub fn is_system_mode(&self) -> bool {
-        self.yul_data
-            .as_ref()
-            .map(|data| data.is_system_mode())
-            .unwrap_or_default()
     }
 }

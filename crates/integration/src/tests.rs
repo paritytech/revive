@@ -42,6 +42,7 @@ test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
 test_spec!(transfer, "Transfer", "Transfer.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
+test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(extcode, "ExtCode", "ExtCode.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
@@ -230,6 +231,8 @@ fn signed_remainder() {
             data: Contract::division_arithmetics_smod(n, d).calldata,
         })
     }
+
+    run_differential(actions);
 }
 
 /*

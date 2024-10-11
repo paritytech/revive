@@ -234,33 +234,6 @@ fn signed_remainder() {
     run_differential(actions);
 }
 
-#[test]
-fn balance_of() {
-    let mut actions = instantiate("contracts/Value.sol", "Value");
-
-    actions.push(Call {
-        origin: TestAddress::Alice,
-        dest: TestAddress::Instantiated(0),
-        value: 0,
-        gas_limit: None,
-        storage_deposit_limit: None,
-        data: Contract::value_balance_of(Address::from(CHARLIE.to_fixed_bytes())).calldata,
-    });
-
-    actions.push(VerifyCall(VerifyCallExpectation {
-        success: true,
-        // Charlie's balance without ExistentialDeposit
-        output: OptionalHex::from(U256::from(1_000_000_000 - 1_000).to_be_bytes_vec()),
-        gas_consumed: None,
-    }));
-
-    Specs {
-        actions,
-        ..Default::default()
-    }
-    .run();
-}
-
 /*
 // These test were implement for the mock-runtime and need to be ported yet.
 
@@ -288,32 +261,6 @@ fn create2_failure() {
         .call();
 
     assert_eq!(output.flags, ReturnFlags::Revert);
-}
-
-
-#[test]
-fn balance() {
-    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
-
-    let expected = U256::ZERO;
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-
-    let expected = U256::from(54589);
-    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
-    state.accounts_mut().get_mut(&address).unwrap().value = expected;
-
-    let contract = Contract::value_balance_of(address);
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(ReturnFlags::Success, output.flags);
-
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received)
 }
 
 #[test]

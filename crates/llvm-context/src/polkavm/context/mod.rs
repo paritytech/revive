@@ -654,6 +654,21 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
+    /// Build address argument store point with bytes swapped and truncated.
+    pub fn build_address_argument_store(
+        &self,
+        address: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<Pointer<'ctx>> {
+        let address_type = self.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+        let address_pointer = self.build_alloca_at_entry(address_type, "address_pointer");
+        let address_truncated =
+            self.builder()
+                .build_int_truncate(address, address_type, "address_truncated")?;
+        let address_swapped = self.build_byte_swap(address_truncated.into())?;
+        self.build_store(address_pointer, address_swapped)?;
+        Ok(address_pointer)
+    }
+
     /// Load the address at given pointer and zero extend it to the VM word size.
     pub fn build_load_address(
         &self,

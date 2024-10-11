@@ -40,14 +40,7 @@ pub fn balance<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
-    let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
-    let address_truncated =
-        context
-            .builder()
-            .build_int_truncate(address, address_type, "address_truncated")?;
-    let address_swapped = context.build_byte_swap(address_truncated.into())?;
-    context.build_store(address_pointer, address_swapped)?;
+    let address_pointer = context.build_address_argument_store(address)?;
 
     let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
     let balance = context.builder().build_ptr_to_int(

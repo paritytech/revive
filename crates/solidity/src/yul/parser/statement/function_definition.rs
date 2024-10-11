@@ -92,37 +92,7 @@ impl FunctionDefinition {
             }
         }
 
-        let (mut arguments, next) = Identifier::parse_typed_list(lexer, None)?;
-        if identifier
-            .inner
-            .contains(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
-        {
-            if arguments.is_empty() {
-                return Err(ParserError::InvalidNumberOfArguments {
-                    location,
-                    identifier: identifier.inner,
-                    expected: 1,
-                    found: arguments.len(),
-                }
-                .into());
-            }
-
-            arguments.remove(0);
-        }
-        if identifier
-            .inner
-            .contains(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER)
-            && !arguments.is_empty()
-        {
-            return Err(ParserError::InvalidNumberOfArguments {
-                location,
-                identifier: identifier.inner,
-                expected: 0,
-                found: arguments.len(),
-            }
-            .into());
-        }
-
+        let (arguments, next) = Identifier::parse_typed_list(lexer, None)?;
         match crate::yul::parser::take_or_next(next, lexer)? {
             Token {
                 lexeme: Lexeme::Symbol(Symbol::ParenthesisRight),
@@ -234,12 +204,7 @@ where
             })
             .collect();
 
-        let function_type = context.function_type(
-            argument_types,
-            self.result.len(),
-            self.identifier
-                .starts_with(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX),
-        );
+        let function_type = context.function_type(argument_types, self.result.len());
 
         let function = context.add_function(
             self.identifier.as_str(),
@@ -310,23 +275,12 @@ where
                 yul_type.into_llvm(context)
             })
             .collect();
-        for (mut index, argument) in self.arguments.iter().enumerate() {
+        for (index, argument) in self.arguments.iter().enumerate() {
             let pointer = context.build_alloca(argument_types[index], argument.inner.as_str());
             context
                 .current_function()
                 .borrow_mut()
                 .insert_stack_pointer(argument.inner.clone(), pointer);
-            if self
-                .identifier
-                .starts_with(revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX)
-                && matches!(
-                    context.current_function().borrow().r#return(),
-                    revive_llvm_context::PolkaVMFunctionReturn::Compound { .. }
-                )
-                && context.is_system_mode()
-            {
-                index += 1;
-            }
             context.build_store(
                 pointer,
                 context.current_function().borrow().get_nth_param(index),
@@ -353,13 +307,6 @@ where
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
-            }
-            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. }
-                if context.current_function().borrow().name().starts_with(
-                    revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
-                ) =>
-            {
-                context.build_return(Some(&pointer.value));
             }
             revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
                 let return_value = context.build_load(pointer, "return_value")?;
@@ -519,80 +466,6 @@ object "Test" {
                 location: Location::new(14, 29),
                 expected: vec!["->", "{"],
                 found: ":=".to_owned(),
-            }
-            .into())
-        );
-    }
-
-    #[test]
-    fn error_invalid_number_of_arguments_near_call_abi() {
-        let input = r#"
-object "Test" {
-    code {
-        {
-            return(0, 0)
-        }
-    }
-    object "Test_deployed" {
-        code {
-            {
-                return(0, 0)
-            }
-
-            function ZKSYNC_NEAR_CALL_test() -> result {
-                result := 42
-            }
-        }
-    }
-}
-    "#;
-
-        let mut lexer = Lexer::new(input.to_owned());
-        let result = Object::parse(&mut lexer, None);
-        assert_eq!(
-            result,
-            Err(Error::InvalidNumberOfArguments {
-                location: Location::new(14, 22),
-                identifier: "ZKSYNC_NEAR_CALL_test".to_owned(),
-                expected: 1,
-                found: 0,
-            }
-            .into())
-        );
-    }
-
-    #[test]
-    fn error_invalid_number_of_arguments_near_call_abi_catch() {
-        let input = r#"
-object "Test" {
-    code {
-        {
-            return(0, 0)
-        }
-    }
-    object "Test_deployed" {
-        code {
-            {
-                return(0, 0)
-            }
-
-            function ZKSYNC_CATCH_NEAR_CALL(length) {
-                revert(0, length)
-            }
-        }
-    }
-}
-    "#;
-
-        let mut lexer = Lexer::new(input.to_owned());
-        let result = Object::parse(&mut lexer, None);
-        assert_eq!(
-            result,
-            Err(Error::InvalidNumberOfArguments {
-                location: Location::new(14, 22),
-                identifier: "ZKSYNC_CATCH_NEAR_CALL".to_owned(),
-                expected: 0,
-                found: 1,
             }
             .into())
         );

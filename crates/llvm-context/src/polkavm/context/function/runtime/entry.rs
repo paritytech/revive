@@ -191,7 +191,7 @@ where
 {
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry_arguments = vec![context.bool_type().as_basic_type_enum()];
-        let entry_function_type = context.function_type(entry_arguments, 0, false);
+        let entry_function_type = context.function_type(entry_arguments, 0);
         context.add_function(
             runtime::FUNCTION_ENTRY,
             entry_function_type,

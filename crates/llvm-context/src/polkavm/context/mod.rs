@@ -433,12 +433,6 @@ where
                 let pointer = self.build_alloca(self.word_type(), "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
-            size if name.starts_with(Function::ZKSYNC_NEAR_CALL_ABI_PREFIX) => {
-                let first_argument = value.get_first_param().expect("Always exists");
-                let r#type = self.structure_type(vec![self.word_type(); size].as_slice());
-                let pointer = first_argument.into_pointer_value();
-                FunctionReturn::compound(Pointer::new(r#type, AddressSpace::Stack, pointer), size)
-            }
             size => {
                 self.set_basic_block(entry_block);
                 let pointer = self.build_alloca(

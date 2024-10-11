@@ -60,7 +60,8 @@ where
     let address_swapped = context.build_byte_swap(address_truncated.into())?;
     context.build_store(address_pointer, address_swapped)?;
 
-    let extcodehash_pointer = context.build_alloca(context.word_type(), "extcodehash_pointer");
+    let extcodehash_pointer =
+        context.build_alloca_at_entry(context.word_type(), "extcodehash_pointer");
 
     context.build_runtime_call(
         runtime_api::imports::CODE_HASH,
@@ -70,5 +71,5 @@ where
         ],
     );
 
-    context.build_load_bytes(extcodehash_pointer)
+    context.build_byte_swap(context.build_load(extcodehash_pointer, "extcodehash_value")?)
 }

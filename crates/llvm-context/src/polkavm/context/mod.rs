@@ -666,18 +666,6 @@ where
             .into())
     }
 
-    /// Load bytes32 at given pointer
-    pub fn build_load_bytes(
-        &self,
-        pointer: Pointer<'ctx>,
-    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let code_hash = self.build_byte_swap(self.build_load(pointer, "bytes_pointer")?)?;
-        Ok(self
-            .builder()
-            .build_int_z_extend(code_hash.into_int_value(), self.word_type(), "bytes_zext")?
-            .into())
-    }
-
     /// Builds a stack load instruction.
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
     pub fn build_load(

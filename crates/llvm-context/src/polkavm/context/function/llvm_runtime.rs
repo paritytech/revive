@@ -12,15 +12,6 @@ use crate::polkavm::context::function::Function;
 #[derive(Debug)]
 pub struct LLVMRuntime<'ctx> {
     /// The corresponding LLVM runtime function.
-    pub shl: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub shr: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub sar: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub byte: FunctionDeclaration<'ctx>,
-
-    /// The corresponding LLVM runtime function.
     pub add_mod: FunctionDeclaration<'ctx>,
     /// The corresponding LLVM runtime function.
     pub mul_mod: FunctionDeclaration<'ctx>,
@@ -31,32 +22,9 @@ pub struct LLVMRuntime<'ctx> {
 
     /// The corresponding LLVM runtime function.
     pub sha3: FunctionDeclaration<'ctx>,
-
-    /// The corresponding LLVM runtime function.
-    pub r#return: FunctionDeclaration<'ctx>,
-    /// The corresponding LLVM runtime function.
-    pub revert: FunctionDeclaration<'ctx>,
 }
 
 impl<'ctx> LLVMRuntime<'ctx> {
-    /// The LLVM personality function name.
-    pub const FUNCTION_PERSONALITY: &'static str = "__personality";
-
-    /// The LLVM exception throwing function name.
-    pub const FUNCTION_CXA_THROW: &'static str = "__cxa_throw";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SHL: &'static str = "__shl";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SHR: &'static str = "__shr";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SAR: &'static str = "__sar";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_BYTE: &'static str = "__byte";
-
     /// The corresponding runtime function name.
     pub const FUNCTION_ADDMOD: &'static str = "__addmod";
 
@@ -72,121 +40,12 @@ impl<'ctx> LLVMRuntime<'ctx> {
     /// The corresponding runtime function name.
     pub const FUNCTION_SHA3: &'static str = "__sha3";
 
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SYSTEM_REQUEST: &'static str = "__system_request";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_FARCALL: &'static str = "__farcall";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_STATICCALL: &'static str = "__staticcall";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_DELEGATECALL: &'static str = "__delegatecall";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_MIMICCALL: &'static str = "__mimiccall";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_FARCALL_BYREF: &'static str = "__farcall_byref";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_STATICCALL_BYREF: &'static str = "__staticcall_byref";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_DELEGATECALL_BYREF: &'static str = "__delegatecall_byref";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_MIMICCALL_BYREF: &'static str = "__mimiccall_byref";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_RETURN: &'static str = "__return";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_REVERT: &'static str = "__revert";
-
     /// A shortcut constructor.
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
         optimizer: &Optimizer,
     ) -> Self {
-        let shl = Self::declare(
-            module,
-            Self::FUNCTION_SHL,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, shl, optimizer);
-        Function::set_pure_function_attributes(llvm, shl);
-
-        let shr = Self::declare(
-            module,
-            Self::FUNCTION_SHR,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, shr, optimizer);
-        Function::set_pure_function_attributes(llvm, shr);
-
-        let sar = Self::declare(
-            module,
-            Self::FUNCTION_SAR,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, sar, optimizer);
-        Function::set_pure_function_attributes(llvm, sar);
-
-        let byte = Self::declare(
-            module,
-            Self::FUNCTION_BYTE,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into();
-                        2
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, byte, optimizer);
-        Function::set_pure_function_attributes(llvm, byte);
-
         let add_mod =
             Self::define(module, Self::FUNCTION_ADDMOD).expect("should be declared in stdlib");
         Function::set_default_attributes(llvm, add_mod, optimizer);
@@ -236,54 +95,13 @@ impl<'ctx> LLVMRuntime<'ctx> {
             false,
         );
 
-        let r#return = Self::declare(
-            module,
-            Self::FUNCTION_RETURN,
-            llvm.void_type().fn_type(
-                vec![
-                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                        .as_basic_type_enum()
-                        .into();
-                    3
-                ]
-                .as_slice(),
-                false,
-            ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, r#return, optimizer);
-        let revert = Self::declare(
-            module,
-            Self::FUNCTION_REVERT,
-            llvm.void_type().fn_type(
-                vec![
-                    llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                        .as_basic_type_enum()
-                        .into();
-                    3
-                ]
-                .as_slice(),
-                false,
-            ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, revert, optimizer);
-
         Self {
-            shl,
-            shr,
-            sar,
-            byte,
-
             add_mod,
             mul_mod,
             exp,
             sign_extend,
 
             sha3,
-
-            r#return,
-            revert,
         }
     }
 

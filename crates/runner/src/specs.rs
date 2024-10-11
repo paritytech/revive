@@ -417,8 +417,7 @@ impl Specs {
                             let code_hash = match code.clone() {
                                 pallet_revive::Code::Existing(code_hash) => code_hash,
                                 pallet_revive::Code::Upload(bytes) => {
-                                    let a = keccak256(&bytes);
-                                    H256::from_slice(&a.as_slice())
+                                    H256::from_slice(keccak256(&bytes).as_slice())
                                 }
                             };
                             let origin = RuntimeOrigin::signed(origin.to_account_id(&results));

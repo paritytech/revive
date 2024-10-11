@@ -234,6 +234,33 @@ fn signed_remainder() {
     run_differential(actions);
 }
 
+#[test]
+fn balance_of() {
+    let mut actions = instantiate("contracts/Value.sol", "Value");
+
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::value_balance_of(Address::from(CHARLIE.to_fixed_bytes())).calldata,
+    });
+
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        // Charlie's balance without ExistentialDeposit
+        output: OptionalHex::from(U256::from(1_000_000_000 - 1_000).to_be_bytes_vec()),
+        gas_consumed: None,
+    }));
+
+    Specs {
+        actions,
+        ..Default::default()
+    }
+    .run();
+}
+
 /*
 // These test were implement for the mock-runtime and need to be ported yet.
 

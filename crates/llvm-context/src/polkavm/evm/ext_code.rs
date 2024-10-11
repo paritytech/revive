@@ -62,14 +62,13 @@ where
 
     let extcodehash_pointer = context.build_alloca(context.word_type(), "extcodehash_pointer");
 
-    context
-        .build_runtime_call(
-            runtime_api::imports::CODE_HASH,
-            &[
-                address_pointer.to_int(context).into(),
-                extcodehash_pointer.to_int(context).into()
-            ],
-        );
+    context.build_runtime_call(
+        runtime_api::imports::CODE_HASH,
+        &[
+            address_pointer.to_int(context).into(),
+            extcodehash_pointer.to_int(context).into(),
+        ],
+    );
 
     context.build_load_bytes(extcodehash_pointer)
 }

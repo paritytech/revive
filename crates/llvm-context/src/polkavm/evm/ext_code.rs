@@ -45,11 +45,31 @@ where
 
 /// Translates the `extcodehash` instruction.
 pub fn hash<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
-    _address: inkwell::values::IntValue<'ctx>,
+    context: &mut Context<'ctx, D>,
+    address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
+    let address_truncated =
+        context
+            .builder()
+            .build_int_truncate(address, address_type, "address_truncated")?;
+    let address_swapped = context.build_byte_swap(address_truncated.into())?;
+    context.build_store(address_pointer, address_swapped)?;
+
+    let extcodehash_pointer = context.build_alloca(context.word_type(), "extcodehash_pointer");
+
+    context
+        .build_runtime_call(
+            runtime_api::imports::CODE_HASH,
+            &[
+                address_pointer.to_int(context).into(),
+                extcodehash_pointer.to_int(context).into()
+            ],
+        );
+
+    context.build_load_bytes(extcodehash_pointer)
 }

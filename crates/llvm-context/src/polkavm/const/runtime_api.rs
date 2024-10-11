@@ -57,7 +57,7 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 20] = [
+    pub static IMPORTS: [&str; 21] = [
         ADDRESS,
         BALANCE,
         BLOCK_NUMBER,
@@ -65,6 +65,7 @@ pub mod imports {
         CALLER,
         CHAIN_ID,
         CODE_SIZE,
+        CODE_HASH,
         DEPOSIT_EVENT,
         GET_IMMUTABLE_DATA,
         GET_STORAGE,

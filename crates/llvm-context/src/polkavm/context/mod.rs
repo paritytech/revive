@@ -1072,8 +1072,9 @@ where
     }
 
     /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.
+    /// The allocation is aligned to 32 bytes.
     ///
-    /// This is emulating the EVM linear memory until PVM supports metered memory.
+    /// This emulates the EVM linear memory until the runtime supports metered memory.
     pub fn build_sbrk(
         &self,
         offset: inkwell::values::IntValue<'ctx>,
@@ -1107,14 +1108,13 @@ where
             .into_int_value())
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap by `size`,
+    /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
     /// trapping the contract if the call failed.
-    /// Returns the end of memory pointer.
     pub fn build_heap_alloc(
         &self,
         offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
-    ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
+    ) -> anyhow::Result<()> {
         let end_of_memory = self.build_sbrk(offset, size)?;
         let return_is_nil = self.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
@@ -1133,7 +1133,7 @@ where
 
         self.set_basic_block(continue_block);
 
-        Ok(end_of_memory)
+        Ok(())
     }
 
     /// Returns a pointer to `offset` into the heap, allocating

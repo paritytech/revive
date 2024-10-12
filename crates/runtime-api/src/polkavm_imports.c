@@ -12,12 +12,12 @@ static char __memory[MAX_MEMORY_SIZE];
 static uint32_t __memory_size = 0;
 
 void *  __sbrk_internal(uint32_t offset, uint32_t size) {
-    if (offset >= MAX_MEMORY_SIZE || size >= MAX_MEMORY_SIZE) {
+    if (offset >= MAX_MEMORY_SIZE || size > MAX_MEMORY_SIZE) {
         return NULL;
     }
 
     uint32_t new_size = ALIGN(offset + size);
-    if (new_size >= MAX_MEMORY_SIZE) {
+    if (new_size > MAX_MEMORY_SIZE) {
         return NULL;
     }
     if (new_size > __memory_size) {

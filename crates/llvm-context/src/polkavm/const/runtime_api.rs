@@ -21,6 +21,8 @@ pub mod imports {
 
     pub static BALANCE: &str = "balance";
 
+    pub static BALANCE_OF: &str = "balance_of";
+
     pub static BLOCK_NUMBER: &str = "block_number";
 
     pub static CHAIN_ID: &str = "chain_id";
@@ -59,11 +61,12 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 22] = [
+    pub static IMPORTS: [&str; 23] = [
         SBRK,
         MEMORY_SIZE,
         ADDRESS,
         BALANCE,
+        BALANCE_OF,
         BLOCK_NUMBER,
         CALL,
         CALLER,

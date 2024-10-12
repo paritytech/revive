@@ -118,6 +118,8 @@ POLKAVM_IMPORT(void, gas_left, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, balance, uint32_t)
 
+POLKAVM_IMPORT(void, balance_of, uint32_t, uint32_t)
+
 POLKAVM_IMPORT(void, chain_id, uint32_t)
 
 POLKAVM_IMPORT(void, now, uint32_t)

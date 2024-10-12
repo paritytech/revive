@@ -40,22 +40,19 @@ pub fn balance<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
-    let address_pointer = context.build_alloca(context.word_type(), "address_pointer");
-    context.build_store(address_pointer, address)?;
+    let address_pointer = context.build_address_argument_store(address)?;
 
+    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
     let balance = context.builder().build_ptr_to_int(
         balance_pointer.value,
         context.xlen_type(),
         "balance",
     )?;
-    let _address = context.builder().build_ptr_to_int(
-        address_pointer.value,
-        context.xlen_type(),
-        "address",
-    )?;
 
-    context.build_runtime_call(runtime_api::imports::BALANCE, &[balance.into()]);
+    context.build_runtime_call(
+        runtime_api::imports::BALANCE_OF,
+        &[address_pointer.to_int(context).into(), balance.into()],
+    );
 
     context.build_load(balance_pointer, "balance")
 }

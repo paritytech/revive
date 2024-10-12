@@ -654,8 +654,9 @@ where
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Allocate and store an Ethereum address after truncating and swapping its bytes.
-    /// Returns a pointer to the stored address or an error if the operation fails.
+    /// Truncate `address` to the ethereum address length and store it as bytes on the stack.
+    /// The stack allocation will be at the function entry. Returns the stack pointer.
+    /// This helper should be used when passing address arguments to the runtime, ensuring correct size and endianness.
     pub fn build_address_argument_store(
         &self,
         address: inkwell::values::IntValue<'ctx>,

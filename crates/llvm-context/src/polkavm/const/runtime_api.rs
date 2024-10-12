@@ -25,9 +25,13 @@ pub mod imports {
 
     pub static CALL: &str = "call";
 
+    pub static DELEGATE_CALL: &str = "delegate_call";
+
     pub static CALLER: &str = "caller";
 
     pub static CODE_SIZE: &str = "code_size";
+
+    pub static CODE_HASH: &str = "code_hash";
 
     pub static DEPOSIT_EVENT: &str = "deposit_event";
 
@@ -57,15 +61,17 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 21] = [
+    pub static IMPORTS: [&str; 23] = [
         ADDRESS,
         BALANCE,
         BALANCE_OF,
         BLOCK_NUMBER,
         CALL,
+        DELEGATE_CALL,
         CALLER,
         CHAIN_ID,
         CODE_SIZE,
+        CODE_HASH,
         DEPOSIT_EVENT,
         GET_IMMUTABLE_DATA,
         GET_STORAGE,

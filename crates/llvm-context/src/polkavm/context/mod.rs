@@ -907,7 +907,7 @@ where
                     .copied()
                     .map(inkwell::values::BasicMetadataValueEnum::from)
                     .collect::<Vec<_>>(),
-                &format!("runtime API call {name}"),
+                &format!("runtime_api_{name}"),
             )
             .unwrap()
             .try_as_basic_value()

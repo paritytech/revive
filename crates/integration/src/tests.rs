@@ -43,6 +43,7 @@ test_spec!(call, "Caller", "Call.sol");
 test_spec!(transfer, "Transfer", "Transfer.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
+test_spec!(delegate, "Delegate", "Delegate.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

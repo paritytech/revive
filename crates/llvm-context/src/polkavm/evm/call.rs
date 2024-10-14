@@ -103,20 +103,79 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub fn delegate_call<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
     _gas: inkwell::values::IntValue<'ctx>,
-    _address: inkwell::values::IntValue<'ctx>,
+    address: inkwell::values::IntValue<'ctx>,
     _value: Option<inkwell::values::IntValue<'ctx>>,
-    _input_offset: inkwell::values::IntValue<'ctx>,
-    _input_length: inkwell::values::IntValue<'ctx>,
-    _output_offset: inkwell::values::IntValue<'ctx>,
-    _output_length: inkwell::values::IntValue<'ctx>,
+    input_offset: inkwell::values::IntValue<'ctx>,
+    input_length: inkwell::values::IntValue<'ctx>,
+    output_offset: inkwell::values::IntValue<'ctx>,
+    output_length: inkwell::values::IntValue<'ctx>,
     _constants: Vec<Option<num::BigUint>>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let address_pointer = context.build_address_argument_store(address)?;
+
+    let extcodehash_pointer =
+        context.build_alloca_at_entry(context.word_type(), "extcodehash_pointer");
+
+    context.build_runtime_call(
+        runtime_api::imports::CODE_HASH,
+        &[
+            address_pointer.to_int(context).into(),
+            extcodehash_pointer.to_int(context).into(),
+        ],
+    );
+
+    context.build_byte_swap(context.build_load(extcodehash_pointer, "extcodehash_value")?)?;
+
+    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
+    let input_length = context.safe_truncate_int_to_xlen(input_length)?;
+    let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
+    let output_length = context.safe_truncate_int_to_xlen(output_length)?;
+
+    // TODO: What to supply here? Is there a weight to gas?
+    let _gas = context
+        .builder()
+        .build_int_truncate(_gas, context.integer_type(64), "gas")?;
+
+    let input_pointer = context.build_heap_gep(input_offset, input_length)?;
+    let output_pointer = context.build_heap_gep(output_offset, output_length)?;
+
+    let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
+    context.build_store(output_length_pointer, output_length)?;
+
+    let flags = context.xlen_type().const_int(0u64, false);
+
+    let name = runtime_api::imports::DELEGATE_CALL;
+    let success = context
+        .build_runtime_call(
+            name,
+            &[
+                flags.into(),
+                extcodehash_pointer.to_int(context).into(),
+                input_pointer.to_int(context).into(),
+                input_length.into(),
+                output_pointer.to_int(context).into(),
+                output_length_pointer.to_int(context).into(),
+            ],
+        )
+        .unwrap_or_else(|| panic!("{name} should return a value"))
+        .into_int_value();
+
+    let is_success = context.builder().build_int_compare(
+        inkwell::IntPredicate::EQ,
+        success,
+        context.xlen_type().const_zero(),
+        "is_success",
+    )?;
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(is_success, context.word_type(), "success")?
+        .as_basic_value_enum())
 }
 
 /// Translates the Yul `linkersymbol` instruction.

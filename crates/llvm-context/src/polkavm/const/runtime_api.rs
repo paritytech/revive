@@ -29,6 +29,8 @@ pub mod imports {
 
     pub static CODE_SIZE: &str = "code_size";
 
+    pub static CODE_HASH: &str = "code_hash";
+
     pub static DEPOSIT_EVENT: &str = "deposit_event";
 
     pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
@@ -66,6 +68,7 @@ pub mod imports {
         CALLER,
         CHAIN_ID,
         CODE_SIZE,
+        CODE_HASH,
         DEPOSIT_EVENT,
         GET_IMMUTABLE_DATA,
         GET_STORAGE,

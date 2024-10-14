@@ -32,7 +32,7 @@ use polkadot_sdk::{
     pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
-    sp_core::H160,
+    sp_core::{H160, H256},
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
     sp_runtime::AccountId32,
 };
@@ -185,6 +185,7 @@ pub enum CallResult {
     Instantiate {
         result: ContractInstantiateResult<Balance, EventRecord>,
         wall_time: Duration,
+        code_hash: H256,
     },
 }
 

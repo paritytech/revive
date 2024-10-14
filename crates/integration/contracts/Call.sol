@@ -21,16 +21,8 @@ pragma solidity ^0.8;
                     "Solidity": {
                         "contract": "Caller"
                     }
-                }
-            }
-        },
-        {
-            "Call": {
-                "dest": {
-                    "Instantiated": 0
                 },
-                "value": 123,
-                "data": "1eb16e5b000000000000000000000000d8b934580fce35a11b58c6d73adee468a2833fa8"
+                "value": 123
             }
         },
         {
@@ -49,11 +41,14 @@ contract Callee {
     function echo(bytes memory payload) public pure returns (bytes memory) {
         return payload;
     }
+
+    receive() external payable {}
 }
 
 contract Caller {
-    function value_transfer(address payable destination) public payable {
-        destination.transfer(msg.value);
+    constructor() payable {
+        Callee callee = new Callee();
+        payable(address(callee)).transfer(msg.value);
     }
 
     function call(bytes memory payload) public returns (bytes memory) {

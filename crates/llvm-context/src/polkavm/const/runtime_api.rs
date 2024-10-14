@@ -21,11 +21,11 @@ pub mod imports {
 
     pub static BLOCK_NUMBER: &str = "block_number";
 
-    pub static CHAIN_ID: &str = "chain_id";
-
     pub static CALL: &str = "call";
 
     pub static CALLER: &str = "caller";
+
+    pub static CHAIN_ID: &str = "chain_id";
 
     pub static CODE_SIZE: &str = "code_size";
 
@@ -45,11 +45,11 @@ pub mod imports {
 
     pub static RETURN: &str = "seal_return";
 
+    pub static SET_STORAGE: &str = "set_storage";
+
     pub static RETURNDATACOPY: &str = "return_data_copy";
 
     pub static RETURNDATASIZE: &str = "return_data_size";
-
-    pub static SET_STORAGE: &str = "set_storage";
 
     pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
 

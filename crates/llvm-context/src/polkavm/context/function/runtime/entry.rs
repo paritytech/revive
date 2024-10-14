@@ -19,9 +19,6 @@ impl Entry {
     /// The call flags argument index.
     pub const ARGUMENT_INDEX_CALL_FLAGS: usize = 0;
 
-    /// The number of mandatory arguments.
-    pub const MANDATORY_ARGUMENTS_COUNT: usize = 2;
-
     /// Reserve 1kb for calldata.
     pub const MAX_CALLDATA_SIZE: usize = 1024;
 

@@ -1206,7 +1206,7 @@ where
                 anyhow::bail!("The `BLOBBASEFEE` instruction is not supported until zkVM v1.5.0");
             }
             InstructionName::MSIZE => {
-                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
+                revive_llvm_context::polkavm_evm_memory::msize(context).map(Some)
             }
 
             InstructionName::CALLCODE => {

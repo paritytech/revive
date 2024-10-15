@@ -40,7 +40,7 @@ const EXECUTABLE_ARGS_BENCH: [&str; 6] = [
     "-",
 ];
 const GAS_USED_MARKER: &str = "EVM gas used:";
-const REVERT_MARKER: &str = "error: execution reverted";
+const REVERT_MARKER: &str = " error: ";
 
 /// The geth EVM state dump structure
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

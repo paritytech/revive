@@ -58,7 +58,10 @@ impl Entry {
             context
                 .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
                 .into(),
-            context.build_sbrk(context.integer_const(crate::polkavm::XLEN, 0))?,
+            context.build_sbrk(
+                context.xlen_type().const_zero(),
+                context.xlen_type().const_zero(),
+            )?,
         )?;
 
         context.set_global(

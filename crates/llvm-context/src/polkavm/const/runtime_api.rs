@@ -13,6 +13,10 @@ pub mod exports {
 }
 
 pub mod imports {
+    pub static SBRK: &str = "__sbrk_internal";
+
+    pub static MEMORY_SIZE: &str = "__msize";
+
     pub static ADDRESS: &str = "address";
 
     pub static BALANCE: &str = "balance";
@@ -57,7 +61,9 @@ pub mod imports {
 
     /// All imported runtime API symbols.
     /// Useful for configuring common attributes and linkage.
-    pub static IMPORTS: [&str; 21] = [
+    pub static IMPORTS: [&str; 23] = [
+        SBRK,
+        MEMORY_SIZE,
         ADDRESS,
         BALANCE,
         BALANCE_OF,
@@ -81,6 +87,3 @@ pub mod imports {
         VALUE_TRANSFERRED,
     ];
 }
-
-/// PolkaVM __sbrk API symbol to extend the heap memory.
-pub static SBRK: &str = "__sbrk";

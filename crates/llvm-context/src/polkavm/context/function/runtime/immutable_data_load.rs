@@ -4,8 +4,8 @@ use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
+use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
-use crate::polkavm::{runtime_api, Dependency};
 
 /// A function for requesting the immutable data from the runtime.
 /// This is a special function that is only used by the front-end generated code.
@@ -70,7 +70,7 @@ where
             .value
             .as_pointer_value();
         context.build_runtime_call(
-            runtime_api::imports::GET_IMMUTABLE_DATA,
+            revive_runtime_api::polkavm_imports::GET_IMMUTABLE_DATA,
             &[
                 context
                     .builder()

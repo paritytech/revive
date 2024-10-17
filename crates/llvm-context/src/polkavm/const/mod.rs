@@ -1,8 +1,5 @@
 //! The LLVM context constants.
 
-/// Runtime API methods.
-pub mod runtime_api;
-
 /// The LLVM framework version.
 pub const LLVM_VERSION: semver::Version = semver::Version::new(18, 1, 4);
 

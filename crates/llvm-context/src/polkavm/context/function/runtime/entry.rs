@@ -5,7 +5,6 @@ use inkwell::types::BasicType;
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
-use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
@@ -109,7 +108,7 @@ impl Entry {
             context.integer_const(crate::polkavm::XLEN, Self::MAX_CALLDATA_SIZE as u64),
         )?;
         context.build_runtime_call(
-            runtime_api::imports::INPUT,
+            revive_runtime_api::polkavm_imports::INPUT,
             &[input_pointer_casted.into(), length_pointer_casted.into()],
         );
 

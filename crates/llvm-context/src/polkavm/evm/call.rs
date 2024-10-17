@@ -5,7 +5,6 @@ use inkwell::values::BasicValue;
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 const STATIC_CALL_FLAG: u32 = 0b0001_0000;
 const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
@@ -77,7 +76,7 @@ where
         arguments,
     )?;
 
-    let name = runtime_api::imports::CALL;
+    let name = revive_runtime_api::polkavm_imports::CALL;
     let argument_pointer = context.builder().build_ptr_to_int(
         argument_pointer.value,
         context.xlen_type(),

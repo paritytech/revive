@@ -7,6 +7,8 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+use inkwell::debug_info::AsDIScope;
+
 /// A function for requesting the immutable data from the runtime.
 /// This is a special function that is only used by the front-end generated code.
 ///
@@ -34,8 +36,16 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA)?;
+        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
+
+        if context.debug_info().is_some() {
+            context.builder().unset_current_debug_location();
+            let func_scope = context
+                .set_current_function_debug_info(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, 0)?
+                .as_debug_info_scope();
+            context.push_debug_scope(func_scope);
+        }
 
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
@@ -110,6 +120,8 @@ where
 
         context.set_basic_block(return_block);
         context.build_return(None);
+
+        context.pop_debug_scope();
 
         Ok(())
     }

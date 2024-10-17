@@ -16,6 +16,7 @@ pub use self::polkavm::context::argument::Argument as PolkaVMArgument;
 pub use self::polkavm::context::attribute::Attribute as PolkaVMAttribute;
 pub use self::polkavm::context::build::Build as PolkaVMBuild;
 pub use self::polkavm::context::code_type::CodeType as PolkaVMCodeType;
+pub use self::polkavm::context::debug_info::DebugInfo;
 pub use self::polkavm::context::evmla_data::EVMLAData as PolkaVMContextEVMLAData;
 pub use self::polkavm::context::function::block::evmla_data::key::Key as PolkaVMFunctionBlockKey;
 pub use self::polkavm::context::function::block::evmla_data::EVMLAData as PolkaVMFunctionBlockEVMLAData;

@@ -14,7 +14,7 @@ const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
 #[allow(clippy::too_many_arguments)]
 pub fn call<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    _gas: inkwell::values::IntValue<'ctx>,
+    gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     value: Option<inkwell::values::IntValue<'ctx>>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -38,10 +38,9 @@ where
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
-    // TODO: What to supply here? Is there a weight to gas?
-    let _gas = context
+    let gas = context
         .builder()
-        .build_int_truncate(_gas, context.integer_type(64), "gas")?;
+        .build_int_truncate(gas, context.integer_type(64), "gas")?;
 
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;
@@ -61,7 +60,7 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
+        gas.as_basic_value_enum(),
         context.integer_const(64, 0).as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         value_pointer.value.as_basic_value_enum(),
@@ -104,7 +103,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn delegate_call<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    _gas: inkwell::values::IntValue<'ctx>,
+    gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     _value: Option<inkwell::values::IntValue<'ctx>>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -125,7 +124,7 @@ where
 
     let gas = context
         .builder()
-        .build_int_truncate(_gas, context.integer_type(64), "gas")?;
+        .build_int_truncate(gas, context.integer_type(64), "gas")?;
 
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;

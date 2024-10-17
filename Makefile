@@ -18,8 +18,10 @@ install-revive:
 format:
 	cargo fmt --all --check
 
+clippy:
+	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
+
 test: format clippy test-cli test-workspace
-	cargo test --workspace
 
 test-integration: install-bin
 	cargo test --package revive-integration
@@ -44,9 +46,6 @@ bench-evm: install-bin
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
-
-clippy:
-	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
 
 docs: docs-build
 	mdbook serve --open docs/

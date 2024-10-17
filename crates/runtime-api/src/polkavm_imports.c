@@ -90,7 +90,7 @@ POLKAVM_IMPORT(uint32_t, take_storage, uint32_t, uint32_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, call, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, delegate_call, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+POLKAVM_IMPORT(uint32_t, delegate_call, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, instantiate, uint32_t)
 

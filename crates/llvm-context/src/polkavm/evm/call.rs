@@ -118,26 +118,12 @@ where
 {
     let address_pointer = context.build_address_argument_store(address)?;
 
-    let extcodehash_pointer =
-        context.build_alloca_at_entry(context.word_type(), "extcodehash_pointer");
-
-    context.build_runtime_call(
-        runtime_api::imports::CODE_HASH,
-        &[
-            address_pointer.to_int(context).into(),
-            extcodehash_pointer.to_int(context).into(),
-        ],
-    );
-
-    context.build_byte_swap(context.build_load(extcodehash_pointer, "extcodehash_value")?)?;
-
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
-    // TODO: What to supply here? Is there a weight to gas?
-    let _gas = context
+    let gas = context
         .builder()
         .build_int_truncate(_gas, context.integer_type(64), "gas")?;
 
@@ -149,19 +135,33 @@ where
 
     let flags = context.xlen_type().const_int(0u64, false);
 
+    let argument_type = revive_runtime_api::calling_convention::delegate_call(context.llvm());
+    let argument_pointer = context.build_alloca_at_entry(argument_type, "delegate_call_arguments");
+    let arguments = &[
+        flags.as_basic_value_enum(),
+        address_pointer.value.as_basic_value_enum(),
+        gas.as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
+        input_pointer.value.as_basic_value_enum(),
+        input_length.as_basic_value_enum(),
+        output_pointer.value.as_basic_value_enum(),
+        output_length_pointer.value.as_basic_value_enum(),
+    ];
+    revive_runtime_api::calling_convention::spill(
+        context.builder(),
+        argument_pointer.value,
+        argument_type,
+        arguments,
+    )?;
+
     let name = runtime_api::imports::DELEGATE_CALL;
+    let argument_pointer = context.builder().build_ptr_to_int(
+        argument_pointer.value,
+        context.xlen_type(),
+        "delegate_call_argument_pointer",
+    )?;
     let success = context
-        .build_runtime_call(
-            name,
-            &[
-                flags.into(),
-                extcodehash_pointer.to_int(context).into(),
-                input_pointer.to_int(context).into(),
-                input_length.into(),
-                output_pointer.to_int(context).into(),
-                output_length_pointer.to_int(context).into(),
-            ],
-        )
+        .build_runtime_call(name, &[argument_pointer.into()])
         .unwrap_or_else(|| panic!("{name} should return a value"))
         .into_int_value();
 

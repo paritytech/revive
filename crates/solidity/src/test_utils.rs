@@ -276,18 +276,26 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, true)
+    compile_evm(contract_name, source_code, true, true)
 }
 
 /// Compile the EVM bin of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
-pub fn compile_evm_deploy_code(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, false)
+pub fn compile_evm_deploy_code(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> Vec<u8> {
+    compile_evm(contract_name, source_code, solc_optimizer_enabled, false)
 }
 
-fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8> {
+fn compile_evm(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    runtime: bool,
+) -> Vec<u8> {
     let pipeline = SolcPipeline::Yul;
-    let solc_optimizer_enabled = true;
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         pipeline,

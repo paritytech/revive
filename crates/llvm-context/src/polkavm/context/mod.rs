@@ -907,7 +907,7 @@ where
                     .copied()
                     .map(inkwell::values::BasicMetadataValueEnum::from)
                     .collect::<Vec<_>>(),
-                &format!("runtime API call {name}"),
+                &format!("runtime_api_{name}_return_value"),
             )
             .unwrap()
             .try_as_basic_value()
@@ -1088,16 +1088,20 @@ where
         Ok(truncated)
     }
 
-    /// Build a call to PolkaVM `sbrk` for extending the heap by `size`.
+    /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.
+    /// The allocation is aligned to 32 bytes.
+    ///
+    /// This emulates the EVM linear memory until the runtime supports metered memory.
     pub fn build_sbrk(
         &self,
+        offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
         Ok(self
             .builder()
             .build_call(
-                self.runtime_api_method(runtime_api::SBRK),
-                &[size.into()],
+                self.runtime_api_method(runtime_api::imports::SBRK),
+                &[offset.into(), size.into()],
                 "call_sbrk",
             )?
             .try_as_basic_value()
@@ -1106,14 +1110,29 @@ where
             .into_pointer_value())
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap by `size`,
+    /// Build a call to PolkaVM `msize` for querying the linear memory size.
+    pub fn build_msize(&self) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        Ok(self
+            .builder()
+            .build_call(
+                self.runtime_api_method(runtime_api::imports::MEMORY_SIZE),
+                &[],
+                "call_msize",
+            )?
+            .try_as_basic_value()
+            .left()
+            .expect("sbrk returns an int")
+            .into_int_value())
+    }
+
+    /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
     /// trapping the contract if the call failed.
-    /// Returns the end of memory pointer.
     pub fn build_heap_alloc(
         &self,
+        offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
-    ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
-        let end_of_memory = self.build_sbrk(size)?;
+    ) -> anyhow::Result<()> {
+        let end_of_memory = self.build_sbrk(offset, size)?;
         let return_is_nil = self.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             end_of_memory,
@@ -1131,7 +1150,7 @@ where
 
         self.set_basic_block(continue_block);
 
-        Ok(end_of_memory)
+        Ok(())
     }
 
     /// Returns a pointer to `offset` into the heap, allocating
@@ -1146,40 +1165,12 @@ where
         assert_eq!(offset.get_type(), self.xlen_type());
         assert_eq!(length.get_type(), self.xlen_type());
 
+        self.build_heap_alloc(offset, length)?;
+
         let heap_start = self
             .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
             .value
             .as_pointer_value();
-        let heap_end = self.build_sbrk(self.integer_const(crate::polkavm::XLEN, 0))?;
-        let value_end = self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
-            &[self.builder().build_int_nuw_add(offset, length, "end")?],
-            self.byte_type(),
-            "heap_end_gep",
-        );
-        let is_out_of_bounds = self.builder().build_int_compare(
-            inkwell::IntPredicate::UGT,
-            value_end.value,
-            heap_end,
-            "is_value_overflowing_heap",
-        )?;
-
-        let out_of_bounds_block = self.append_basic_block("heap_offset_out_of_bounds");
-        let heap_offset_block = self.append_basic_block("build_heap_pointer");
-        self.build_conditional_branch(is_out_of_bounds, out_of_bounds_block, heap_offset_block)?;
-
-        self.set_basic_block(out_of_bounds_block);
-        let size = self.builder().build_int_nuw_sub(
-            self.builder()
-                .build_ptr_to_int(value_end.value, self.xlen_type(), "value_end")?,
-            self.builder()
-                .build_ptr_to_int(heap_end, self.xlen_type(), "heap_end")?,
-            "heap_alloc_size",
-        )?;
-        self.build_heap_alloc(size)?;
-        self.build_unconditional_branch(heap_offset_block);
-
-        self.set_basic_block(heap_offset_block);
         Ok(self.build_gep(
             Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
             &[offset],

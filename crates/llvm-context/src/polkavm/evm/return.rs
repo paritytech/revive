@@ -4,7 +4,7 @@ use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-use crate::polkavm::{runtime_api, Dependency};
+use crate::polkavm::Dependency;
 
 /// Translates the `return` instruction.
 pub fn r#return<'ctx, D>(
@@ -51,7 +51,7 @@ where
                 .value
                 .as_pointer_value();
             context.build_runtime_call(
-                runtime_api::imports::SET_IMMUTABLE_DATA,
+                revive_runtime_api::polkavm_imports::SET_IMMUTABLE_DATA,
                 &[
                     context
                         .builder()

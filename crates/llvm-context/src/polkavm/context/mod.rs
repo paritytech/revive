@@ -28,7 +28,6 @@ use inkwell::values::BasicValue;
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
-use crate::polkavm::r#const::*;
 use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
@@ -138,7 +137,7 @@ where
             )
             .expect("the PolkaVM imports module should be linkable");
 
-        for import in runtime_api::imports::IMPORTS {
+        for import in revive_runtime_api::polkavm_imports::IMPORTS {
             module
                 .get_function(import)
                 .expect("should be declared")
@@ -834,7 +833,7 @@ where
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 
                 self.build_runtime_call(
-                    runtime_api::imports::GET_STORAGE,
+                    revive_runtime_api::polkavm_imports::GET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
@@ -933,7 +932,7 @@ where
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 
                 self.build_runtime_call(
-                    runtime_api::imports::SET_STORAGE,
+                    revive_runtime_api::polkavm_imports::SET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
                         storage_key_pointer_casted.into(),
@@ -1168,7 +1167,7 @@ where
         )?;
 
         self.build_runtime_call(
-            runtime_api::imports::RETURN,
+            revive_runtime_api::polkavm_imports::RETURN,
             &[flags.into(), offset_pointer.into(), length_pointer.into()],
         );
         self.build_unreachable();
@@ -1238,7 +1237,7 @@ where
         Ok(self
             .builder()
             .build_call(
-                self.runtime_api_method(runtime_api::imports::SBRK),
+                self.runtime_api_method(revive_runtime_api::polkavm_imports::SBRK),
                 &[offset.into(), size.into()],
                 "call_sbrk",
             )?
@@ -1253,7 +1252,7 @@ where
         Ok(self
             .builder()
             .build_call(
-                self.runtime_api_method(runtime_api::imports::MEMORY_SIZE),
+                self.runtime_api_method(revive_runtime_api::polkavm_imports::MEMORY_SIZE),
                 &[],
                 "call_msize",
             )?

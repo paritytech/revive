@@ -4,7 +4,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the `gas_limit` instruction.
 pub fn gas_limit<'ctx, D>(
@@ -43,7 +42,7 @@ pub fn chain_id<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_runtime_call_to_getter(runtime_api::imports::CHAIN_ID)
+    context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::CHAIN_ID)
 }
 
 /// Translates the `block_number` instruction.
@@ -53,7 +52,7 @@ pub fn block_number<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_runtime_call_to_getter(runtime_api::imports::BLOCK_NUMBER)
+    context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::BLOCK_NUMBER)
 }
 
 /// Translates the `block_timestamp` instruction.
@@ -63,7 +62,7 @@ pub fn block_timestamp<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.build_runtime_call_to_getter(runtime_api::imports::NOW)
+    context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::NOW)
 }
 
 /// Translates the `block_hash` instruction.
@@ -119,7 +118,7 @@ where
         "address_output",
     );
     context.build_runtime_call(
-        runtime_api::imports::ADDRESS,
+        revive_runtime_api::polkavm_imports::ADDRESS,
         &[pointer.to_int(context).into()],
     );
     context.build_load_address(pointer)
@@ -137,7 +136,7 @@ where
         "address_output",
     );
     context.build_runtime_call(
-        runtime_api::imports::CALLER,
+        revive_runtime_api::polkavm_imports::CALLER,
         &[pointer.to_int(context).into()],
     );
     context.build_load_address(pointer)

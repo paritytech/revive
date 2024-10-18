@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use inkwell::types::BasicType;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -229,14 +230,15 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        context.set_current_function(self.identifier.as_str())?;
-        let r#return = context.current_function().borrow().r#return();
-
+        context.set_current_function(self.identifier.as_str(), Some(self.location.line))?;
         context.set_basic_block(context.current_function().borrow().entry_block());
+
+        let r#return = context.current_function().borrow().r#return();
         match r#return {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
                 let identifier = self.result.pop().expect("Always exists");
+
                 let r#type = identifier.r#type.unwrap_or_default();
                 context.build_store(pointer, r#type.into_llvm(context).const_zero())?;
                 context
@@ -288,6 +290,8 @@ where
         }
 
         self.body.into_llvm(context)?;
+        context.set_debug_location(self.location.line, 0, None)?;
+
         match context
             .basic_block()
             .get_last_instruction()
@@ -313,6 +317,8 @@ where
                 context.build_return(Some(&return_value));
             }
         }
+
+        context.pop_debug_scope();
 
         Ok(())
     }

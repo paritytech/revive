@@ -15,7 +15,7 @@ pub fn create_context(
     let module = llvm.create_module("test");
     let optimizer = Optimizer::new(optimizer_settings);
 
-    Context::<DummyDependency>::new(llvm, module, optimizer, None, true, None)
+    Context::<DummyDependency>::new(llvm, module, optimizer, None, true, None, None)
 }
 
 #[test]

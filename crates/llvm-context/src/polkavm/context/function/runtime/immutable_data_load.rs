@@ -34,7 +34,7 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA)?;
+        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         let immutable_data_size_pointer = context
@@ -110,6 +110,8 @@ where
 
         context.set_basic_block(return_block);
         context.build_return(None);
+
+        context.pop_debug_scope();
 
         Ok(())
     }

@@ -95,7 +95,6 @@ pub fn build_solidity_with_options(
             None,
             &solc_version.default,
             false,
-            false,
         ),
         None,
         pipeline == SolcPipeline::Yul,
@@ -106,7 +105,7 @@ pub fn build_solidity_with_options(
 
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
-    let build: crate::Build = project.compile(optimizer_settings, false, false, None)?;
+    let build: crate::Build = project.compile(optimizer_settings, false, None)?;
     build.write_to_standard_json(
         &mut output,
         &solc_version,
@@ -143,7 +142,6 @@ pub fn build_solidity_with_options_evm(
             solc_optimizer_enabled,
             None,
             &solc_version.default,
-            false,
             false,
         ),
         None,
@@ -193,13 +191,7 @@ pub fn build_solidity_and_detect_missing_libraries(
         libraries.clone(),
         None,
         SolcStandardJsonInputSettingsSelection::new_required(pipeline),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            true,
-            None,
-            &solc_version.default,
-            false,
-            false,
-        ),
+        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
         pipeline == SolcPipeline::Yul,
         None,
@@ -229,7 +221,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
 
     let project =
         Project::try_from_yul_string(PathBuf::from("test.yul").as_path(), source_code, None)?;
-    let _build = project.compile(optimizer_settings, false, false, None)?;
+    let _build = project.compile(optimizer_settings, false, None)?;
 
     Ok(())
 }
@@ -259,13 +251,7 @@ pub fn check_solidity_warning(
         libraries,
         None,
         SolcStandardJsonInputSettingsSelection::new_required(pipeline),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            true,
-            None,
-            &solc_version.default,
-            false,
-            false,
-        ),
+        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
         pipeline == SolcPipeline::Yul,
         suppressed_warnings,
@@ -290,18 +276,26 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, true)
+    compile_evm(contract_name, source_code, true, true)
 }
 
 /// Compile the EVM bin of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
-pub fn compile_evm_deploy_code(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, false)
+pub fn compile_evm_deploy_code(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> Vec<u8> {
+    compile_evm(contract_name, source_code, solc_optimizer_enabled, false)
 }
 
-fn compile_evm(contract_name: &str, source_code: &str, runtime: bool) -> Vec<u8> {
+fn compile_evm(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    runtime: bool,
+) -> Vec<u8> {
     let pipeline = SolcPipeline::Yul;
-    let solc_optimizer_enabled = true;
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         pipeline,

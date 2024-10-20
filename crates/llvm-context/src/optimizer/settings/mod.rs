@@ -21,8 +21,6 @@ pub struct Settings {
 
     /// Fallback to optimizing for size if the bytecode is too large.
     pub is_fallback_to_size_enabled: bool,
-    /// Whether the system request memoization is disabled.
-    pub is_system_request_memoization_disabled: bool,
 
     /// Whether the LLVM `verify each` option is enabled.
     pub is_verify_each_enabled: bool,
@@ -43,7 +41,6 @@ impl Settings {
             level_back_end,
 
             is_fallback_to_size_enabled: false,
-            is_system_request_memoization_disabled: false,
 
             is_verify_each_enabled: false,
             is_debug_logging_enabled: false,
@@ -65,7 +62,6 @@ impl Settings {
             level_back_end,
 
             is_fallback_to_size_enabled: false,
-            is_system_request_memoization_disabled: false,
 
             is_verify_each_enabled,
             is_debug_logging_enabled,
@@ -206,19 +202,9 @@ impl Settings {
         self.is_fallback_to_size_enabled = true;
     }
 
-    /// Disables the system request memoization.
-    pub fn disable_system_request_memoization(&mut self) {
-        self.is_system_request_memoization_disabled = true;
-    }
-
     /// Whether the fallback to optimizing for size is enabled.
     pub fn is_fallback_to_size_enabled(&self) -> bool {
         self.is_fallback_to_size_enabled
-    }
-
-    /// Whether the system request memoization is disabled.
-    pub fn is_system_request_memoization_disabled(&self) -> bool {
-        self.is_system_request_memoization_disabled
     }
 }
 

@@ -5,7 +5,6 @@ use inkwell::values::BasicValue;
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 const STATIC_CALL_FLAG: u32 = 0b0001_0000;
 const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
@@ -27,14 +26,7 @@ pub fn call<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
-    let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
-    let address_truncated =
-        context
-            .builder()
-            .build_int_truncate(address, address_type, "address_truncated")?;
-    let address_swapped = context.build_byte_swap(address_truncated.into())?;
-    context.build_store(address_pointer, address_swapped)?;
+    let address_pointer = context.build_address_argument_store(address)?;
 
     let value = value.unwrap_or_else(|| context.word_const(0));
     let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
@@ -84,7 +76,7 @@ where
         arguments,
     )?;
 
-    let name = runtime_api::imports::CALL;
+    let name = revive_runtime_api::polkavm_imports::CALL;
     let argument_pointer = context.builder().build_ptr_to_int(
         argument_pointer.value,
         context.xlen_type(),

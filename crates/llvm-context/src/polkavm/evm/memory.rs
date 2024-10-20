@@ -1,9 +1,28 @@
 //! Translates the heap memory operations.
 
+use inkwell::values::BasicValue;
+
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+
+/// Translates the `msize` instruction.
+pub fn msize<'ctx, D>(
+    context: &mut Context<'ctx, D>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+where
+    D: Dependency + Clone,
+{
+    Ok(context
+        .builder()
+        .build_int_z_extend(
+            context.build_msize()?,
+            context.word_type(),
+            "heap_size_extended",
+        )?
+        .as_basic_value_enum())
+}
 
 /// Translates the `mload` instruction.
 /// Uses the main heap.

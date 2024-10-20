@@ -5,7 +5,6 @@ use inkwell::types::BasicType;
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
-use crate::polkavm::r#const::*;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
@@ -18,9 +17,6 @@ pub struct Entry {}
 impl Entry {
     /// The call flags argument index.
     pub const ARGUMENT_INDEX_CALL_FLAGS: usize = 0;
-
-    /// The number of mandatory arguments.
-    pub const MANDATORY_ARGUMENTS_COUNT: usize = 2;
 
     /// Reserve 1kb for calldata.
     pub const MAX_CALLDATA_SIZE: usize = 1024;
@@ -61,7 +57,10 @@ impl Entry {
             context
                 .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
                 .into(),
-            context.build_sbrk(context.integer_const(crate::polkavm::XLEN, 0))?,
+            context.build_sbrk(
+                context.xlen_type().const_zero(),
+                context.xlen_type().const_zero(),
+            )?,
         )?;
 
         context.set_global(
@@ -109,7 +108,7 @@ impl Entry {
             context.integer_const(crate::polkavm::XLEN, Self::MAX_CALLDATA_SIZE as u64),
         )?;
         context.build_runtime_call(
-            runtime_api::imports::INPUT,
+            revive_runtime_api::polkavm_imports::INPUT,
             &[input_pointer_casted.into(), length_pointer_casted.into()],
         );
 
@@ -188,7 +187,7 @@ where
 {
     fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
         let entry_arguments = vec![context.bool_type().as_basic_type_enum()];
-        let entry_function_type = context.function_type(entry_arguments, 0, false);
+        let entry_function_type = context.function_type(entry_arguments, 0);
         context.add_function(
             runtime::FUNCTION_ENTRY,
             entry_function_type,

@@ -355,32 +355,6 @@ fn create2_failure() {
     assert_eq!(output.flags, ReturnFlags::Revert);
 }
 
-
-#[test]
-fn balance() {
-    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
-
-    let expected = U256::ZERO;
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-
-    let expected = U256::from(54589);
-    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
-    state.accounts_mut().get_mut(&address).unwrap().value = expected;
-
-    let contract = Contract::value_balance_of(address);
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(ReturnFlags::Success, output.flags);
-
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received)
-}
-
 #[test]
 fn ext_code_size() {
     let contract = Contract::ext_code_size(Transaction::default_address());

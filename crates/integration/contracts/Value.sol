@@ -6,6 +6,15 @@ pragma solidity ^0.8;
     "differential": true,
     "actions": [
         {
+            "Upload": {
+                "code": {
+                    "Solidity": {
+                        "contract": "ValueTester"
+                    }
+                }
+            }
+        },
+        {
             "Instantiate": {
                 "value": 1024,
                 "code": {
@@ -23,31 +32,35 @@ pragma solidity ^0.8;
                 "value": 123,
                 "data": "3fa4f245"
             }
-        },
-        {
-            "Call": {
-                "dest": {
-                    "Instantiated": 0
-                },
-                "data": "52da5fa0"
-            }
         }
     ]
 }
 */
 
-contract Value {
+contract ValueTester {
     constructor() payable {}
-
-    function value() public payable returns (uint ret) {
-        ret = msg.value;
-    }
 
     function balance_self() public view returns (uint ret) {
         ret = address(this).balance;
     }
+}
 
-    function balance_of(address _address) public view returns (uint ret) {
-        ret = _address.balance;
+contract Value {
+    constructor() payable {
+        ValueTester tester = new ValueTester{value: msg.value}();
+
+        // own account
+        assert(address(this).balance == 0);
+
+        // tester account
+        assert(address(tester).balance == msg.value);
+        assert(tester.balance_self() == msg.value);
+
+        // non-existant account
+        assert(address(0xdeadbeef).balance == 0);
+    }
+
+    function value() public payable returns (uint ret) {
+        ret = msg.value;
     }
 }

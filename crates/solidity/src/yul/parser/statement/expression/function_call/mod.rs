@@ -125,13 +125,6 @@ impl FunctionCall {
         let location = self.location;
 
         match self.name {
-            Name::UserDefined(name)
-                if name.starts_with(
-                    revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
-                ) && context.is_system_mode() =>
-            {
-                unimplemented!();
-            }
             Name::UserDefined(name) => {
                 let mut values = Vec::with_capacity(self.arguments.len());
                 for argument in self.arguments.into_iter().rev() {
@@ -970,9 +963,7 @@ impl FunctionCall {
                     location
                 );
             }
-            Name::MSize => {
-                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
-            }
+            Name::MSize => revive_llvm_context::polkavm_evm_memory::msize(context).map(Some),
 
             Name::Verbatim {
                 input_size,

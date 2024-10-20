@@ -4,7 +4,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the `extcodesize` instruction if `address` is `Some`.
 /// Otherwise, translates the `codesize` instruction.
@@ -31,10 +30,15 @@ where
     )?;
     let value = context
         .build_runtime_call(
-            runtime_api::imports::CODE_SIZE,
+            revive_runtime_api::polkavm_imports::CODE_SIZE,
             &[address_pointer_casted.into()],
         )
-        .unwrap_or_else(|| panic!("{} should return a value", runtime_api::imports::CODE_SIZE))
+        .unwrap_or_else(|| {
+            panic!(
+                "{} should return a value",
+                revive_runtime_api::polkavm_imports::CODE_SIZE
+            )
+        })
         .into_int_value();
 
     Ok(context

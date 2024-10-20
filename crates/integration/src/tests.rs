@@ -295,11 +295,13 @@ fn ext_code_hash() {
             storage_deposit_limit: None,
             data: Contract::ext_code_hash(Address::from(CHARLIE.to_fixed_bytes())).calldata,
         });
-        // actions.push(VerifyCall(VerifyCallExpectation {
-        //     success: true,
-        //     output: OptionalHex::from(hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()),
-        //     gas_consumed: None
-        // }));
+        actions.push(VerifyCall(VerifyCallExpectation {
+            success: true,
+            output: OptionalHex::from(
+                hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec(),
+            ),
+            gas_consumed: None,
+        }));
     }
 
     // non-existing account

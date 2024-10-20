@@ -30,6 +30,8 @@ pub static CHAIN_ID: &str = "chain_id";
 
 pub static CODE_SIZE: &str = "code_size";
 
+pub static CODE_HASH: &str = "code_hash";
+
 pub static DEPOSIT_EVENT: &str = "deposit_event";
 
 pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
@@ -58,7 +60,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 23] = [
+pub static IMPORTS: [&str; 24] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -69,6 +71,7 @@ pub static IMPORTS: [&str; 23] = [
     CALLER,
     CHAIN_ID,
     CODE_SIZE,
+    CODE_HASH,
     DEPOSIT_EVENT,
     GET_IMMUTABLE_DATA,
     GET_STORAGE,

@@ -80,6 +80,8 @@ POLKAVM_IMPORT(void, chain_id, uint32_t)
 
 POLKAVM_IMPORT(uint32_t, code_size, uint32_t)
 
+POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
+
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, get_immutable_data, uint32_t, uint32_t);

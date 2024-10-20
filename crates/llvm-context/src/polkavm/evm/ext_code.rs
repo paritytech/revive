@@ -68,7 +68,7 @@ where
         context.build_alloca_at_entry(context.word_type(), "extcodehash_pointer");
 
     context.build_runtime_call(
-        runtime_api::imports::CODE_HASH,
+        revive_runtime_api::polkavm_imports::CODE_HASH,
         &[
             address_pointer.to_int(context).into(),
             extcodehash_pointer.to_int(context).into(),

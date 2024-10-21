@@ -178,10 +178,16 @@ sol!(
         function ExtCodeSize(address who) public view returns (uint ret);
 
         function CodeSize() public pure returns (uint ret);
+
+        function ExtCodeHash(address who) public view returns (bytes32 ret);
+
+        function CodeHash() public view returns (bytes32 ret);
     }
 );
 case!("ExtCode.sol", ExtCode, ExtCodeSizeCall, ext_code_size, address: Address);
 case!("ExtCode.sol", ExtCode, CodeSizeCall, code_size,);
+case!("ExtCode.sol", ExtCode, ExtCodeHashCall, ext_code_hash, address: Address);
+case!("ExtCode.sol", ExtCode, CodeHashCall, code_hash,);
 
 sol!(
     contract MCopy {

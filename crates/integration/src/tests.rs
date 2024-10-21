@@ -234,6 +234,92 @@ fn signed_remainder() {
     run_differential(actions);
 }
 
+#[test]
+fn ext_code_hash() {
+    let mut actions = instantiate("contracts/ExtCode.sol", "ExtCode");
+
+    // First do contract instantiation to figure out address and code hash
+    let results = Specs {
+        actions: actions.clone(),
+        ..Default::default()
+    }
+    .run();
+    let (addr, code_hash) = match results.first().cloned() {
+        Some(CallResult::Instantiate {
+            result, code_hash, ..
+        }) => (result.result.unwrap().addr, code_hash),
+        _ => panic!("instantiate contract failed"),
+    };
+
+    // code hash of itself
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::code_hash().calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(code_hash.as_bytes().to_vec()),
+        gas_consumed: None,
+    }));
+
+    // code hash for a given contract address
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from(addr.to_fixed_bytes())).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(code_hash.as_bytes().to_vec()),
+        gas_consumed: None,
+    }));
+
+    // EOA returns fixed hash
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from(CHARLIE.to_fixed_bytes())).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(
+            hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec(),
+        ),
+        gas_consumed: None,
+    }));
+
+    // non-existing account
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from([8u8; 20])).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from([0u8; 32].to_vec()),
+        gas_consumed: None,
+    }));
+
+    Specs {
+        actions,
+        ..Default::default()
+    }
+    .run();
+}
+
 /*
 // These test were implement for the mock-runtime and need to be ported yet.
 

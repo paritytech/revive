@@ -51,10 +51,10 @@ path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
 rand = "0.8"
-polkavm-common = "0.12"
-polkavm-linker = "0.12"
-polkavm-disassembler = "0.12"
-polkavm = "0.12"
+polkavm-common = "0.13"
+polkavm-linker = "0.13"
+polkavm-disassembler = "0.13"
+polkavm = "0.13"
 alloy-primitives = { version = "0.8", features = ["serde"] }
 alloy-sol-types = "0.8"
 alloy-genesis = "0.3"
@@ -67,7 +67,7 @@ log = { version = "0.4" }
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "5e0843e5a0fb601016dc1ccd46451a96049600e9" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "aeebf2f383390f2f86527d70212162d5dbea8b93" }
 
 # llvm
 [workspace.dependencies.inkwell]

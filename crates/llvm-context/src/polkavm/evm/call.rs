@@ -152,7 +152,7 @@ where
         arguments,
     )?;
 
-    let name = runtime_api::imports::DELEGATE_CALL;
+    let name = revive_runtime_api::polkavm_imports::DELEGATE_CALL;
     let argument_pointer = context.builder().build_ptr_to_int(
         argument_pointer.value,
         context.xlen_type(),

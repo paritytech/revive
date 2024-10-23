@@ -2,6 +2,16 @@ use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module, sup
 
 include!(concat!(env!("OUT_DIR"), "/polkavm_exports.rs"));
 
+/// The contract deploy export.
+pub static CALL: &str = "call";
+
+/// The contract call export.
+pub static DEPLOY: &str = "deploy";
+
+/// All exported symbols.
+/// Useful for configuring common attributes and linkage.
+pub static EXPORTS: [&str; 2] = [CALL, DEPLOY];
+
 /// Creates a LLVM module from the [BITCODE].
 /// The module exports `call` and `deploy` functions (which are named thereafter).
 /// Returns `Error` if the bitcode fails to parse, which should never happen.
@@ -23,7 +33,7 @@ mod tests {
         let context = inkwell::context::Context::create();
         let module = polkavm_exports::module(&context, "polkavm_exports").unwrap();
 
-        assert!(module.get_function("call").is_some());
-        assert!(module.get_function("deploy").is_some());
+        assert!(module.get_function(polkavm_exports::CALL).is_some());
+        assert!(module.get_function(polkavm_exports::DEPLOY).is_some());
     }
 }

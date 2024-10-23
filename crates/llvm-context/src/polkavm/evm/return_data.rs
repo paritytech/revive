@@ -2,7 +2,6 @@
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the return data size.
 pub fn size<'ctx, D>(
@@ -18,7 +17,7 @@ where
         "return_data_copy_output_pointer",
     )?;
     context.build_runtime_call(
-        runtime_api::imports::RETURNDATASIZE,
+        revive_runtime_api::polkavm_imports::RETURNDATASIZE,
         &[output_pointer_parameter.into()],
     );
     context.build_load(output_pointer, "return_data_size_load")
@@ -59,7 +58,7 @@ where
     )?;
 
     context.build_runtime_call(
-        runtime_api::imports::RETURNDATACOPY,
+        revive_runtime_api::polkavm_imports::RETURNDATACOPY,
         &[
             output_pointer.into(),
             output_length_pointer_int.into(),

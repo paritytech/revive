@@ -14,4 +14,16 @@ contract ExtCode {
             ret := codesize()
         }
     }
+
+    function ExtCodeHash(address who) public view returns (bytes32 ret) {
+        assembly {
+            ret := extcodehash(who)
+        }
+    }
+
+    function CodeHash() public view returns (bytes32 ret) {
+        assembly {
+            ret := extcodehash(address())
+        }
+    }
 }

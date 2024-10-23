@@ -7,7 +7,6 @@ use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the contract `create` and `create2` instruction.
 ///
@@ -82,7 +81,7 @@ where
         "instantiate_argument_pointer",
     )?;
     context.build_runtime_call(
-        runtime_api::imports::INSTANTIATE,
+        revive_runtime_api::polkavm_imports::INSTANTIATE,
         &[argument_pointer.into()],
     );
 

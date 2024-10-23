@@ -4,7 +4,7 @@ use pallet_revive::AddressMapper;
 use serde::{Deserialize, Serialize};
 
 use crate::*;
-use alloy_primitives::Address;
+use alloy_primitives::{keccak256, Address};
 #[cfg(feature = "revive-solidity")]
 use revive_differential::{Evm, EvmLog};
 #[cfg(feature = "revive-solidity")]
@@ -409,6 +409,13 @@ impl Specs {
                             data,
                             salt,
                         } => {
+                            let code: pallet_revive::Code = code.into();
+                            let code_hash = match code.clone() {
+                                pallet_revive::Code::Existing(code_hash) => code_hash,
+                                pallet_revive::Code::Upload(bytes) => {
+                                    H256::from_slice(keccak256(&bytes).as_slice())
+                                }
+                            };
                             let origin = RuntimeOrigin::signed(origin.to_account_id(&results));
                             let time_start = Instant::now();
                             let result = Contracts::bare_instantiate(
@@ -416,7 +423,7 @@ impl Specs {
                                 value,
                                 gas_limit.unwrap_or(GAS_LIMIT),
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                                code.into(),
+                                code,
                                 data,
                                 salt.0,
                                 DebugInfo::Skip,
@@ -425,6 +432,7 @@ impl Specs {
                             results.push(CallResult::Instantiate {
                                 result,
                                 wall_time: time_start.elapsed(),
+                                code_hash,
                             })
                         }
                         Upload {

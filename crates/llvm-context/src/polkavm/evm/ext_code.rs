@@ -4,7 +4,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the `extcodesize` instruction if `address` is `Some`.
 /// Otherwise, translates the `codesize` instruction.
@@ -31,10 +30,15 @@ where
     )?;
     let value = context
         .build_runtime_call(
-            runtime_api::imports::CODE_SIZE,
+            revive_runtime_api::polkavm_imports::CODE_SIZE,
             &[address_pointer_casted.into()],
         )
-        .unwrap_or_else(|| panic!("{} should return a value", runtime_api::imports::CODE_SIZE))
+        .unwrap_or_else(|| {
+            panic!(
+                "{} should return a value",
+                revive_runtime_api::polkavm_imports::CODE_SIZE
+            )
+        })
         .into_int_value();
 
     Ok(context
@@ -45,11 +49,31 @@ where
 
 /// Translates the `extcodehash` instruction.
 pub fn hash<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
-    _address: inkwell::values::IntValue<'ctx>,
+    context: &mut Context<'ctx, D>,
+    address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
+    let address_truncated =
+        context
+            .builder()
+            .build_int_truncate(address, address_type, "address_truncated")?;
+    let address_swapped = context.build_byte_swap(address_truncated.into())?;
+    context.build_store(address_pointer, address_swapped)?;
+
+    let extcodehash_pointer =
+        context.build_alloca_at_entry(context.word_type(), "extcodehash_pointer");
+
+    context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::CODE_HASH,
+        &[
+            address_pointer.to_int(context).into(),
+            extcodehash_pointer.to_int(context).into(),
+        ],
+    );
+
+    context.build_byte_swap(context.build_load(extcodehash_pointer, "extcodehash_value")?)
 }

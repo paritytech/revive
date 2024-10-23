@@ -5,18 +5,15 @@ use inkwell::values::BasicValue;
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
-static STATIC_CALL_FLAG: u32 = 0b0001_0000;
+const STATIC_CALL_FLAG: u32 = 0b0001_0000;
+const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
 
 /// Translates a contract call.
-///
-/// If the `simulation_address` is specified, the call is
-/// substituted with another instruction according to the specification.
 #[allow(clippy::too_many_arguments)]
 pub fn call<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    gas: inkwell::values::IntValue<'ctx>,
+    _gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     value: Option<inkwell::values::IntValue<'ctx>>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -29,59 +26,64 @@ pub fn call<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let address_pointer = context.build_alloca(context.word_type(), "address_ptr");
-    context.build_store(address_pointer, address)?;
+    let address_pointer = context.build_address_argument_store(address)?;
 
-    let value_pointer = if let Some(value) = value {
-        let value_pointer = context.build_alloca(context.value_type(), "value");
-        context.build_store(value_pointer, value)?;
-        value_pointer
-    } else {
-        context.sentinel_pointer()
-    };
+    let value = value.unwrap_or_else(|| context.word_const(0));
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
+    context.build_store(value_pointer, value)?;
 
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
-    let gas = context
+    // TODO: What to supply here? Is there a weight to gas?
+    let _gas = context
         .builder()
-        .build_int_truncate(gas, context.integer_type(64), "gas")?;
-
-    let flags = if static_call { STATIC_CALL_FLAG } else { 0 };
+        .build_int_truncate(_gas, context.integer_type(64), "gas")?;
 
     let input_pointer = context.build_heap_gep(input_offset, input_length)?;
     let output_pointer = context.build_heap_gep(output_offset, output_length)?;
 
-    let output_length_pointer = context.get_global(crate::polkavm::GLOBAL_RETURN_DATA_SIZE)?;
-    context.build_store(output_length_pointer.into(), output_length)?;
+    let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
+    context.build_store(output_length_pointer, output_length)?;
 
-    let argument_pointer = revive_runtime_api::calling_convention::Spill::new(
+    let flags = if static_call {
+        REENTRANT_CALL_FLAG | STATIC_CALL_FLAG
+    } else {
+        REENTRANT_CALL_FLAG
+    };
+    let flags = context.xlen_type().const_int(flags as u64, false);
+
+    let argument_type = revive_runtime_api::calling_convention::call(context.llvm());
+    let argument_pointer = context.build_alloca_at_entry(argument_type, "call_arguments");
+    let arguments = &[
+        flags.as_basic_value_enum(),
+        address_pointer.value.as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
+        context.sentinel_pointer().value.as_basic_value_enum(),
+        value_pointer.value.as_basic_value_enum(),
+        input_pointer.value.as_basic_value_enum(),
+        input_length.as_basic_value_enum(),
+        output_pointer.value.as_basic_value_enum(),
+        output_length_pointer.value.as_basic_value_enum(),
+    ];
+    revive_runtime_api::calling_convention::spill(
         context.builder(),
-        revive_runtime_api::calling_convention::call(context.llvm()),
-        "call_arguments",
-    )?
-    .next(context.xlen_type().const_int(flags as u64, false))?
-    .next(address_pointer.value)?
-    .next(gas)?
-    .skip()
-    .next(context.sentinel_pointer().value)?
-    .next(value_pointer.value)?
-    .next(input_pointer.value)?
-    .next(input_length)?
-    .next(output_pointer.value)?
-    .next(output_length_pointer.value)?
-    .done();
+        argument_pointer.value,
+        argument_type,
+        arguments,
+    )?;
 
-    let name = runtime_api::imports::CALL;
-    let arguments = context.builder().build_ptr_to_int(
-        argument_pointer,
+    let name = revive_runtime_api::polkavm_imports::CALL;
+    let argument_pointer = context.builder().build_ptr_to_int(
+        argument_pointer.value,
         context.xlen_type(),
-        "argument_pointer",
+        "call_argument_pointer",
     )?;
     let success = context
-        .build_runtime_call(name, &[arguments.into()])
+        .build_runtime_call(name, &[argument_pointer.into()])
         .unwrap_or_else(|| panic!("{name} should return a value"))
         .into_int_value();
 

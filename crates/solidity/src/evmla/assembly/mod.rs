@@ -199,6 +199,7 @@ where
             revive_llvm_context::PolkaVMDummyLLVMWritable::default(),
         )
         .declare(context)?;
+        revive_llvm_context::PolkaVMImmutableDataLoadFunction.declare(context)?;
 
         entry.into_llvm(context)?;
 
@@ -266,6 +267,7 @@ where
             revive_llvm_context::PolkaVMCodeType::Runtime,
         ))
         .into_llvm(context)?;
+        revive_llvm_context::PolkaVMImmutableDataLoadFunction.into_llvm(context)?;
 
         Ok(())
     }

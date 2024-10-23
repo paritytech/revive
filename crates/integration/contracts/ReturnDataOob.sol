@@ -19,18 +19,16 @@ pragma solidity ^0.8;
             "Instantiate": {
                 "code": {
                     "Solidity": {
-                        "contract": "Caller"
+                        "contract": "ReturnDataOob"
                     }
-                },
-                "value": 123
+                }
             }
         },
         {
             "Call": {
                 "dest": {
                     "Instantiated": 0
-                },
-                "data": "5a6535fc00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000004cafebabe00000000000000000000000000000000000000000000000000000000"
+                }
             }
         }
     ]
@@ -41,18 +39,15 @@ contract Callee {
     function echo(bytes memory payload) public pure returns (bytes memory) {
         return payload;
     }
-
-    receive() external payable {}
 }
 
-contract Caller {
-    constructor() payable {
-        Callee callee = new Callee();
-        payable(address(callee)).transfer(msg.value);
-    }
-
-    function call(bytes memory payload) public returns (bytes memory) {
-        Callee callee = new Callee();
-        return callee.echo(payload);
+contract ReturnDataOob {
+    fallback() external {
+        new Callee().echo(hex"1234");
+        assembly {
+            let pos := mload(64)
+            let size := add(returndatasize(), 1)
+            returndatacopy(pos, 0, size)
+        }
     }
 }

@@ -125,13 +125,6 @@ impl FunctionCall {
         let location = self.location;
 
         match self.name {
-            Name::UserDefined(name)
-                if name.starts_with(
-                    revive_llvm_context::PolkaVMFunction::ZKSYNC_NEAR_CALL_ABI_PREFIX,
-                ) && context.is_system_mode() =>
-            {
-                unimplemented!();
-            }
             Name::UserDefined(name) => {
                 let mut values = Vec::with_capacity(self.arguments.len());
                 for argument in self.arguments.into_iter().rev() {
@@ -501,25 +494,30 @@ impl FunctionCall {
                 )
                 .map(|_| None)
             }
-            Name::LoadImmutable => todo!(),
+            Name::LoadImmutable => {
+                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let key = arguments[0].original.take().ok_or_else(|| {
+                    anyhow::anyhow!("{} `load_immutable` literal is missing", location)
+                })?;
+                let offset = context
+                    .solidity_mut()
+                    .get_or_allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
+                let index = context.xlen_type().const_int(offset as u64, false);
+                revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
+            }
             Name::SetImmutable => {
                 let mut arguments = self.pop_arguments::<D, 3>(context)?;
                 let key = arguments[1].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `load_immutable` literal is missing", location)
                 })?;
-
-                if key.as_str() == "library_deploy_address" {
-                    return Ok(None);
-                }
-
-                let offset = context.solidity_mut().allocate_immutable(key.as_str());
-
-                let index = context.word_const(offset as u64);
+                let offset = context.solidity_mut().allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
+                let index = context.xlen_type().const_int(offset as u64, false);
                 let value = arguments[2].value.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
-
             Name::CallDataLoad => {
                 let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
 
@@ -831,6 +829,7 @@ impl FunctionCall {
                     value,
                     input_offset,
                     input_length,
+                    None,
                 )
                 .map(Some)
             }
@@ -842,7 +841,7 @@ impl FunctionCall {
                 let input_length = arguments[2].into_int_value();
                 let salt = arguments[3].into_int_value();
 
-                revive_llvm_context::polkavm_evm_create::create2(
+                revive_llvm_context::polkavm_evm_create::create(
                     context,
                     value,
                     input_offset,
@@ -964,9 +963,7 @@ impl FunctionCall {
                     location
                 );
             }
-            Name::MSize => {
-                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
-            }
+            Name::MSize => revive_llvm_context::polkavm_evm_memory::msize(context).map(Some),
 
             Name::Verbatim {
                 input_size,

@@ -62,9 +62,7 @@ impl Project {
     pub fn compile(
         self,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
-        is_system_mode: bool,
         include_metadata_hash: bool,
-        bytecode_encoding_testing: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
@@ -75,9 +73,7 @@ impl Project {
                 let process_output = crate::process::call(ProcessInput::new(
                     contract,
                     project.clone(),
-                    is_system_mode,
                     include_metadata_hash,
-                    bytecode_encoding_testing,
                     optimizer_settings.clone(),
                     debug_config.clone(),
                 ));
@@ -241,7 +237,6 @@ impl revive_llvm_context::PolkaVMDependency for Project {
         project: Self,
         identifier: &str,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
-        is_system_mode: bool,
         include_metadata_hash: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<String> {
@@ -261,7 +256,6 @@ impl revive_llvm_context::PolkaVMDependency for Project {
             .compile(
                 project,
                 optimizer_settings,
-                is_system_mode,
                 include_metadata_hash,
                 debug_config,
             )

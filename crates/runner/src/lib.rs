@@ -26,13 +26,13 @@
 use std::time::Duration;
 
 use hex::{FromHex, ToHex};
-use pallet_revive::AddressMapper;
+use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
+    pallet_revive::{CollectEvents, ContractResult, DebugInfo},
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
-    sp_core::H160,
+    sp_core::{H160, H256},
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
     sp_runtime::AccountId32,
 };
@@ -161,7 +161,7 @@ impl VerifyCallExpectation {
     fn verify(self, result: &CallResult) {
         assert_eq!(
             self.success,
-            result.is_ok(),
+            !result.did_revert(),
             "contract execution result mismatch: {result:?}"
         );
 
@@ -179,23 +179,33 @@ impl VerifyCallExpectation {
 #[derive(Clone, Debug)]
 pub enum CallResult {
     Exec {
-        result: ContractExecResult<Balance, EventRecord>,
+        result: ContractResult<ExecReturnValue, Balance, EventRecord>,
         wall_time: Duration,
     },
     Instantiate {
-        result: ContractInstantiateResult<Balance, EventRecord>,
+        result: ContractResult<InstantiateReturnValue, Balance, EventRecord>,
         wall_time: Duration,
+        code_hash: H256,
     },
 }
 
 impl CallResult {
     /// Check if the call was successful
-    fn is_ok(&self) -> bool {
+    fn did_revert(&self) -> bool {
         match self {
-            Self::Exec { result, .. } => result.result.is_ok(),
-            Self::Instantiate { result, .. } => result.result.is_ok(),
+            Self::Exec { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.did_revert())
+                .unwrap_or(true),
+            Self::Instantiate { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.result.did_revert())
+                .unwrap_or(true),
         }
     }
+
     /// Get the output of the call
     fn output(&self) -> Vec<u8> {
         match self {
@@ -211,6 +221,7 @@ impl CallResult {
                 .unwrap_or_default(),
         }
     }
+
     /// Get the gas consumed by the call
     fn gas_consumed(&self) -> Weight {
         match self {

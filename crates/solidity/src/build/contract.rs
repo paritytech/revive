@@ -139,6 +139,9 @@ impl Contract {
         let bytecode = hex::encode(self.build.bytecode.as_slice());
         if let Some(evm) = standard_json_contract.evm.as_mut() {
             evm.modify(assembly_text, bytecode);
+            if standard_json_contract.ir_optimized.is_some() {
+                evm.assembly = None;
+            }
         }
 
         standard_json_contract.factory_dependencies = Some(self.build.factory_dependencies);

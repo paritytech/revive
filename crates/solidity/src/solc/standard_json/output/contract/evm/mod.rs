@@ -48,6 +48,5 @@ impl EVM {
         self.assembly_text = Some(assembly_text);
         self.bytecode = Some(Bytecode::new(bytecode.clone()));
         self.deployed_bytecode = Some(DeployedBytecode::new(bytecode));
-        self.assembly = None;
     }
 }

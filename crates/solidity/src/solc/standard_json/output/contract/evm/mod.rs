@@ -31,7 +31,7 @@ pub struct EVM {
     pub bytecode: Option<Bytecode>,
     /// The deployed bytecode of the contract.
     /// It is overwritten with the PolkaVM blob before yielding the compiled project artifacts.
-    /// and set to the value of the contract's bytecode.
+    /// Hence it will be the same as the runtime code but we keep both for compatibility reasons.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.

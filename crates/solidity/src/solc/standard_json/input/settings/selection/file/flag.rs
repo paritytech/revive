@@ -41,6 +41,9 @@ pub enum Flag {
     EVMBC,
     #[serde(rename = "evm.deployedBytecode")]
     EVMDBC,
+    /// The assembly code
+    #[serde(rename = "evm.assembly")]
+    Assembly,
 }
 
 impl From<SolcPipeline> for Flag {
@@ -66,6 +69,7 @@ impl std::fmt::Display for Flag {
             Self::EVMLA => write!(f, "evm.legacyAssembly"),
             Self::EVMBC => write!(f, "evm.bytecode"),
             Self::EVMDBC => write!(f, "evm.deployedBytecode"),
+            Self::Assembly => write!(f, "evm.assembly"),
         }
     }
 }

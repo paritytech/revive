@@ -20,17 +20,19 @@ use self::extra_metadata::ExtraMetadata;
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
     /// The contract EVM legacy assembly code.
-    #[serde(rename = "legacyAssembly")]
+    #[serde(rename = "legacyAssembly", skip_serializing_if = "Option::is_none")]
     pub assembly: Option<Assembly>,
     /// The contract PolkaVM assembly code.
-    #[serde(rename = "assembly")]
+    #[serde(rename = "assembly", skip_serializing_if = "Option::is_none")]
     pub assembly_text: Option<String>,
     /// The contract bytecode.
     /// Is reset by that of PolkaVM before yielding the compiled project artifacts.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bytecode: Option<Bytecode>,
     /// The deployed bytecode of the contract.
     /// It is overwritten by PolkaVM before yielding the compiled project artifacts,
     /// and set to the value of the contract's bytecode.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.
     #[serde(default, skip_serializing_if = "Option::is_none")]

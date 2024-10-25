@@ -9,6 +9,10 @@ jobs:
   Release:
     runs-on: ubuntu-20.04
     steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: build llvm
         run: docker build -t revive-llvm:latest --progress=plain --build-arg RUST_VERSION=1.80 -f .github/Dockerfile-llvm .
 

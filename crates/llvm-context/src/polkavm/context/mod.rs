@@ -669,20 +669,6 @@ where
                 self.build_byte_swap(value)
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
-
                 let storage_value_pointer =
                     self.build_alloca(self.word_type(), "storage_value_pointer");
                 let storage_value_length_pointer =
@@ -694,20 +680,42 @@ where
 
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 
-                self.build_runtime_call(
-                    revive_runtime_api::polkavm_imports::GET_STORAGE,
-                    &[
-                        self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
-                        self.xlen_type().const_all_ones().into(),
-                        storage_value_pointer.to_int(self).into(),
-                        storage_value_length_pointer.to_int(self).into(),
-                    ],
-                );
+                let success = self
+                    .build_runtime_call(
+                        revive_runtime_api::polkavm_imports::GET_STORAGE,
+                        &[
+                            self.xlen_type().const_int(transient as u64, false).into(),
+                            pointer.to_int(self).into(),
+                            self.xlen_type().const_all_ones().into(),
+                            storage_value_pointer.to_int(self).into(),
+                            storage_value_length_pointer.to_int(self).into(),
+                        ],
+                    )
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{} should return a value",
+                            revive_runtime_api::polkavm_imports::GET_STORAGE
+                        )
+                    })
+                    .into_int_value();
 
-                // We do not to check the return value.
-                // Solidity assumes infallible SLOAD.
-                // If a key doesn't exist the "zero" value is returned.
+                let is_success = self.builder().build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    success,
+                    self.xlen_type().const_zero(),
+                    "is_success",
+                )?;
+
+                let block_continue = self.append_basic_block("block_continue");
+                let block_failure = self.append_basic_block("block_failure");
+
+                // if success then continue with load, otherwise fill storage_value with "zero"
+                self.build_conditional_branch(is_success, block_continue, block_failure)?;
+
+                self.set_basic_block(block_failure);
+                self.build_store(storage_value_pointer, self.word_type().const_zero())?;
+                self.build_unconditional_branch(block_continue);
+                self.set_basic_block(block_continue);
 
                 self.build_load(storage_value_pointer, "storage_value_load")
             }
@@ -767,18 +775,6 @@ where
                     self.word_type().as_basic_type_enum()
                 );
 
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-
                 let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
@@ -786,8 +782,6 @@ where
                     "storage_value_pointer_casted",
                 )?;
 
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
                 self.builder()
                     .build_store(storage_value_pointer.value, value)?;
 
@@ -797,7 +791,7 @@ where
                     revive_runtime_api::polkavm_imports::SET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
+                        pointer.to_int(self).into(),
                         self.xlen_type().const_all_ones().into(),
                         storage_value_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),

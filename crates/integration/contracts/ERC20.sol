@@ -4,9 +4,80 @@ pragma solidity ^0.8;
 
 /* runner.json
 {
+    "differential": true,
     "actions": [
     {
-      "Instantiate": {}
+        "Instantiate": {
+            "code": {
+                "Solidity": {
+                    "contract": "ERC20"
+                }
+            }
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "313ce567"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "06fdde03"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "95d89b41"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "a0712d680000000000000000000000000000000000000000000000000000000000003039"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "70a082310000000000000000000000000101010101010101010101010101010101010101"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "a9059cbb000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d000000000000000000000000000000000000000000000000000000000000007b"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "095ea7b3000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d00000000000000000000000000000000000000000000000000000000000000ff"
+        }
+    },
+    {
+        "Call": {
+            "dest": {
+                "Instantiated": 0
+            },
+            "data": "dd62ed3e0000000000000000000000000101010101010101010101010101010101010101000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d"
+        }
     }
   ]
 }

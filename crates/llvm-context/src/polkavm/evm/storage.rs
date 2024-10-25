@@ -13,7 +13,7 @@ pub fn load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
+    let position_pointer = Pointer::new_with_store_offset(
         context,
         AddressSpace::Storage,
         context.word_type(),
@@ -32,7 +32,7 @@ pub fn store<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
+    let position_pointer = Pointer::new_with_store_offset(
         context,
         AddressSpace::Storage,
         context.word_type(),
@@ -51,7 +51,7 @@ pub fn transient_load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
+    let position_pointer = Pointer::new_with_store_offset(
         context,
         AddressSpace::TransientStorage,
         context.word_type(),
@@ -70,7 +70,7 @@ pub fn transient_store<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
+    let position_pointer = Pointer::new_with_store_offset(
         context,
         AddressSpace::TransientStorage,
         context.word_type(),

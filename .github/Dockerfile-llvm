@@ -1,0 +1,14 @@
+FROM alpine:3.20.3
+
+ARG RUST_VERSION=stable
+
+RUN apk add bash git cmake make g++ ninja python3 ncurses-static curl lld-dev lld lld-libs libc++-static
+RUN ninja --version
+
+RUN bash -c ./build-llvm.sh
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
+ENV PATH=/root/.cargo/bin:/llvm18.0/bin:${PATH}
+
+WORKDIR /app
+RUN REVIVE_INSTALL_DIR=$(pwd)/target/release

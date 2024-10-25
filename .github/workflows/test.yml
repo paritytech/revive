@@ -1,0 +1,23 @@
+name: Release
+run-name: Release ${{ github.ref_name }}
+on:
+  pull_request:
+      types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+
+  Release:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: build llvm
+        run: docker build -t revive-llvm:latest --progress=plain -f --build-arg RUST_VERSION=1.80 .github/Dockerfile-llvm
+
+      - name: build revive
+        run: docker build -t revive:latest --progress=plain -f .github/Dockerfile
+
+      - name: get binary
+        run: docker run --rm revive:latest -v output:/app/output cp /app/release/revive/resolc /app/output
+
+      # docker push revive:latest
+
+      - run: gh release upload ${{ github.ref_name }} output/resolc --clobber

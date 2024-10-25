@@ -28,18 +28,20 @@ where
         context.xlen_type(),
         "address_pointer",
     )?;
-    let value = context
-        .build_runtime_call(
-            revive_runtime_api::polkavm_imports::CODE_SIZE,
-            &[address_pointer_casted.into()],
-        )
-        .unwrap_or_else(|| {
-            panic!(
-                "{} should return a value",
-                revive_runtime_api::polkavm_imports::CODE_SIZE
-            )
-        })
-        .into_int_value();
+    // TODO: uncomment when code_size is implemented on pallet-revive
+    // let value = context
+    //     .build_runtime_call(
+    //         revive_runtime_api::polkavm_imports::CODE_SIZE,
+    //         &[address_pointer_casted.into()],
+    //     )
+    //     .unwrap_or_else(|| {
+    //         panic!(
+    //             "{} should return a value",
+    //             revive_runtime_api::polkavm_imports::CODE_SIZE
+    //         )
+    //     })
+    //     .into_int_value();
+    let value = context.word_type().const_int(1000, false); // dummy size
 
     Ok(context
         .builder()

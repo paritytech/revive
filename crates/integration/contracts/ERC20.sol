@@ -6,80 +6,25 @@ pragma solidity ^0.8;
 {
     "differential": true,
     "actions": [
-    {
-        "Instantiate": {
-            "code": {
-                "Solidity": {
-                    "contract": "ERC20"
+        {
+            "Upload": {
+                "code": {
+                    "Solidity": {
+                        "contract": "ERC20"
+                    }
+                }
+            }
+        },
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "ERC20Tester"
+                    }
                 }
             }
         }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "313ce567"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "06fdde03"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "95d89b41"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "a0712d680000000000000000000000000000000000000000000000000000000000003039"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "70a082310000000000000000000000000101010101010101010101010101010101010101"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "a9059cbb000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d000000000000000000000000000000000000000000000000000000000000007b"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "095ea7b3000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d00000000000000000000000000000000000000000000000000000000000000ff"
-        }
-    },
-    {
-        "Call": {
-            "dest": {
-                "Instantiated": 0
-            },
-            "data": "dd62ed3e0000000000000000000000000101010101010101010101010101010101010101000000000000000000000000ed27012c24fda47a661de241c4030ecb9d18a76d"
-        }
-    }
-  ]
+    ]
 }
 */
 
@@ -151,5 +96,28 @@ contract ERC20 is IERC20 {
         balanceOf[msg.sender] -= amount;
         totalSupply -= amount;
         emit Transfer(msg.sender, address(0), amount);
+    }
+}
+
+contract ERC20Tester {
+    constructor() {
+        address BOB = address(0xffffffffffffffffffffffffffffffffffffff);
+        ERC20 token = new ERC20();
+        assert(token.decimals() == 18);
+
+        token.mint(300);
+        assert(token.balanceOf(address(this)) == 300);
+        token.transfer(BOB, 100);
+        assert(token.balanceOf(address(this)) == 200);
+        assert(token.balanceOf(BOB) == 100);
+
+        token.approve(address(this), 100);
+
+        token.transferFrom(address(this), BOB, 100);
+        assert(token.balanceOf(BOB) == 200);
+        assert(token.balanceOf(address(this)) == 100);
+
+        token.burn(100);
+        assert(token.balanceOf(address(this)) == 0);
     }
 }

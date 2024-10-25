@@ -76,35 +76,6 @@ impl<'ctx> Pointer<'ctx> {
         Self::new(r#type, address_space, value)
     }
 
-    /// Creates a new pointer with the specified `offset` for storage operations.
-    pub fn new_with_store_offset<D, T>(
-        context: &Context<'ctx, D>,
-        address_space: AddressSpace,
-        r#type: T,
-        offset: inkwell::values::IntValue<'ctx>,
-        name: &str,
-    ) -> Self
-    where
-        D: Dependency + Clone,
-        T: BasicType<'ctx>,
-    {
-        assert_ne!(
-            address_space,
-            AddressSpace::Stack,
-            "Stack pointers cannot be addressed"
-        );
-
-        // TODO: should we swap the key???
-        // let swapped = context.build_byte_swap(offset.into()).unwrap();
-        let storage_key = context.build_alloca_at_entry(context.word_type(), name);
-        context
-            .builder()
-            .build_store(storage_key.value, offset)
-            .unwrap();
-
-        Self::new(r#type, address_space, storage_key.value)
-    }
-
     /// Casts the pointer into another type.
     pub fn cast<T>(self, r#type: T) -> Self
     where

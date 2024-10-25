@@ -8,7 +8,7 @@ YUL and EVM assembly recompiler to LLVM, targetting RISC-V on [PolkaVM](https://
 
 ## Status
 
-This is experimental software in active development and not ready just yet for production usage.
+This is experimental software in active development and not ready just yet for production usage. Please do report any compiler related issues or missing features that are [not yet known to us](STATUS.md) here.
 
 Discussion around the development is hosted on the [Polkadot Forum](https://forum.polkadot.network/t/contracts-update-solidity-on-polkavm/6949#a-new-solidity-compiler-1).
 

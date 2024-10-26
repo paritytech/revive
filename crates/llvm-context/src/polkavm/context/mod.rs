@@ -694,6 +694,8 @@ where
                 );
 
                 // We do not to check the return value.
+                // Solidity assumes infallible SLOAD.
+                // If a key doesn't exist the "zero" value is returned.
 
                 self.build_load(storage_value_pointer, "storage_value_load")
             }

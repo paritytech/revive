@@ -693,6 +693,8 @@ where
                     ],
                 );
 
+                // We do not to check the return value.
+
                 self.build_load(storage_value_pointer, "storage_value_load")
             }
             AddressSpace::Stack => {

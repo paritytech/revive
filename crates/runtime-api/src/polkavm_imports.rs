@@ -46,6 +46,8 @@ pub static INSTANTIATE: &str = "instantiate";
 
 pub static NOW: &str = "now";
 
+pub static ORIGIN: &str = "origin";
+
 pub static RETURN: &str = "seal_return";
 
 pub static SET_STORAGE: &str = "set_storage";
@@ -60,7 +62,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 24] = [
+pub static IMPORTS: [&str; 25] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -79,6 +81,7 @@ pub static IMPORTS: [&str; 24] = [
     INPUT,
     INSTANTIATE,
     NOW,
+    ORIGIN,
     RETURN,
     RETURNDATACOPY,
     RETURNDATASIZE,

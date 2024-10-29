@@ -246,7 +246,7 @@ pub enum Code {
     /// A contract blob
     Bytes(Vec<u8>),
     /// Pre-existing contract hash
-    Hash(Hash),
+    Hash(crate::runtime::Hash),
 }
 
 impl Default for Code {

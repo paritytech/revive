@@ -32,10 +32,9 @@ pub fn origin<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let address_pointer = context.build_alloca_at_entry(
-        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
-        "origin_address",
-    );
+    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_pointer = context.build_alloca_at_entry(address_type, "origin_address");
+    context.build_store(address_pointer, address_type.const_zero())?;
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::ORIGIN,
         &[address_pointer.to_int(context).into()],

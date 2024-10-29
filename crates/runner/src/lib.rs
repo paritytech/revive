@@ -72,7 +72,7 @@ impl ExtBuilder {
         Self {
             balance_genesis_config: value
                 .iter()
-                .map(|(address, balance)| (AccountId::to_account_id(address), *balance))
+                .map(|(address, balance)| (AccountId::to_fallback_account_id(address), *balance))
                 .collect(),
         }
     }

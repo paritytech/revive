@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use pallet_revive::AddressMapper;
 use serde::{Deserialize, Serialize};
 
 use crate::*;

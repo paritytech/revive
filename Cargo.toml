@@ -67,11 +67,12 @@ log = { version = "0.4" }
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "aeebf2f383390f2f86527d70212162d5dbea8b93" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "35535efb3d9f4d3b3be63c3c2bcf963883ab6af1" }
 
 # llvm
 [workspace.dependencies.inkwell]
-version = "0.5"
+git = "https://github.com/TheDan64/inkwell.git"
+rev = "7b410298b6a93450adaa90b1841d5805a3038f12"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 

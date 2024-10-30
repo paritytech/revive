@@ -31,7 +31,7 @@ fn main_inner() -> anyhow::Result<()> {
 
     if arguments.version {
         println!(
-            "{} v{} rev-{} (LLVM build {:?})",
+            "{} version {}+commit.{} (LLVM build {:?})",
             env!("CARGO_PKG_DESCRIPTION"),
             env!("CARGO_PKG_VERSION"),
             env!("GIT_COMMIT_HASH"),

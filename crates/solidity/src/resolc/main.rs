@@ -31,10 +31,11 @@ fn main_inner() -> anyhow::Result<()> {
 
     if arguments.version {
         println!(
-            "{} v{} (LLVM build {:?})",
+            "{} version {}+commit.{} (LLVM build {:?})",
             env!("CARGO_PKG_DESCRIPTION"),
             env!("CARGO_PKG_VERSION"),
-            inkwell::support::get_llvm_version()
+            env!("GIT_COMMIT_HASH"),
+            inkwell::support::get_llvm_version(),
         );
         return Ok(());
     }

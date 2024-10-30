@@ -7,6 +7,7 @@ pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
 pub(crate) mod solc;
+pub(crate) mod version;
 pub(crate) mod warning;
 pub(crate) mod yul;
 
@@ -38,6 +39,7 @@ pub use self::solc::standard_json::output::contract::Contract as SolcStandardJso
 pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
 pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler as SolcCompiler;
+pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
 
 pub mod test_utils;
@@ -244,11 +246,7 @@ pub fn standard_json(
 
     if detect_missing_libraries {
         let missing_libraries = project.get_missing_libraries();
-        missing_libraries.write_to_standard_json(
-            &mut solc_output,
-            &solc_version,
-            &resolc_version,
-        )?;
+        missing_libraries.write_to_standard_json(&mut solc_output, &solc_version)?;
     } else {
         let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
         build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;
@@ -278,8 +276,6 @@ pub fn combined_json(
     output_directory: Option<PathBuf>,
     overwrite: bool,
 ) -> anyhow::Result<()> {
-    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
-
     let build = standard_output(
         input_files,
         libraries,
@@ -298,7 +294,7 @@ pub fn combined_json(
     )?;
 
     let mut combined_json = solc.combined_json(input_files, format.as_str())?;
-    build.write_to_combined_json(&mut combined_json, &resolc_version)?;
+    build.write_to_combined_json(&mut combined_json)?;
 
     match output_directory {
         Some(output_directory) => {

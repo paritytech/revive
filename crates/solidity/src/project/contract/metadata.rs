@@ -10,10 +10,10 @@ pub struct Metadata {
     pub solc_metadata: serde_json::Value,
     /// The `solc` version.
     pub solc_version: semver::Version,
-    /// The zkVM `solc` edition.
-    pub solc_zkvm_edition: Option<semver::Version>,
+    /// The pallet revive edition.
+    pub revive_pallet_version: Option<semver::Version>,
     /// The PolkaVM compiler version.
-    pub zk_version: semver::Version,
+    pub revive_version: semver::Version,
     /// The PolkaVM compiler optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
 }
@@ -23,15 +23,15 @@ impl Metadata {
     pub fn new(
         solc_metadata: serde_json::Value,
         solc_version: semver::Version,
-        solc_zkvm_edition: Option<semver::Version>,
-        zk_version: semver::Version,
+        revive_pallet_version: Option<semver::Version>,
+        revive_version: semver::Version,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
     ) -> Self {
         Self {
             solc_metadata,
             solc_version,
-            solc_zkvm_edition,
-            zk_version,
+            revive_pallet_version,
+            revive_version,
             optimizer_settings,
         }
     }

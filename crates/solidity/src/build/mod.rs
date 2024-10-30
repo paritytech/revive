@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::solc::combined_json::CombinedJson;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version as SolcVersion;
+use crate::ResolcVersion;
 
 use self::contract::Contract;
 
@@ -40,11 +41,7 @@ impl Build {
     }
 
     /// Writes all contracts assembly and bytecode to the combined JSON.
-    pub fn write_to_combined_json(
-        self,
-        combined_json: &mut CombinedJson,
-        resolc_version: &semver::Version,
-    ) -> anyhow::Result<()> {
+    pub fn write_to_combined_json(self, combined_json: &mut CombinedJson) -> anyhow::Result<()> {
         for (path, contract) in self.contracts.into_iter() {
             let combined_json_contract = combined_json
                 .contracts
@@ -61,7 +58,7 @@ impl Build {
             contract.write_to_combined_json(combined_json_contract)?;
         }
 
-        combined_json.zk_version = Some(resolc_version.to_string());
+        combined_json.revive_version = Some(ResolcVersion::default().long);
 
         Ok(())
     }
@@ -90,7 +87,11 @@ impl Build {
 
         standard_json.version = Some(solc_version.default.to_string());
         standard_json.long_version = Some(solc_version.long.to_owned());
-        standard_json.zk_version = Some(resolc_version.to_string());
+        standard_json.revive_version = Some(format!(
+            "{}+commit.{}",
+            resolc_version,
+            env!("GIT_COMMIT_HASH")
+        ));
 
         Ok(())
     }

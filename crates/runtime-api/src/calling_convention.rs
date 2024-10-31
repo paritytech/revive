@@ -119,6 +119,8 @@ pub fn delegate_call(context: &Context) -> StructType {
             context.i64_type().as_basic_type_enum(),
             // proof_size_limit: u64,
             context.i64_type().as_basic_type_enum(),
+            // deposit_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
             // input_data_ptr: u32,
             context.ptr_type(Default::default()).as_basic_type_enum(),
             // input_data_len: u32,

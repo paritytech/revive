@@ -140,6 +140,7 @@ where
         address_pointer.value.as_basic_value_enum(),
         gas.as_basic_value_enum(),
         context.integer_const(64, 0).as_basic_value_enum(),
+        context.sentinel_pointer().value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),
         input_length.as_basic_value_enum(),
         output_pointer.value.as_basic_value_enum(),

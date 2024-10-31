@@ -43,10 +43,12 @@ contract Logic {
     address public sender;
     uint256 public value;
 
+    uint public immutable multiplier = 4;
+
     event DidSetVars();
 
     function setVars(uint256 _num) public payable returns (uint256) {
-        num = _num * 2;
+        num = _num * multiplier;
         sender = msg.sender;
         value = msg.value;
         emit DidSetVars();
@@ -58,6 +60,8 @@ contract Tester {
     uint256 public num;
     address public sender;
     uint256 public value;
+
+    uint public immutable multiplier = 2;
 
     function setVars(uint256 _num) public payable returns (bool, bytes memory) {
         Logic impl = new Logic();
@@ -71,9 +75,9 @@ contract Tester {
         assert(impl.num() == 0);
         assert(impl.sender() == address(0));
         assert(impl.value() == 0);
-        assert(this.num() == _num * 2);
-        assert(this.sender() == msg.sender);
-        assert(this.value() == msg.value);
+        assert(num == _num * 4);
+        assert(sender == msg.sender);
+        assert(value == msg.value);
 
         return (success, data);
     }

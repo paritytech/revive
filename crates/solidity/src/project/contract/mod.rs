@@ -91,7 +91,6 @@ impl Contract {
             self.metadata_json.take(),
             version.default.clone(),
             version.l2_revision.clone(),
-            semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid"),
             optimizer.settings().to_owned(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");

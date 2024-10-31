@@ -11,7 +11,7 @@ pub struct Metadata {
     /// The `solc` metadata.
     pub solc_metadata: serde_json::Value,
     /// The `solc` version.
-    pub solc_version: semver::Version,
+    pub solc_version: String,
     /// The pallet revive edition.
     pub revive_pallet_version: Option<semver::Version>,
     /// The PolkaVM compiler version.
@@ -24,7 +24,7 @@ impl Metadata {
     /// A shortcut constructor.
     pub fn new(
         solc_metadata: serde_json::Value,
-        solc_version: semver::Version,
+        solc_version: String,
         revive_pallet_version: Option<semver::Version>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
     ) -> Self {

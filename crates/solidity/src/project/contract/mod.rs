@@ -89,7 +89,7 @@ impl Contract {
 
         let metadata = Metadata::new(
             self.metadata_json.take(),
-            version.default.clone(),
+            version.long.clone(),
             version.l2_revision.clone(),
             optimizer.settings().to_owned(),
         );

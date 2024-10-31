@@ -26,10 +26,10 @@
 use std::time::Duration;
 
 use hex::{FromHex, ToHex};
-use pallet_revive::AddressMapper;
+use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
+    pallet_revive::{CollectEvents, ContractResult, DebugInfo},
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
     sp_core::{H160, H256},
@@ -72,7 +72,7 @@ impl ExtBuilder {
         Self {
             balance_genesis_config: value
                 .iter()
-                .map(|(address, balance)| (AccountId::to_account_id(address), *balance))
+                .map(|(address, balance)| (AccountId::to_fallback_account_id(address), *balance))
                 .collect(),
         }
     }
@@ -179,11 +179,11 @@ impl VerifyCallExpectation {
 #[derive(Clone, Debug)]
 pub enum CallResult {
     Exec {
-        result: ContractExecResult<Balance, EventRecord>,
+        result: ContractResult<ExecReturnValue, Balance, EventRecord>,
         wall_time: Duration,
     },
     Instantiate {
-        result: ContractInstantiateResult<Balance, EventRecord>,
+        result: ContractResult<InstantiateReturnValue, Balance, EventRecord>,
         wall_time: Duration,
         code_hash: H256,
     },
@@ -246,7 +246,7 @@ pub enum Code {
     /// A contract blob
     Bytes(Vec<u8>),
     /// Pre-existing contract hash
-    Hash(Hash),
+    Hash(crate::runtime::Hash),
 }
 
 impl Default for Code {

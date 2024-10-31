@@ -48,6 +48,8 @@ pub static INSTANTIATE: &str = "instantiate";
 
 pub static NOW: &str = "now";
 
+pub static ORIGIN: &str = "origin";
+
 pub static RETURN: &str = "seal_return";
 
 pub static SET_STORAGE: &str = "set_storage";
@@ -82,6 +84,7 @@ pub static IMPORTS: [&str; 25] = [
     INPUT,
     INSTANTIATE,
     NOW,
+    ORIGIN,
     RETURN,
     RETURNDATACOPY,
     RETURNDATASIZE,

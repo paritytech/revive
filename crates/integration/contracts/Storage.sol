@@ -22,6 +22,14 @@ pragma solidity ^0.8;
                 },
                 "data": "fabc9efaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
             }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "558b9f9bffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            }
         }
     ]
 }
@@ -30,10 +38,18 @@ pragma solidity ^0.8;
 contract Storage {
     function transient(uint value) public returns (uint ret) {
         assembly {
-            let slot := 123
+            let slot := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00
             tstore(slot, value)
             let success := call(0, 0, 0, 0, 0, 0, 0)
             ret := tload(slot)
+        }
+    }
+
+    function persistent(uint value) public returns (uint ret) {
+        assembly {
+            let slot := 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00
+            sstore(slot, value)
+            ret := sload(slot)
         }
     }
 }

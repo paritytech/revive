@@ -27,12 +27,19 @@ where
 
 /// Translates the `tx.origin` instruction.
 pub fn origin<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_pointer = context.build_alloca_at_entry(address_type, "origin_address");
+    context.build_store(address_pointer, address_type.const_zero())?;
+    context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::ORIGIN,
+        &[address_pointer.to_int(context).into()],
+    );
+    context.build_load_address(address_pointer)
 }
 
 /// Translates the `chain_id` instruction.

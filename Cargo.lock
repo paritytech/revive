@@ -4296,7 +4296,7 @@ checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "cc",
  "libc",
@@ -7850,7 +7850,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "alloy-primitives 0.8.10",
  "criterion",
@@ -7862,11 +7862,11 @@ dependencies = [
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 
 [[package]]
 name = "revive-common"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "serde",
@@ -7876,7 +7876,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives 0.8.10",
@@ -7889,7 +7889,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "alloy-primitives 0.8.10",
  "alloy-sol-types 0.8.10",
@@ -7910,7 +7910,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -7924,7 +7924,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "hex",
@@ -7949,7 +7949,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "alloy-primitives 0.8.10",
  "hex",
@@ -7964,7 +7964,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -7973,7 +7973,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solidity"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -8000,7 +8000,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0"
+version = "0.1.0-dev.5"
 dependencies = [
  "inkwell",
 ]

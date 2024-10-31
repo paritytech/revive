@@ -199,7 +199,6 @@ pub fn standard_json(
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
-    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
 
     let solc_input = SolcStandardJsonInput::try_from_stdin(solc_pipeline)?;
     let source_code_files = solc_input
@@ -249,7 +248,7 @@ pub fn standard_json(
         missing_libraries.write_to_standard_json(&mut solc_output, &solc_version)?;
     } else {
         let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
-        build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;
+        build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }
     serde_json::to_writer(std::io::stdout(), &solc_output)?;
     std::process::exit(0);

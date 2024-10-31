@@ -68,7 +68,6 @@ impl Build {
         mut self,
         standard_json: &mut StandardJsonOutput,
         solc_version: &SolcVersion,
-        resolc_version: &semver::Version,
     ) -> anyhow::Result<()> {
         let contracts = match standard_json.contracts.as_mut() {
             Some(contracts) => contracts,
@@ -87,11 +86,7 @@ impl Build {
 
         standard_json.version = Some(solc_version.default.to_string());
         standard_json.long_version = Some(solc_version.long.to_owned());
-        standard_json.revive_version = Some(format!(
-            "{}+commit.{}",
-            resolc_version,
-            env!("GIT_COMMIT_HASH")
-        ));
+        standard_json.revive_version = Some(ResolcVersion::default().long);
 
         Ok(())
     }

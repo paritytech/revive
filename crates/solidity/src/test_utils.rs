@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
@@ -106,11 +105,7 @@ pub fn build_solidity_with_options(
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
     let build: crate::Build = project.compile(optimizer_settings, false, None)?;
-    build.write_to_standard_json(
-        &mut output,
-        &solc_version,
-        &semver::Version::from_str(env!("CARGO_PKG_VERSION"))?,
-    )?;
+    build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
 }

@@ -321,6 +321,114 @@ fn ext_code_hash() {
     .run();
 }
 
+#[test]
+fn ext_code_size() {
+    let alice = Address::from(ALICE.0);
+    let own_address = alice.create(0);
+    let baseline_address = alice.create2([0u8; 32], keccak256(Contract::baseline().pvm_runtime));
+
+    let own_code_size = U256::from(
+        Contract::ext_code_size(Default::default())
+            .pvm_runtime
+            .len(),
+    );
+    let baseline_code_size = U256::from(Contract::baseline().pvm_runtime.len());
+
+    Specs {
+        actions: vec![
+            // Instantiate the test contract
+            instantiate("contracts/ExtCode.sol", "ExtCode").remove(0),
+            // Instantiate the baseline contract
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Solidity {
+                    path: Some("contracts/Baseline.sol".into()),
+                    contract: "Baseline".to_string(),
+                    solc_optimizer: None,
+                    pipeline: None,
+                },
+                data: vec![],
+                salt: OptionalHex::from([0; 32]),
+            },
+            // Alice is not a contract and returns a code size of 0
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(alice).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from([0u8; 32].to_vec()),
+                gas_consumed: None,
+            }),
+            // Unknown address returns a code size of 0
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(Address::from([0xff; 20])).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from([0u8; 32].to_vec()),
+                gas_consumed: None,
+            }),
+            // Own address via extcodesize returns own code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(own_address).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(own_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+            // Own address via codesize returns own code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::code_size().calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(own_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+            // Baseline address returns the baseline code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(baseline_address).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(baseline_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+        ],
+        ..Default::default()
+    }
+    .run();
+}
+
 /*
 // These test were implement for the mock-runtime and need to be ported yet.
 
@@ -348,29 +456,5 @@ fn create2_failure() {
         .call();
 
     assert_eq!(output.flags, ReturnFlags::Revert);
-}
-
-#[test]
-fn ext_code_size() {
-    let contract = Contract::ext_code_size(Transaction::default_address());
-    let (_, output) = assert_success(&contract, false);
-    let received = U256::from_be_slice(&output.data);
-    let expected = U256::from(contract.pvm_runtime.len());
-    assert_eq!(received, expected);
-
-    let contract = Contract::ext_code_size(Default::default());
-    let (_, output) = assert_success(&contract, false);
-    let received = U256::from_be_slice(&output.data);
-    let expected = U256::ZERO;
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn code_size() {
-    let contract = Contract::code_size();
-    let (_, output) = assert_success(&contract, false);
-    let expected = U256::from(contract.pvm_runtime.len());
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
 }
 */

@@ -105,9 +105,7 @@ contract ERC20Tester {
         ERC20 token = new ERC20();
         assert(token.decimals() == 18);
 
-        // use call directly when code_size is implemented on pallet-revive
-
-        address(token).call(abi.encodeWithSignature("mint(uint256)", 300));
+        token.mint(300);
         assert(token.balanceOf(address(this)) == 300);
         token.transfer(BOB, 100);
         assert(token.balanceOf(address(this)) == 200);
@@ -119,7 +117,7 @@ contract ERC20Tester {
         assert(token.balanceOf(BOB) == 200);
         assert(token.balanceOf(address(this)) == 100);
 
-        address(token).call(abi.encodeWithSignature("burn(uint256)", 100));
+        token.burn(100);
         assert(token.balanceOf(address(this)) == 0);
     }
 }

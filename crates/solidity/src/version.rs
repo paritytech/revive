@@ -22,7 +22,7 @@ impl Default for Version {
         let llvm = semver::Version::new(llvm_major as u64, llvm_minor as u64, llvm_patch as u64);
 
         Self {
-            long: format!("{default}+commit.{commit}..llvm-{llvm}"),
+            long: format!("{default}+commit.{commit}.llvm-{llvm}"),
             default,
             llvm,
         }

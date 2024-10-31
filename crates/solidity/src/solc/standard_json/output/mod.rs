@@ -45,7 +45,7 @@ pub struct Output {
     pub long_version: Option<String>,
     /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub zk_version: Option<String>,
+    pub revive_version: Option<String>,
 }
 
 impl Output {

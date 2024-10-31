@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version as SolcVersion;
+use crate::ResolcVersion;
 
 /// The missing Solidity libraries.
 pub struct MissingLibraries {
@@ -23,7 +24,6 @@ impl MissingLibraries {
         mut self,
         standard_json: &mut StandardJsonOutput,
         solc_version: &SolcVersion,
-        resolc_version: &semver::Version,
     ) -> anyhow::Result<()> {
         let contracts = match standard_json.contracts.as_mut() {
             Some(contracts) => contracts,
@@ -43,7 +43,7 @@ impl MissingLibraries {
 
         standard_json.version = Some(solc_version.default.to_string());
         standard_json.long_version = Some(solc_version.long.to_owned());
-        standard_json.zk_version = Some(resolc_version.to_string());
+        standard_json.revive_version = Some(ResolcVersion::default().long);
 
         Ok(())
     }

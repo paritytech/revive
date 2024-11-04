@@ -27,18 +27,6 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
-        context.declare_global(
-            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER,
-            context.word_type().array_type(0),
-            AddressSpace::Stack,
-        );
-
-        context.declare_global(
-            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE,
-            context.xlen_type(),
-            AddressSpace::Stack,
-        );
-
         let calldata_type = context.array_type(context.byte_type(), Self::MAX_CALLDATA_SIZE);
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_POINTER,
@@ -196,6 +184,18 @@ where
             0,
             Some(inkwell::module::Linkage::External),
         )?;
+
+        context.declare_global(
+            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER,
+            context.word_type().array_type(0),
+            AddressSpace::Stack,
+        );
+
+        context.declare_global(
+            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE,
+            context.xlen_type(),
+            AddressSpace::Stack,
+        );
 
         Ok(())
     }

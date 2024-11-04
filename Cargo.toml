@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-dev.5"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,18 +14,18 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.80.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0", path = "crates/builtins" }
-revive-common = { version = "0.1.0", path = "crates/common" }
-revive-differential = { version = "0.1.0", path = "crates/differential" }
-revive-integration = { version = "0.1.0", path = "crates/integration" }
-revive-linker = { version = "0.1.0", path = "crates/linker" }
-lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0", path = "crates/runner" }
-revive-solidity = { version = "0.1.0", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
+revive-benchmarks = { version = "0.1.0-dev.5", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.5", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.5", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.5", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.5", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.5", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.5", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.5", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.5", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.5", path = "crates/runner" }
+revive-solidity = { version = "0.1.0-dev.5", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.5", path = "crates/stdlib" }
 
 hex = "0.4"
 petgraph = "0.6"
@@ -67,7 +67,8 @@ log = { version = "0.4" }
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "db40a66db71e8e7fe943dda5cd0e28078efa2a19" }
+
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "2b6b69641ccff4d7aa9c32051bbb2f1e775ef8cc" }
 
 # llvm
 [workspace.dependencies.inkwell]

@@ -1,463 +1,436 @@
 use std::str::FromStr;
 
-use alloy_primitives::{keccak256, Address, FixedBytes, B256, I256, U256};
-use alloy_sol_types::{sol, SolCall, SolValue};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use sha1::Digest;
+use alloy_primitives::*;
+use revive_runner::*;
+use SpecsAction::*;
 
-use crate::{
-    assert_success,
-    cases::Contract,
-    mock_runtime::{self, ReturnFlags, State, Transaction},
-};
+use crate::cases::Contract;
 
-#[test]
-fn fibonacci() {
-    let parameter = 6;
+/// Parameters:
+/// - The function name of the test
+/// - The contract name to fill in empty code based on the file path
+/// - The contract source file
+macro_rules! test_spec {
+    ($test_name:ident, $contract_name:literal, $source_file:literal) => {
+        #[test]
+        fn $test_name() {
+            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("should always exist");
+            let path = format!("{manifest_dir}/../integration/contracts/{}", $source_file);
+            Specs::from_comment($contract_name, &path).remove(0).run();
+        }
+    };
+}
 
-    for contract in [
-        Contract::fib_recursive(parameter),
-        Contract::fib_iterative(parameter),
-        Contract::fib_binet(parameter),
-    ] {
-        let (_, output) = assert_success(&contract, true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        let expected = U256::from(8);
-        assert_eq!(received, expected);
+test_spec!(baseline, "Baseline", "Baseline.sol");
+test_spec!(flipper, "Flipper", "flipper.sol");
+test_spec!(fibonacci_recursive, "FibonacciRecursive", "Fibonacci.sol");
+test_spec!(fibonacci_iterative, "FibonacciIterative", "Fibonacci.sol");
+test_spec!(fibonacci_binet, "FibonacciBinet", "Fibonacci.sol");
+test_spec!(hash_keccak_256, "TestSha3", "Crypto.sol");
+test_spec!(erc20, "ERC20", "ERC20.sol");
+test_spec!(computation, "Computation", "Computation.sol");
+test_spec!(msize, "MSize", "MSize.sol");
+test_spec!(sha1, "SHA1", "SHA1.sol");
+test_spec!(block, "Block", "Block.sol");
+test_spec!(mcopy, "MCopy", "MCopy.sol");
+test_spec!(events, "Events", "Events.sol");
+test_spec!(storage, "Storage", "Storage.sol");
+test_spec!(mstore8, "MStore8", "MStore8.sol");
+test_spec!(address, "Context", "Context.sol");
+test_spec!(balance, "Value", "Value.sol");
+test_spec!(create, "CreateB", "Create.sol");
+test_spec!(call, "Caller", "Call.sol");
+test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
+test_spec!(immutables, "Immutables", "Immutables.sol");
+test_spec!(transaction, "Transaction", "Transaction.sol");
+
+fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
+    vec![Instantiate {
+        origin: TestAddress::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        code: Code::Solidity {
+            path: Some(path.into()),
+            contract: contract.to_string(),
+            solc_optimizer: None,
+            pipeline: None,
+        },
+        data: vec![],
+        salt: OptionalHex::default(),
+    }]
+}
+
+fn run_differential(actions: Vec<SpecsAction>) {
+    Specs {
+        differential: true,
+        actions,
+        ..Default::default()
     }
+    .run();
 }
 
 #[test]
-fn flipper() {
-    let (state, address) = State::new_deployed(Contract::flipper_constructor(true));
+fn bitwise_byte() {
+    let mut actions = instantiate("contracts/Bitwise.sol", "Bitwise");
 
-    let contract = Contract::flipper();
-    let (state, output) = state
-        .transaction()
-        .calldata(contract.calldata.clone())
-        .callee(address)
-        .call();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::ZERO);
-
-    let (state, output) = state
-        .transaction()
-        .calldata(contract.calldata)
-        .callee(address)
-        .call();
-    assert_eq!(output.flags, ReturnFlags::Success);
-    state.assert_storage_key(address, U256::ZERO, U256::from(1));
-}
-
-#[test]
-fn hash_keccak_256() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract TestSha3 {
-            function test(string memory _pre) external payable returns (bytes32);
-        }
-    );
-    let source = r#"contract TestSha3 {
-            function test(string memory _pre) external payable returns (bytes32 hash) {
-                hash = keccak256(bytes(_pre));
-            }
-        }"#;
-    let code = crate::compile_blob("TestSha3", source);
-
-    let param = "hello";
-    let input = TestSha3::testCall::new((param.to_string(),)).abi_encode();
-
-    let (_, output) = State::default()
-        .transaction()
-        .with_default_account(&code)
-        .calldata(input)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    let expected = keccak256(param.as_bytes());
-    let received = FixedBytes::<32>::from_slice(&output.data);
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn erc20() {
-    let _ = crate::compile_blob("ERC20", include_str!("../contracts/ERC20.sol"));
-}
-
-#[test]
-fn triangle_number() {
-    let (_, output) = assert_success(&Contract::triangle_number(13), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::try_from(91).unwrap();
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn odd_product() {
-    let (_, output) = assert_success(&Contract::odd_product(5), true);
-    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = I256::try_from(945i64).unwrap();
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn msize_plain() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract MSize {
-            function mSize() public pure returns (uint);
-        }
-    );
-    let code = crate::compile_blob_with_options(
-        "MSize",
-        include_str!("../contracts/MSize.sol"),
-        false,
-        revive_solidity::SolcPipeline::EVMLA,
-    );
-
-    let input = MSize::mSizeCall::new(()).abi_encode();
-    let (_, output) = State::default()
-        .transaction()
-        .calldata(input)
-        .with_default_account(&code)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // Solidity always stores the "free memory pointer" (32 byte int) at offset 64.
-    let expected = U256::try_from(64 + 32).unwrap();
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn transferred_value() {
-    sol!(
-        contract Value {
-            function value() public payable returns (uint);
-        }
-    );
-    let code = crate::compile_blob("Value", include_str!("../contracts/Value.sol"));
-
-    let (_, output) = State::default()
-        .transaction()
-        .calldata(Value::valueCall::SELECTOR.to_vec())
-        .callvalue(U256::from(123))
-        .with_default_account(&code)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    let expected = I256::try_from(123).unwrap();
-    let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn msize_non_word_sized_access() {
-    sol!(
-        #[derive(Debug, PartialEq, Eq)]
-        contract MSize {
-            function mStore100() public pure returns (uint);
-        }
-    );
-    let code = crate::compile_blob_with_options(
-        "MSize",
-        include_str!("../contracts/MSize.sol"),
-        false,
-        revive_solidity::SolcPipeline::Yul,
-    );
-
-    let input = MSize::mStore100Call::new(()).abi_encode();
-    let (_, output) = State::default()
-        .transaction()
-        .with_default_account(&code)
-        .calldata(input)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // https://docs.zksync.io/build/developer-reference/differences-with-ethereum.html#mstore-mload
-    // "Unlike EVM, where the memory growth is in words, on zkEVM the memory growth is counted in bytes."
-    // "For example, if you write mstore(100, 0) the msize on zkEVM will be 132, but on the EVM it will be 160."
-    let expected = U256::try_from(132).unwrap();
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn mstore8() {
-    for (received, expected) in [
-        (U256::MIN, U256::MIN),
-        (
-            U256::from(1),
-            U256::from_str_radix(
-                "452312848583266388373324160190187140051835877600158453279131187530910662656",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(2),
-            U256::from_str_radix(
-                "904625697166532776746648320380374280103671755200316906558262375061821325312",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(255),
-            U256::from_str_radix(
-                "115339776388732929035197660848497720713218148788040405586178452820382218977280",
-                10,
-            )
-            .unwrap(),
-        ),
-        (U256::from(256), U256::from(0)),
-        (
-            U256::from(257),
-            U256::from_str_radix(
-                "452312848583266388373324160190187140051835877600158453279131187530910662656",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(258),
-            U256::from_str_radix(
-                "904625697166532776746648320380374280103671755200316906558262375061821325312",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::from(123456789),
-            U256::from_str_radix(
-                "9498569820248594155839807363993929941088553429603327518861754938149123915776",
-                10,
-            )
-            .unwrap(),
-        ),
-        (
-            U256::MAX,
-            U256::from_str_radix(
-                "115339776388732929035197660848497720713218148788040405586178452820382218977280",
-                10,
-            )
-            .unwrap(),
-        ),
-    ]
-    .par_iter()
-    .map(|(parameter, expected)| {
-        let (_, output) = assert_success(&Contract::mstore8(*parameter), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *expected)
-    })
-    .collect::<Vec<_>>()
+    let de_bruijn_sequence =
+        hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
+    let value = U256::from_be_bytes::<32>(de_bruijn_sequence.clone().try_into().unwrap());
+    for input in de_bruijn_sequence
+        .iter()
+        .enumerate()
+        .map(|(index, _)| Contract::bitwise_byte(U256::from(index), value).calldata)
+        .chain([
+            Contract::bitwise_byte(U256::ZERO, U256::ZERO).calldata,
+            Contract::bitwise_byte(U256::ZERO, U256::MAX).calldata,
+            Contract::bitwise_byte(U256::MAX, U256::ZERO).calldata,
+            Contract::bitwise_byte(U256::from_str("18446744073709551619").unwrap(), U256::MAX)
+                .calldata,
+        ])
     {
-        assert_eq!(received, expected);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: input,
+        })
     }
-}
 
-#[test]
-fn sha1() {
-    let pre = vec![0xffu8; 512];
-    let mut hasher = sha1::Sha1::new();
-    hasher.update(&pre);
-    let hash = hasher.finalize();
-
-    let (_, output) = assert_success(&Contract::sha1(pre), true);
-    let expected = FixedBytes::<20>::from_slice(&hash[..]);
-    let received = FixedBytes::<20>::from_slice(&output.data[..20]);
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn block_number() {
-    let (_, output) = assert_success(&Contract::block_number(), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::from(mock_runtime::State::BLOCK_NUMBER);
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn block_timestamp() {
-    let (_, output) = assert_success(&Contract::block_timestamp(), true);
-    let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-    let expected = U256::from(mock_runtime::State::BLOCK_TIMESTAMP);
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn address() {
-    let contract = Contract::context_address();
-    let (_, output) = assert_success(&contract, true);
-    let received = Address::from_slice(&output.data[12..]);
-    let expected = Transaction::default_address();
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn caller() {
-    let (_, output) = assert_success(&Contract::context_caller(), true);
-    let received = Address::from_slice(&output.data[12..]);
-    let expected = Transaction::default_address();
-    assert_eq!(received, expected);
+    run_differential(actions);
 }
 
 #[test]
 fn unsigned_division() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
     let one = U256::from(1);
     let two = U256::from(2);
     let five = U256::from(5);
-    for (received, expected) in [
-        (five, five, one),
-        (five, one, five),
-        (U256::ZERO, U256::MAX, U256::ZERO),
-        (five, two, two),
-        (one, U256::ZERO, U256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_div(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected)
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (five, two),
+        (one, U256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_div(n, d).calldata,
+        })
     }
+
+    run_differential(actions);
 }
 
 #[test]
 fn signed_division() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
     let one = I256::try_from(1).unwrap();
     let two = I256::try_from(2).unwrap();
     let minus_two = I256::try_from(-2).unwrap();
     let five = I256::try_from(5).unwrap();
     let minus_five = I256::try_from(-5).unwrap();
-    for (received, expected) in [
-        (five, five, one),
-        (five, one, five),
-        (I256::ZERO, I256::MAX, I256::ZERO),
-        (I256::ZERO, I256::MINUS_ONE, I256::ZERO),
-        (five, two, two),
-        (five, I256::MINUS_ONE, minus_five),
-        (I256::MINUS_ONE, minus_two, I256::ZERO),
-        (minus_five, minus_five, one),
-        (minus_five, two, minus_two),
-        (I256::MINUS_ONE, I256::MIN, I256::ZERO),
-        (one, I256::ZERO, I256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_sdiv(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::ZERO, I256::MINUS_ONE),
+        (five, two),
+        (five, I256::MINUS_ONE),
+        (I256::MINUS_ONE, minus_two),
+        (minus_five, minus_five),
+        (minus_five, two),
+        (I256::MINUS_ONE, I256::MIN),
+        (one, I256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_sdiv(n, d).calldata,
+        })
     }
+
+    run_differential(actions);
 }
 
 #[test]
 fn unsigned_remainder() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
     let one = U256::from(1);
     let two = U256::from(2);
     let five = U256::from(5);
-    for (received, expected) in [
-        (five, five, U256::ZERO),
-        (five, one, U256::ZERO),
-        (U256::ZERO, U256::MAX, U256::ZERO),
-        (U256::MAX, U256::MAX, U256::ZERO),
-        (five, two, one),
-        (two, five, two),
-        (U256::MAX, U256::ZERO, U256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_mod(*n, *d), true);
-        let received = U256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (U256::MAX, U256::MAX),
+        (five, two),
+        (two, five),
+        (U256::MAX, U256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_mod(n, d).calldata,
+        })
     }
+
+    run_differential(actions);
 }
 
 #[test]
 fn signed_remainder() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+
     let one = I256::try_from(1).unwrap();
     let two = I256::try_from(2).unwrap();
     let minus_two = I256::try_from(-2).unwrap();
     let five = I256::try_from(5).unwrap();
     let minus_five = I256::try_from(-5).unwrap();
-    for (received, expected) in [
-        (five, five, I256::ZERO),
-        (five, one, I256::ZERO),
-        (I256::ZERO, I256::MAX, I256::ZERO),
-        (I256::MAX, I256::MAX, I256::ZERO),
-        (five, two, one),
-        (two, five, two),
-        (five, minus_five, I256::ZERO),
-        (five, I256::MINUS_ONE, I256::ZERO),
-        (five, minus_two, one),
-        (minus_five, two, I256::MINUS_ONE),
-        (minus_two, five, minus_two),
-        (minus_five, minus_five, I256::ZERO),
-        (minus_five, I256::MINUS_ONE, I256::ZERO),
-        (minus_five, minus_two, I256::MINUS_ONE),
-        (minus_two, minus_five, minus_two),
-        (I256::MIN, I256::MINUS_ONE, I256::ZERO),
-        (I256::ZERO, I256::ZERO, I256::ZERO),
-    ]
-    .par_iter()
-    .map(|(n, d, q)| {
-        let (_, output) = assert_success(&Contract::division_arithmetics_smod(*n, *d), true);
-        let received = I256::from_be_bytes::<32>(output.data.try_into().unwrap());
-        (received, *q)
-    })
-    .collect::<Vec<_>>()
-    {
-        assert_eq!(received, expected);
+    for (n, d) in [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::MAX, I256::MAX),
+        (five, two),
+        (two, five),
+        (five, minus_five),
+        (five, I256::MINUS_ONE),
+        (five, minus_two),
+        (minus_five, two),
+        (minus_two, five),
+        (minus_five, minus_five),
+        (minus_five, I256::MINUS_ONE),
+        (minus_five, minus_two),
+        (minus_two, minus_five),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::ZERO, I256::ZERO),
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_smod(n, d).calldata,
+        })
     }
+
+    run_differential(actions);
 }
 
 #[test]
-fn events() {
-    assert_success(&Contract::event(U256::ZERO), true);
-    assert_success(&Contract::event(U256::from(123)), true);
+fn ext_code_hash() {
+    let mut actions = instantiate("contracts/ExtCode.sol", "ExtCode");
+
+    // First do contract instantiation to figure out address and code hash
+    let results = Specs {
+        actions: actions.clone(),
+        ..Default::default()
+    }
+    .run();
+    let (addr, code_hash) = match results.first().cloned() {
+        Some(CallResult::Instantiate {
+            result, code_hash, ..
+        }) => (result.result.unwrap().addr, code_hash),
+        _ => panic!("instantiate contract failed"),
+    };
+
+    // code hash of itself
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::code_hash().calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(code_hash.as_bytes().to_vec()),
+        gas_consumed: None,
+    }));
+
+    // code hash for a given contract address
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from(addr.to_fixed_bytes())).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(code_hash.as_bytes().to_vec()),
+        gas_consumed: None,
+    }));
+
+    // EOA returns fixed hash
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from(CHARLIE.to_fixed_bytes())).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from(
+            hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec(),
+        ),
+        gas_consumed: None,
+    }));
+
+    // non-existing account
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::ext_code_hash(Address::from([8u8; 20])).calldata,
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: true,
+        output: OptionalHex::from([0u8; 32].to_vec()),
+        gas_consumed: None,
+    }));
+
+    Specs {
+        actions,
+        ..Default::default()
+    }
+    .run();
 }
 
 #[test]
-fn create2() {
-    let mut state = State::default();
-    let contract_a = Contract::create_a();
-    state.upload_code(&contract_a.pvm_runtime);
+fn ext_code_size() {
+    let alice = Address::from(ALICE.0);
+    let own_address = alice.create(0);
+    let baseline_address = alice.create2([0u8; 32], keccak256(Contract::baseline().pvm_runtime));
 
-    let contract = Contract::create_b();
-    let (state, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
+    let own_code_size = U256::from(
+        Contract::ext_code_size(Default::default())
+            .pvm_runtime
+            .len(),
+    );
+    let baseline_code_size = U256::from(Contract::baseline().pvm_runtime.len());
 
-    assert_eq!(output.flags, ReturnFlags::Success);
-    assert_eq!(state.accounts().len(), 2);
-
-    for address in state.accounts().keys() {
-        if *address != Transaction::default_address() {
-            let derived_address = Transaction::default_address().create2(
-                B256::from(U256::from(1)),
-                keccak256(&contract_a.pvm_runtime).0,
-            );
-            assert_eq!(*address, derived_address);
-        }
+    Specs {
+        actions: vec![
+            // Instantiate the test contract
+            instantiate("contracts/ExtCode.sol", "ExtCode").remove(0),
+            // Instantiate the baseline contract
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Solidity {
+                    path: Some("contracts/Baseline.sol".into()),
+                    contract: "Baseline".to_string(),
+                    solc_optimizer: None,
+                    pipeline: None,
+                },
+                data: vec![],
+                salt: OptionalHex::from([0; 32]),
+            },
+            // Alice is not a contract and returns a code size of 0
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(alice).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from([0u8; 32].to_vec()),
+                gas_consumed: None,
+            }),
+            // Unknown address returns a code size of 0
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(Address::from([0xff; 20])).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from([0u8; 32].to_vec()),
+                gas_consumed: None,
+            }),
+            // Own address via extcodesize returns own code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(own_address).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(own_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+            // Own address via codesize returns own code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::code_size().calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(own_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+            // Baseline address returns the baseline code size
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size(baseline_address).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(baseline_code_size.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+        ],
+        ..Default::default()
     }
+    .run();
 }
+
+/*
+// These test were implement for the mock-runtime and need to be ported yet.
 
 #[test]
 fn create2_failure() {
@@ -484,155 +457,4 @@ fn create2_failure() {
 
     assert_eq!(output.flags, ReturnFlags::Revert);
 }
-
-#[test]
-fn create_with_value() {
-    let mut state = State::default();
-    state.upload_code(&Contract::create_a().pvm_runtime);
-    let amount = U256::from(123);
-
-    let contract = Contract::create_b();
-    let (state, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .callvalue(amount)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-    assert_eq!(state.accounts().len(), 2);
-
-    for (address, account) in state.accounts() {
-        if *address == Transaction::default_address() {
-            assert_eq!(account.value, U256::ZERO);
-        } else {
-            assert_eq!(account.value, amount);
-        }
-    }
-}
-
-#[test]
-fn ext_code_size() {
-    let contract = Contract::ext_code_size(Transaction::default_address());
-    let (_, output) = assert_success(&contract, false);
-    let received = U256::from_be_slice(&output.data);
-    let expected = U256::from(contract.pvm_runtime.len());
-    assert_eq!(received, expected);
-
-    let contract = Contract::ext_code_size(Default::default());
-    let (_, output) = assert_success(&contract, false);
-    let received = U256::from_be_slice(&output.data);
-    let expected = U256::ZERO;
-    assert_eq!(received, expected);
-}
-
-#[test]
-fn code_size() {
-    let contract = Contract::code_size();
-    let (_, output) = assert_success(&contract, false);
-    let expected = U256::from(contract.pvm_runtime.len());
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-}
-
-#[test]
-fn value_transfer() {
-    // Succeeds in remix (shanghai) but traps the interpreter
-    let (state, _) = assert_success(&Contract::call_value_transfer(Default::default()), false);
-
-    assert_eq!(state.accounts().len(), 2);
-    assert!(state.accounts().get(&Address::default()).is_some());
-}
-
-#[test]
-fn echo() {
-    let (state, address) = State::new_deployed(Contract::call_constructor());
-
-    let expected = vec![1, 2, 3, 4, 5];
-    let contract = Contract::call_call(address, expected.clone());
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
-        .unwrap()
-        .to_vec();
-
-    assert_eq!(expected, received);
-}
-
-#[test]
-fn mcopy() {
-    let expected = vec![1, 2, 3];
-
-    let (_, output) = assert_success(&Contract::memcpy(expected.clone()), false);
-
-    let received = alloy_primitives::Bytes::abi_decode(&output.data, true)
-        .unwrap()
-        .to_vec();
-
-    assert_eq!(expected, received);
-}
-
-#[test]
-fn balance() {
-    let (_, output) = assert_success(&Contract::value_balance_of(Default::default()), false);
-
-    let expected = U256::ZERO;
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received);
-
-    let expected = U256::from(54589);
-    let (mut state, address) = State::new_deployed(Contract::value_balance_of(Default::default()));
-    state.accounts_mut().get_mut(&address).unwrap().value = expected;
-
-    let contract = Contract::value_balance_of(address);
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(ReturnFlags::Success, output.flags);
-
-    let received = U256::from_be_slice(&output.data);
-    assert_eq!(expected, received)
-}
-
-#[test]
-fn bitwise_byte() {
-    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::ZERO), true);
-    assert_success(&Contract::bitwise_byte(U256::ZERO, U256::MAX), true);
-    assert_success(&Contract::bitwise_byte(U256::MAX, U256::ZERO), true);
-    assert_success(
-        &Contract::bitwise_byte(U256::from_str("18446744073709551619").unwrap(), U256::MAX),
-        true,
-    );
-
-    let de_bruijn_sequence =
-        hex::decode("4060503824160d0784426150b864361d0f88c4a27148ac5a2f198d46e391d8f4").unwrap();
-    let value = U256::from_be_bytes::<32>(de_bruijn_sequence.clone().try_into().unwrap());
-
-    for (index, byte) in de_bruijn_sequence.iter().enumerate() {
-        let (_, output) = assert_success(&Contract::bitwise_byte(U256::from(index), value), true);
-        let expected = U256::from(*byte as i32);
-        let received = U256::abi_decode(&output.data, true).unwrap();
-        assert_eq!(expected, received)
-    }
-}
-
-#[test]
-fn transient_storage() {
-    let expected = U256::MAX;
-    let (state, output) = assert_success(&Contract::storage_transient(expected), false);
-    let received = U256::abi_decode(&output.data, true).unwrap();
-    assert_eq!(expected, received);
-
-    assert!(state
-        .accounts()
-        .values()
-        .all(|account| account.storage.is_empty()));
-}
+*/

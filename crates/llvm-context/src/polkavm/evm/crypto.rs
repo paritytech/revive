@@ -2,7 +2,6 @@
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates the `sha3` instruction.
 pub fn sha3<'ctx, D>(
@@ -19,7 +18,7 @@ where
     let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
 
     context.build_runtime_call(
-        runtime_api::imports::HASH_KECCAK_256,
+        revive_runtime_api::polkavm_imports::HASH_KECCAK_256,
         &[
             input_pointer.to_int(context).into(),
             length_casted.into(),

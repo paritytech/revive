@@ -1,6 +1,4 @@
-//!
-//! The exit code constants.
-//!
+//! The revive exit code constants.
 
 /// The common application success exit code.
 pub const EXIT_CODE_SUCCESS: i32 = 0;

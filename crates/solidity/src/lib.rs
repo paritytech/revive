@@ -8,6 +8,8 @@ pub(crate) mod evmla;
 pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
+pub(crate) mod solc;
+pub(crate) mod version;
 pub(crate) mod warning;
 pub(crate) mod yul;
 
@@ -46,6 +48,25 @@ pub use self::process::Process;
 pub use self::project::contract::Contract as ProjectContract;
 pub use self::project::Project;
 pub use self::r#const::*;
+pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
+pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
+pub use self::solc::pipeline::Pipeline as SolcPipeline;
+pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
+pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+pub use self::solc::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
+pub use self::solc::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
+pub use self::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+pub use self::solc::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
+pub use self::solc::standard_json::input::source::Source as SolcStandardJsonInputSource;
+pub use self::solc::standard_json::input::Input as SolcStandardJsonInput;
+pub use self::solc::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
+pub use self::solc::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
+pub use self::solc::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
+pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
+pub use self::solc::version::Version as SolcVersion;
+pub use self::solc::Compiler as SolcCompiler;
+pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
 #[cfg(target_os = "emscripten")]
 pub mod libsolc;
@@ -61,7 +82,6 @@ pub fn yul<T: Compiler>(
     input_files: &[PathBuf],
     solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
-    is_system_mode: bool,
     include_metadata_hash: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
@@ -74,28 +94,17 @@ pub fn yul<T: Compiler>(
         ),
     };
 
-    let solc_validator = if is_system_mode {
-        None
-    } else {
-        if solc.version()?.default != compiler::LAST_SUPPORTED_VERSION {
-            anyhow::bail!(
+    if solc.version()?.default != SolcCompiler::LAST_SUPPORTED_VERSION {
+        anyhow::bail!(
                 "The Yul mode is only supported with the most recent version of the Solidity compiler: {}",
                 compiler::LAST_SUPPORTED_VERSION,
             );
-        }
+    }
 
-        Some(&*solc)
-    };
-
+    let solc_validator = Some(&*solc);
     let project = Project::try_from_yul_path(path, solc_validator)?;
 
-    let build = project.compile(
-        optimizer_settings,
-        is_system_mode,
-        include_metadata_hash,
-        false,
-        debug_config,
-    )?;
+    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
 
     Ok(build)
 }
@@ -104,7 +113,6 @@ pub fn yul<T: Compiler>(
 pub fn llvm_ir(
     input_files: &[PathBuf],
     optimizer_settings: revive_llvm_context::OptimizerSettings,
-    is_system_mode: bool,
     include_metadata_hash: bool,
     debug_config: Option<revive_llvm_context::DebugConfig>,
 ) -> anyhow::Result<Build> {
@@ -119,13 +127,7 @@ pub fn llvm_ir(
 
     let project = Project::try_from_llvm_ir_path(path)?;
 
-    let build = project.compile(
-        optimizer_settings,
-        is_system_mode,
-        include_metadata_hash,
-        false,
-        debug_config,
-    )?;
+    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
 
     Ok(build)
 }
@@ -140,7 +142,6 @@ pub fn standard_output<T: Compiler>(
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     force_evmla: bool,
-    is_system_mode: bool,
     include_metadata_hash: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -164,7 +165,6 @@ pub fn standard_output<T: Compiler>(
             None,
             &solc_version.default,
             optimizer_settings.is_fallback_to_size_enabled(),
-            optimizer_settings.is_system_request_memoization_disabled(),
         ),
         None,
         solc_pipeline == SolcPipeline::Yul,
@@ -210,13 +210,7 @@ pub fn standard_output<T: Compiler>(
         debug_config.as_ref(),
     )?;
 
-    let build = project.compile(
-        optimizer_settings,
-        is_system_mode,
-        include_metadata_hash,
-        false,
-        debug_config,
-    )?;
+    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
 
     Ok(build)
 }
@@ -227,7 +221,6 @@ pub fn standard_json<T: Compiler>(
     solc: &mut T,
     detect_missing_libraries: bool,
     force_evmla: bool,
-    is_system_mode: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
@@ -235,7 +228,6 @@ pub fn standard_json<T: Compiler>(
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
-    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
 
     let solc_input = SolcStandardJsonInput::try_from_stdin(solc_pipeline)?;
     let source_code_files = solc_input
@@ -282,20 +274,10 @@ pub fn standard_json<T: Compiler>(
 
     if detect_missing_libraries {
         let missing_libraries = project.get_missing_libraries();
-        missing_libraries.write_to_standard_json(
-            &mut solc_output,
-            &solc_version,
-            &resolc_version,
-        )?;
+        missing_libraries.write_to_standard_json(&mut solc_output, &solc_version)?;
     } else {
-        let build = project.compile(
-            optimizer_settings,
-            is_system_mode,
-            include_metadata_hash,
-            false,
-            debug_config,
-        )?;
-        build.write_to_standard_json(&mut solc_output, &solc_version, &resolc_version)?;
+        let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
+        build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }
     serde_json::to_writer(std::io::stdout(), &solc_output)?;
     std::process::exit(0);
@@ -312,7 +294,6 @@ pub fn combined_json<T: Compiler>(
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     force_evmla: bool,
-    is_system_mode: bool,
     include_metadata_hash: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -323,8 +304,6 @@ pub fn combined_json<T: Compiler>(
     output_directory: Option<PathBuf>,
     overwrite: bool,
 ) -> anyhow::Result<()> {
-    let resolc_version = semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid");
-
     let build = standard_output(
         input_files,
         libraries,
@@ -333,7 +312,6 @@ pub fn combined_json<T: Compiler>(
         solc_optimizer_enabled,
         optimizer_settings,
         force_evmla,
-        is_system_mode,
         include_metadata_hash,
         base_path,
         include_paths,
@@ -344,7 +322,7 @@ pub fn combined_json<T: Compiler>(
     )?;
 
     let mut combined_json = solc.combined_json(input_files, format.as_str())?;
-    build.write_to_combined_json(&mut combined_json, &resolc_version)?;
+    build.write_to_combined_json(&mut combined_json)?;
 
     match output_directory {
         Some(output_directory) => {

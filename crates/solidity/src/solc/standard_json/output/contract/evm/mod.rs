@@ -20,15 +20,19 @@ use self::extra_metadata::ExtraMetadata;
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
     /// The contract EVM legacy assembly code.
-    #[serde(rename = "legacyAssembly")]
+    #[serde(rename = "legacyAssembly", skip_serializing_if = "Option::is_none")]
     pub assembly: Option<Assembly>,
     /// The contract PolkaVM assembly code.
-    #[serde(rename = "assembly")]
+    #[serde(rename = "assembly", skip_serializing_if = "Option::is_none")]
     pub assembly_text: Option<String>,
     /// The contract bytecode.
     /// Is reset by that of PolkaVM before yielding the compiled project artifacts.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bytecode: Option<Bytecode>,
-    /// The contract deployed bytecode.
+    /// The deployed bytecode of the contract.
+    /// It is overwritten with the PolkaVM blob before yielding the compiled project artifacts.
+    /// Hence it will be the same as the runtime code but we keep both for compatibility reasons.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -42,6 +46,7 @@ impl EVM {
     /// Sets the PolkaVM assembly and bytecode.
     pub fn modify(&mut self, assembly_text: String, bytecode: String) {
         self.assembly_text = Some(assembly_text);
-        self.bytecode = Some(Bytecode::new(bytecode));
+        self.bytecode = Some(Bytecode::new(bytecode.clone()));
+        self.deployed_bytecode = Some(DeployedBytecode::new(bytecode));
     }
 }

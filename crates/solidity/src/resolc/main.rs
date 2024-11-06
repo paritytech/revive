@@ -34,10 +34,9 @@ fn main_inner() -> anyhow::Result<()> {
 
     if arguments.version {
         println!(
-            "{} v{} (LLVM build {:?})",
+            "{} version {}",
             env!("CARGO_PKG_DESCRIPTION"),
-            env!("CARGO_PKG_VERSION"),
-            inkwell::support::get_llvm_version()
+            revive_solidity::ResolcVersion::default().long
         );
         return Ok(());
     }
@@ -106,9 +105,6 @@ fn main_inner() -> anyhow::Result<()> {
     if arguments.fallback_to_optimizing_for_size {
         optimizer_settings.enable_fallback_to_size();
     }
-    if arguments.disable_system_request_memoization {
-        optimizer_settings.disable_system_request_memoization();
-    }
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
@@ -126,7 +122,6 @@ fn main_inner() -> anyhow::Result<()> {
             input_files.as_slice(),
             &mut solc,
             optimizer_settings,
-            arguments.is_system_mode,
             include_metadata_hash,
             debug_config,
         )
@@ -134,7 +129,6 @@ fn main_inner() -> anyhow::Result<()> {
         revive_solidity::llvm_ir(
             input_files.as_slice(),
             optimizer_settings,
-            arguments.is_system_mode,
             include_metadata_hash,
             debug_config,
         )
@@ -143,7 +137,6 @@ fn main_inner() -> anyhow::Result<()> {
             &mut solc,
             arguments.detect_missing_libraries,
             arguments.force_evmla,
-            arguments.is_system_mode,
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
@@ -160,7 +153,6 @@ fn main_inner() -> anyhow::Result<()> {
             !arguments.disable_solc_optimizer,
             optimizer_settings,
             arguments.force_evmla,
-            arguments.is_system_mode,
             include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,
@@ -181,7 +173,6 @@ fn main_inner() -> anyhow::Result<()> {
             !arguments.disable_solc_optimizer,
             optimizer_settings,
             arguments.force_evmla,
-            arguments.is_system_mode,
             include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,

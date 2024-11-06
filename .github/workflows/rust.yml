@@ -19,7 +19,7 @@ jobs:
       - name: Install solc
         run: |
           mkdir -p solc
-          curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.26/solc-static-linux
+          curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
           chmod +x solc/solc
           echo "$(pwd)/solc/" >> $GITHUB_PATH
 
@@ -31,7 +31,10 @@ jobs:
           echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
 
       - name: Install apt dependencies
-        run: sudo apt update && sudo apt install -y libtinfo5
+        run: |
+          sudo add-apt-repository -y ppa:ethereum/ethereum
+          sudo apt update
+          sudo apt install -y libtinfo5 ethereum
 
       - name: Format
         run: make format

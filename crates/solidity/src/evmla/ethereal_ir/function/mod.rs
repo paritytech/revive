@@ -1139,7 +1139,6 @@ where
                         .integer_type(revive_common::BIT_LENGTH_BOOLEAN)
                         .as_basic_type_enum()],
                     output_size,
-                    false,
                 );
                 (r#type, output_size)
             }
@@ -1156,7 +1155,6 @@ where
                         input_size
                     ],
                     output_size,
-                    false,
                 );
                 (r#type, output_size)
             }

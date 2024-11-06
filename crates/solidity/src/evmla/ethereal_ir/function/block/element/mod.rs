@@ -45,7 +45,7 @@ impl Element {
     fn pop_arguments_llvm<'ctx, D>(
         &mut self,
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> Vec<inkwell::values::BasicValueEnum<'ctx>>
+    ) -> anyhow::Result<Vec<inkwell::values::BasicValueEnum<'ctx>>>
     where
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
@@ -57,15 +57,13 @@ impl Element {
                 [self.stack.elements.len() + input_size - output_size - 1 - index]
                 .to_llvm()
                 .into_pointer_value();
-            let value = context
-                .build_load(
-                    revive_llvm_context::PolkaVMPointer::new_stack_field(context, pointer),
-                    format!("argument_{index}").as_str(),
-                )
-                .unwrap();
+            let value = context.build_load(
+                revive_llvm_context::PolkaVMPointer::new_stack_field(context, pointer),
+                format!("argument_{index}").as_str(),
+            )?;
             arguments.push(value);
         }
-        arguments
+        Ok(arguments)
     }
 }
 
@@ -426,7 +424,7 @@ where
             InstructionName::JUMPDEST => Ok(None),
 
             InstructionName::ADD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::addition(
                     context,
                     arguments[0].into_int_value(),
@@ -435,7 +433,7 @@ where
                 .map(Some)
             }
             InstructionName::SUB => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::subtraction(
                     context,
                     arguments[0].into_int_value(),
@@ -444,7 +442,7 @@ where
                 .map(Some)
             }
             InstructionName::MUL => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::multiplication(
                     context,
                     arguments[0].into_int_value(),
@@ -453,7 +451,7 @@ where
                 .map(Some)
             }
             InstructionName::DIV => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::division(
                     context,
                     arguments[0].into_int_value(),
@@ -462,7 +460,7 @@ where
                 .map(Some)
             }
             InstructionName::MOD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::remainder(
                     context,
                     arguments[0].into_int_value(),
@@ -471,7 +469,7 @@ where
                 .map(Some)
             }
             InstructionName::SDIV => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::division_signed(
                     context,
                     arguments[0].into_int_value(),
@@ -480,7 +478,7 @@ where
                 .map(Some)
             }
             InstructionName::SMOD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::remainder_signed(
                     context,
                     arguments[0].into_int_value(),
@@ -490,7 +488,7 @@ where
             }
 
             InstructionName::LT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -500,7 +498,7 @@ where
                 .map(Some)
             }
             InstructionName::GT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -510,7 +508,7 @@ where
                 .map(Some)
             }
             InstructionName::EQ => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -520,7 +518,7 @@ where
                 .map(Some)
             }
             InstructionName::ISZERO => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -530,7 +528,7 @@ where
                 .map(Some)
             }
             InstructionName::SLT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -540,7 +538,7 @@ where
                 .map(Some)
             }
             InstructionName::SGT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -551,7 +549,7 @@ where
             }
 
             InstructionName::OR => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::or(
                     context,
                     arguments[0].into_int_value(),
@@ -560,7 +558,7 @@ where
                 .map(Some)
             }
             InstructionName::XOR => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
@@ -569,7 +567,7 @@ where
                 .map(Some)
             }
             InstructionName::NOT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
@@ -578,7 +576,7 @@ where
                 .map(Some)
             }
             InstructionName::AND => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::and(
                     context,
                     arguments[0].into_int_value(),
@@ -587,7 +585,7 @@ where
                 .map(Some)
             }
             InstructionName::SHL => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_left(
                     context,
                     arguments[0].into_int_value(),
@@ -596,7 +594,7 @@ where
                 .map(Some)
             }
             InstructionName::SHR => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_right(
                     context,
                     arguments[0].into_int_value(),
@@ -605,7 +603,7 @@ where
                 .map(Some)
             }
             InstructionName::SAR => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(
                     context,
                     arguments[0].into_int_value(),
@@ -614,7 +612,7 @@ where
                 .map(Some)
             }
             InstructionName::BYTE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::byte(
                     context,
                     arguments[0].into_int_value(),
@@ -624,7 +622,7 @@ where
             }
 
             InstructionName::ADDMOD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_math::add_mod(
                     context,
                     arguments[0].into_int_value(),
@@ -634,7 +632,7 @@ where
                 .map(Some)
             }
             InstructionName::MULMOD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_math::mul_mod(
                     context,
                     arguments[0].into_int_value(),
@@ -644,7 +642,7 @@ where
                 .map(Some)
             }
             InstructionName::EXP => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_math::exponent(
                     context,
                     arguments[0].into_int_value(),
@@ -653,7 +651,7 @@ where
                 .map(Some)
             }
             InstructionName::SIGNEXTEND => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_math::sign_extend(
                     context,
                     arguments[0].into_int_value(),
@@ -663,7 +661,7 @@ where
             }
 
             InstructionName::SHA3 | InstructionName::KECCAK256 => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_crypto::sha3(
                     context,
                     arguments[0].into_int_value(),
@@ -673,7 +671,7 @@ where
             }
 
             InstructionName::MLOAD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_memory::load(
                     context,
                     arguments[0].into_int_value(),
@@ -681,7 +679,7 @@ where
                 .map(Some)
             }
             InstructionName::MSTORE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_memory::store(
                     context,
                     arguments[0].into_int_value(),
@@ -690,7 +688,7 @@ where
                 .map(|_| None)
             }
             InstructionName::MSTORE8 => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_memory::store_byte(
                     context,
                     arguments[0].into_int_value(),
@@ -699,7 +697,7 @@ where
                 .map(|_| None)
             }
             InstructionName::MCOPY => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 let destination = revive_llvm_context::PolkaVMPointer::new_with_offset(
                     context,
                     revive_llvm_context::PolkaVMAddressSpace::Heap,
@@ -725,7 +723,7 @@ where
             }
 
             InstructionName::SLOAD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_storage::load(
                     context,
                     arguments[0].into_int_value(),
@@ -733,7 +731,7 @@ where
                 .map(Some)
             }
             InstructionName::SSTORE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_storage::store(
                     context,
                     arguments[0].into_int_value(),
@@ -742,7 +740,7 @@ where
                 .map(|_| None)
             }
             InstructionName::TLOAD => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_load(
                     context,
                     arguments[0].into_int_value(),
@@ -750,7 +748,7 @@ where
                 .map(Some)
             }
             InstructionName::TSTORE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_store(
                     context,
                     arguments[0].into_int_value(),
@@ -766,27 +764,28 @@ where
 
                 let offset = context
                     .solidity_mut()
-                    .get_or_allocate_immutable(key.as_str());
+                    .get_or_allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
 
-                let index = context.word_const(offset as u64);
+                let index = context.xlen_type().const_int(offset as u64, false);
                 revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
             }
             InstructionName::ASSIGNIMMUTABLE => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
 
                 let key = self
                     .instruction
                     .value
                     .ok_or_else(|| anyhow::anyhow!("Instruction value missing"))?;
 
-                let offset = context.solidity_mut().allocate_immutable(key.as_str());
+                let offset = context.solidity_mut().allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
 
-                let index = context.word_const(offset as u64);
+                let index = context.xlen_type().const_int(offset as u64, false);
                 let value = arguments.pop().expect("Always exists").into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
-
             InstructionName::CALLDATALOAD => {
                 match context
                     .code_type()
@@ -796,7 +795,7 @@ where
                         Ok(Some(context.word_const(0).as_basic_value_enum()))
                     }
                     revive_llvm_context::PolkaVMCodeType::Runtime => {
-                        let arguments = self.pop_arguments_llvm(context);
+                        let arguments = self.pop_arguments_llvm(context)?;
                         revive_llvm_context::polkavm_evm_calldata::load(
                             context,
                             arguments[0].into_int_value(),
@@ -819,7 +818,7 @@ where
                 }
             }
             InstructionName::CALLDATACOPY => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
 
                 match context
                     .code_type()
@@ -862,7 +861,7 @@ where
                 }
             }
             InstructionName::CODECOPY => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
 
                 let parent = context.module().get_name().to_str().expect("Always valid");
                 let source = &self.stack_input.elements[1];
@@ -917,7 +916,7 @@ where
                 revive_llvm_context::polkavm_evm_return_data::size(context).map(Some)
             }
             InstructionName::RETURNDATACOPY => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_return_data::copy(
                     context,
                     arguments[0].into_int_value(),
@@ -927,7 +926,7 @@ where
                 .map(|_| None)
             }
             InstructionName::EXTCODESIZE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_ext_code::size(
                     context,
                     Some(arguments[0].into_int_value()),
@@ -935,7 +934,7 @@ where
                 .map(Some)
             }
             InstructionName::EXTCODEHASH => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_ext_code::hash(
                     context,
                     arguments[0].into_int_value(),
@@ -944,7 +943,7 @@ where
             }
 
             InstructionName::RETURN => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_return::r#return(
                     context,
                     arguments[0].into_int_value(),
@@ -953,7 +952,7 @@ where
                 .map(|_| None)
             }
             InstructionName::REVERT => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_return::revert(
                     context,
                     arguments[0].into_int_value(),
@@ -969,7 +968,7 @@ where
             }
 
             InstructionName::LOG0 => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments.remove(0).into_int_value(),
@@ -982,7 +981,7 @@ where
                 .map(|_| None)
             }
             InstructionName::LOG1 => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments.remove(0).into_int_value(),
@@ -995,7 +994,7 @@ where
                 .map(|_| None)
             }
             InstructionName::LOG2 => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments.remove(0).into_int_value(),
@@ -1008,7 +1007,7 @@ where
                 .map(|_| None)
             }
             InstructionName::LOG3 => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments.remove(0).into_int_value(),
@@ -1021,7 +1020,7 @@ where
                 .map(|_| None)
             }
             InstructionName::LOG4 => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments.remove(0).into_int_value(),
@@ -1035,7 +1034,7 @@ where
             }
 
             InstructionName::CALL => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
 
                 let gas = arguments.remove(0).into_int_value();
                 let address = arguments.remove(0).into_int_value();
@@ -1060,7 +1059,7 @@ where
                 .map(Some)
             }
             InstructionName::STATICCALL => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
 
                 let gas = arguments.remove(0).into_int_value();
                 let address = arguments.remove(0).into_int_value();
@@ -1084,7 +1083,7 @@ where
                 .map(Some)
             }
             InstructionName::DELEGATECALL => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
 
                 let gas = arguments.remove(0).into_int_value();
                 let address = arguments.remove(0).into_int_value();
@@ -1108,7 +1107,7 @@ where
             }
 
             InstructionName::CREATE | InstructionName::ZK_CREATE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
 
                 let value = arguments[0].into_int_value();
                 let input_offset = arguments[1].into_int_value();
@@ -1119,18 +1118,19 @@ where
                     value,
                     input_offset,
                     input_length,
+                    None,
                 )
                 .map(Some)
             }
             InstructionName::CREATE2 | InstructionName::ZK_CREATE2 => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
 
                 let value = arguments[0].into_int_value();
                 let input_offset = arguments[1].into_int_value();
                 let input_length = arguments[2].into_int_value();
                 let salt = arguments[3].into_int_value();
 
-                revive_llvm_context::polkavm_evm_create::create2(
+                revive_llvm_context::polkavm_evm_create::create(
                     context,
                     value,
                     input_offset,
@@ -1154,12 +1154,14 @@ where
                 revive_llvm_context::polkavm_evm_ether_gas::gas(context).map(Some)
             }
             InstructionName::BALANCE => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
 
                 let address = arguments[0].into_int_value();
                 revive_llvm_context::polkavm_evm_ether_gas::balance(context, address).map(Some)
             }
-            InstructionName::SELFBALANCE => todo!(),
+            InstructionName::SELFBALANCE => {
+                revive_llvm_context::polkavm_evm_ether_gas::self_balance(context).map(Some)
+            }
 
             InstructionName::GASLIMIT => {
                 revive_llvm_context::polkavm_evm_contract_context::gas_limit(context).map(Some)
@@ -1181,7 +1183,7 @@ where
                 revive_llvm_context::polkavm_evm_contract_context::block_number(context).map(Some)
             }
             InstructionName::BLOCKHASH => {
-                let arguments = self.pop_arguments_llvm(context);
+                let arguments = self.pop_arguments_llvm(context)?;
                 let index = arguments[0].into_int_value();
 
                 revive_llvm_context::polkavm_evm_contract_context::block_hash(context, index)
@@ -1204,7 +1206,7 @@ where
                 anyhow::bail!("The `BLOBBASEFEE` instruction is not supported until zkVM v1.5.0");
             }
             InstructionName::MSIZE => {
-                revive_llvm_context::polkavm_evm_contract_context::msize(context).map(Some)
+                revive_llvm_context::polkavm_evm_memory::msize(context).map(Some)
             }
 
             InstructionName::CALLCODE => {
@@ -1219,7 +1221,7 @@ where
                 anyhow::bail!("The `EXTCODECOPY` instruction is not supported");
             }
             InstructionName::SELFDESTRUCT => {
-                let _arguments = self.pop_arguments_llvm(context);
+                let _arguments = self.pop_arguments_llvm(context)?;
                 anyhow::bail!("The `SELFDESTRUCT` instruction is not supported");
             }
 
@@ -1231,7 +1233,7 @@ where
                 return_address,
                 ..
             } => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 arguments.pop();
                 arguments.reverse();
                 arguments.pop();
@@ -1294,7 +1296,7 @@ where
                 return Ok(());
             }
             InstructionName::RecursiveReturn { .. } => {
-                let mut arguments = self.pop_arguments_llvm(context);
+                let mut arguments = self.pop_arguments_llvm(context)?;
                 arguments.reverse();
                 arguments.pop();
 

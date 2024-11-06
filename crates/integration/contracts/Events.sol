@@ -2,6 +2,39 @@
 
 pragma solidity ^0.8;
 
+/* runner.json
+{
+    "differential": true,
+    "actions": [
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "Events"
+                    }
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "4d43bec90000000000000000000000000000000000000000000000000000000000000000"
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "4d43bec9000000000000000000000000000000000000000000000000000000000000007b"
+            }
+        }
+    ]
+}
+*/
+
 contract Events {
     event A() anonymous;
     event E(uint, uint indexed, uint indexed, uint indexed);

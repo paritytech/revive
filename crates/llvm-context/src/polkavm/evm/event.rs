@@ -4,7 +4,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::polkavm_const::runtime_api;
 
 /// Translates a log or event call.
 ///
@@ -43,6 +42,7 @@ where
             context.byte_type().array_type(topics_buffer_size as u32),
             "topics_buffer",
         );
+
         for (n, topic) in topics.iter().enumerate() {
             let topic_buffer_offset = context
                 .xlen_type()
@@ -57,6 +57,7 @@ where
                 context.build_byte_swap(topic.as_basic_value_enum())?,
             )?;
         }
+
         [
             context
                 .builder()
@@ -68,14 +69,17 @@ where
                 .as_basic_value_enum(),
             context
                 .xlen_type()
-                .const_int(topics_buffer_size as u64, false)
+                .const_int(topics.len() as u64, false)
                 .as_basic_value_enum(),
             input_pointer.as_basic_value_enum(),
             input_length.as_basic_value_enum(),
         ]
     };
 
-    let _ = context.build_runtime_call(runtime_api::imports::DEPOSIT_EVENT, &arguments);
+    let _ = context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::DEPOSIT_EVENT,
+        &arguments,
+    );
 
     Ok(())
 }

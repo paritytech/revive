@@ -45,7 +45,7 @@ pub struct Output {
     pub long_version: Option<String>,
     /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub zk_version: Option<String>,
+    pub revive_version: Option<String>,
 }
 
 impl Output {
@@ -136,19 +136,6 @@ impl Output {
             project_contracts,
             libraries,
         ))
-    }
-
-    /// Removes EVM artifacts to prevent their accidental usage.
-    pub fn remove_evm(&mut self) {
-        if let Some(files) = self.contracts.as_mut() {
-            for (_, file) in files.iter_mut() {
-                for (_, contract) in file.iter_mut() {
-                    if let Some(evm) = contract.evm.as_mut() {
-                        evm.bytecode = None;
-                    }
-                }
-            }
-        }
     }
 
     /// Traverses the AST and returns the list of additional errors and warnings.

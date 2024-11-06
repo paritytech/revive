@@ -23,11 +23,20 @@ install-wasm:
 install-npm:
 	npm install && npm fund
 
+# install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
+ifeq ($(origin REVIVE_INSTALL_DIR), undefined)
+REVIVE_INSTALL_DIR=`pwd`/release/revive-debian
+endif
+install-revive:
+	cargo install --path crates/solidity --root $(REVIVE_INSTALL_DIR)
+
 format:
 	cargo fmt --all --check
 
+clippy:
+	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
+
 test: format clippy test-cli test-workspace
-	cargo test --workspace
 
 test-integration: install-bin
 	cargo test --package revive-integration
@@ -41,27 +50,17 @@ test-workspace: install
 test-cli: install
 	npm run test:cli
 
-bench-prepare: install-bin
-	cargo criterion --bench prepare --features bench-evm,bench-pvm --message-format=json \
-	| criterion-table > crates/benchmarks/PREPARE.md
+bench-pvm: install-bin
+	cargo criterion --bench execute --features bench-pvm-interpreter --message-format=json \
+	| criterion-table > crates/benchmarks/PVM.md
 
-bench-execute: install-bin
-	cargo criterion --bench execute --features bench-evm,bench-pvm --message-format=json \
-	| criterion-table > crates/benchmarks/EXECUTE.md
-
-bench-extensive: install-bin
-	cargo criterion --all --all-features --message-format=json \
-	| criterion-table > crates/benchmarks/BENCHMARKS.md
-
-bench-quick: install-bin
-	cargo criterion --all --features bench-evm
+bench-evm: install-bin
+	cargo criterion --bench execute --features bench-evm --message-format=json \
+	| criterion-table > crates/benchmarks/EVM.md
 
 bench: install-bin
-	cargo criterion --all --features bench-evm,bench-pvm --message-format=json \
+	cargo criterion --all --all-features --message-format=json \
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
-
-clippy:
-	cargo clippy --all-features --workspace --tests --benches
 
 docs: docs-build
 	mdbook serve --open docs/

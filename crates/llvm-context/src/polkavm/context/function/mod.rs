@@ -48,12 +48,6 @@ pub struct Function<'ctx> {
 }
 
 impl<'ctx> Function<'ctx> {
-    /// The near call ABI function prefix.
-    pub const ZKSYNC_NEAR_CALL_ABI_PREFIX: &'static str = "ZKSYNC_NEAR_CALL";
-
-    /// The near call ABI exception handler name.
-    pub const ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER: &'static str = "ZKSYNC_CATCH_NEAR_CALL";
-
     /// The stack hashmap default capacity.
     const STACK_HASHMAP_INITIAL_CAPACITY: usize = 64;
 
@@ -91,13 +85,8 @@ impl<'ctx> Function<'ctx> {
             || (name.starts_with("__")
                 && name != self::runtime::FUNCTION_ENTRY
                 && name != self::runtime::FUNCTION_DEPLOY_CODE
-                && name != self::runtime::FUNCTION_RUNTIME_CODE)
-    }
-
-    /// Checks whether the function is related to the near call ABI.
-    pub fn is_near_call_abi(name: &str) -> bool {
-        name.starts_with(Self::ZKSYNC_NEAR_CALL_ABI_PREFIX)
-            || name == Self::ZKSYNC_NEAR_CALL_ABI_EXCEPTION_HANDLER
+                && name != self::runtime::FUNCTION_RUNTIME_CODE
+                && name != self::runtime::FUNCTION_LOAD_IMMUTABLE_DATA)
     }
 
     /// Returns the LLVM function declaration.

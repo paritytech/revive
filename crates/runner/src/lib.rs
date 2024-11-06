@@ -7,49 +7,74 @@
 //! ```rust
 //! use revive_runner::*;
 //! use SpecsAction::*;
-//! run_test(Specs {
+//! Specs {
+//!     differential: false,
 //!     balances: vec![(ALICE, 1_000_000_000)],
 //!     actions: vec![Instantiate {
-//!         origin: ALICE,
+//!         origin: TestAddress::Alice,
 //!         value: 0,
 //!         gas_limit: Some(GAS_LIMIT),
 //!         storage_deposit_limit: Some(DEPOSIT_LIMIT),
 //!         code: Code::Bytes(include_bytes!("../fixtures/Baseline.pvm").to_vec()),
 //!         data: vec![],
-//!         salt: vec![],
+//!         salt: Default::default(),
 //!     }],
-//! })
+//! }
+//! .run();
 //! ```
 
+use std::time::Duration;
+
+use hex::{FromHex, ToHex};
+use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    pallet_revive::{CollectEvents, ContractExecResult, ContractInstantiateResult, DebugInfo},
+    pallet_revive::{CollectEvents, ContractResult, DebugInfo},
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
+    sp_core::{H160, H256},
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
     sp_runtime::AccountId32,
 };
 use serde::{Deserialize, Serialize};
 
-mod runtime;
 use crate::runtime::*;
+pub use crate::specs::*;
 
-pub const ALICE: AccountId32 = AccountId32::new([1u8; 32]);
-pub const BOB: AccountId32 = AccountId32::new([2u8; 32]);
-pub const CHARLIE: AccountId32 = AccountId32::new([3u8; 32]);
+mod runtime;
+mod specs;
+
+#[cfg(not(feature = "revive-solidity"))]
+pub(crate) const NO_SOLIDITY_FRONTEND: &str =
+    "revive-runner was built without the solidity frontend; please enable the 'solidity' feature!";
+
+/// The alice test account
+pub const ALICE: H160 = H160([1u8; 20]);
+/// The bob test account
+pub const BOB: H160 = H160([2u8; 20]);
+/// The charlie test account
+pub const CHARLIE: H160 = H160([3u8; 20]);
+/// Default gas limit
+pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000, 3 * 1024 * 1024);
+/// Default deposit limit
+pub const DEPOSIT_LIMIT: Balance = 10_000_000;
 
 /// Externalities builder
 #[derive(Default)]
 pub struct ExtBuilder {
     /// List of endowments at genesis
-    balance_genesis_config: Vec<(AccountId, Balance)>,
+    balance_genesis_config: Vec<(AccountId32, Balance)>,
 }
 
 impl ExtBuilder {
     /// Set the balance of an account at genesis
-    fn balance_genesis_config(mut self, value: Vec<(AccountId, Balance)>) -> Self {
-        self.balance_genesis_config = value;
-        self
+    fn balance_genesis_config(self, value: Vec<(H160, Balance)>) -> Self {
+        Self {
+            balance_genesis_config: value
+                .iter()
+                .map(|(address, balance)| (AccountId::to_fallback_account_id(address), *balance))
+                .collect(),
+        }
     }
 
     /// Build the externalities
@@ -71,28 +96,61 @@ impl ExtBuilder {
     }
 }
 
-/// Default gas limit
-pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000, 3 * 1024 * 1024);
-
-/// Default deposit limit
-pub const DEPOSIT_LIMIT: Balance = 10_000_000;
-
 /// Expectation for a call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
-    gas_consumed: Option<Weight>,
+    pub gas_consumed: Option<Weight>,
     /// When provided, the expected output
-    output: Option<Vec<u8>>,
+    #[serde(default, with = "hex")]
+    pub output: OptionalHex<Vec<u8>>,
     ///Expected call result
-    success: bool,
+    pub success: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OptionalHex<T>(Option<T>);
+
+impl<I: FromHex + AsRef<[u8]>> FromHex for OptionalHex<I> {
+    type Error = <I as FromHex>::Error;
+
+    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
+        let value = I::from_hex(hex)?;
+        Ok(Self(Some(value)))
+    }
+}
+
+impl<I: AsRef<[u8]>> ToHex for &OptionalHex<I> {
+    fn encode_hex<T: std::iter::FromIterator<char>>(&self) -> T {
+        match self.0.as_ref() {
+            None => T::from_iter("".chars()),
+            Some(data) => I::encode_hex::<T>(data),
+        }
+    }
+
+    fn encode_hex_upper<T: std::iter::FromIterator<char>>(&self) -> T {
+        match self.0.as_ref() {
+            None => T::from_iter("".chars()),
+            Some(data) => I::encode_hex_upper(data),
+        }
+    }
+}
+
+impl<T: AsRef<[u8]>> From<T> for OptionalHex<T> {
+    fn from(value: T) -> Self {
+        if value.as_ref().is_empty() {
+            OptionalHex(None)
+        } else {
+            OptionalHex(Some(value))
+        }
+    }
 }
 
 impl Default for VerifyCallExpectation {
     fn default() -> Self {
         Self {
             gas_consumed: None,
-            output: None,
+            output: OptionalHex(None),
             success: true,
         }
     }
@@ -100,62 +158,87 @@ impl Default for VerifyCallExpectation {
 
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
-    fn verify(self, result: CallResult) {
-        dbg!(&result);
-        assert_eq!(self.success, result.is_ok());
+    fn verify(self, result: &CallResult) {
+        assert_eq!(
+            self.success,
+            !result.did_revert(),
+            "contract execution result mismatch: {result:?}"
+        );
+
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
-        if let Some(output) = self.output {
-            assert_eq!(output, result.output());
+
+        if let OptionalHex(Some(data)) = self.output {
+            assert_eq!(data, result.output());
         }
     }
 }
 
 /// Result of a call
-#[derive(Debug)]
-enum CallResult {
-    Exec(ContractExecResult<Balance, EventRecord>),
-    Instantiate(ContractInstantiateResult<AccountId, Balance, EventRecord>),
+#[derive(Clone, Debug)]
+pub enum CallResult {
+    Exec {
+        result: ContractResult<ExecReturnValue, Balance, EventRecord>,
+        wall_time: Duration,
+    },
+    Instantiate {
+        result: ContractResult<InstantiateReturnValue, Balance, EventRecord>,
+        wall_time: Duration,
+        code_hash: H256,
+    },
 }
 
 impl CallResult {
     /// Check if the call was successful
-    fn is_ok(&self) -> bool {
+    fn did_revert(&self) -> bool {
         match self {
-            Self::Exec(res) => res.result.is_ok(),
-            Self::Instantiate(res) => res.result.is_ok(),
+            Self::Exec { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.did_revert())
+                .unwrap_or(true),
+            Self::Instantiate { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.result.did_revert())
+                .unwrap_or(true),
         }
     }
+
     /// Get the output of the call
     fn output(&self) -> Vec<u8> {
         match self {
-            Self::Exec(res) => res
+            Self::Exec { result, .. } => result
                 .result
                 .as_ref()
                 .map(|r| r.data.clone())
                 .unwrap_or_default(),
-            Self::Instantiate(res) => res
+            Self::Instantiate { result, .. } => result
                 .result
                 .as_ref()
                 .map(|r| r.result.data.clone())
                 .unwrap_or_default(),
         }
     }
+
     /// Get the gas consumed by the call
     fn gas_consumed(&self) -> Weight {
         match self {
-            Self::Exec(res) => res.gas_consumed,
-            Self::Instantiate(res) => res.gas_consumed,
+            Self::Exec { result, .. } => result.gas_consumed,
+            Self::Instantiate { result, .. } => result.gas_consumed,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Code {
+    #[cfg(feature = "revive-solidity")]
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
-        path: std::path::PathBuf,
+        path: Option<std::path::PathBuf>,
+        solc_optimizer: Option<bool>,
+        pipeline: Option<revive_solidity::SolcPipeline>,
         contract: String,
     },
     /// Read the contract blob from disk
@@ -163,16 +246,36 @@ pub enum Code {
     /// A contract blob
     Bytes(Vec<u8>),
     /// Pre-existing contract hash
-    Hash(Hash),
+    Hash(crate::runtime::Hash),
 }
 
-impl From<Code> for pallet_revive::Code<Hash> {
+impl Default for Code {
+    fn default() -> Self {
+        Self::Bytes(vec![])
+    }
+}
+
+impl From<Code> for pallet_revive::Code {
     fn from(val: Code) -> Self {
         match val {
-            Code::Solidity { path, contract } => {
-                pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob(
-                    contract.as_str(),
-                    std::fs::read_to_string(path).unwrap().as_str(),
+            #[cfg(feature = "solidity")]
+            Code::Solidity {
+                path,
+                contract,
+                solc_optimizer,
+                pipeline,
+            } => {
+                let Some(path) = path else {
+                    panic!("Solidity source of contract '{contract}' missing path");
+                };
+                let Ok(source_code) = std::fs::read_to_string(&path) else {
+                    panic!("Failed to reead source code from {}", path.display());
+                };
+                pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob_with_options(
+                    &contract,
+                    &source_code,
+                    solc_optimizer.unwrap_or(true),
+                    pipeline.unwrap_or(revive_solidity::SolcPipeline::Yul),
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),
@@ -182,201 +285,41 @@ impl From<Code> for pallet_revive::Code<Hash> {
     }
 }
 
-/// An action to perform in a contract test
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SpecsAction {
-    /// Instantiate a contract
-    Instantiate {
-        origin: AccountId,
-        #[serde(default)]
-        value: Balance,
-        #[serde(default)]
-        gas_limit: Option<Weight>,
-        #[serde(default)]
-        storage_deposit_limit: Option<Balance>,
-        code: Code,
-        #[serde(default)]
-        data: Vec<u8>,
-        #[serde(default)]
-        salt: Vec<u8>,
-    },
-    /// Call a contract
-    Call {
-        origin: AccountId,
-        dest: AccountId,
-        #[serde(default)]
-        value: Balance,
-        #[serde(default)]
-        gas_limit: Option<Weight>,
-        #[serde(default)]
-        storage_deposit_limit: Option<Balance>,
-        #[serde(default)]
-        data: Vec<u8>,
-    },
-    /// Verify the result of the last call, omitting this will simply ensure the last call was successful
-    VerifyCall(VerifyCallExpectation),
-
-    /// Verify the balance of an account
-    VerifyBalance {
-        origin: AccountId,
-        expected: Balance,
-    },
-    /// Verify the storage of a contract
-    VerifyStorage {
-        contract: AccountId,
-        key: Vec<u8>,
-        expected: Option<Vec<u8>>,
-    },
-}
-
-/// Specs for a contract test
-#[derive(Default, Debug, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Specs {
-    /// List of endowments at genesis
-    pub balances: Vec<(AccountId, Balance)>,
-    /// List of actions to perform
-    pub actions: Vec<SpecsAction>,
-}
-
-impl Specs {
-    /// Get the list of actions to perform
-    /// A default [`SpecAction::VerifyCall`] is injected after each Instantiate or Call action when
-    /// missing
-    fn actions(&self) -> Vec<SpecsAction> {
-        self.actions
-            .iter()
-            .enumerate()
-            .flat_map(|(index, item)| {
-                let next_item = self.actions.get(index + 1);
-                if matches!(
-                    item,
-                    SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
-                ) && !matches!(next_item, Some(SpecsAction::VerifyCall(_)))
-                {
-                    return vec![
-                        item.clone(),
-                        SpecsAction::VerifyCall(VerifyCallExpectation::default()),
-                    ];
-                }
-                vec![item.clone()]
-            })
-            .collect()
-    }
-}
-
-/// Run a contract test
-/// The test takes a [`Specs`] and executes the actions in order
-pub fn run_test(specs: Specs) {
-    ExtBuilder::default()
-        .balance_genesis_config(specs.balances.clone())
-        .build()
-        .execute_with(|| {
-            use SpecsAction::*;
-
-            let mut res: Option<CallResult> = None;
-            let actions = specs.actions();
-
-            for action in actions {
-                match action {
-                    Instantiate {
-                        origin,
-                        value,
-                        gas_limit,
-                        storage_deposit_limit,
-                        code,
-                        data,
-                        salt,
-                    } => {
-                        res = Some(CallResult::Instantiate(Contracts::bare_instantiate(
-                            RuntimeOrigin::signed(origin),
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            code.into(),
-                            data,
-                            salt,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        )));
-                    }
-                    Call {
-                        origin,
-                        dest,
-                        value,
-                        gas_limit,
-                        storage_deposit_limit,
-                        data,
-                    } => {
-                        res = Some(CallResult::Exec(Contracts::bare_call(
-                            RuntimeOrigin::signed(origin),
-                            dest,
-                            value,
-                            gas_limit.unwrap_or(GAS_LIMIT),
-                            storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
-                            data,
-                            DebugInfo::Skip,
-                            CollectEvents::Skip,
-                        )));
-                    }
-                    VerifyCall(expectation) => {
-                        if let Some(res) = res.take() {
-                            expectation.verify(res);
-                        } else {
-                            panic!("No call to verify");
-                        }
-                    }
-                    VerifyBalance { origin, expected } => {
-                        assert_eq!(Balances::free_balance(&origin), expected);
-                    }
-                    VerifyStorage {
-                        contract,
-                        key,
-                        expected,
-                    } => {
-                        let Ok(storage) = Contracts::get_storage(contract, key) else {
-                            panic!("Error reading storage");
-                        };
-                        assert_eq!(storage, expected);
-                    }
-                }
-            }
-        });
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::*;
 
     #[test]
     fn instantiate_works() {
-        use SpecsAction::*;
-        run_test(Specs {
+        use specs::SpecsAction::*;
+        let specs = Specs {
+            differential: false,
             balances: vec![(ALICE, 1_000_000_000)],
             actions: vec![Instantiate {
-                origin: ALICE,
+                origin: TestAddress::Alice,
                 value: 0,
                 gas_limit: Some(GAS_LIMIT),
                 storage_deposit_limit: Some(DEPOSIT_LIMIT),
                 code: Code::Bytes(include_bytes!("../fixtures/Baseline.pvm").to_vec()),
                 data: vec![],
-                salt: vec![],
+                salt: OptionalHex::default(),
             }],
-        })
+        };
+        specs.run();
     }
 
     #[test]
     fn instantiate_with_json() {
-        let specs = serde_json::from_str::<Specs>(
+        serde_json::from_str::<Specs>(
             r#"
         {
         "balances": [
-            [ "5C62Ck4UrFPiBtoCmeSrgF7x9yv9mn38446dhCpsi2mLHiFT", 1000000000 ]
+            [ "0101010101010101010101010101010101010101", 1000000000 ]
         ],
         "actions": [
             {
                 "Instantiate": {
-                    "origin": "5C62Ck4UrFPiBtoCmeSrgF7x9yv9mn38446dhCpsi2mLHiFT",
+                    "origin": "Alice",
                     "value": 0,
                     "code": {
                         "Path": "fixtures/Baseline.pvm"
@@ -387,7 +330,7 @@ mod tests {
         }
     "#,
         )
-        .unwrap();
-        run_test(specs);
+        .unwrap()
+        .run();
     }
 }

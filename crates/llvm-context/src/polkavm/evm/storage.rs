@@ -1,7 +1,6 @@
 //! Translates the storage operations.
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -13,14 +12,10 @@ pub fn load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
-        context,
-        AddressSpace::Storage,
-        context.word_type(),
-        position,
-        "storage_load_position_pointer",
-    );
-    context.build_load(position_pointer, "storage_load_value")
+    let mut slot_ptr = context.build_alloca_at_entry(context.word_type(), "slot_pointer");
+    slot_ptr.address_space = AddressSpace::Storage;
+    context.builder().build_store(slot_ptr.value, position)?;
+    context.build_load(slot_ptr, "storage_load_value")
 }
 
 /// Translates the storage store.
@@ -32,14 +27,10 @@ pub fn store<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
-        context,
-        AddressSpace::Storage,
-        context.word_type(),
-        position,
-        "storage_store_position_pointer",
-    );
-    context.build_store(position_pointer, value)?;
+    let mut slot_ptr = context.build_alloca_at_entry(context.word_type(), "slot_pointer");
+    slot_ptr.address_space = AddressSpace::Storage;
+    context.builder().build_store(slot_ptr.value, position)?;
+    context.build_store(slot_ptr, value)?;
     Ok(())
 }
 
@@ -51,14 +42,10 @@ pub fn transient_load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
-        context,
-        AddressSpace::TransientStorage,
-        context.word_type(),
-        position,
-        "transient_storage_load_position_pointer",
-    );
-    context.build_load(position_pointer, "transient_storage_load_value")
+    let mut slot_ptr = context.build_alloca_at_entry(context.word_type(), "slot_pointer");
+    slot_ptr.address_space = AddressSpace::TransientStorage;
+    context.builder().build_store(slot_ptr.value, position)?;
+    context.build_load(slot_ptr, "transient_storage_load_value")
 }
 
 /// Translates the transient storage store.
@@ -70,13 +57,9 @@ pub fn transient_store<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let position_pointer = Pointer::new_with_offset(
-        context,
-        AddressSpace::TransientStorage,
-        context.word_type(),
-        position,
-        "transient_storage_store_position_pointer",
-    );
-    context.build_store(position_pointer, value)?;
+    let mut slot_ptr = context.build_alloca_at_entry(context.word_type(), "slot_pointer");
+    slot_ptr.address_space = AddressSpace::TransientStorage;
+    context.builder().build_store(slot_ptr.value, position)?;
+    context.build_store(slot_ptr, value)?;
     Ok(())
 }

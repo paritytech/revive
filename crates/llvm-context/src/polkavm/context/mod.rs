@@ -26,7 +26,6 @@ use inkwell::values::BasicValue;
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
-use crate::polkavm::r#const::*;
 use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
@@ -124,34 +123,54 @@ where
             .expect("the stdlib module should be linkable");
     }
 
-    /// Link in the PolkaVM guest module, containing imported and exported functions,
+    /// Link in the PolkaVM imports module, containing imported functions,
     /// and marking them as external (they need to be relocatable as too).
-    fn link_polkavm_guest_module(
+    fn link_polkavm_imports(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
     ) {
         module
             .link_in_module(
-                pallet_contracts_pvm_llapi::polkavm_guest::module(llvm, "polkavm_guest").unwrap(),
+                revive_runtime_api::polkavm_imports::module(llvm, "polkavm_imports").unwrap(),
             )
-            .expect("the PolkaVM guest API module should be linkable");
+            .expect("the PolkaVM imports module should be linkable");
 
-        for export in runtime_api::exports::EXPORTS {
-            module
-                .get_function(export)
-                .expect("should be declared")
-                .add_attribute(
-                    inkwell::attributes::AttributeLoc::Function,
-                    llvm.create_enum_attribute(Attribute::NoReturn as u32, 0),
-                );
-        }
-
-        for import in runtime_api::imports::IMPORTS {
+        for import in revive_runtime_api::polkavm_imports::IMPORTS {
             module
                 .get_function(import)
                 .expect("should be declared")
                 .set_linkage(inkwell::module::Linkage::External);
         }
+    }
+
+    fn link_polkavm_exports(&self, contract_path: &str) -> anyhow::Result<()> {
+        let exports = revive_runtime_api::polkavm_exports::module(self.llvm(), "polkavm_exports")
+            .map_err(|error| {
+            anyhow::anyhow!(
+                "The contract `{}` exports module loading error: {}",
+                contract_path,
+                error
+            )
+        })?;
+        self.module.link_in_module(exports).map_err(|error| {
+            anyhow::anyhow!(
+                "The contract `{}` exports module linking error: {}",
+                contract_path,
+                error
+            )
+        })
+    }
+
+    fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
+        let size = self.solidity().immutables_size() as u32;
+        let exports = revive_runtime_api::immutable_data::module(self.llvm(), size);
+        self.module.link_in_module(exports).map_err(|error| {
+            anyhow::anyhow!(
+                "The contract `{}` immutable data module linking error: {}",
+                contract_path,
+                error
+            )
+        })
     }
 
     /// Configure the PolkaVM minimum stack size.
@@ -161,7 +180,7 @@ where
         size: u32,
     ) {
         module
-            .link_in_module(pallet_contracts_pvm_llapi::polkavm_guest::min_stack_size(
+            .link_in_module(revive_runtime_api::calling_convention::min_stack_size(
                 llvm,
                 "polkavm_stack_size",
                 size,
@@ -191,7 +210,7 @@ where
         debug_config: Option<DebugConfig>,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
-        Self::link_polkavm_guest_module(llvm, &module);
+        Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
 
@@ -229,6 +248,9 @@ where
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     ) -> anyhow::Result<Build> {
         let module_clone = self.module.clone();
+
+        self.link_polkavm_exports(contract_path)?;
+        self.link_immutable_data(contract_path)?;
 
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         target_machine.set_target_data(self.module());
@@ -371,6 +393,15 @@ where
         }
     }
 
+    /// Declare an external global.
+    pub fn declare_global<T>(&mut self, name: &str, r#type: T, address_space: AddressSpace)
+    where
+        T: BasicType<'ctx> + Clone + Copy,
+    {
+        let global = Global::declare(self, r#type, address_space, name);
+        self.globals.insert(name.to_owned(), global);
+    }
+
     /// Returns the LLVM intrinsics collection reference.
     pub fn intrinsics(&self) -> &Intrinsics<'ctx> {
         &self.intrinsics
@@ -381,47 +412,14 @@ where
         &self.llvm_runtime
     }
 
-    /// Declare a function already existing in the module.
-    pub fn declare_extern_function(
-        &mut self,
-        name: &str,
-    ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        let function = self.module().get_function(name).ok_or_else(|| {
-            anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
-        })?;
-
-        let basic_block = self.llvm.append_basic_block(function, name);
-        let declaration = FunctionDeclaration::new(
-            self.function_type::<inkwell::types::BasicTypeEnum>(vec![], 0, false),
-            function,
-        );
-        let function = Function::new(
-            name.to_owned(),
-            declaration,
-            FunctionReturn::None,
-            basic_block,
-            basic_block,
-        );
-        Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
-
-        let function = Rc::new(RefCell::new(function));
-        self.functions.insert(name.to_string(), function.clone());
-
-        Ok(function)
-    }
-
     /// Appends a function to the current module.
     pub fn add_function(
         &mut self,
         name: &str,
         r#type: inkwell::types::FunctionType<'ctx>,
         return_values_length: usize,
-        mut linkage: Option<inkwell::module::Linkage>,
+        linkage: Option<inkwell::module::Linkage>,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        if Function::is_near_call_abi(name) && self.is_system_mode() {
-            linkage = Some(inkwell::module::Linkage::External);
-        }
-
         let value = self.module().add_function(name, r#type, linkage);
 
         let entry_block = self.llvm.append_basic_block(value, "entry");
@@ -433,12 +431,6 @@ where
                 self.set_basic_block(entry_block);
                 let pointer = self.build_alloca(self.word_type(), "return_pointer");
                 FunctionReturn::primitive(pointer)
-            }
-            size if name.starts_with(Function::ZKSYNC_NEAR_CALL_ABI_PREFIX) => {
-                let first_argument = value.get_first_param().expect("Always exists");
-                let r#type = self.structure_type(vec![self.word_type(); size].as_slice());
-                let pointer = first_argument.into_pointer_value();
-                FunctionReturn::compound(Pointer::new(r#type, AddressSpace::Stack, pointer), size)
             }
             size => {
                 self.set_basic_block(entry_block);
@@ -460,10 +452,6 @@ where
             return_block,
         );
         Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
-        if Function::is_near_call_abi(function.name()) && self.is_system_mode() {
-            Function::set_exception_handler_attributes(self.llvm, function.declaration());
-        }
-
         let function = Rc::new(RefCell::new(function));
         self.functions.insert(name.to_string(), function.clone());
 
@@ -524,10 +512,6 @@ where
                     manager,
                     name,
                     self.optimizer.settings().to_owned(),
-                    self.yul_data
-                        .as_ref()
-                        .map(|data| data.is_system_mode())
-                        .unwrap_or_default(),
                     self.include_metadata_hash,
                     self.debug_config.clone(),
                 )
@@ -585,59 +569,70 @@ where
         self.builder.get_insert_block().expect("Always exists")
     }
 
-    /// Builds a stack allocation instruction.
-    /// Sets the alignment to 128 bits.
+    /// Builds an aligned stack allocation at the function entry.
+    pub fn build_alloca_at_entry<T: BasicType<'ctx> + Clone + Copy>(
+        &self,
+        r#type: T,
+        name: &str,
+    ) -> Pointer<'ctx> {
+        let current_block = self.basic_block();
+        let entry_block = self.current_function().borrow().entry_block();
+
+        match entry_block.get_first_instruction() {
+            Some(instruction) => self.builder().position_before(&instruction),
+            None => self.builder().position_at_end(entry_block),
+        }
+
+        let pointer = self.build_alloca(r#type, name);
+        self.set_basic_block(current_block);
+        pointer
+    }
+
+    /// Builds an aligned stack allocation at the current position.
+    /// Use this if [`build_alloca_at_entry`] might change program semantics.
+    /// Otherwise, alloca should always be built at the function prelude!
     pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
         let pointer = self.builder.build_alloca(r#type, name).unwrap();
-        self.basic_block()
-            .get_last_instruction()
-            .expect("Always exists")
+        pointer
+            .as_instruction()
+            .unwrap()
             .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
             .expect("Alignment is valid");
+
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
-    /// Allocate an int of size `bit_length` on the stack.
-    /// Returns the allocation pointer and the length pointer.
-    ///
-    /// Useful helper for passing runtime API parameters on the stack.
-    pub fn build_stack_parameter(
+    /// Truncate `address` to the ethereum address length and store it as bytes on the stack.
+    /// The stack allocation will be at the function entry. Returns the stack pointer.
+    /// This helper should be used when passing address arguments to the runtime, ensuring correct size and endianness.
+    pub fn build_address_argument_store(
         &self,
-        bit_length: usize,
-        name: &str,
-    ) -> (Pointer<'ctx>, Pointer<'ctx>) {
-        let buffer_pointer = self.build_alloca(self.integer_type(bit_length), name);
-        let symbol = match bit_length {
-            revive_common::BIT_LENGTH_WORD => GLOBAL_I256_SIZE,
-            revive_common::BIT_LENGTH_ETH_ADDRESS => GLOBAL_I160_SIZE,
-            revive_common::BIT_LENGTH_BLOCK_NUMBER => GLOBAL_I64_SIZE,
-            _ => panic!("invalid stack parameter bit width: {bit_length}"),
-        };
-        let length_pointer = self.get_global(symbol).expect("should be declared");
-        (buffer_pointer, length_pointer.into())
+        address: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<Pointer<'ctx>> {
+        let address_type = self.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+        let address_pointer = self.build_alloca_at_entry(address_type, "address_pointer");
+        let address_truncated =
+            self.builder()
+                .build_int_truncate(address, address_type, "address_truncated")?;
+        let address_swapped = self.build_byte_swap(address_truncated.into())?;
+        self.build_store(address_pointer, address_swapped)?;
+        Ok(address_pointer)
     }
 
-    /// Load the integer at given pointer and zero extend it to the VM word size.
-    pub fn build_load_word(
+    /// Load the address at given pointer and zero extend it to the VM word size.
+    pub fn build_load_address(
         &self,
         pointer: Pointer<'ctx>,
-        bit_length: usize,
-        name: &str,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let value = self.build_load(
-            pointer.cast(self.integer_type(bit_length)),
-            &format!("load_{name}"),
-        )?;
-        let value_extended = self.builder().build_int_z_extend(
-            value.into_int_value(),
-            self.word_type(),
-            &format!("zext_{name}"),
-        )?;
-        Ok(value_extended.as_basic_value_enum())
+        let address = self.build_byte_swap(self.build_load(pointer, "address_pointer")?)?;
+        Ok(self
+            .builder()
+            .build_int_z_extend(address.into_int_value(), self.word_type(), "address_zext")?
+            .into())
     }
 
     /// Builds a stack load instruction.
@@ -674,31 +669,25 @@ where
                 self.build_byte_swap(value)
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
+                let storage_value_pointer =
+                    self.build_alloca(self.word_type(), "storage_value_pointer");
+                self.build_store(storage_value_pointer, self.word_const(0))?;
 
-                let (storage_value_pointer, storage_value_length_pointer) = self
-                    .build_stack_parameter(revive_common::BIT_LENGTH_WORD, "storage_value_pointer");
+                let storage_value_length_pointer =
+                    self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
+                self.build_store(
+                    storage_value_length_pointer,
+                    self.word_const(revive_common::BIT_LENGTH_WORD as u64),
+                )?;
 
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 
                 self.build_runtime_call(
-                    runtime_api::imports::GET_STORAGE,
+                    revive_runtime_api::polkavm_imports::GET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
+                        pointer.to_int(self).into(),
+                        self.xlen_type().const_all_ones().into(),
                         storage_value_pointer.to_int(self).into(),
                         storage_value_length_pointer.to_int(self).into(),
                     ],
@@ -766,18 +755,6 @@ where
                     self.word_type().as_basic_type_enum()
                 );
 
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-
                 let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
@@ -786,18 +763,16 @@ where
                 )?;
 
                 self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
-                self.builder()
                     .build_store(storage_value_pointer.value, value)?;
 
                 let transient = pointer.address_space == AddressSpace::TransientStorage;
 
                 self.build_runtime_call(
-                    runtime_api::imports::SET_STORAGE,
+                    revive_runtime_api::polkavm_imports::SET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
+                        pointer.to_int(self).into(),
+                        self.xlen_type().const_all_ones().into(),
                         storage_value_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),
                     ],
@@ -905,11 +880,27 @@ where
                     .copied()
                     .map(inkwell::values::BasicMetadataValueEnum::from)
                     .collect::<Vec<_>>(),
-                &format!("runtime API call {name}"),
+                &format!("runtime_api_{name}_return_value"),
             )
             .unwrap()
             .try_as_basic_value()
             .left()
+    }
+
+    /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
+    /// This means that the supplied API method just writes back a single word.
+    /// `import` is thus expect to have a single parameter, the 32 bytes output buffer,
+    /// and no return value.
+    pub fn build_runtime_call_to_getter(
+        &self,
+        import: &'static str,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+    where
+        D: Dependency + Clone,
+    {
+        let pointer = self.build_alloca_at_entry(self.word_type(), &format!("{import}_output"));
+        self.build_runtime_call(import, &[pointer.to_int(self).into()]);
+        self.build_load(pointer, import)
     }
 
     /// Builds a call.
@@ -1012,7 +1003,7 @@ where
         )?;
 
         self.build_runtime_call(
-            runtime_api::imports::RETURN,
+            revive_runtime_api::polkavm_imports::RETURN,
             &[flags.into(), offset_pointer.into(), length_pointer.into()],
         );
         self.build_unreachable();
@@ -1070,16 +1061,20 @@ where
         Ok(truncated)
     }
 
-    /// Build a call to PolkaVM `sbrk` for extending the heap by `size`.
+    /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.
+    /// The allocation is aligned to 32 bytes.
+    ///
+    /// This emulates the EVM linear memory until the runtime supports metered memory.
     pub fn build_sbrk(
         &self,
+        offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
         Ok(self
             .builder()
             .build_call(
-                self.runtime_api_method(runtime_api::SBRK),
-                &[size.into()],
+                self.runtime_api_method(revive_runtime_api::polkavm_imports::SBRK),
+                &[offset.into(), size.into()],
                 "call_sbrk",
             )?
             .try_as_basic_value()
@@ -1088,14 +1083,29 @@ where
             .into_pointer_value())
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap by `size`,
+    /// Build a call to PolkaVM `msize` for querying the linear memory size.
+    pub fn build_msize(&self) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        Ok(self
+            .builder()
+            .build_call(
+                self.runtime_api_method(revive_runtime_api::polkavm_imports::MEMORY_SIZE),
+                &[],
+                "call_msize",
+            )?
+            .try_as_basic_value()
+            .left()
+            .expect("sbrk returns an int")
+            .into_int_value())
+    }
+
+    /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
     /// trapping the contract if the call failed.
-    /// Returns the end of memory pointer.
     pub fn build_heap_alloc(
         &self,
+        offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
-    ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
-        let end_of_memory = self.build_sbrk(size)?;
+    ) -> anyhow::Result<()> {
+        let end_of_memory = self.build_sbrk(offset, size)?;
         let return_is_nil = self.builder().build_int_compare(
             inkwell::IntPredicate::EQ,
             end_of_memory,
@@ -1113,7 +1123,7 @@ where
 
         self.set_basic_block(continue_block);
 
-        Ok(end_of_memory)
+        Ok(())
     }
 
     /// Returns a pointer to `offset` into the heap, allocating
@@ -1128,40 +1138,12 @@ where
         assert_eq!(offset.get_type(), self.xlen_type());
         assert_eq!(length.get_type(), self.xlen_type());
 
+        self.build_heap_alloc(offset, length)?;
+
         let heap_start = self
             .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
             .value
             .as_pointer_value();
-        let heap_end = self.build_sbrk(self.integer_const(crate::polkavm::XLEN, 0))?;
-        let value_end = self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
-            &[self.builder().build_int_nuw_add(offset, length, "end")?],
-            self.byte_type(),
-            "heap_end_gep",
-        );
-        let is_out_of_bounds = self.builder().build_int_compare(
-            inkwell::IntPredicate::UGT,
-            value_end.value,
-            heap_end,
-            "is_value_overflowing_heap",
-        )?;
-
-        let out_of_bounds_block = self.append_basic_block("heap_offset_out_of_bounds");
-        let heap_offset_block = self.append_basic_block("build_heap_pointer");
-        self.build_conditional_branch(is_out_of_bounds, out_of_bounds_block, heap_offset_block)?;
-
-        self.set_basic_block(out_of_bounds_block);
-        let size = self.builder().build_int_nuw_sub(
-            self.builder()
-                .build_ptr_to_int(value_end.value, self.xlen_type(), "value_end")?,
-            self.builder()
-                .build_ptr_to_int(heap_end, self.xlen_type(), "heap_end")?,
-            "heap_alloc_size",
-        )?;
-        self.build_heap_alloc(size)?;
-        self.build_unconditional_branch(heap_offset_block);
-
-        self.set_basic_block(heap_offset_block);
         Ok(self.build_gep(
             Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
             &[offset],
@@ -1233,7 +1215,7 @@ where
         self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
     }
 
-    /// Returns the register witdh sized type.
+    /// Returns the sentinel pointer value.
     pub fn sentinel_pointer(&self) -> Pointer<'ctx> {
         let sentinel_pointer = self
             .xlen_type()
@@ -1282,12 +1264,11 @@ where
         &self,
         argument_types: Vec<T>,
         return_values_size: usize,
-        is_near_call_abi: bool,
     ) -> inkwell::types::FunctionType<'ctx>
     where
         T: BasicType<'ctx>,
     {
-        let mut argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
+        let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
             .as_slice()
             .iter()
             .map(T::as_basic_type_enum)
@@ -1299,11 +1280,6 @@ where
                 .void_type()
                 .fn_type(argument_types.as_slice(), false),
             1 => self.word_type().fn_type(argument_types.as_slice(), false),
-            _size if is_near_call_abi && self.is_system_mode() => {
-                let return_type = self.llvm().ptr_type(AddressSpace::Stack.into());
-                argument_types.insert(0, return_type.as_basic_type_enum().into());
-                return_type.fn_type(argument_types.as_slice(), false)
-            }
             size => self
                 .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
@@ -1495,13 +1471,5 @@ where
         } else {
             anyhow::bail!("The immutable size data is not available");
         }
-    }
-
-    /// Whether the system mode is enabled.
-    pub fn is_system_mode(&self) -> bool {
-        self.yul_data
-            .as_ref()
-            .map(|data| data.is_system_mode())
-            .unwrap_or_default()
     }
 }

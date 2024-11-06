@@ -2,6 +2,32 @@
 
 pragma solidity ^0.8;
 
+/* runner.json
+{
+    "differential": true,
+    "actions": [
+        {
+            "Upload": {
+                "code": {
+                    "Solidity": {
+                        "contract": "ERC20"
+                    }
+                }
+            }
+        },
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "ERC20Tester"
+                    }
+                }
+            }
+        }
+    ]
+}
+*/
+
 // https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.0.0/contracts/token/ERC20/IERC20.sol
 interface IERC20 {
     function totalSupply() external view returns (uint);
@@ -70,5 +96,28 @@ contract ERC20 is IERC20 {
         balanceOf[msg.sender] -= amount;
         totalSupply -= amount;
         emit Transfer(msg.sender, address(0), amount);
+    }
+}
+
+contract ERC20Tester {
+    constructor() {
+        address BOB = address(0xffffffffffffffffffffffffffffffffffffff);
+        ERC20 token = new ERC20();
+        assert(token.decimals() == 18);
+
+        token.mint(300);
+        assert(token.balanceOf(address(this)) == 300);
+        token.transfer(BOB, 100);
+        assert(token.balanceOf(address(this)) == 200);
+        assert(token.balanceOf(BOB) == 100);
+
+        token.approve(address(this), 100);
+
+        token.transferFrom(address(this), BOB, 100);
+        assert(token.balanceOf(BOB) == 200);
+        assert(token.balanceOf(address(this)) == 100);
+
+        token.burn(100);
+        assert(token.balanceOf(address(this)) == 0);
     }
 }

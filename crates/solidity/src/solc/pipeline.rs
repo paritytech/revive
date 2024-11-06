@@ -1,10 +1,12 @@
 //! The Solidity compiler pipeline type.
 
-use crate::compiler;
-use crate::compiler::version::Version as SolcVersion;
+use serde::{Deserialize, Serialize};
+
+use crate::solc::version::Version as SolcVersion;
+use crate::solc::Compiler as SolcCompiler;
 
 /// The Solidity compiler pipeline type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Pipeline {

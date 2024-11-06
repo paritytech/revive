@@ -78,7 +78,6 @@ impl Contract {
         mut self,
         project: Project,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
-        is_system_mode: bool,
         include_metadata_hash: bool,
         debug_config: Option<revive_llvm_context::DebugConfig>,
     ) -> anyhow::Result<ContractBuild> {
@@ -90,9 +89,8 @@ impl Contract {
 
         let metadata = Metadata::new(
             self.metadata_json.take(),
-            version.default.clone(),
+            version.long.clone(),
             version.l2_revision.clone(),
-            semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("Always valid"),
             optimizer.settings().to_owned(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
@@ -127,8 +125,7 @@ impl Contract {
         context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
         match self.ir {
             IR::Yul(_) => {
-                let yul_data = revive_llvm_context::PolkaVMContextYulData::new(is_system_mode);
-                context.set_yul_data(yul_data);
+                context.set_yul_data(Default::default());
             }
             IR::EVMLA(_) => {
                 let evmla_data = revive_llvm_context::PolkaVMContextEVMLAData::new(version.default);

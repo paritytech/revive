@@ -3,6 +3,9 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Mutex;
+
+use once_cell::sync::Lazy;
 
 use crate::compiler::pipeline::Pipeline as SolcPipeline;
 use crate::compiler::solc::SolcCompiler;
@@ -14,6 +17,27 @@ use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::compiler::Compiler;
 use crate::project::Project;
 use crate::warning::Warning;
+use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
+use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
+use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
+use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
+use crate::solc::Compiler as SolcCompiler;
+use crate::warning::Warning;
+
+static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    Lazy::new(Default::default);
+
+#[derive(Hash, PartialEq, Eq)]
+struct CachedBlob {
+    contract_name: String,
+    solc_optimizer_enabled: bool,
+    pipeline: SolcPipeline,
+}
 
 /// Checks if the required executables are present in `${PATH}`.
 fn check_dependencies() {
@@ -80,7 +104,6 @@ pub fn build_solidity_with_options(
             None,
             &solc_version.default,
             false,
-            false,
         ),
         None,
         pipeline == SolcPipeline::Yul,
@@ -91,24 +114,20 @@ pub fn build_solidity_with_options(
 
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
-    let build: crate::Build = project.compile(optimizer_settings, false, false, false, None)?;
-    build.write_to_standard_json(
-        &mut output,
-        &solc_version,
-        &semver::Version::from_str(env!("CARGO_PKG_VERSION"))?,
-    )?;
+    let build: crate::Build = project.compile(optimizer_settings, false, None)?;
+    build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
 }
 
-/// Build a Solidity contract and get the EVM bin-runtime.
+/// Build a Solidity contract and get the EVM code
 pub fn build_solidity_with_options_evm(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
     pipeline: SolcPipeline,
     solc_optimizer_enabled: bool,
-) -> anyhow::Result<BTreeMap<String, DeployedBytecode>> {
+) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
@@ -130,7 +149,6 @@ pub fn build_solidity_with_options_evm(
             None,
             &solc_version.default,
             false,
-            false,
         ),
         None,
         pipeline == SolcPipeline::Yul,
@@ -144,9 +162,12 @@ pub fn build_solidity_with_options_evm(
         for (_, file) in files.iter_mut() {
             for (name, contract) in file.iter_mut() {
                 if let Some(evm) = contract.evm.as_mut() {
-                    if let Some(deployed_bytecode) = evm.deployed_bytecode.as_ref() {
-                        contracts.insert(name.clone(), deployed_bytecode.clone());
-                    }
+                    let (Some(bytecode), Some(deployed_bytecode)) =
+                        (evm.bytecode.as_ref(), evm.deployed_bytecode.as_ref())
+                    else {
+                        continue;
+                    };
+                    contracts.insert(name.clone(), (bytecode.clone(), deployed_bytecode.clone()));
                 }
             }
         }
@@ -177,13 +198,7 @@ pub fn build_solidity_and_detect_missing_libraries(
         libraries.clone(),
         None,
         SolcStandardJsonInputSettingsSelection::new_required(pipeline),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            true,
-            None,
-            &solc_version.default,
-            false,
-            false,
-        ),
+        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
         pipeline == SolcPipeline::Yul,
         None,
@@ -194,11 +209,7 @@ pub fn build_solidity_and_detect_missing_libraries(
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
     let missing_libraries = project.get_missing_libraries();
-    missing_libraries.write_to_standard_json(
-        &mut output,
-        &solc.version()?,
-        &semver::Version::from_str(env!("CARGO_PKG_VERSION"))?,
-    )?;
+    missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;
 
     Ok(output)
 }
@@ -211,12 +222,9 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
-    let project = Project::try_from_yul_string::<SolcCompiler>(
-        PathBuf::from("test.yul").as_path(),
-        source_code,
-        None,
-    )?;
-    let _build = project.compile(optimizer_settings, false, false, false, None)?;
+    let project =
+        Project::try_from_yul_string::<SolcCompiler>(PathBuf::from("test.yul").as_path(), source_code, None)?;
+    let _build = project.compile(optimizer_settings, false, None)?;
 
     Ok(())
 }
@@ -227,14 +235,14 @@ pub fn check_solidity_warning(
     warning_substring: &str,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     pipeline: SolcPipeline,
-    skip_for_zkvm_edition: bool,
+    skip_for_revive_edition: bool,
     suppressed_warnings: Option<Vec<Warning>>,
 ) -> anyhow::Result<bool> {
     check_dependencies();
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
-    if skip_for_zkvm_edition && solc_version.l2_revision.is_some() {
+    if skip_for_revive_edition && solc_version.l2_revision.is_some() {
         return Ok(true);
     }
 
@@ -246,13 +254,7 @@ pub fn check_solidity_warning(
         libraries,
         None,
         SolcStandardJsonInputSettingsSelection::new_required(pipeline),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            true,
-            None,
-            &solc_version.default,
-            false,
-            false,
-        ),
+        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
         pipeline == SolcPipeline::Yul,
         suppressed_warnings,
@@ -266,4 +268,118 @@ pub fn check_solidity_warning(
         .any(|error| error.formatted_message.contains(warning_substring));
 
     Ok(contains_warning)
+}
+
+/// Compile the blob of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_blob_with_options(contract_name, source_code, true, SolcPipeline::Yul)
+}
+
+/// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_evm(contract_name, source_code, true, true)
+}
+
+/// Compile the EVM bin of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_evm_deploy_code(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> Vec<u8> {
+    compile_evm(contract_name, source_code, solc_optimizer_enabled, false)
+}
+
+fn compile_evm(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    runtime: bool,
+) -> Vec<u8> {
+    let pipeline = SolcPipeline::Yul;
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        pipeline,
+        solc_optimizer_enabled,
+    };
+
+    let cache = if runtime {
+        &EVM_RUNTIME_BLOB_CACHE
+    } else {
+        &EVM_BLOB_CACHE
+    };
+    if let Some(blob) = cache.lock().unwrap().get(&id) {
+        return blob.clone();
+    }
+
+    let file_name = "contract.sol";
+    let contracts = build_solidity_with_options_evm(
+        [(file_name.into(), source_code.into())].into(),
+        Default::default(),
+        None,
+        pipeline,
+        solc_optimizer_enabled,
+    )
+    .expect("source should compile");
+    let object = &contracts
+        .get(contract_name)
+        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name));
+    let code = if runtime {
+        object.1.object.as_str()
+    } else {
+        object.0.object.as_str()
+    };
+    let blob = hex::decode(code).expect("code shold be hex encoded");
+
+    cache.lock().unwrap().insert(id, blob.clone());
+
+    blob
+}
+
+/// Compile the blob of `contract_name` found in given `source_code`.
+pub fn compile_blob_with_options(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    pipeline: SolcPipeline,
+) -> Vec<u8> {
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        solc_optimizer_enabled,
+        pipeline,
+    };
+
+    if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
+        return blob.clone();
+    }
+
+    let file_name = "contract.sol";
+    let contracts = build_solidity_with_options(
+        [(file_name.into(), source_code.into())].into(),
+        Default::default(),
+        None,
+        pipeline,
+        revive_llvm_context::OptimizerSettings::cycles(),
+        solc_optimizer_enabled,
+    )
+    .expect("source should compile")
+    .contracts
+    .expect("source should contain at least one contract");
+
+    let bytecode = contracts[file_name][contract_name]
+        .evm
+        .as_ref()
+        .expect("source should produce EVM output")
+        .bytecode
+        .as_ref()
+        .expect("source should produce assembly text")
+        .object
+        .as_str();
+    let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
+
+    PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+
+    blob
 }

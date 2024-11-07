@@ -28,7 +28,7 @@ pub(crate) const FIRST_YUL_VERSION: semver::Version = semver::Version::new(0, 8,
 const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);
 
 /// The last supported version of `solc`.
-pub(crate) const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 26);
+pub(crate) const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 28);
 
 /// The Solidity compiler.
 pub trait Compiler {

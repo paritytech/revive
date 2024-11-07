@@ -1,8 +1,8 @@
 //! Common utility used for in frontend and integration tests.
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
@@ -16,14 +16,7 @@ use crate::compiler::standard_json::output::contract::evm::bytecode::DeployedByt
 use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::compiler::Compiler;
 use crate::project::Project;
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
-use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
-use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
-use crate::solc::Compiler as SolcCompiler;
+use crate::compiler::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);

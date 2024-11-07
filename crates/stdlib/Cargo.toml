@@ -1,9 +1,10 @@
 [package]
 name = "revive-stdlib"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "revive compiler stdlib components"
 
 [dependencies]
 inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-0"] }

@@ -19,7 +19,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-structopt = { workspace = true }
 colored = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }

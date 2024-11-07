@@ -11,6 +11,6 @@ use self::input::Input;
 use self::output::Output;
 
 pub trait Process {
-    fn run() -> anyhow::Result<()>;
+    fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()>;
     fn call(input: Input) -> anyhow::Result<Output>;
 }

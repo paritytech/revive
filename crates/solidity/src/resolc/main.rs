@@ -41,6 +41,14 @@ fn main_inner() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if arguments.license {
+        let license_mit = include_str!("../../../../LICENSE-MIT");
+        let license_apache = include_str!("../../../../LICENSE-APACHE");
+
+        println!("{}\n{}\n", license_mit, license_apache);
+        return Ok(());
+    }
+
     #[cfg(feature = "parallel")]
     rayon::ThreadPoolBuilder::new()
         .stack_size(RAYON_WORKER_STACK_SIZE)
@@ -50,13 +58,25 @@ fn main_inner() -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM); // TODO: pass from CLI
 
     if arguments.recursive_process {
+        #[cfg(debug_assertions)]
+        if let Some(fname) = arguments.recursive_process_input {
+            let mut infile = std::fs::File::open(fname)?;
+            #[cfg(target_os = "emscripten")]
+            {
+                return revive_solidity::WorkerProcess::run(Some(&mut infile));
+            }
+            #[cfg(not(target_os = "emscripten"))]
+            {
+                return revive_solidity::NativeProcess::run(Some(&mut infile));
+            }
+        }
         #[cfg(target_os = "emscripten")]
         {
-            return revive_solidity::WorkerProcess::run();
+            return revive_solidity::WorkerProcess::run(None);
         }
         #[cfg(not(target_os = "emscripten"))]
         {
-            return revive_solidity::NativeProcess::run();
+            return revive_solidity::NativeProcess::run(None);
         }
     }
 

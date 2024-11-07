@@ -22,7 +22,7 @@ use self::version::Version;
 const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 4, 12);
 
 /// The first version of `solc`, where Yul codegen is considered robust enough.
-const FIRST_YUL_VERSION: semver::Version = semver::Version::new(0, 8, 0);
+pub(crate) const FIRST_YUL_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
 /// The first version of `solc`, where `--via-ir` codegen mode is supported.
 const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);

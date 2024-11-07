@@ -17,15 +17,18 @@ pub extern "C" fn solidity_license() -> *const c_char {
 #[no_mangle]
 pub extern "C" fn solidity_version() -> *const c_char {
     let mut solc = SoljsonCompiler { version: None };
-    let version = solc.version().map(|v| v.long).unwrap_or("unknown".to_owned());
-     // Store the string in a static variable
-     unsafe {
+    let version = solc
+        .version()
+        .map(|v| v.long)
+        .unwrap_or("unknown".to_owned());
+    // Store the string in a static variable
+    unsafe {
         if VERSION.is_none() {
             VERSION = Some(Box::new(CString::new(version).unwrap()));
         }
 
         VERSION.as_ref().map_or_else(std::ptr::null, |s| s.as_ptr())
-     }
+    }
 }
 
 #[no_mangle]
@@ -46,7 +49,15 @@ pub extern "C" fn solidity_free(data: *mut c_char) {
 #[no_mangle]
 pub extern "C" fn solidity_compile(
     input: *const c_char,
-    _readCallback: Option<extern "C" fn(*mut libc::c_void, *const c_char, *const c_char, *mut *mut c_char, *mut *mut c_char)>,
+    _readCallback: Option<
+        extern "C" fn(
+            *mut libc::c_void,
+            *const c_char,
+            *const c_char,
+            *mut *mut c_char,
+            *mut *mut c_char,
+        ),
+    >,
     _readContext: *mut libc::c_void,
 ) -> *mut c_char {
     let input = unsafe { CStr::from_ptr(input).to_str().unwrap_or("") };
@@ -58,5 +69,4 @@ pub extern "C" fn solidity_compile(
 }
 
 #[no_mangle]
-pub extern "C" fn solidity_reset() {
-}
+pub extern "C" fn solidity_reset() {}

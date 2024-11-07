@@ -42,8 +42,8 @@ impl SolcCompiler {
 }
 
 impl Compiler for SolcCompiler {
-     /// Compiles the Solidity `--standard-json` input into Yul IR.
-     fn standard_json(
+    /// Compiles the Solidity `--standard-json` input into Yul IR.
+    fn standard_json(
         &mut self,
         mut input: StandardJsonInput,
         pipeline: Pipeline,

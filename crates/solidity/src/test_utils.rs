@@ -12,11 +12,11 @@ use crate::compiler::solc::SolcCompiler;
 use crate::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::compiler::standard_json::input::Input as SolcStandardJsonInput;
+use crate::compiler::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::compiler::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::compiler::Compiler;
 use crate::project::Project;
-use crate::compiler::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
@@ -214,8 +214,11 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
-    let project =
-        Project::try_from_yul_string::<SolcCompiler>(PathBuf::from("test.yul").as_path(), source_code, None)?;
+    let project = Project::try_from_yul_string::<SolcCompiler>(
+        PathBuf::from("test.yul").as_path(),
+        source_code,
+        None,
+    )?;
     let _build = project.compile(optimizer_settings, false, None)?;
 
     Ok(())

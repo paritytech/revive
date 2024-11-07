@@ -16,7 +16,6 @@ use crate::compiler::standard_json::output::contract::evm::bytecode::DeployedByt
 use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::compiler::Compiler;
 use crate::project::Project;
-use crate::warning::Warning;
 use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;

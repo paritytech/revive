@@ -13,12 +13,10 @@ env:
 
 jobs:
   build-revive-wasm:
-    runs-on: parity-large
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
-    container:
-      image: paritytech/ci-unified:bullseye-1.81.0
     steps:
       - uses: actions/checkout@v4
 
@@ -34,15 +32,14 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          apt remove -y 'llvm-15*' 'libllvm15*'
           # Install LLVM
           curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
           tar Jxf llvm.tar.xz
           mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
           echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
-          wget https://cmake.org/files/v3.20/cmake-3.20.0-linux-x86_64.sh && chmod +x cmake-3.20.0-linux-x86_64.sh && ./cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
-          alias cmake='/usr/local/bin/cmake'
-          apt-get update && apt-get install -y ninja-build
+          # wget https://cmake.org/files/v3.20/cmake-3.20.0-linux-x86_64.sh && chmod +x cmake-3.20.0-linux-x86_64.sh && ./cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
+          # alias cmake='/usr/local/bin/cmake'
+          apt-get update && apt-get install -y cmake ninja-build
           rustup target add wasm32-unknown-emscripten
           # Install Emscripten
           git clone https://github.com/emscripten-core/emsdk.git
@@ -61,9 +58,6 @@ jobs:
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          export CC="clang-18"
-          export CXX="clang-18"
-          export LLVM_VERSION="18"
           export EMSDK_ROOT=${PWD}/emsdk
           ./emscripten-build-llvm.sh
 

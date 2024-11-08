@@ -55,11 +55,15 @@ jobs:
           cargo --version
           rustup +nightly show
           cargo +nightly --version
+          cmake --version
           bash --version
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
+          export CC="clang-18"
+          export CXX="clang-18"
+          export LLVM_VERSION="18"
           export EMSDK_ROOT=${PWD}/emsdk
           ./emscripten-build-llvm.sh
 

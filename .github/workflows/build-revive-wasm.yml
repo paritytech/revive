@@ -34,6 +34,11 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
+          # Install LLVM
+          curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+          tar Jxf llvm.tar.xz
+          mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
+          echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
           wget https://cmake.org/files/v3.20/cmake-3.20.0-linux-x86_64.sh && chmod +x cmake-3.20.0-linux-x86_64.sh && ./cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
           alias cmake='/usr/local/bin/cmake'
           apt-get update && apt-get install -y ninja-build

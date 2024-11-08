@@ -13,6 +13,8 @@ env:
 jobs:
   build-revive-wasm:
     runs-on: parity-large
+    container:
+      image: paritytech/ci-unified:bullseye-1.81.0
     steps:
       - uses: actions/checkout@v4
 

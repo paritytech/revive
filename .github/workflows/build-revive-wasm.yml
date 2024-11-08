@@ -1,0 +1,64 @@
+name: Build revive-wasm
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
+
+jobs:
+  build-revive-wasm:
+    runs-on: parity-large
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: |
+          rustup show
+          cargo --version
+          rustup +nightly show
+          cargo +nightly --version
+          bash --version
+
+      - name: Cache LLVM build
+        id: cache-llvm
+        uses: actions/cache@v3
+        with:
+          path: |
+            llvm18.0-emscripten
+          # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
+          key: llvm-build-${{ runner.os }}-${{ hashFiles('clone-llvm.sh', 'emscripten-build-llvm.sh') }}
+
+      - name: Install Dependencies
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+          # Install Emscripten
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          export LLVM_LINK_PREFIX==${PWD}/llvm18.0-emscripten
+          source ./emsdk/emsdk_env.sh
+          ./emscripten-build-llvm.sh
+
+      - name: Use Cached LLVM
+        if: steps.cache-llvm.outputs.cache-hit == 'true'
+        run: |
+          echo "Using cached LLVM"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revive-wasm
+          path: |
+            ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.js
+            ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
+          retention-days: 1

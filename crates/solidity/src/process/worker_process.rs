@@ -33,7 +33,7 @@ pub struct WorkerProcess;
 
 impl Process for WorkerProcess {
     /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-    fn run() -> anyhow::Result<()> {
+    fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
         let mut buffer = Vec::with_capacity(16384);
         // TODO: Init correctly stdin in emscripten - preload FS conf before module init
         let mut stdin = File::open("/in")
@@ -43,16 +43,26 @@ impl Process for WorkerProcess {
         let mut stderr = File::create("/err")
             .map_err(|error| anyhow::anyhow!("File /err creating error: {}", error))?;
 
-        stdin.read_to_end(&mut buffer).expect("Stdin reading error");
+        match input_file {
+            Some(ins) => {
+                if let Err(error) = ins.read_to_end(&mut buffer) {
+                    anyhow::bail!("Failed to read recursive process input file: {:?}", error);
+                }
+            }
+            None => {
+                if let Err(error) = stdin.read_to_end(&mut buffer) {
+                    anyhow::bail!(
+                        "Failed to read recursive process input from stdin: {:?}",
+                        error
+                    )
+                }
+            }
+        }
 
         let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
-        if input.enable_test_encoding {
-            todo!()
-        }
         let result = input.contract.compile(
             input.project,
             input.optimizer_settings,
-            input.is_system_mode,
             input.include_metadata_hash,
             input.debug_config,
         );

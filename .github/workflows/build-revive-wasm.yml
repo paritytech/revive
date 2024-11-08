@@ -34,6 +34,7 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
+          apt remove -y 'llvm-15*' 'libllvm15*'
           # Install LLVM
           curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
           tar Jxf llvm.tar.xz

@@ -52,14 +52,19 @@ jobs:
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          export LLVM_LINK_PREFIX==${PWD}/llvm18.0-emscripten
-          source ./emsdk/emsdk_env.sh
+          export EMSDK_ROOT=${PWD}/emsdk
           ./emscripten-build-llvm.sh
 
       - name: Use Cached LLVM
         if: steps.cache-llvm.outputs.cache-hit == 'true'
         run: |
           echo "Using cached LLVM"
+
+      - name: Build revive
+        run: |
+          export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
+          source ./emsdk/emsdk_env.sh
+          make install-wasm
 
       - uses: actions/upload-artifact@v4
         with:

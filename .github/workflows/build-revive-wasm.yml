@@ -34,7 +34,9 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          apt-get update && apt-get install -y cmake ninja-build
+          wget https://cmake.org/files/v3.20/cmake-3.20.0-linux-x86_64.sh && chmod +x cmake-3.20.0-linux-x86_64.sh && ./cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
+          alias cmake='/usr/local/bin/cmake'
+          apt-get update && apt-get install -y ninja-build
           rustup target add wasm32-unknown-emscripten
           # Install Emscripten
           git clone https://github.com/emscripten-core/emsdk.git

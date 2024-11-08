@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
+  EMSCRIPTEN_VERSION: 3.1.64
 
 jobs:
   build-revive-wasm:
@@ -17,13 +18,6 @@ jobs:
       image: paritytech/ci-unified:bullseye-1.81.0
     steps:
       - uses: actions/checkout@v4
-
-      - run: |
-          rustup show
-          cargo --version
-          rustup +nightly show
-          cargo +nightly --version
-          bash --version
 
       - name: Cache LLVM build
         id: cache-llvm
@@ -37,13 +31,20 @@ jobs:
       - name: Install Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          apt-get update && apt-get install -y cmake ninja-build
+          rustup target add wasm32-unknown-emscripten
           # Install Emscripten
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
-          ./emsdk install latest
-          ./emsdk activate latest
+          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
+          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
+
+      - run: |
+          rustup show
+          cargo --version
+          rustup +nightly show
+          cargo +nightly --version
+          bash --version
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'

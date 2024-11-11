@@ -121,3 +121,4 @@ contract ERC20Tester {
         assert(token.balanceOf(address(this)) == 0);
     }
 }
+

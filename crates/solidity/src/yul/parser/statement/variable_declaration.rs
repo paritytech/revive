@@ -101,7 +101,9 @@ where
     ) -> anyhow::Result<()> {
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
-            let r#type = identifier.r#type.unwrap_or_default().into_llvm(context);
+            context.set_debug_location(self.location.line, 0, None)?;
+            let identifier_type = identifier.r#type.clone().unwrap_or_default();
+            let r#type = identifier_type.into_llvm(context);
             let pointer = context.build_alloca(r#type, identifier.inner.as_str());
             context
                 .current_function()
@@ -116,7 +118,7 @@ where
                                 .current_function()
                                 .borrow_mut()
                                 .yul_mut()
-                                .insert_constant(identifier.inner, constant);
+                                .insert_constant(identifier.inner.clone(), constant);
                         }
 
                         value.to_llvm()
@@ -131,6 +133,8 @@ where
         }
 
         for (index, binding) in self.bindings.iter().enumerate() {
+            context.set_debug_location(self.location.line, 0, None)?;
+
             let yul_type = binding
                 .r#type
                 .to_owned()

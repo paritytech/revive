@@ -5,6 +5,8 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use inkwell::debug_info::AsDIScope;
+
 use crate::yul::error::Error;
 use crate::yul::lexer::token::lexeme::symbol::Symbol;
 use crate::yul::lexer::token::lexeme::Lexeme;
@@ -153,9 +155,26 @@ where
             function.into_llvm(context)?;
         }
 
-        context.set_current_function(current_function.as_str())?;
+        context.set_current_function(current_function.as_str(), Some(self.location.line))?;
+
+        if let Some(dinfo) = context.debug_info() {
+            let di_builder = dinfo.builder();
+            let di_scope = dinfo.top_scope().expect("expected a debug-info scope");
+            let di_block_scope = di_builder
+                .create_lexical_block(
+                    di_scope,
+                    dinfo.compilation_unit().get_file(),
+                    std::cmp::min(self.location.line, u32::MAX as usize) as u32,
+                    0,
+                )
+                .as_debug_info_scope();
+            context.push_debug_scope(di_block_scope);
+            context.set_debug_location(self.location.line, 0, None)?;
+        }
+
         context.set_basic_block(current_block);
         for statement in local_statements.into_iter() {
+            context.set_debug_location(statement.location().line, 0, None)?;
             if context.basic_block().get_terminator().is_some() {
                 break;
             }
@@ -193,6 +212,8 @@ where
                 ),
             }
         }
+
+        context.pop_debug_scope();
 
         Ok(())
     }

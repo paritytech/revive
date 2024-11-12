@@ -6,4 +6,7 @@ fn main() {
         .unwrap_or("unknown".to_owned());
 
     println!("cargo:rustc-env=GIT_COMMIT_HASH={}", git_rev.trim());
+
+    println!("cargo:rustc-link-search=/usr/lib/clang/17/lib/linux");
+    println!("cargo:rust-link-lib=static=clang_rt.builtins-aarch64");
 }

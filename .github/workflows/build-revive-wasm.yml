@@ -34,7 +34,7 @@ jobs:
         run: |
           # wget https://cmake.org/files/v3.20/cmake-3.20.0-linux-x86_64.sh && chmod +x cmake-3.20.0-linux-x86_64.sh && ./cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
           # alias cmake='/usr/local/bin/cmake'
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5 libtinfo-dev
           # Install Emscripten
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk

@@ -32,7 +32,7 @@ jobs:
       - name: Install LLVM Dependencies
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5 libtinfo-dev libtinfo5
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5
           # Install Emscripten
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk

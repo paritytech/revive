@@ -37,10 +37,13 @@ Install [emscripten](https://emscripten.org/docs/getting_started/downloads.html)
 To build resolc.js execute:
 
 ```bash
+bash build-llvm.sh
+export PATH=${PWD}/llvm18.0/bin:$PATH
 export EMSDK_ROOT=<PATH_TO_EMSCRIPTEN_SDK>
 bash emscripten-build-llvm.sh
 source $EMSDK_ROOT/emsdk_env.sh
 export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
+export PATH=$PATH:$PWD/llvm18.0-emscripten/bin/
 make install-wasm
 ```
 

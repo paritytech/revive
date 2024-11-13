@@ -86,8 +86,8 @@ fn set_rustc_link_flags(llvm_config_path: &Path) {
         println!("cargo:rustc-link-lib=static={lib}");
     }
 
-    #[cfg(target_os = "linux")]
-    {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "linux" {
         println!("cargo:rustc-link-lib=dylib=stdc++");
         println!("cargo:rustc-link-lib=tinfo");
     }

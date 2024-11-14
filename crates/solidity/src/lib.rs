@@ -28,9 +28,9 @@ pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContrac
 pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
 pub use self::solc::pipeline::Pipeline as SolcPipeline;
 #[cfg(not(target_os = "emscripten"))]
-pub use self::solc::solc::SolcCompiler;
+pub use self::solc::solc_compiler::SolcCompiler;
 #[cfg(target_os = "emscripten")]
-pub use self::solc::soljson::SoljsonCompiler;
+pub use self::solc::soljson_compiler::SoljsonCompiler;
 pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
 pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;

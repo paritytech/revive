@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 
 use crate::project::Project;
 use crate::solc::pipeline::Pipeline as SolcPipeline;
-use crate::solc::solc::SolcCompiler;
+use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::solc::standard_json::input::Input as SolcStandardJsonInput;

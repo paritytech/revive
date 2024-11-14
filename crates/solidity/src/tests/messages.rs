@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::compiler::pipeline::Pipeline as SolcPipeline;
+use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::warning::Warning;
 
 pub const ECRECOVER_TEST_SOURCE: &str = r#"

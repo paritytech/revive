@@ -3,9 +3,9 @@
 pub mod combined_json;
 pub mod pipeline;
 #[cfg(not(target_os = "emscripten"))]
-pub mod solc;
+pub mod solc_compiler;
 #[cfg(target_os = "emscripten")]
-pub mod soljson;
+pub mod soljson_compiler;
 pub mod standard_json;
 pub mod version;
 

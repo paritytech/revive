@@ -38,6 +38,11 @@ jobs:
           tar Jxf llvm.tar.xz
           mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
           echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
+          # Install Emscripten
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
+          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
 
       - run: |
           rustup show
@@ -47,15 +52,6 @@ jobs:
           cmake --version
           bash --version
           llvm-config --version
-
-      - name: Install LLVM Dependencies
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          # Install Emscripten
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'

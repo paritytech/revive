@@ -78,7 +78,7 @@ POLKAVM_IMPORT(void, caller, uint32_t)
 
 POLKAVM_IMPORT(void, chain_id, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, code_size, uint32_t)
+POLKAVM_IMPORT(uint32_t, code_size, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
@@ -95,6 +95,8 @@ POLKAVM_IMPORT(void, input, uint32_t, uint32_t)
 POLKAVM_IMPORT(uint32_t, instantiate, uint32_t)
 
 POLKAVM_IMPORT(void, now, uint32_t)
+
+POLKAVM_IMPORT(void, origin, uint32_t)
 
 POLKAVM_IMPORT(void, seal_return, uint32_t, uint32_t, uint32_t)
 

@@ -1,5 +1,6 @@
 use frame_support::runtime;
 
+use pallet_revive::AccountId32Mapper;
 use polkadot_sdk::*;
 use polkadot_sdk::{
     polkadot_sdk_frame::{log, runtime::prelude::*},
@@ -7,7 +8,7 @@ use polkadot_sdk::{
 };
 
 pub type Balance = u128;
-pub type AccountId = pallet_revive::DefaultAddressMapper;
+pub type AccountId = pallet_revive::AccountId32Mapper<Runtime>;
 pub type Block = frame_system::mocking::MockBlock<Runtime>;
 pub type Hash = <Runtime as frame_system::Config>::Hash;
 pub type EventRecord =
@@ -74,7 +75,7 @@ impl pallet_revive::Config for Runtime {
     type ChainExtension = ();
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
-    type AddressMapper = AccountId;
+    type AddressMapper = AccountId32Mapper<Self>;
     type RuntimeMemory = ConstU32<{ 512 * 1024 * 1024 }>;
     type PVFMemory = ConstU32<{ 1024 * 1024 * 1024 }>;
     type UnsafeUnstableInterface = UnstableInterface;

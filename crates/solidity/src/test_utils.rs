@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
@@ -106,11 +105,7 @@ pub fn build_solidity_with_options(
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
     let build: crate::Build = project.compile(optimizer_settings, false, None)?;
-    build.write_to_standard_json(
-        &mut output,
-        &solc_version,
-        &semver::Version::from_str(env!("CARGO_PKG_VERSION"))?,
-    )?;
+    build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
 }
@@ -202,11 +197,7 @@ pub fn build_solidity_and_detect_missing_libraries(
     let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
 
     let missing_libraries = project.get_missing_libraries();
-    missing_libraries.write_to_standard_json(
-        &mut output,
-        &solc.version()?,
-        &semver::Version::from_str(env!("CARGO_PKG_VERSION"))?,
-    )?;
+    missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;
 
     Ok(output)
 }
@@ -232,14 +223,14 @@ pub fn check_solidity_warning(
     warning_substring: &str,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     pipeline: SolcPipeline,
-    skip_for_zkvm_edition: bool,
+    skip_for_revive_edition: bool,
     suppressed_warnings: Option<Vec<Warning>>,
 ) -> anyhow::Result<bool> {
     check_dependencies();
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
-    if skip_for_zkvm_edition && solc_version.l2_revision.is_some() {
+    if skip_for_revive_edition && solc_version.l2_revision.is_some() {
         return Ok(true);
     }
 

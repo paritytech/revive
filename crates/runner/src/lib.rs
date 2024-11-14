@@ -72,7 +72,7 @@ impl ExtBuilder {
         Self {
             balance_genesis_config: value
                 .iter()
-                .map(|(address, balance)| (AccountId::to_account_id(address), *balance))
+                .map(|(address, balance)| (AccountId::to_fallback_account_id(address), *balance))
                 .collect(),
         }
     }
@@ -246,7 +246,7 @@ pub enum Code {
     /// A contract blob
     Bytes(Vec<u8>),
     /// Pre-existing contract hash
-    Hash(Hash),
+    Hash(crate::runtime::Hash),
 }
 
 impl Default for Code {

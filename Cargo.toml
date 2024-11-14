@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-dev.5"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,18 +14,18 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.80.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0", path = "crates/builtins" }
-revive-common = { version = "0.1.0", path = "crates/common" }
-revive-differential = { version = "0.1.0", path = "crates/differential" }
-revive-integration = { version = "0.1.0", path = "crates/integration" }
-revive-linker = { version = "0.1.0", path = "crates/linker" }
-lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0", path = "crates/runner" }
-revive-solidity = { version = "0.1.0", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
+revive-benchmarks = { version = "0.1.0-dev.5", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.5", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.5", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.5", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.5", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.5", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.5", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.5", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.5", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.5", path = "crates/runner" }
+revive-solidity = { version = "0.1.0-dev.5", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.5", path = "crates/stdlib" }
 
 hex = "0.4"
 petgraph = "0.6"
@@ -51,10 +51,10 @@ path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
 rand = "0.8"
-polkavm-common = "0.13"
-polkavm-linker = "0.13"
-polkavm-disassembler = "0.13"
-polkavm = "0.13"
+polkavm-common = "0.14"
+polkavm-linker = "0.14"
+polkavm-disassembler = "0.14"
+polkavm = "0.14"
 alloy-primitives = { version = "0.8", features = ["serde"] }
 alloy-sol-types = "0.8"
 alloy-genesis = "0.3"
@@ -67,11 +67,12 @@ log = { version = "0.4" }
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "aeebf2f383390f2f86527d70212162d5dbea8b93" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "2b6b69641ccff4d7aa9c32051bbb2f1e775ef8cc" }
 
 # llvm
 [workspace.dependencies.inkwell]
-version = "0.5"
+git = "https://github.com/TheDan64/inkwell.git"
+rev = "7b410298b6a93450adaa90b1841d5805a3038f12"
 default-features = false
 features = ["serde", "llvm18-0", "no-libffi-linking", "target-riscv"]
 

@@ -138,7 +138,7 @@ where
         for import in revive_runtime_api::polkavm_imports::IMPORTS {
             module
                 .get_function(import)
-                .expect("should be declared")
+                .unwrap_or_else(|| panic!("{import} import should be declared"))
                 .set_linkage(inkwell::module::Linkage::External);
         }
     }
@@ -669,22 +669,10 @@ where
                 self.build_byte_swap(value)
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
-
                 let storage_value_pointer =
                     self.build_alloca(self.word_type(), "storage_value_pointer");
+                self.build_store(storage_value_pointer, self.word_const(0))?;
+
                 let storage_value_length_pointer =
                     self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
                 self.build_store(
@@ -698,7 +686,7 @@ where
                     revive_runtime_api::polkavm_imports::GET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
+                        pointer.to_int(self).into(),
                         self.xlen_type().const_all_ones().into(),
                         storage_value_pointer.to_int(self).into(),
                         storage_value_length_pointer.to_int(self).into(),
@@ -767,18 +755,6 @@ where
                     self.word_type().as_basic_type_enum()
                 );
 
-                let storage_key_value = self.builder().build_ptr_to_int(
-                    pointer.value,
-                    self.word_type(),
-                    "storage_ptr_to_int",
-                )?;
-                let storage_key_pointer = self.build_alloca(self.word_type(), "storage_key");
-                let storage_key_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_key_pointer.value,
-                    self.xlen_type(),
-                    "storage_key_pointer_casted",
-                )?;
-
                 let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
                 let storage_value_pointer_casted = self.builder().build_ptr_to_int(
                     storage_value_pointer.value,
@@ -786,8 +762,6 @@ where
                     "storage_value_pointer_casted",
                 )?;
 
-                self.builder()
-                    .build_store(storage_key_pointer.value, storage_key_value)?;
                 self.builder()
                     .build_store(storage_value_pointer.value, value)?;
 
@@ -797,7 +771,7 @@ where
                     revive_runtime_api::polkavm_imports::SET_STORAGE,
                     &[
                         self.xlen_type().const_int(transient as u64, false).into(),
-                        storage_key_pointer_casted.into(),
+                        pointer.to_int(self).into(),
                         self.xlen_type().const_all_ones().into(),
                         storage_value_pointer_casted.into(),
                         self.integer_const(crate::polkavm::XLEN, 32).into(),

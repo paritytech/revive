@@ -7,15 +7,15 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
-use crate::compiler::pipeline::Pipeline as SolcPipeline;
-use crate::compiler::solc::SolcCompiler;
-use crate::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-use crate::compiler::standard_json::input::Input as SolcStandardJsonInput;
-use crate::compiler::standard_json::output::contract::evm::bytecode::Bytecode;
-use crate::compiler::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use crate::compiler::standard_json::output::Output as SolcStandardJsonOutput;
-use crate::compiler::Compiler;
+use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::solc::solc::SolcCompiler;
+use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
+use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
+use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
+use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
+use crate::solc::Compiler;
 use crate::project::Project;
 use crate::warning::Warning;
 

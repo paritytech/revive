@@ -1,8 +1,7 @@
 //! Solidity to PolkaVM compiler library.
 
 pub(crate) mod build;
-#[path = "solc/compiler.rs"]
-pub(crate) mod compiler;
+pub(crate) mod solc;
 pub(crate) mod r#const;
 pub(crate) mod evmla;
 pub(crate) mod missing_libraries;
@@ -14,28 +13,28 @@ pub(crate) mod yul;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
-pub use self::compiler::combined_json::contract::Contract as SolcCombinedJsonContract;
-pub use self::compiler::combined_json::CombinedJson as SolcCombinedJson;
-pub use self::compiler::pipeline::Pipeline as SolcPipeline;
+pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
+pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
+pub use self::solc::pipeline::Pipeline as SolcPipeline;
 #[cfg(not(target_os = "emscripten"))]
-pub use self::compiler::solc::SolcCompiler;
+pub use self::solc::solc::SolcCompiler;
 #[cfg(target_os = "emscripten")]
-pub use self::compiler::soljson::SoljsonCompiler;
-pub use self::compiler::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
-pub use self::compiler::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-pub use self::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-pub use self::compiler::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
-pub use self::compiler::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
-pub use self::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-pub use self::compiler::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
-pub use self::compiler::standard_json::input::source::Source as SolcStandardJsonInputSource;
-pub use self::compiler::standard_json::input::Input as SolcStandardJsonInput;
-pub use self::compiler::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
-pub use self::compiler::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
-pub use self::compiler::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
-pub use self::compiler::standard_json::output::Output as SolcStandardJsonOutput;
-pub use self::compiler::version::Version as SolcVersion;
-pub use self::compiler::Compiler;
+pub use self::solc::soljson::SoljsonCompiler;
+pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
+pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+pub use self::solc::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
+pub use self::solc::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
+pub use self::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+pub use self::solc::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
+pub use self::solc::standard_json::input::source::Source as SolcStandardJsonInputSource;
+pub use self::solc::standard_json::input::Input as SolcStandardJsonInput;
+pub use self::solc::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
+pub use self::solc::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
+pub use self::solc::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
+pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
+pub use self::solc::version::Version as SolcVersion;
+pub use self::solc::Compiler;
 pub use self::missing_libraries::MissingLibraries;
 pub use self::process::input::Input as ProcessInput;
 #[cfg(not(target_os = "emscripten"))]
@@ -75,10 +74,10 @@ pub fn yul<T: Compiler>(
         ),
     };
 
-    if solc.version()?.default != compiler::LAST_SUPPORTED_VERSION {
+    if solc.version()?.default != solc::LAST_SUPPORTED_VERSION {
         anyhow::bail!(
                 "The Yul mode is only supported with the most recent version of the Solidity compiler: {}",
-                compiler::LAST_SUPPORTED_VERSION,
+                solc::LAST_SUPPORTED_VERSION,
             );
     }
 

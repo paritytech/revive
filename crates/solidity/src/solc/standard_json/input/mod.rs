@@ -13,10 +13,10 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::compiler::pipeline::Pipeline as SolcPipeline;
-use crate::compiler::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-use crate::compiler::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::compiler::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::warning::Warning;
 
 use self::language::Language;

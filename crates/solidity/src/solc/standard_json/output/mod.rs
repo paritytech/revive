@@ -10,8 +10,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
 
-use crate::compiler::pipeline::Pipeline as SolcPipeline;
-use crate::compiler::version::Version as SolcVersion;
+use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::solc::version::Version as SolcVersion;
 use crate::evmla::assembly::instruction::Instruction;
 use crate::evmla::assembly::Assembly;
 use crate::project::contract::ir::IR as ProjectContractIR;

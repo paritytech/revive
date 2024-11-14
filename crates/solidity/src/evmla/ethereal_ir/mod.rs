@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-use crate::compiler::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::assembly::instruction::Instruction;
 
 use self::function::block::Block;

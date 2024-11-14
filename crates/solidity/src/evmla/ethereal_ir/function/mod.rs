@@ -20,8 +20,8 @@ use num::One;
 use num::ToPrimitive;
 use num::Zero;
 
-use crate::compiler::standard_json::output::contract::evm::extra_metadata::recursive_function::RecursiveFunction;
-use crate::compiler::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::recursive_function::RecursiveFunction;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::assembly::instruction::name::Name as InstructionName;
 use crate::evmla::assembly::instruction::Instruction;
 use crate::evmla::ethereal_ir::function::block::element::stack::element::Element;

@@ -8,8 +8,8 @@ use std::path::Path;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::compiler::combined_json::contract::Contract as CombinedJsonContract;
-use crate::compiler::standard_json::output::contract::Contract as StandardJsonOutputContract;
+use crate::solc::combined_json::contract::Contract as CombinedJsonContract;
+use crate::solc::standard_json::output::contract::Contract as StandardJsonOutputContract;
 
 /// The Solidity contract build.
 #[derive(Debug, Serialize, Deserialize)]

@@ -3,11 +3,11 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::compiler::combined_json::CombinedJson;
-use crate::compiler::pipeline::Pipeline;
-use crate::compiler::standard_json::input::Input as StandardJsonInput;
-use crate::compiler::standard_json::output::Output as StandardJsonOutput;
-use crate::compiler::version::Version;
+use crate::solc::combined_json::CombinedJson;
+use crate::solc::pipeline::Pipeline;
+use crate::solc::standard_json::input::Input as StandardJsonInput;
+use crate::solc::standard_json::output::Output as StandardJsonOutput;
+use crate::solc::version::Version;
 use anyhow::Context;
 use std::ffi::{c_char, c_void, CStr, CString};
 

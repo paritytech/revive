@@ -12,7 +12,7 @@ use sha3::Digest;
 use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::build::contract::Contract as ContractBuild;
-use crate::compiler::version::Version as SolcVersion;
+use crate::solc::version::Version as SolcVersion;
 use crate::project::Project;
 
 use self::ir::IR;

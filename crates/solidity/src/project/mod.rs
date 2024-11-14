@@ -15,9 +15,8 @@ use sha3::Digest;
 
 use crate::build::contract::Contract as ContractBuild;
 use crate::build::Build;
-use crate::compiler;
-use crate::compiler::version::Version as SolcVersion;
-use crate::compiler::Compiler;
+use crate::solc::version::Version as SolcVersion;
+use crate::solc::Compiler;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
@@ -189,7 +188,7 @@ impl Project {
             solc.validate_yul(path)?;
         }
 
-        let source_version = SolcVersion::new_simple(compiler::LAST_SUPPORTED_VERSION);
+        let source_version = SolcVersion::new_simple(crate::solc::LAST_SUPPORTED_VERSION);
         let path = path.to_string_lossy().to_string();
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 

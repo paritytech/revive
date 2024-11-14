@@ -1,18 +1,29 @@
 //! Solidity to PolkaVM compiler library.
 
 pub(crate) mod build;
-pub(crate) mod solc;
 pub(crate) mod r#const;
 pub(crate) mod evmla;
 pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
+pub(crate) mod solc;
 pub(crate) mod version;
 pub(crate) mod warning;
 pub(crate) mod yul;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
+pub use self::missing_libraries::MissingLibraries;
+pub use self::process::input::Input as ProcessInput;
+#[cfg(not(target_os = "emscripten"))]
+pub use self::process::native_process::NativeProcess;
+pub use self::process::output::Output as ProcessOutput;
+#[cfg(target_os = "emscripten")]
+pub use self::process::worker_process::WorkerProcess;
+pub use self::process::Process;
+pub use self::project::contract::Contract as ProjectContract;
+pub use self::project::Project;
+pub use self::r#const::*;
 pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
 pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
 pub use self::solc::pipeline::Pipeline as SolcPipeline;
@@ -35,17 +46,6 @@ pub use self::solc::standard_json::output::contract::Contract as SolcStandardJso
 pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
 pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler;
-pub use self::missing_libraries::MissingLibraries;
-pub use self::process::input::Input as ProcessInput;
-#[cfg(not(target_os = "emscripten"))]
-pub use self::process::native_process::NativeProcess;
-pub use self::process::output::Output as ProcessOutput;
-#[cfg(target_os = "emscripten")]
-pub use self::process::worker_process::WorkerProcess;
-pub use self::process::Process;
-pub use self::project::contract::Contract as ProjectContract;
-pub use self::project::Project;
-pub use self::r#const::*;
 pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
 #[cfg(target_os = "emscripten")]

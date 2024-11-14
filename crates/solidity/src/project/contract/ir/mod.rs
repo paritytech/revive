@@ -9,8 +9,8 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::assembly::Assembly;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::yul::parser::statement::object::Object;
 
 use self::evmla::EVMLA;

@@ -12,8 +12,8 @@ use sha3::Digest;
 use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::build::contract::Contract as ContractBuild;
-use crate::solc::version::Version as SolcVersion;
 use crate::project::Project;
+use crate::solc::version::Version as SolcVersion;
 
 use self::ir::IR;
 use self::metadata::Metadata;

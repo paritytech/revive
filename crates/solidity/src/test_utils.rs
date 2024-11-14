@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
+use crate::project::Project;
 use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::solc::SolcCompiler;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
@@ -16,7 +17,6 @@ use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::solc::Compiler;
-use crate::project::Project;
 use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);

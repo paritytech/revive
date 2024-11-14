@@ -20,13 +20,13 @@ use num::One;
 use num::ToPrimitive;
 use num::Zero;
 
-use crate::solc::standard_json::output::contract::evm::extra_metadata::recursive_function::RecursiveFunction;
-use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::assembly::instruction::name::Name as InstructionName;
 use crate::evmla::assembly::instruction::Instruction;
 use crate::evmla::ethereal_ir::function::block::element::stack::element::Element;
 use crate::evmla::ethereal_ir::function::block::element::stack::Stack;
 use crate::evmla::ethereal_ir::EtherealIR;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::recursive_function::RecursiveFunction;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 
 use self::block::element::stack::element::Element as StackElement;
 use self::block::element::Element as BlockElement;

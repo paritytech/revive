@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::evmla::assembly::instruction::Instruction;
+use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 
 use self::function::block::Block;
 use self::function::r#type::Type as FunctionType;

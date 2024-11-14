@@ -15,12 +15,12 @@ use sha3::Digest;
 
 use crate::build::contract::Contract as ContractBuild;
 use crate::build::Build;
-use crate::solc::version::Version as SolcVersion;
-use crate::solc::Compiler;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
 use crate::project::contract::ir::IR;
+use crate::solc::version::Version as SolcVersion;
+use crate::solc::Compiler;
 use crate::yul::lexer::Lexer;
 use crate::yul::parser::statement::object::Object;
 

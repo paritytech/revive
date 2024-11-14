@@ -29,18 +29,9 @@ jobs:
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
           key: llvm-build-${{ runner.os }}-${{ hashFiles('clone-llvm.sh', 'emscripten-build-llvm.sh') }}
 
-      - name: Install LLVM Dependencies
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5 libtinfo5
-          # Install Emscripten
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
-
       - name: Install Dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5
           rustup target add wasm32-unknown-emscripten
           # Install LLVM required for the compiler runtime, runtime-api and stdlib
           curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
@@ -56,6 +47,15 @@ jobs:
           cmake --version
           bash --version
           llvm-config --version
+
+      - name: Install LLVM Dependencies
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          # Install Emscripten
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
+          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'

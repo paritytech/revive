@@ -15,7 +15,12 @@ doctest = false
 
 [features]
 riscv-zbb = []
-riscv-64 = []
+riscv-64 = [
+    "revive-linker/riscv-64",
+    "revive-builtins/riscv-64",
+    "revive-runtime-api/riscv-64",
+    "revive-common/riscv-64",
+]
 
 [dependencies]
 anyhow = { workspace = true }

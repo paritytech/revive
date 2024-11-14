@@ -11,9 +11,9 @@ const TARGET_FLAG: &str = "--target=riscv32";
 const TARGET_FLAG: &str = "--target=riscv64";
 
 #[cfg(not(feature = "riscv-64"))]
-const TARGET_ARCH_FLAG: &str = "-march=rv32em";
+const TARGET_ARCH_FLAG: &str = "-march=rv32emac";
 #[cfg(feature = "riscv-64")]
-const TARGET_ARCH_FLAG: &str = "-march=rv64em";
+const TARGET_ARCH_FLAG: &str = "-march=rv64emac";
 
 #[cfg(not(feature = "riscv-64"))]
 const TARGET_ABI_FLAG: &str = "-mabi=ilp32e";
@@ -36,6 +36,10 @@ fn compile(source_path: &str, bitcode_path: &str) {
             TARGET_TRIPLE_FLAG,
             TARGET_ARCH_FLAG,
             TARGET_ABI_FLAG,
+            "-Xclang",
+            "-target-feature",
+            "-Xclang",
+            "+fast-unaligned-access,+xtheadcondmov",
             "-fno-exceptions",
             "-ffreestanding",
             "-Wall",

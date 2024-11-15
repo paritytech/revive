@@ -91,7 +91,7 @@ where
             output_pointer.to_int(context).into(),
         ],
     );
-    context.build_load(output_pointer, "block_hash")
+    context.build_byte_swap(context.build_load(output_pointer, "block_hash")?)
 }
 
 /// Translates the `difficulty` instruction.

@@ -20,7 +20,7 @@ pragma solidity ^0.8;
 }
 */
 
-contract Context {
+contract BlockHash {
     constructor(bytes32 expected) payable {
         assert(blockhash(0) == expected);
         assert(blockhash(1) == 0);

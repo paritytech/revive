@@ -44,6 +44,7 @@ test_spec!(transfer, "Transfer", "Transfer.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
+test_spec!(block_hash, "BlockHash", "BlockHash.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

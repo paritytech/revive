@@ -74,13 +74,24 @@ where
 
 /// Translates the `block_hash` instruction.
 pub fn block_hash<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
-    _index: inkwell::values::IntValue<'ctx>,
+    context: &mut Context<'ctx, D>,
+    index: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let output_pointer = context.build_alloca_at_entry(context.word_type(), "blockhash_out_ptr");
+    let index_ptr = context.build_alloca_at_entry(context.word_type(), "blockhash_index_ptr");
+    context.build_store(index_ptr, index)?;
+
+    context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::BLOCK_HASH,
+        &[
+            index_ptr.to_int(context).into(),
+            output_pointer.to_int(context).into(),
+        ],
+    );
+    context.build_load(output_pointer, "block_hash")
 }
 
 /// Translates the `difficulty` instruction.

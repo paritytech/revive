@@ -22,6 +22,12 @@ pragma solidity ^0.8;
 
 contract Context {
     constructor(bytes32 expected) payable {
-        assert(expected == blockhash(0));
+        assert(blockhash(0) == expected);
+        assert(blockhash(1) == 0);
+        assert(
+            blockhash(
+                0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+            ) == 0
+        );
     }
 }

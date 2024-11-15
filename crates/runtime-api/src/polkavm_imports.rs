@@ -20,6 +20,8 @@ pub static BALANCE: &str = "balance";
 
 pub static BALANCE_OF: &str = "balance_of";
 
+pub static BLOCK_HASH: &str = "block_hash";
+
 pub static BLOCK_NUMBER: &str = "block_number";
 
 pub static CALL: &str = "call";
@@ -62,12 +64,13 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 25] = [
+pub static IMPORTS: [&str; 26] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
     BALANCE,
     BALANCE_OF,
+    BLOCK_HASH,
     BLOCK_NUMBER,
     CALL,
     CALLER,

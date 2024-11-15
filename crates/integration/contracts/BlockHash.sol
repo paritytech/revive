@@ -10,7 +10,7 @@ pragma solidity ^0.8;
             "Instantiate": {
                 "code": {
                     "Solidity": {
-                        "contract": "Context"
+                        "contract": "BlockHash"
                     }
                 },
                 "data": "4545454545454545454545454545454545454545454545454545454545454545"

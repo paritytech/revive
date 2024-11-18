@@ -41,7 +41,7 @@ mergeInto(LibraryManager.library, {
                 let outputFile = newModule.FS.readFile('/out', { encoding: 'utf8' });
                 parentPort.postMessage({ output: outputFile });
             }
-        });`
+        });`;
 
         function compileWithWorker(inputJson, callback) {
             return new Promise((resolve, reject) => {

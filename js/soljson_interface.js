@@ -1,11 +1,11 @@
 mergeInto(LibraryManager.library, {
     soljson_compile: function(inputPtr, inputLen) {
-        var inputJson = UTF8ToString(inputPtr, inputLen);
-        var output = Module.soljson.cwrap('solidity_compile', 'string', ['string'])(inputJson);
+        const inputJson = UTF8ToString(inputPtr, inputLen);
+        const output = Module.solc.compile(inputJson)
         return stringToNewUTF8(output)
     },
     soljson_version: function() {
-        var version = Module.soljson.cwrap("solidity_version", "string", [])();
+        var version = Module.solc.version();
         return stringToNewUTF8(version)
     },
     resolc_compile: function(inputPtr, inputLen) {

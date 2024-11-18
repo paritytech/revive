@@ -10,7 +10,7 @@ mkdir -p ${INSTALL_DIR}
 # Build LLVM, clang
 LLVM_SRC_PREFIX=${PWD}/llvm-project
 LLVM_SRC_DIR=${LLVM_SRC_PREFIX}/llvm
-LLVM_BUILD_DIR=${PWD}/build/llvm
+LLVM_BUILD_DIR=${LLVM_SRC_PREFIX}/build/llvm
 if [ ! -d ${LLVM_BUILD_DIR} ] ; then
 	mkdir -p ${LLVM_BUILD_DIR}
 fi
@@ -33,7 +33,7 @@ cmake --install ${LLVM_BUILD_DIR}
 
 # Build compiler builtins
 COMPILER_RT_SRC_DIR=${LLVM_SRC_PREFIX}/compiler-rt
-COMPILER_RT_BUILD_DIR=${PWD}/build/compiler-rt
+COMPILER_RT_BUILD_DIR=${LLVM_SRC_PREFIX}/build/compiler-rt
 if [ ! -d ${COMPILER_RT_BUILD_DIR} ] ; then
 	mkdir -p ${COMPILER_RT_BUILD_DIR}
 fi

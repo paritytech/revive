@@ -1,0 +1,15 @@
+{
+  "name": "revive",
+  "version": "1.0.0",
+  "description": "Revive compiler",
+  "main": "run_revive.js",
+  "type": "module",
+  "dependencies": {
+    "deasync": "^0.1.15",
+    "solc": "^0.8.28"
+  },
+  "scripts": {
+    "init": "cp -r ../target/wasm32-unknown-emscripten/release/resolc.{js,wasm} .",
+    "test": "npm run init && node run_revive.js"
+  }
+}

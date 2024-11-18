@@ -1,9 +1,9 @@
 // worker.js
 // nodejs version
-const { parentPort } = require('worker_threads');
+import { parentPort } from 'worker_threads';
 
 parentPort.on('message', async (inputJson) => {
-    const { default: ModuleFactory } = await import('./resolc.mjs');
+    const { default: ModuleFactory } = await import('./resolc.js');
     const newModule = await ModuleFactory();
 
     // Create a virtual file for stdin

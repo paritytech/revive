@@ -52,7 +52,6 @@ inkwell = { workspace = true, features = ["target-riscv", "llvm18-0-no-llvm-link
 default = []
 parallel = ["rayon"]
 
-#TODO: Use pthreads -C target-feature=+atomics,+bulk-memory -Clink-arg=-pthread in compilation and enable `parallel` feature
-# Enable parallel_native by default only for non-emscripten targets
+# Enable parallel by default only for non-emscripten targets
 [target.'cfg(not(target_os = "emscripten"))'.features]
-default = ["parallel_native"]
+default = ["parallel"]

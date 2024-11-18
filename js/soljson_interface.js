@@ -13,10 +13,40 @@ mergeInto(LibraryManager.library, {
         const deasync = require('deasync');
 
         var inputJson = UTF8ToString(inputPtr, inputLen);
+
+        // Inline worker code
+        const workerCode = `
+        // worker.js
+        // nodejs version
+        const { parentPort } = require('worker_threads');
+
+        parentPort.on('message', async (inputJson) => {
+            const { default: ModuleFactory } = await import('./resolc.js');
+            const newModule = await ModuleFactory();
+
+            // Create a virtual file for stdin
+            newModule.FS.writeFile('/in', inputJson);
+
+            // Call main on the new instance
+            const output = newModule.callMain(['--recursive-process']);
+
+            // Check the /err file content
+            const errorMessage = newModule.FS.readFile('/err', { encoding: 'utf8' });
+
+            if (errorMessage.length > 0) {
+                // If /err is not empty, throw an error with its content
+                throw new Error(errorMessage);
+            } else {
+                // If no error, read the output file
+                let outputFile = newModule.FS.readFile('/out', { encoding: 'utf8' });
+                parentPort.postMessage({ output: outputFile });
+            }
+        });`
+
         function compileWithWorker(inputJson, callback) {
             return new Promise((resolve, reject) => {
                 // Create a new Worker
-                const worker = new Worker('./worker.js');
+                const worker = new Worker(workerCode, { eval: true });
 
                 // Listen for messages from the worker
                 worker.on('message', (message) => {

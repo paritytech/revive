@@ -18,33 +18,6 @@ extern "C" {
     fn soljson_compile(inputPtr: *const c_char, inputLen: usize) -> *const c_char;
 }
 
-fn get_soljson_version() -> anyhow::Result<String> {
-    unsafe {
-        let version_ptr = soljson_version();
-        let version = CStr::from_ptr(version_ptr)
-            .to_str()
-            .with_context(|| "Failed to convert C string to Rust string")
-            .map(str::to_owned);
-        libc::free(version_ptr as *mut c_void);
-        Ok(version?)
-    }
-}
-
-pub fn compile_standard_json(input: String) -> anyhow::Result<String> {
-    let c_input = CString::new(input).unwrap();
-    let c_input_len = c_input.as_bytes().len();
-
-    unsafe {
-        let output_ptr = soljson_compile(c_input.as_ptr(), c_input_len);
-        let output_json = CStr::from_ptr(output_ptr)
-            .to_str()
-            .with_context(|| "Failed to convert C string to Rust string")
-            .map(str::to_owned);
-        libc::free(output_ptr as *mut c_void);
-        Ok(output_json?)
-    }
-}
-
 /// The Solidity compiler.
 pub struct SoljsonCompiler {
     /// The lazily-initialized compiler version.
@@ -65,7 +38,7 @@ impl Compiler for SoljsonCompiler {
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
         let input_json = serde_json::to_string(&input).expect("Always valid");
-        let out = compile_standard_json(input_json)?;
+        let out = Self::compile_standard_json(input_json)?;
         let mut output: StandardJsonOutput = revive_common::deserialize_from_slice(out.as_bytes())
             .map_err(|error| {
                 anyhow::anyhow!(
@@ -94,7 +67,7 @@ impl Compiler for SoljsonCompiler {
     }
 
     fn version(&mut self) -> anyhow::Result<Version> {
-        let version = get_soljson_version()?;
+        let version = Self::get_soljson_version()?;
         let long = version.clone();
         let default: semver::Version = version
             .split('+')
@@ -127,5 +100,34 @@ impl Compiler for SoljsonCompiler {
         self.version = Some(version.clone());
 
         Ok(version)
+    }
+}
+
+impl SoljsonCompiler {
+    fn get_soljson_version() -> anyhow::Result<String> {
+        unsafe {
+            let version_ptr = soljson_version();
+            let version = CStr::from_ptr(version_ptr)
+                .to_str()
+                .with_context(|| "Failed to convert C string to Rust string")
+                .map(str::to_owned);
+            libc::free(version_ptr as *mut c_void);
+            Ok(version?)
+        }
+    }
+
+    fn compile_standard_json(input: String) -> anyhow::Result<String> {
+        let c_input = CString::new(input).unwrap();
+        let c_input_len = c_input.as_bytes().len();
+
+        unsafe {
+            let output_ptr = soljson_compile(c_input.as_ptr(), c_input_len);
+            let output_json = CStr::from_ptr(output_ptr)
+                .to_str()
+                .with_context(|| "Failed to convert C string to Rust string")
+                .map(str::to_owned);
+            libc::free(output_ptr as *mut c_void);
+            Ok(output_json?)
+        }
     }
 }

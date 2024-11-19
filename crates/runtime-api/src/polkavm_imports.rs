@@ -66,7 +66,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 26] = [
+pub static IMPORTS: [&str; 27] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,

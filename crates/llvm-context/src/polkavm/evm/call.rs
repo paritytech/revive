@@ -104,7 +104,6 @@ pub fn delegate_call<'ctx, D>(
     context: &mut Context<'ctx, D>,
     gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
-    _value: Option<inkwell::values::IntValue<'ctx>>,
     input_offset: inkwell::values::IntValue<'ctx>,
     input_length: inkwell::values::IntValue<'ctx>,
     output_offset: inkwell::values::IntValue<'ctx>,

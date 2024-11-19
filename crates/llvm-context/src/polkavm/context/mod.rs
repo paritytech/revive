@@ -138,7 +138,7 @@ where
         for import in revive_runtime_api::polkavm_imports::IMPORTS {
             module
                 .get_function(import)
-                .expect("should be declared")
+                .unwrap_or_else(|| panic!("{import} import should be declared"))
                 .set_linkage(inkwell::module::Linkage::External);
         }
     }

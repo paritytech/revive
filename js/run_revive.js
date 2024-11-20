@@ -3,26 +3,7 @@ const require = createRequire(import.meta.url);
 import solc from 'solc';
 
 // Import the Emscripten module
-import ModuleFactory from './resolc.js';
-
-// Solidity source code
-const input = `
-  // SPDX-License-Identifier: MIT
-  pragma solidity ^0.8;
-  contract Baseline {
-    function baseline() public payable {}
-  }`;
-
-async function runCompiler() {
-  const Module = await ModuleFactory();
-  Module.solc = solc;
-
-  // Write the input Solidity code to the Emscripten file system
-  Module.FS.writeFile('./input.sol', input);
-
-  // Compile the Solidity source code
-  Module.callMain(['./input.sol', '-O3','--bin']);
-}
+import Module from './resolc.js';
 
 const compilerStandardJsonInput = {
     language: 'Solidity',
@@ -52,21 +33,33 @@ const compilerStandardJsonInput = {
     },
   };
 
-async function runCompilerWithStandardJson() {
-  const Module = await ModuleFactory();
-  Module.solc = solc;
+async function runCompiler() {
+  const m = await Module();
+  m.solc = solc;
 
-  // Write the input Solidity code to the Emscripten file system
-  Module.FS.writeFile('/in',  JSON.stringify(compilerStandardJsonInput));
+  // Set input data for stdin
+  m.setStdinData(JSON.stringify(compilerStandardJsonInput));
+
+  var stdoutString = "";
+  m.setStdoutCallback(function(char) {
+      if (char.charCodeAt(0) === '\n') {
+        console.log("new line")
+        exit
+      }
+      stdoutString += char;
+  });
+
+  var stderrString = "";
+  m.setStderrCallback(function(error) {
+    stderrString += char;
+  });
 
   // Compile the Solidity source code
-  Module.callMain(['--standard-json']);
+  let x = m.callMain(['--standard-json']);
+  console.log(stdoutString)
+  console.error(stderrString)
 }
 
 runCompiler().catch(err => {
-  console.error('Error:', err);
-});
-
-runCompilerWithStandardJson().catch(err => {
   console.error('Error:', err);
 });

@@ -10,7 +10,8 @@ RUSTFLAGS_EMSCRIPTEN := \
 	-Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8,cwrap \
 	-Clink-arg=-sMODULARIZE \
 	-Clink-arg=-sEXPORT_ES6 \
-	-Clink-arg=--js-library=js/soljson_interface.js
+	-Clink-arg=--js-library=js/soljson_interface.js \
+	-Clink-arg=--pre-js=js/pre.js
 
 install: install-bin install-npm
 

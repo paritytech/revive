@@ -32,7 +32,7 @@ resolc --version
 
 ### Cross-compilation to WASM
 
-Cross-compiles the Revive recompiler to WASM to enable it to run in a Node.js or browser environment.
+Cross-compiles the Revive compiler to WASM for running it in a Node.js or browser environment.
 
 Install [emscripten](https://emscripten.org/docs/getting_started/downloads.html). Tested on version 3.1.64.
 To build resolc.js execute:

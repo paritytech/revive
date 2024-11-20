@@ -50,7 +50,7 @@ async function runCompiler() {
   });
 
   var stderrString = "";
-  m.setStderrCallback(function(error) {
+  m.setStderrCallback(function(char) {
     stderrString += char;
   });
 

@@ -53,4 +53,14 @@ Please consult the [Makefile](Makefile) targets to learn how to run tests and be
 Ensure that your branch passes `make test` locally when submitting a pull request.
 
 ## Design overview
+
 `revive` uses [solc](https://github.com/ethereum/solidity/), the Ethereum Solidity compiler, as the [Solidity frontend](crates/solidity/src/lib.rs) to process smart contracts written in Solidity. The YUL IR code (or legacy EVM assembly as a fallback for older `solc` versions) emitted by `solc` is then translated to LLVM IR, targetting [Polkadots `revive` pallet](https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html).
+
+## Tests
+
+Before running the tests, ensure that Geth (Go Ethereum) is installed on your system. Follow the installation guide here: [Installing Geth](https://geth.ethereum.org/docs/getting-started/installing-geth).
+Once Geth is installed, you can run the tests using the following command:
+
+```bash
+make test
+```

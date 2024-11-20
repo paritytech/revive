@@ -12,8 +12,6 @@ use std::path::PathBuf;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
-#[cfg(target_os = "emscripten")]
-use std::fs::File;
 
 use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
@@ -43,20 +41,7 @@ pub struct Input {
 impl Input {
     /// A shortcut constructor from stdin.
     pub fn try_from_stdin(solc_pipeline: SolcPipeline) -> anyhow::Result<Self> {
-        let mut input: Self = serde_json::from_reader({
-            #[cfg(target_os = "emscripten")]
-            {
-                std::io::BufReader::new(
-                    File::open("/in")
-                        .map_err(|error| anyhow::anyhow!("File /in openning error: {}", error))?,
-                )
-            }
-            #[cfg(not(target_os = "emscripten"))]
-            {
-                std::io::BufReader::new(std::io::stdin())
-            }
-        })?;
-
+        let mut input: Self = serde_json::from_reader(std::io::BufReader::new(std::io::stdin()))?;
         input
             .settings
             .output_selection

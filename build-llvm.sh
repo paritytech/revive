@@ -5,12 +5,13 @@ set -euo pipefail
 INSTALL_DIR="${PWD}/llvm18.0"
 mkdir -p ${INSTALL_DIR}
 
-./clone-llvm.sh
-
 # Build LLVM, clang
 LLVM_SRC_PREFIX=${PWD}/llvm-project
 LLVM_SRC_DIR=${LLVM_SRC_PREFIX}/llvm
 LLVM_BUILD_DIR=${LLVM_SRC_PREFIX}/build/llvm
+
+./clone-llvm.sh "${LLVM_SRC_PREFIX}"
+
 if [ ! -d ${LLVM_BUILD_DIR} ] ; then
 	mkdir -p ${LLVM_BUILD_DIR}
 fi

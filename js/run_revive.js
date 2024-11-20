@@ -1,9 +1,6 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
 import solc from 'solc';
-
 // Import the Emscripten module
-import Module from './resolc.js';
+import createRevive from './resolc.js';
 
 const compilerStandardJsonInput = {
     language: 'Solidity',
@@ -34,7 +31,7 @@ const compilerStandardJsonInput = {
   };
 
 async function runCompiler() {
-  const m = await Module();
+  const m = await createRevive();
   m.solc = solc;
 
   // Set input data for stdin
@@ -56,8 +53,8 @@ async function runCompiler() {
 
   // Compile the Solidity source code
   let x = m.callMain(['--standard-json']);
-  console.log(stdoutString)
-  console.error(stderrString)
+  console.log("Stdout: " + stdoutString)
+  console.error("Stderr: " + stderrString)
 }
 
 runCompiler().catch(err => {

@@ -14,7 +14,6 @@ use revive_llvm_context::PolkaVMWriteLLVM;
 use crate::build::contract::Contract as ContractBuild;
 use crate::project::Project;
 use crate::solc::version::Version as SolcVersion;
-use revive_llvm_context::DebugInfo;
 
 use self::ir::IR;
 use self::metadata::Metadata;
@@ -80,10 +79,9 @@ impl Contract {
         project: Project,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: Option<revive_llvm_context::DebugConfig>,
+        debug_config: revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
-        let emit_debug_info = optimizer_settings.emit_debug_info();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
 
         let version = project.version.clone();
@@ -118,21 +116,12 @@ impl Contract {
             _ => llvm.create_module(self.path.as_str()),
         };
 
-        let debug_info = if emit_debug_info {
-            let debug_info = DebugInfo::new(&module);
-            debug_info.initialize_module(&llvm, &module);
-            Some(debug_info)
-        } else {
-            None
-        };
-
         let mut context = revive_llvm_context::PolkaVMContext::new(
             &llvm,
             module,
             optimizer,
             Some(project),
             include_metadata_hash,
-            debug_info,
             debug_config,
         );
         context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());

@@ -89,7 +89,7 @@ where
     /// The debug info of the current module.
     debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
-    debug_config: Option<DebugConfig>,
+    debug_config: DebugConfig,
 
     /// The Solidity data.
     solidity_data: Option<SolidityData>,
@@ -209,8 +209,7 @@ where
         optimizer: Optimizer,
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
-        debug_info: Option<DebugInfo<'ctx>>,
-        debug_config: Option<DebugConfig>,
+        debug_config: DebugConfig,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
@@ -219,6 +218,11 @@ where
 
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
+        let debug_info = debug_config.emit_debug_info.then(|| {
+            let debug_info = DebugInfo::new(&module);
+            debug_info.initialize_module(llvm, &module);
+            debug_info
+        });
 
         Self {
             llvm,
@@ -259,9 +263,9 @@ where
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         target_machine.set_target_data(self.module());
 
-        if let Some(ref debug_config) = self.debug_config {
-            debug_config.dump_llvm_ir_unoptimized(contract_path, self.module())?;
-        }
+        self.debug_config
+            .dump_llvm_ir_unoptimized(contract_path, self.module())?;
+
         self.verify().map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` unoptimized LLVM IR verification error: {}",
@@ -279,9 +283,10 @@ where
                     error
                 )
             })?;
-        if let Some(ref debug_config) = self.debug_config {
-            debug_config.dump_llvm_ir_optimized(contract_path, self.module())?;
-        }
+
+        self.debug_config
+            .dump_llvm_ir_optimized(contract_path, self.module())?;
+
         self.verify().map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` optimized LLVM IR verification error: {}",
@@ -648,8 +653,8 @@ where
     }
 
     /// Returns the debug config reference.
-    pub fn debug_config(&self) -> Option<&DebugConfig> {
-        self.debug_config.as_ref()
+    pub fn debug_config(&self) -> &DebugConfig {
+        &self.debug_config
     }
 
     /// Appends a new basic block to the current function.

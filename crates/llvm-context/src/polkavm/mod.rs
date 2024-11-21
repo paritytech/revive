@@ -29,7 +29,7 @@ pub fn build_assembly_text(
     contract_path: &str,
     bytecode: &[u8],
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
-    debug_config: Option<&DebugConfig>,
+    debug_config: &DebugConfig,
 ) -> anyhow::Result<Build> {
     let program_blob = ProgramBlob::parse(bytecode.into())
         .map_err(anyhow::Error::msg)
@@ -49,9 +49,7 @@ pub fn build_assembly_text(
         format!("Failed to convert disassembled code to string for contract: {contract_path}")
     })?;
 
-    if let Some(debug_config) = debug_config {
-        debug_config.dump_assembly(contract_path, &assembly_text)?;
-    }
+    debug_config.dump_assembly(contract_path, &assembly_text)?;
 
     Ok(Build::new(
         assembly_text.to_owned(),
@@ -98,7 +96,7 @@ pub trait Dependency {
         path: &str,
         optimizer_settings: OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: Option<DebugConfig>,
+        debug_config: DebugConfig,
     ) -> anyhow::Result<String>;
 
     /// Resolves a full contract path.
@@ -118,7 +116,7 @@ impl Dependency for DummyDependency {
         _path: &str,
         _optimizer_settings: OptimizerSettings,
         _include_metadata_hash: bool,
-        _debug_config: Option<DebugConfig>,
+        _debug_config: DebugConfig,
     ) -> anyhow::Result<String> {
         Ok(String::new())
     }

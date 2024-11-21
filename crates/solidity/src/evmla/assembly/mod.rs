@@ -212,9 +212,10 @@ where
     ) -> anyhow::Result<()> {
         let full_path = self.full_path().to_owned();
 
-        if let Some(debug_config) = context.debug_config() {
-            debug_config.dump_evmla(full_path.as_str(), self.to_string().as_str())?;
-        }
+        context
+            .debug_config()
+            .dump_evmla(full_path.as_str(), self.to_string().as_str())?;
+
         let deploy_code_blocks = EtherealIR::get_blocks(
             context.evmla().version.to_owned(),
             revive_llvm_context::PolkaVMCodeType::Deploy,
@@ -228,9 +229,11 @@ where
             .ok_or_else(|| anyhow::anyhow!("Runtime code data not found"))?
             .remove("0")
             .expect("Always exists");
-        if let Some(debug_config) = context.debug_config() {
-            debug_config.dump_evmla(full_path.as_str(), data.to_string().as_str())?;
-        }
+
+        context
+            .debug_config()
+            .dump_evmla(full_path.as_str(), data.to_string().as_str())?;
+
         let runtime_code_instructions = match data {
             Data::Assembly(assembly) => assembly
                 .code
@@ -253,9 +256,11 @@ where
         blocks.extend(runtime_code_blocks);
         let mut ethereal_ir =
             EtherealIR::new(context.evmla().version.to_owned(), extra_metadata, blocks)?;
-        if let Some(debug_config) = context.debug_config() {
-            debug_config.dump_ethir(full_path.as_str(), ethereal_ir.to_string().as_str())?;
-        }
+
+        context
+            .debug_config()
+            .dump_ethir(full_path.as_str(), ethereal_ir.to_string().as_str())?;
+
         ethereal_ir.declare(context)?;
         ethereal_ir.into_llvm(context)?;
 

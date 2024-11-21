@@ -63,7 +63,7 @@ impl Project {
         self,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: Option<revive_llvm_context::DebugConfig>,
+        debug_config: revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
         let results: BTreeMap<String, anyhow::Result<ContractBuild>> = self
@@ -238,7 +238,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
         identifier: &str,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: Option<revive_llvm_context::DebugConfig>,
+        debug_config: revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<String> {
         let contract_path = project.resolve_path(identifier)?;
         let contract = project

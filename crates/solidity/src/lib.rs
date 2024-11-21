@@ -54,7 +54,7 @@ pub fn yul(
     solc: &mut SolcCompiler,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
+    debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -85,7 +85,7 @@ pub fn llvm_ir(
     input_files: &[PathBuf],
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
+    debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -119,7 +119,7 @@ pub fn standard_output(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
+    debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
@@ -178,7 +178,7 @@ pub fn standard_output(
         libraries,
         solc_pipeline,
         &solc_version,
-        debug_config.as_ref(),
+        &debug_config,
     )?;
 
     let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
@@ -195,7 +195,7 @@ pub fn standard_json(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
+    debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
@@ -240,7 +240,7 @@ pub fn standard_json(
         libraries,
         solc_pipeline,
         &solc_version,
-        debug_config.as_ref(),
+        &debug_config,
     )?;
 
     if detect_missing_libraries {
@@ -271,7 +271,7 @@ pub fn combined_json(
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<Warning>>,
-    debug_config: Option<revive_llvm_context::DebugConfig>,
+    debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,
 ) -> anyhow::Result<()> {

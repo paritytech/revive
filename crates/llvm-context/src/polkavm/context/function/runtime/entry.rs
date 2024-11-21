@@ -125,6 +125,8 @@ impl Entry {
     where
         D: Dependency + Clone,
     {
+        context.set_debug_location(0, 0, None)?;
+
         let is_deploy = context
             .current_function()
             .borrow()
@@ -214,7 +216,7 @@ where
             true,
         );
 
-        context.set_current_function(runtime::FUNCTION_ENTRY)?;
+        context.set_current_function(runtime::FUNCTION_ENTRY, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         Self::initialize_globals(context)?;
@@ -224,6 +226,8 @@ where
         context.build_unconditional_branch(context.current_function().borrow().return_block());
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_unreachable();
+
+        context.pop_debug_scope();
 
         Ok(())
     }

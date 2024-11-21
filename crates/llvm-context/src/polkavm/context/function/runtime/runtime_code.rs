@@ -54,11 +54,14 @@ where
     }
 
     fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_RUNTIME_CODE)?;
+        context.set_current_function(runtime::FUNCTION_RUNTIME_CODE, None)?;
 
         context.set_basic_block(context.current_function().borrow().entry_block());
         context.set_code_type(CodeType::Runtime);
+
         self.inner.into_llvm(context)?;
+        context.set_debug_location(0, 0, None)?;
+
         match context
             .basic_block()
             .get_last_instruction()
@@ -72,6 +75,8 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_unreachable();
+
+        context.pop_debug_scope();
 
         Ok(())
     }

@@ -29,16 +29,16 @@ fn invoke_lld(cmd_args: &[&str]) -> bool {
     unsafe { LLDELFLink(args.as_ptr(), args.len()) == 0 }
 }
 
-fn polkavm_linker<T: AsRef<[u8]>>(code: T, strip_binary: Option<bool>) -> anyhow::Result<Vec<u8>> {
+pub fn polkavm_linker<T: AsRef<[u8]>>(code: T, strip_binary: bool) -> anyhow::Result<Vec<u8>> {
     let mut config = polkavm_linker::Config::default();
-    config.set_strip(strip_binary.unwrap_or(true));
+    config.set_strip(strip_binary);
     config.set_optimize(true);
 
     polkavm_linker::program_from_elf(config, code.as_ref())
         .map_err(|reason| anyhow::anyhow!("polkavm linker failed: {}", reason))
 }
 
-pub fn link<T: AsRef<[u8]>>(input: T, strip_binary: Option<bool>) -> anyhow::Result<Vec<u8>> {
+pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
     let dir = tempfile::tempdir().expect("failed to create temp directory for linking");
     let output_path = dir.path().join("out.so");
     let object_path = dir.path().join("out.o");
@@ -79,10 +79,5 @@ pub fn link<T: AsRef<[u8]>>(input: T, strip_binary: Option<bool>) -> anyhow::Res
         return Err(anyhow::anyhow!("ld.lld failed"));
     }
 
-    if env::var("PVM_LINKER_DUMP_SO").is_ok() {
-        fs::copy(&output_path, "/tmp/out.so")?;
-    };
-
-    let blob = fs::read(&output_path)?;
-    polkavm_linker(blob, strip_binary)
+    Ok(fs::read(&output_path)?)
 }

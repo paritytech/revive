@@ -305,11 +305,17 @@ where
                 )
             })?;
 
-        let bytecode = revive_linker::link(buffer.as_slice(), Some(self.debug_info().is_none()))?;
+        let shared_object = revive_linker::link(buffer.as_slice())?;
+
+        self.debug_config
+            .dump_object(contract_path, &shared_object)?;
+
+        let polkavm_bytecode =
+            revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
         let build = match crate::polkavm::build_assembly_text(
             contract_path,
-            &bytecode,
+            &polkavm_bytecode,
             metadata_hash,
             self.debug_config(),
         ) {

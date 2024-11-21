@@ -39,7 +39,11 @@ fn set_rustc_link_flags(llvm_config_path: &Path) {
         "LLVMTargetParser",
         "LLVMBinaryFormat",
         "LLVMDemangle",
-        // Required by `llvm-sys`
+        // The `llvm-sys` crate relies on `llvm-config` to obtain a list of required LLVM libraries
+        // during the build process. This works well in typical native environments, where `llvm-config`
+        // can accurately list the necessary libraries.
+        // However, when cross-compiling to WebAssembly using Emscripten, `llvm-config` fails to recognize
+        // JavaScript-based libraries, making it necessary to manually inject the required dependencies.
         "LLVMRISCVDisassembler",
         "LLVMRISCVAsmParser",
         "LLVMRISCVCodeGen",

@@ -518,28 +518,28 @@ where
         name: &str,
         line_no: u32,
     ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
-        let Some(dinfo) = self.debug_info() else {
+        let Some(debug_info) = self.debug_info() else {
             anyhow::bail!("expected debug-info builders");
         };
 
-        let di_builder = dinfo.builder();
-        let di_file = dinfo.compilation_unit().get_file();
-        let di_scope = di_file.as_debug_info_scope();
-        let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
-        let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
-        let subroutine_type =
-            di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
-        Ok(di_builder.create_function(
-            di_scope,
+        let builder = debug_info.builder();
+        let file = debug_info.compilation_unit().get_file();
+        let scope = file.as_debug_info_scope();
+        let flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
+        let return_type = debug_info.create_word_type(Some(flags))?.as_type();
+        let subroutine_type = builder.create_subroutine_type(file, Some(return_type), &[], flags);
+
+        Ok(builder.create_function(
+            scope,
             name,
             None,
-            di_file,
+            file,
             line_no,
             subroutine_type,
             false,
             true,
             1,
-            di_flags,
+            flags,
             false,
         ))
     }
@@ -550,34 +550,34 @@ where
         column: u32,
         scope: Option<DIScope<'ctx>>,
     ) -> anyhow::Result<()> {
-        let Some(dinfo) = self.debug_info() else {
+        let Some(debug_info) = self.debug_info() else {
             return Ok(());
         };
 
-        let di_scope = match scope {
+        let scope = match scope {
             Some(scp) => scp,
-            None => dinfo.top_scope().expect("expected a debug-info scope"),
+            None => debug_info.top_scope().expect("expected a debug-info scope"),
         };
-        let di_loc =
-            dinfo
+        let location =
+            debug_info
                 .builder()
-                .create_debug_location(self.llvm(), line, column, di_scope, None);
-        self.builder().set_current_debug_location(di_loc);
+                .create_debug_location(self.llvm(), line, column, scope, None);
+        self.builder().set_current_debug_location(location);
 
         Ok(())
     }
 
     /// Pushes a debug-info scope to the stack.
     pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
-        if let Some(dinfo) = self.debug_info() {
-            dinfo.push_scope(scope);
+        if let Some(debug_info) = self.debug_info() {
+            debug_info.push_scope(scope);
         }
     }
 
     /// Pops the top of the debug-info scope stack.
     pub fn pop_debug_scope(&self) {
-        if let Some(dinfo) = self.debug_info() {
-            dinfo.pop_scope();
+        if let Some(debug_info) = self.debug_info() {
+            debug_info.pop_scope();
         }
     }
 

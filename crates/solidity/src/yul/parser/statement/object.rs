@@ -219,10 +219,10 @@ where
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
-        if let Some(dinfo) = context.debug_info() {
-            let di_builder = dinfo.builder();
+        if let Some(debug_info) = context.debug_info() {
+            let di_builder = debug_info.builder();
             let object_name: &str = self.identifier.as_str();
-            let di_parent_scope = dinfo
+            let di_parent_scope = debug_info
                 .top_scope()
                 .expect("expected an existing debug-info scope");
             let object_scope = di_builder.create_namespace(di_parent_scope, object_name, true);

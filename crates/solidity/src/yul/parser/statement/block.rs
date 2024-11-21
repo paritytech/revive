@@ -157,13 +157,13 @@ where
 
         context.set_current_function(current_function.as_str(), Some(self.location.line))?;
 
-        if let Some(dinfo) = context.debug_info() {
-            let di_builder = dinfo.builder();
-            let di_scope = dinfo.top_scope().expect("expected a debug-info scope");
+        if let Some(debug_info) = context.debug_info() {
+            let di_builder = debug_info.builder();
+            let di_scope = debug_info.top_scope().expect("expected a debug-info scope");
             let di_block_scope = di_builder
                 .create_lexical_block(
                     di_scope,
-                    dinfo.compilation_unit().get_file(),
+                    debug_info.compilation_unit().get_file(),
                     self.location.line,
                     0,
                 )

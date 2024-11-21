@@ -153,8 +153,8 @@ impl Contract {
             )
         })?;
 
-        if let Some(dinfo) = context.debug_info() {
-            dinfo.finalize_module()
+        if let Some(debug_info) = context.debug_info() {
+            debug_info.finalize_module()
         }
 
         let build = context.build(self.path.as_str(), metadata_hash)?;

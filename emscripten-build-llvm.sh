@@ -14,7 +14,7 @@ fi
 
 source "${EMSDK_ROOT}/emsdk_env.sh"
 
-LLVM_SRC=$(PWD)/llvm-project
+LLVM_SRC="${PWD}/llvm-project"
 LLVM_NATIVE="${PWD}/build/llvm-tools"
 LLVM_WASM="${PWD}/build/llvm-wasm"
 

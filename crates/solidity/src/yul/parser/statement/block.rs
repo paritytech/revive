@@ -164,7 +164,7 @@ where
                 .create_lexical_block(
                     di_scope,
                     dinfo.compilation_unit().get_file(),
-                    std::cmp::min(self.location.line, u32::MAX as usize) as u32,
+                    self.location.line,
                     0,
                 )
                 .as_debug_info_scope();

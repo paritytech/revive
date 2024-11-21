@@ -47,7 +47,11 @@ impl Assignment {
                 .into());
             }
         };
-        let length = identifier.inner.len();
+        let length = identifier
+            .inner
+            .len()
+            .try_into()
+            .map_err(|_| Error::Parser(ParserError::InvalidLength))?;
 
         match lexer.peek()? {
             Token {

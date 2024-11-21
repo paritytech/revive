@@ -492,7 +492,7 @@ where
     }
 
     /// Sets the current active function. If debug-info generation is enabled, constructs a debug-scope and pushes in on the scope-stack.
-    pub fn set_current_function(&mut self, name: &str, line: Option<usize>) -> anyhow::Result<()> {
+    pub fn set_current_function(&mut self, name: &str, line: Option<u32>) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
@@ -501,7 +501,7 @@ where
         if let Some(scope) = self.current_function().borrow().get_debug_scope() {
             self.push_debug_scope(scope);
         }
-        self.set_debug_location(line.unwrap_or(0), 0, None)?;
+        self.set_debug_location(line.unwrap_or_default(), 0, None)?;
 
         Ok(())
     }
@@ -541,24 +541,19 @@ where
 
     pub fn set_debug_location(
         &self,
-        line: usize,
-        column: usize,
+        line: u32,
+        column: u32,
         scope: Option<DIScope<'ctx>>,
     ) -> anyhow::Result<()> {
         if let Some(dinfo) = self.debug_info() {
-            let line_num: u32 = std::cmp::min(line, u32::MAX as usize) as u32;
-            let column_num: u32 = std::cmp::min(column, u32::MAX as usize) as u32;
             let di_scope = match scope {
                 Some(scp) => scp,
                 None => dinfo.top_scope().expect("expected a debug-info scope"),
             };
-            let di_loc = dinfo.builder().create_debug_location(
-                self.llvm(),
-                line_num,
-                column_num,
-                di_scope,
-                None,
-            );
+            let di_loc =
+                dinfo
+                    .builder()
+                    .create_debug_location(self.llvm(), line, column, di_scope, None);
             self.builder().set_current_debug_location(di_loc);
         }
         Ok(())

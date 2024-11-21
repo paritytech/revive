@@ -54,6 +54,10 @@ impl Integer {
             return None;
         };
 
+        let length = length
+            .try_into()
+            .expect("the YUL should be of reasonable size");
+
         let token = Token::new(
             Location::new(0, length),
             Lexeme::Literal(Literal::Integer(value)),

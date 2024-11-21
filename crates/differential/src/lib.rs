@@ -557,6 +557,7 @@ allocated bytes: 3711"#;
     }
 
     #[test]
+    #[ignore] // https://github.com/ethereum/go-ethereum/issues/30778
     fn bench_flipper() {
         let log_runtime = Evm::default()
             .code_blob(EVM_BIN_RUNTIME_FIXTURE.as_bytes().to_vec())

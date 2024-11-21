@@ -20,7 +20,7 @@ LLVM_WASM="${PWD}/build/llvm-wasm"
 
 ./clone-llvm.sh "${LLVM_SRC}"
 
-# Cross-compiling LLVM requires a native build of "llvm-tblgen" and "clang-tblgen"
+# Cross-compiling LLVM requires a native build of "llvm-tblgen", "clang-tblgen" and "llvm-config"
 if [ ! -d "${LLVM_NATIVE}" ]; then
     cmake -G Ninja \
         -S "${LLVM_SRC}/llvm" \

@@ -57,7 +57,7 @@ pub enum Error {
         /// The list of invalid attributes.
         values: BTreeSet<String>,
     },
-    /// Invalid
+    /// Invalid code length.
     #[error("The line or column length exceed the maximum of u32::MAX")]
     InvalidLength,
 }

@@ -496,7 +496,8 @@ where
             .expect("Must be declared before use")
     }
 
-    /// Sets the current active function. If debug-info generation is enabled, constructs a debug-scope and pushes in on the scope-stack.
+    /// Sets the current active function. If debug-info generation is enabled,
+    /// constructs a debug-scope and pushes in on the scope-stack.
     pub fn set_current_function(&mut self, name: &str, line: Option<u32>) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
@@ -517,31 +518,30 @@ where
         name: &str,
         line_no: u32,
     ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
-        if let Some(dinfo) = self.debug_info() {
-            let di_builder = dinfo.builder();
-            let di_file = dinfo.compilation_unit().get_file();
-            let di_scope = di_file.as_debug_info_scope();
-            let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
-            let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
-            let subroutine_type =
-                di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
-            let func_scope = di_builder.create_function(
-                di_scope,
-                name,
-                None,
-                di_file,
-                line_no,
-                subroutine_type,
-                false,
-                true,
-                1,
-                di_flags,
-                false,
-            );
-            Ok(func_scope)
-        } else {
-            anyhow::bail!("expected debug-info builders")
-        }
+        let Some(dinfo) = self.debug_info() else {
+            anyhow::bail!("expected debug-info builders");
+        };
+
+        let di_builder = dinfo.builder();
+        let di_file = dinfo.compilation_unit().get_file();
+        let di_scope = di_file.as_debug_info_scope();
+        let di_flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
+        let ret_type = dinfo.create_word_type(Some(di_flags))?.as_type();
+        let subroutine_type =
+            di_builder.create_subroutine_type(di_file, Some(ret_type), &[], di_flags);
+        Ok(di_builder.create_function(
+            di_scope,
+            name,
+            None,
+            di_file,
+            line_no,
+            subroutine_type,
+            false,
+            true,
+            1,
+            di_flags,
+            false,
+        ))
     }
 
     pub fn set_debug_location(
@@ -550,17 +550,20 @@ where
         column: u32,
         scope: Option<DIScope<'ctx>>,
     ) -> anyhow::Result<()> {
-        if let Some(dinfo) = self.debug_info() {
-            let di_scope = match scope {
-                Some(scp) => scp,
-                None => dinfo.top_scope().expect("expected a debug-info scope"),
-            };
-            let di_loc =
-                dinfo
-                    .builder()
-                    .create_debug_location(self.llvm(), line, column, di_scope, None);
-            self.builder().set_current_debug_location(di_loc);
-        }
+        let Some(dinfo) = self.debug_info() else {
+            return Ok(());
+        };
+
+        let di_scope = match scope {
+            Some(scp) => scp,
+            None => dinfo.top_scope().expect("expected a debug-info scope"),
+        };
+        let di_loc =
+            dinfo
+                .builder()
+                .create_debug_location(self.llvm(), line, column, di_scope, None);
+        self.builder().set_current_debug_location(di_loc);
+
         Ok(())
     }
 

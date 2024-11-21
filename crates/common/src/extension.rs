@@ -41,3 +41,6 @@ pub static EXTENSION_POLKAVM_ASSEMBLY: &str = "pvmasm";
 
 /// The PolkaVM bytecode file extension.
 pub static EXTENSION_POLKAVM_BINARY: &str = "pvm";
+
+/// The ELF shared object file extension.
+pub static EXTENSION_SHARED_OBJECT: &str = "so";

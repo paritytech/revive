@@ -29,7 +29,7 @@ fn invoke_lld(cmd_args: &[&str]) -> bool {
     unsafe { LLDELFLink(args.as_ptr(), args.len()) == 0 }
 }
 
-fn polkavm_linker<T: AsRef<[u8]>>(code: T) -> anyhow::Result<Vec<u8>> {
+pub fn polkavm_linker<T: AsRef<[u8]>>(code: T) -> anyhow::Result<Vec<u8>> {
     let mut config = polkavm_linker::Config::default();
     config.set_strip(true);
     config.set_optimize(true);
@@ -79,10 +79,5 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
         return Err(anyhow::anyhow!("ld.lld failed"));
     }
 
-    if env::var("PVM_LINKER_DUMP_SO").is_ok() {
-        fs::copy(&output_path, "/tmp/out.so")?;
-    };
-
-    let blob = fs::read(&output_path)?;
-    polkavm_linker(blob)
+    Ok(fs::read(&output_path)?)
 }

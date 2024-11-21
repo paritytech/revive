@@ -521,7 +521,6 @@ where
         let Some(debug_info) = self.debug_info() else {
             anyhow::bail!("expected debug-info builders");
         };
-
         let builder = debug_info.builder();
         let file = debug_info.compilation_unit().get_file();
         let scope = file.as_debug_info_scope();
@@ -544,6 +543,11 @@ where
         ))
     }
 
+    /// Set the debug info location.
+    ///
+    /// No-op if the emitting debug info is disabled.
+    ///
+    /// If `scope` is `None` the top scope will be used.
     pub fn set_debug_location(
         &self,
         line: u32,
@@ -553,7 +557,6 @@ where
         let Some(debug_info) = self.debug_info() else {
             return Ok(());
         };
-
         let scope = match scope {
             Some(scp) => scp,
             None => debug_info.top_scope().expect("expected a debug-info scope"),
@@ -562,6 +565,7 @@ where
             debug_info
                 .builder()
                 .create_debug_location(self.llvm(), line, column, scope, None);
+
         self.builder().set_current_debug_location(location);
 
         Ok(())

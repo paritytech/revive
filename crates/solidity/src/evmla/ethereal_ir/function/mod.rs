@@ -1175,7 +1175,7 @@ where
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
-        context.set_current_function(self.name.as_str())?;
+        context.set_current_function(self.name.as_str(), None)?;
 
         for (key, blocks) in self.blocks.iter() {
             for (index, block) in blocks.iter().enumerate() {
@@ -1296,6 +1296,8 @@ where
                 context.build_return(Some(&return_value));
             }
         }
+
+        context.pop_debug_scope();
 
         Ok(())
     }

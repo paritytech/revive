@@ -69,6 +69,9 @@ impl String {
             .to_owned();
 
         let literal = Self::new(string, is_hex_string);
+        let length = length
+            .try_into()
+            .expect("the YUL should be of reasonable size");
 
         Some(Token::new(
             Location::new(0, length),

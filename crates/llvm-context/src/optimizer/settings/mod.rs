@@ -9,7 +9,7 @@ use itertools::Itertools;
 
 use self::size_level::SizeLevel;
 
-/// The LLVM optimizer settings.
+/// The LLVM optimizer and code-gen settings.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]
 pub struct Settings {
     /// The middle-end optimization level.

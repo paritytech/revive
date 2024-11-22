@@ -66,11 +66,12 @@ fn main_inner() -> anyhow::Result<()> {
     let debug_config = match arguments.debug_output_directory {
         Some(ref debug_output_directory) => {
             std::fs::create_dir_all(debug_output_directory.as_path())?;
-            Some(revive_llvm_context::DebugConfig::new(
-                debug_output_directory.to_owned(),
-            ))
+            revive_llvm_context::DebugConfig::new(
+                Some(debug_output_directory.to_owned()),
+                arguments.emit_source_debug_info,
+            )
         }
-        None => None,
+        None => revive_llvm_context::DebugConfig::new(None, arguments.emit_source_debug_info),
     };
 
     let (input_files, remappings) = arguments.split_input_files_and_remappings()?;

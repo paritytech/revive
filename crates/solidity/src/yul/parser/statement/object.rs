@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use inkwell::debug_info::AsDIScope;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -217,16 +219,30 @@ where
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+        if let Some(debug_info) = context.debug_info() {
+            let di_builder = debug_info.builder();
+            let object_name: &str = self.identifier.as_str();
+            let di_parent_scope = debug_info
+                .top_scope()
+                .expect("expected an existing debug-info scope");
+            let object_scope = di_builder.create_namespace(di_parent_scope, object_name, true);
+            context.push_debug_scope(object_scope.as_debug_info_scope());
+        }
+
         if self.identifier.ends_with("_deployed") {
             revive_llvm_context::PolkaVMImmutableDataLoadFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code).into_llvm(context)?;
         } else {
             revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;
         }
+        context.set_debug_location(self.location.line, 0, None)?;
 
         if let Some(object) = self.inner_object {
             object.into_llvm(context)?;
         }
+        context.set_debug_location(self.location.line, 0, None)?;
+
+        context.pop_debug_scope();
 
         Ok(())
     }

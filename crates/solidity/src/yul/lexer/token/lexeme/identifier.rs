@@ -26,7 +26,10 @@ impl Identifier {
         let end = input.find(Self::cannot_continue).unwrap_or(input.len());
 
         let inner = input[..end].to_string();
-        let length = inner.len();
+        let length = inner
+            .len()
+            .try_into()
+            .expect("the YUL should be of reasonable size");
 
         if let Some(token) = Keyword::parse(inner.as_str()) {
             return Some(token);

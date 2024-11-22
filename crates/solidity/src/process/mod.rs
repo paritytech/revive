@@ -85,17 +85,16 @@ pub fn call(input: Input) -> anyhow::Result<Output> {
     })?;
 
     #[cfg(debug_assertions)]
-    if let Some(dbg_config) = &input.debug_config {
-        dbg_config
-            .dump_stage_output(&input.contract.path, Some("stage"), &input_json)
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "{:?} failed to log the recursive process output: {:?}",
-                    executable,
-                    error,
-                )
-            })?;
-    }
+    input
+        .debug_config
+        .dump_stage_output(&input.contract.path, Some("stage"), &input_json)
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "{:?} failed to log the recursive process output: {:?}",
+                executable,
+                error,
+            )
+        })?;
 
     process
         .stdin

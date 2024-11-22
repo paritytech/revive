@@ -11,6 +11,8 @@ pub mod yul_data;
 
 use std::collections::HashMap;
 
+use inkwell::debug_info::AsDIScope;
+
 use crate::optimizer::settings::size_level::SizeLevel;
 use crate::optimizer::Optimizer;
 use crate::polkavm::context::attribute::Attribute;
@@ -92,6 +94,14 @@ impl<'ctx> Function<'ctx> {
     /// Returns the LLVM function declaration.
     pub fn declaration(&self) -> Declaration<'ctx> {
         self.declaration
+    }
+
+    /// Returns the debug-info scope.
+    pub fn get_debug_scope(&self) -> Option<inkwell::debug_info::DIScope<'ctx>> {
+        self.declaration()
+            .function_value()
+            .get_subprogram()
+            .map(|scp| scp.as_debug_info_scope())
     }
 
     /// Returns the N-th parameter of the function.

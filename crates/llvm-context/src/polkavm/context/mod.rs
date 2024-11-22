@@ -5,7 +5,7 @@ pub mod argument;
 pub mod attribute;
 pub mod build;
 pub mod code_type;
-// pub mod debug_info;
+pub mod debug_info;
 pub mod evmla_data;
 pub mod function;
 pub mod global;
@@ -21,6 +21,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use inkwell::debug_info::AsDIScope;
+use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 
@@ -35,7 +37,7 @@ use self::address_space::AddressSpace;
 use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
-// use self::debug_info::DebugInfo;
+use self::debug_info::DebugInfo;
 use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
@@ -85,9 +87,9 @@ where
     /// Whether to append the metadata hash at the end of bytecode.
     include_metadata_hash: bool,
     /// The debug info of the current module.
-    // debug_info: DebugInfo<'ctx>,
+    debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
-    debug_config: Option<DebugConfig>,
+    debug_config: DebugConfig,
 
     /// The Solidity data.
     solidity_data: Option<SolidityData>,
@@ -207,7 +209,7 @@ where
         optimizer: Optimizer,
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
-        debug_config: Option<DebugConfig>,
+        debug_config: DebugConfig,
     ) -> Self {
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
@@ -216,6 +218,11 @@ where
 
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
+        let debug_info = debug_config.emit_debug_info.then(|| {
+            let debug_info = DebugInfo::new(&module);
+            debug_info.initialize_module(llvm, &module);
+            debug_info
+        });
 
         Self {
             llvm,
@@ -232,7 +239,8 @@ where
 
             dependency_manager,
             include_metadata_hash,
-            // debug_info,
+
+            debug_info,
             debug_config,
 
             solidity_data: None,
@@ -255,9 +263,9 @@ where
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         target_machine.set_target_data(self.module());
 
-        if let Some(ref debug_config) = self.debug_config {
-            debug_config.dump_llvm_ir_unoptimized(contract_path, self.module())?;
-        }
+        self.debug_config
+            .dump_llvm_ir_unoptimized(contract_path, self.module())?;
+
         self.verify().map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` unoptimized LLVM IR verification error: {}",
@@ -275,9 +283,10 @@ where
                     error
                 )
             })?;
-        if let Some(ref debug_config) = self.debug_config {
-            debug_config.dump_llvm_ir_optimized(contract_path, self.module())?;
-        }
+
+        self.debug_config
+            .dump_llvm_ir_optimized(contract_path, self.module())?;
+
         self.verify().map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` optimized LLVM IR verification error: {}",
@@ -298,11 +307,11 @@ where
 
         let shared_object = revive_linker::link(buffer.as_slice())?;
 
-        if let Some(ref debug_config) = self.debug_config {
-            debug_config.dump_object(contract_path, &shared_object)?;
-        }
+        self.debug_config
+            .dump_object(contract_path, &shared_object)?;
 
-        let polkavm_bytecode = revive_linker::polkavm_linker(shared_object)?;
+        let polkavm_bytecode =
+            revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
         let build = match crate::polkavm::build_assembly_text(
             contract_path,
@@ -428,6 +437,21 @@ where
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let value = self.module().add_function(name, r#type, linkage);
 
+        if self.debug_info().is_some() {
+            self.builder().unset_current_debug_location();
+            let func_scope = match value.get_subprogram() {
+                None => {
+                    let fn_name = value.get_name().to_str()?;
+                    let scp = self.build_function_debug_info(fn_name, 0)?;
+                    value.set_subprogram(scp);
+                    scp
+                }
+                Some(scp) => scp,
+            };
+            self.push_debug_scope(func_scope.as_debug_info_scope());
+            self.set_debug_location(0, 0, Some(func_scope.as_debug_info_scope()))?;
+        }
+
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
@@ -461,6 +485,8 @@ where
         let function = Rc::new(RefCell::new(function));
         self.functions.insert(name.to_string(), function.clone());
 
+        self.pop_debug_scope();
+
         Ok(function)
     }
 
@@ -476,13 +502,93 @@ where
             .expect("Must be declared before use")
     }
 
-    /// Sets the current active function.
-    pub fn set_current_function(&mut self, name: &str) -> anyhow::Result<()> {
+    /// Sets the current active function. If debug-info generation is enabled,
+    /// constructs a debug-scope and pushes in on the scope-stack.
+    pub fn set_current_function(&mut self, name: &str, line: Option<u32>) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
         self.current_function = Some(function);
+
+        if let Some(scope) = self.current_function().borrow().get_debug_scope() {
+            self.push_debug_scope(scope);
+        }
+        self.set_debug_location(line.unwrap_or_default(), 0, None)?;
+
         Ok(())
+    }
+
+    /// Builds a debug-info scope for a function.
+    pub fn build_function_debug_info(
+        &self,
+        name: &str,
+        line_no: u32,
+    ) -> anyhow::Result<inkwell::debug_info::DISubprogram<'ctx>> {
+        let Some(debug_info) = self.debug_info() else {
+            anyhow::bail!("expected debug-info builders");
+        };
+        let builder = debug_info.builder();
+        let file = debug_info.compilation_unit().get_file();
+        let scope = file.as_debug_info_scope();
+        let flags = inkwell::debug_info::DIFlagsConstants::PUBLIC;
+        let return_type = debug_info.create_word_type(Some(flags))?.as_type();
+        let subroutine_type = builder.create_subroutine_type(file, Some(return_type), &[], flags);
+
+        Ok(builder.create_function(
+            scope,
+            name,
+            None,
+            file,
+            line_no,
+            subroutine_type,
+            false,
+            true,
+            1,
+            flags,
+            false,
+        ))
+    }
+
+    /// Set the debug info location.
+    ///
+    /// No-op if the emitting debug info is disabled.
+    ///
+    /// If `scope` is `None` the top scope will be used.
+    pub fn set_debug_location(
+        &self,
+        line: u32,
+        column: u32,
+        scope: Option<DIScope<'ctx>>,
+    ) -> anyhow::Result<()> {
+        let Some(debug_info) = self.debug_info() else {
+            return Ok(());
+        };
+        let scope = match scope {
+            Some(scp) => scp,
+            None => debug_info.top_scope().expect("expected a debug-info scope"),
+        };
+        let location =
+            debug_info
+                .builder()
+                .create_debug_location(self.llvm(), line, column, scope, None);
+
+        self.builder().set_current_debug_location(location);
+
+        Ok(())
+    }
+
+    /// Pushes a debug-info scope to the stack.
+    pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
+        if let Some(debug_info) = self.debug_info() {
+            debug_info.push_scope(scope);
+        }
+    }
+
+    /// Pops the top of the debug-info scope stack.
+    pub fn pop_debug_scope(&self) {
+        if let Some(debug_info) = self.debug_info() {
+            debug_info.pop_scope();
+        }
     }
 
     /// Pushes a new loop context to the stack.
@@ -554,9 +660,14 @@ where
             .expect("The dependency manager is unset")
     }
 
+    /// Returns the debug info.
+    pub fn debug_info(&self) -> Option<&DebugInfo<'ctx>> {
+        self.debug_info.as_ref()
+    }
+
     /// Returns the debug config reference.
-    pub fn debug_config(&self) -> Option<&DebugConfig> {
-        self.debug_config.as_ref()
+    pub fn debug_config(&self) -> &DebugConfig {
+        &self.debug_config
     }
 
     /// Appends a new basic block to the current function.

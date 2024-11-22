@@ -15,12 +15,12 @@ pub struct Token {
     /// The lexeme.
     pub lexeme: Lexeme,
     /// The token length, including whitespaces.
-    pub length: usize,
+    pub length: u32,
 }
 
 impl Token {
     /// A shortcut constructor.
-    pub fn new(location: Location, lexeme: Lexeme, length: usize) -> Self {
+    pub fn new(location: Location, lexeme: Lexeme, length: u32) -> Self {
         Self {
             location,
             lexeme,

@@ -1,4 +1,7 @@
 #!/bin/bash
+
+set -euo pipefail
+
 # Default directory for cloning the llvm-project repository
 DEFAULT_DIR="llvm-project"
 

@@ -3,7 +3,7 @@ import * as path from 'path';
 const outputDir = 'artifacts';
 const binExtension = ':C.pvm';
 const asmExtension = ':C.pvmasm';
-const llvmExtension = '.ll'
+const llvmExtension = '.ll';
 const contractSolFilename = 'contract.sol';
 const contractYulFilename = 'contract.yul';
 const contractOptimizedLLVMFilename = contractSolFilename + '.C.optimized';

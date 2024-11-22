@@ -37,7 +37,8 @@ where
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
-    let gas = context
+    // TODO: What to supply here? Is there a weight to gas?
+    let _gas = context
         .builder()
         .build_int_truncate(gas, context.integer_type(64), "gas")?;
 
@@ -59,7 +60,7 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        gas.as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
         context.integer_const(64, 0).as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         value_pointer.value.as_basic_value_enum(),
@@ -120,7 +121,8 @@ where
     let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
-    let gas = context
+    // TODO: What to supply here? Is there a weight to gas?
+    let _gas = context
         .builder()
         .build_int_truncate(gas, context.integer_type(64), "gas")?;
 
@@ -137,7 +139,7 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        gas.as_basic_value_enum(),
+        context.integer_const(64, 0).as_basic_value_enum(),
         context.integer_const(64, 0).as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),

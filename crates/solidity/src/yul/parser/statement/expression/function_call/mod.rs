@@ -807,7 +807,6 @@ impl FunctionCall {
                     context,
                     gas,
                     address,
-                    None,
                     input_offset,
                     input_size,
                     output_offset,

@@ -221,11 +221,11 @@ where
         include_metadata_hash: bool,
         debug_config: DebugConfig,
     ) -> Self {
+        Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
-        Self::set_data_layout(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);

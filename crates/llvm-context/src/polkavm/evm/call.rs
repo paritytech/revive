@@ -90,7 +90,7 @@ where
     let is_success = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         success,
-        context.xlen_type().const_zero(),
+        context.integer_const(revive_common::BIT_LENGTH_X64, 0),
         "is_success",
     )?;
 

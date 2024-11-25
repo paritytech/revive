@@ -9,7 +9,7 @@
     "solc": "^0.8.28"
   },
   "scripts": {
-    "build": "cp -r ../target/wasm32-unknown-emscripten/release/resolc.{js,wasm} ./src && npx rollup -c",
+    "build": "cp ../target/wasm32-unknown-emscripten/release/resolc.js ../target/wasm32-unknown-emscripten/release/resolc.wasm ./src && npx rollup -c",
     "test": "npm run build && node run_revive.js"
   },
   "devDependencies": {

@@ -56,7 +56,7 @@ impl Output {
         libraries: BTreeMap<String, BTreeMap<String, String>>,
         pipeline: SolcPipeline,
         solc_version: &SolcVersion,
-        debug_config: Option<&revive_llvm_context::DebugConfig>,
+        debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Project> {
         if let SolcPipeline::EVMLA = pipeline {
             self.preprocess_dependencies()?;
@@ -90,9 +90,7 @@ impl Output {
                             continue;
                         }
 
-                        if let Some(debug_config) = debug_config {
-                            debug_config.dump_yul(full_path.as_str(), ir_optimized.as_str())?;
-                        }
+                        debug_config.dump_yul(full_path.as_str(), ir_optimized.as_str())?;
 
                         let mut lexer = Lexer::new(ir_optimized.to_owned());
                         let object = Object::parse(&mut lexer, None).map_err(|error| {

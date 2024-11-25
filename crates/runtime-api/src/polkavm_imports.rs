@@ -26,6 +26,8 @@ pub static BLOCK_NUMBER: &str = "block_number";
 
 pub static CALL: &str = "call";
 
+pub static DELEGATE_CALL: &str = "delegate_call";
+
 pub static CALLER: &str = "caller";
 
 pub static CHAIN_ID: &str = "chain_id";
@@ -64,7 +66,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 26] = [
+pub static IMPORTS: [&str; 27] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -73,6 +75,7 @@ pub static IMPORTS: [&str; 26] = [
     BLOCK_HASH,
     BLOCK_NUMBER,
     CALL,
+    DELEGATE_CALL,
     CALLER,
     CHAIN_ID,
     CODE_SIZE,

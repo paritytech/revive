@@ -19,7 +19,7 @@ pub struct Input {
     /// The optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
-    pub debug_config: Option<revive_llvm_context::DebugConfig>,
+    pub debug_config: revive_llvm_context::DebugConfig,
 }
 
 impl Input {
@@ -29,7 +29,7 @@ impl Input {
         project: Project,
         include_metadata_hash: bool,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
-        debug_config: Option<revive_llvm_context::DebugConfig>,
+        debug_config: revive_llvm_context::DebugConfig,
     ) -> Self {
         Self {
             contract,

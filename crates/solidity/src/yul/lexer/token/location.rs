@@ -7,9 +7,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq)]
 pub struct Location {
     /// The line number, starting from 1.
-    pub line: usize,
+    pub line: u32,
     /// The column number, starting from 1.
-    pub column: usize,
+    pub column: u32,
 }
 
 impl Default for Location {
@@ -20,13 +20,13 @@ impl Default for Location {
 
 impl Location {
     /// Creates a default location.
-    pub fn new(line: usize, column: usize) -> Self {
+    pub fn new(line: u32, column: u32) -> Self {
         Self { line, column }
     }
 
     /// Mutates the location by shifting the original one down by `lines` and
     /// setting the column to `column`.
-    pub fn shift_down(&mut self, lines: usize, column: usize) {
+    pub fn shift_down(&mut self, lines: u32, column: u32) {
         if lines == 0 {
             self.shift_right(column);
             return;
@@ -37,7 +37,7 @@ impl Location {
     }
 
     /// Mutates the location by shifting the original one rightward by `columns`.
-    pub fn shift_right(&mut self, columns: usize) {
+    pub fn shift_right(&mut self, columns: u32) {
         self.column += columns;
     }
 }

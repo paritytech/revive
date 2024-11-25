@@ -24,6 +24,9 @@ static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Def
 static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
     Lazy::new(Default::default);
 
+const DEBUG_CONFIG: revive_llvm_context::DebugConfig =
+    revive_llvm_context::DebugConfig::new(None, true);
+
 #[derive(Hash, PartialEq, Eq)]
 struct CachedBlob {
     contract_name: String,
@@ -104,9 +107,10 @@ pub fn build_solidity_with_options(
 
     let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
 
-    let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
+    let project =
+        output.try_to_project(sources, libraries, pipeline, &solc_version, &DEBUG_CONFIG)?;
 
-    let build: crate::Build = project.compile(optimizer_settings, false, None)?;
+    let build: crate::Build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
@@ -198,7 +202,8 @@ pub fn build_solidity_and_detect_missing_libraries(
 
     let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
 
-    let project = output.try_to_project(sources, libraries, pipeline, &solc_version, None)?;
+    let project =
+        output.try_to_project(sources, libraries, pipeline, &solc_version, &DEBUG_CONFIG)?;
 
     let missing_libraries = project.get_missing_libraries();
     missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;
@@ -219,7 +224,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
         source_code,
         None,
     )?;
-    let _build = project.compile(optimizer_settings, false, None)?;
+    let _build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
 
     Ok(())
 }

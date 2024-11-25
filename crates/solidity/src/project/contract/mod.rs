@@ -79,7 +79,7 @@ impl Contract {
         project: Project,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: Option<revive_llvm_context::DebugConfig>,
+        debug_config: revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
@@ -104,6 +104,7 @@ impl Contract {
 
         let module = match self.ir {
             IR::LLVMIR(ref llvm_ir) => {
+                // Create the output module
                 let memory_buffer =
                     inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(
                         llvm_ir.source.as_bytes(),
@@ -114,6 +115,7 @@ impl Contract {
             }
             _ => llvm.create_module(self.path.as_str()),
         };
+
         let mut context = revive_llvm_context::PolkaVMContext::new(
             &llvm,
             module,
@@ -150,6 +152,10 @@ impl Contract {
                 error
             )
         })?;
+
+        if let Some(debug_info) = context.debug_info() {
+            debug_info.finalize_module()
+        }
 
         let build = context.build(self.path.as_str(), metadata_hash)?;
 

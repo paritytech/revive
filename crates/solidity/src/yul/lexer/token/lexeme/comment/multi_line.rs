@@ -19,12 +19,20 @@ impl Comment {
         let end_position = input.find(Self::END).unwrap_or(input.len());
         let input = &input[..end_position];
 
-        let length = end_position + Self::END.len();
-        let lines = input.matches('\n').count();
+        let length = (end_position + Self::END.len())
+            .try_into()
+            .expect("the YUL should be of reasonable size");
+        let lines = input
+            .matches('\n')
+            .count()
+            .try_into()
+            .expect("the YUL should be of reasonable size");
         let columns = match input.rfind('\n') {
             Some(new_line) => end_position - (new_line + 1),
             None => end_position,
-        };
+        }
+        .try_into()
+        .expect("the YUL should be of reasonable size");
 
         Token::new(Location::new(lines, columns), Lexeme::Comment, length)
     }

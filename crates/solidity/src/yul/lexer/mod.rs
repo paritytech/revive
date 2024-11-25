@@ -21,7 +21,7 @@ pub struct Lexer {
     /// The input source code.
     input: String,
     /// The number of characters processed so far.
-    offset: usize,
+    offset: u32,
     /// The current location.
     location: Location,
     /// The peeked lexeme, waiting to be fetched.
@@ -48,8 +48,17 @@ impl Lexer {
             return Ok(peeked);
         }
 
-        while self.offset < self.input.len() {
-            let input = &self.input[self.offset..];
+        while self.offset
+            < self
+                .input
+                .len()
+                .try_into()
+                .map_err(|_| Error::InvalidLexeme {
+                    location: self.location,
+                    sequence: Default::default(),
+                })?
+        {
+            let input = &self.input[(self.offset as usize)..];
 
             if input.starts_with(|character| char::is_ascii_whitespace(&character)) {
                 if input.starts_with('\n') {
@@ -101,12 +110,13 @@ impl Lexer {
                 return Ok(token);
             }
 
-            let end = self.input[self.offset..]
+            let end = self.input[(self.offset as usize)..]
                 .find(char::is_whitespace)
                 .unwrap_or(self.input.len());
             return Err(Error::InvalidLexeme {
                 location: self.location,
-                sequence: self.input[self.offset..self.offset + end].to_owned(),
+                sequence: self.input[(self.offset as usize)..(self.offset as usize) + end]
+                    .to_owned(),
             });
         }
 

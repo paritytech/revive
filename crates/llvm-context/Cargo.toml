@@ -14,6 +14,7 @@ description = "Shared front end code of the revive PolkaVM compilers"
 doctest = false
 
 [features]
+default = ["riscv-64", "riscv-zbb"]
 riscv-zbb = []
 riscv-64 = [
     "revive-linker/riscv-64",

@@ -14,6 +14,7 @@ description = "Shared constants of the revive compiler"
 doctest = false
 
 [features]
+default = ["riscv-64"]
 riscv-64 = []
 
 [dependencies]

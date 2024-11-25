@@ -202,6 +202,16 @@ where
         );
     }
 
+    /// Configure the revive datalayout.
+    fn set_data_layout(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        let source_module = revive_stdlib::module(llvm, "revive_stdlib").unwrap();
+        let data_layout = source_module.get_data_layout();
+        module.set_data_layout(&data_layout);
+    }
+
     /// Initializes a new LLVM context.
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
@@ -215,6 +225,7 @@ where
         Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
         Self::set_module_flags(llvm, &module);
+        Self::set_data_layout(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);

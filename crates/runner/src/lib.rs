@@ -55,7 +55,7 @@ pub const BOB: H160 = H160([2u8; 20]);
 /// The charlie test account
 pub const CHARLIE: H160 = H160([3u8; 20]);
 /// Default gas limit
-pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000, 3 * 1024 * 1024);
+pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000_000, 3 * 1024 * 1024 * 1024);
 /// Default deposit limit
 pub const DEPOSIT_LIMIT: Balance = 10_000_000;
 

@@ -1,23 +1,8 @@
 use std::{env, fs, path::Path, process::Command};
 
-#[cfg(not(feature = "riscv-64"))]
-const TARGET_TRIPLE_FLAG: &str = "-triple=riscv32-unknown-unknown-elf";
-#[cfg(feature = "riscv-64")]
 const TARGET_TRIPLE_FLAG: &str = "-triple=riscv64-unknown-unknown-elf";
-
-#[cfg(not(feature = "riscv-64"))]
-const TARGET_FLAG: &str = "--target=riscv32";
-#[cfg(feature = "riscv-64")]
 const TARGET_FLAG: &str = "--target=riscv64";
-
-#[cfg(not(feature = "riscv-64"))]
-const TARGET_ARCH_FLAG: &str = "-march=rv32emac";
-#[cfg(feature = "riscv-64")]
 const TARGET_ARCH_FLAG: &str = "-march=rv64emac";
-
-#[cfg(not(feature = "riscv-64"))]
-const TARGET_ABI_FLAG: &str = "-mabi=ilp32e";
-#[cfg(feature = "riscv-64")]
 const TARGET_ABI_FLAG: &str = "-mabi=lp64e";
 
 const IMPORTS_SOUCE: &str = "src/polkavm_imports.c";

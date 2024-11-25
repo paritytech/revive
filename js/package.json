@@ -9,7 +9,15 @@
     "solc": "^0.8.28"
   },
   "scripts": {
-    "init": "cp -r ../target/wasm32-unknown-emscripten/release/resolc.{js,wasm} .",
-    "test": "npm run init && node run_revive.js"
+    "build": "cp -r ../target/wasm32-unknown-emscripten/release/resolc.{js,wasm} ./src && npx rollup -c",
+    "test": "npm run build && node run_revive.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-env": "^7.26.0",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-node-resolve": "^15.3.0",
+    "rollup": "^4.27.3",
+    "rollup-plugin-copy": "^3.5.0"
   }
 }

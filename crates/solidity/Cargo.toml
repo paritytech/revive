@@ -49,9 +49,5 @@ libc = { workspace = true }
 inkwell = { workspace = true, features = ["target-riscv", "llvm18-0-no-llvm-linking"]}
 
 [features]
-default = []
 parallel = ["rayon"]
-
-# Enable parallel by default only for non-emscripten targets
-[target.'cfg(not(target_os = "emscripten"))'.features]
 default = ["parallel"]

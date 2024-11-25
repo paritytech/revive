@@ -14,5 +14,6 @@ artifacts
 tmp
 package-lock.json
 /*.html
-/js/resolc.*
+/js/src/resolc.*
+/js/dist/
 /build

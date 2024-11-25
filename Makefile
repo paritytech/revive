@@ -11,19 +11,21 @@ RUSTFLAGS_EMSCRIPTEN := \
 	-Clink-arg=-sMODULARIZE \
 	-Clink-arg=-sEXPORT_ES6 \
 	-Clink-arg=-sEXPORT_NAME=createRevive \
-	-Clink-arg=--js-library=js/soljson_interface.js \
-	-Clink-arg=--pre-js=js/pre.js
+	-Clink-arg=--js-library=js/embed/soljson_interface.js \
+	-Clink-arg=--pre-js=js/embed/pre.js
 
 install: install-bin install-npm
 
 install-bin:
 	cargo install --path crates/solidity
 
-install-wasm:
-	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo install --target wasm32-unknown-emscripten --path crates/solidity
-
 install-npm:
 	npm install && npm fund
+
+install-wasm:
+	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	npm install
+	npm run build:revive
 
 # install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
 ifeq ($(origin REVIVE_INSTALL_DIR), undefined)
@@ -75,4 +77,6 @@ clean:
 	rm -rf node_modules ; \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
-	rm -f package-lock.json
+	rm -f package-lock.json ; \
+	rm -rf js/dist ; \
+	rm -f js/src/resolc.{wasm,js}

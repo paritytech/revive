@@ -1,6 +1,6 @@
 import solc from 'solc';
 // Import the Emscripten module
-import createRevive from './resolc.js';
+import createRevive from './dist/revive-esm/resolc.js';
 
 const compilerStandardJsonInput = {
     language: 'Solidity',

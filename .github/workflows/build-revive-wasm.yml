@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
+  REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/js/dist/revive-cjs
   EMSCRIPTEN_VERSION: 3.1.64
 
 jobs:
@@ -75,5 +75,6 @@ jobs:
           name: revive-wasm
           path: |
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.js
+            ${{ env.REVIVE_WASM_INSTALL_DIR }}/worker.js
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
           retention-days: 1

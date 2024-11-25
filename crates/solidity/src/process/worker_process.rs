@@ -1,9 +1,6 @@
 //! Process for compiling a single compilation unit using Web Workers.
 
 use std::ffi::{c_char, c_void, CStr, CString};
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
 
 use super::Input;
 use super::Output;
@@ -32,61 +29,6 @@ enum Response {
 pub struct WorkerProcess;
 
 impl Process for WorkerProcess {
-    /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-    fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
-        let mut buffer = Vec::with_capacity(16384);
-        // TODO: Init correctly stdin in emscripten - preload FS conf before module init
-        let mut stdin = File::open("/in")
-            .map_err(|error| anyhow::anyhow!("File /in openning error: {}", error))?;
-        let mut stdout = File::create("/out")
-            .map_err(|error| anyhow::anyhow!("File /out creating error: {}", error))?;
-        let mut stderr = File::create("/err")
-            .map_err(|error| anyhow::anyhow!("File /err creating error: {}", error))?;
-
-        match input_file {
-            Some(ins) => {
-                if let Err(error) = ins.read_to_end(&mut buffer) {
-                    anyhow::bail!("Failed to read recursive process input file: {:?}", error);
-                }
-            }
-            None => {
-                if let Err(error) = stdin.read_to_end(&mut buffer) {
-                    anyhow::bail!(
-                        "Failed to read recursive process input from stdin: {:?}",
-                        error
-                    )
-                }
-            }
-        }
-
-        let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
-        let result = input.contract.compile(
-            input.project,
-            input.optimizer_settings,
-            input.include_metadata_hash,
-            input.debug_config,
-        );
-
-        match result {
-            Ok(build) => {
-                let output = Output::new(build);
-                let json = serde_json::to_vec(&output).expect("Always valid");
-                stdout
-                    .write_all(json.as_slice())
-                    .expect("Stdout writing error");
-                Ok(())
-            }
-            Err(error) => {
-                let message = error.to_string();
-                stderr
-                    .write_all(message.as_bytes())
-                    .expect("Stderr writing error");
-                Err(error)
-            }
-        }
-    }
-
-    /// Runs this process recursively to compile a single contract.
     fn call(input: Input) -> anyhow::Result<Output> {
         let input_json = serde_json::to_vec(&input).expect("Always valid");
         let input_str = String::from_utf8(input_json).expect("Input shall be valid");

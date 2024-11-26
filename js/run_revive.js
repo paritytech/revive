@@ -1,4 +1,4 @@
-const solc = require('solc');
+const soljson = require('solc/soljson');
 const createRevive = require('./dist/revive-cjs/resolc.js');
 
 const compilerStandardJsonInput = {
@@ -31,7 +31,7 @@ const compilerStandardJsonInput = {
 
 async function runCompiler() {
   const m = createRevive();
-  m.solc = solc;
+  m.soljson = soljson;
 
   // Set input data for stdin
   m.setStdinData(JSON.stringify(compilerStandardJsonInput));

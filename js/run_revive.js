@@ -1,6 +1,5 @@
-import solc from 'solc';
-// Import the Emscripten module
-import createRevive from './dist/revive-esm/resolc.js';
+const solc = require('solc');
+const createRevive = require('./dist/revive-cjs/resolc.js');
 
 const compilerStandardJsonInput = {
     language: 'Solidity',
@@ -31,7 +30,7 @@ const compilerStandardJsonInput = {
   };
 
 async function runCompiler() {
-  const m = await createRevive();
+  const m = createRevive();
   m.solc = solc;
 
   // Set input data for stdin

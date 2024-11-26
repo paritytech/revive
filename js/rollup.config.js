@@ -1,12 +1,12 @@
-import babel from '@rollup/plugin-babel';
-import copy from 'rollup-plugin-copy';
-import resolve from '@rollup/plugin-node-resolve';
+const babel = require('@rollup/plugin-babel');
+const copy = require('rollup-plugin-copy');
+const resolve = require('@rollup/plugin-node-resolve'); // Add this if resolve is not already imported
 
 const outputDirCJS = 'dist/revive-cjs';
 const outputDirESM = 'dist/revive-esm';
 
-export default {
-  input: ['src/resolc.js', 'src/worker.js'],  // Adjust this to your main entry file
+module.exports = {
+  input: ['src/resolc.js'],
   output: [
     {
       dir: outputDirCJS,
@@ -26,10 +26,10 @@ export default {
     }),
     resolve(),
     copy({
-        targets: [
-          { src: 'src/resolc.wasm', dest: outputDirCJS },
-          { src: 'src/resolc.wasm', dest: outputDirESM },
-        ],
-      })
+      targets: [
+        { src: 'src/resolc.wasm', dest: outputDirCJS },
+        { src: 'src/resolc.wasm', dest: outputDirESM },
+      ],
+    }),
   ],
 };

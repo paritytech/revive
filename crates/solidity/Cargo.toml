@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 which = { workspace = true }
 path-slash = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -41,6 +41,13 @@ inkwell = { workspace = true }
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
 
-
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "*", default-features = false }
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+libc = { workspace = true }
+inkwell = { workspace = true, features = ["target-riscv", "llvm18-0-no-llvm-linking"]}
+
+[features]
+parallel = ["rayon"]
+default = ["parallel"]

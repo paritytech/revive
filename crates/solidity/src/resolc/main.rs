@@ -4,8 +4,11 @@ pub mod arguments;
 
 use std::str::FromStr;
 
+use revive_solidity::Process;
+
 use self::arguments::Arguments;
 
+#[cfg(feature = "parallel")]
 /// The rayon worker stack size.
 const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
@@ -46,6 +49,7 @@ fn main_inner() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    #[cfg(feature = "parallel")]
     rayon::ThreadPoolBuilder::new()
         .stack_size(RAYON_WORKER_STACK_SIZE)
         .build_global()
@@ -57,10 +61,23 @@ fn main_inner() -> anyhow::Result<()> {
         #[cfg(debug_assertions)]
         if let Some(fname) = arguments.recursive_process_input {
             let mut infile = std::fs::File::open(fname)?;
-            return revive_solidity::run_process(Some(&mut infile));
+            #[cfg(target_os = "emscripten")]
+            {
+                return revive_solidity::WorkerProcess::run(Some(&mut infile));
+            }
+            #[cfg(not(target_os = "emscripten"))]
+            {
+                return revive_solidity::NativeProcess::run(Some(&mut infile));
+            }
         }
-
-        return revive_solidity::run_process(None);
+        #[cfg(target_os = "emscripten")]
+        {
+            return revive_solidity::WorkerProcess::run(None);
+        }
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            return revive_solidity::NativeProcess::run(None);
+        }
     }
 
     let debug_config = match arguments.debug_output_directory {
@@ -83,11 +100,19 @@ fn main_inner() -> anyhow::Result<()> {
         None => None,
     };
 
-    let mut solc = revive_solidity::SolcCompiler::new(
-        arguments
-            .solc
-            .unwrap_or_else(|| revive_solidity::SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()),
-    )?;
+    let mut solc = {
+        #[cfg(target_os = "emscripten")]
+        {
+            revive_solidity::SoljsonCompiler { version: None }
+        }
+
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            revive_solidity::SolcCompiler::new(arguments.solc.unwrap_or_else(|| {
+                revive_solidity::SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()
+            }))?
+        }
+    };
 
     let evm_version = match arguments.evm_version {
         Some(evm_version) => Some(revive_common::EVMVersion::try_from(evm_version.as_str())?),

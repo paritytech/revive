@@ -8,9 +8,12 @@
 /*.s
 /llvm-project
 /llvm18.0
+/llvm18.0-emscripten
 node_modules
 artifacts
 tmp
 package-lock.json
 /*.html
+/js/src/resolc.*
+/js/dist/
 /build

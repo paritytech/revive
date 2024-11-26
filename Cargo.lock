@@ -8135,6 +8135,7 @@ dependencies = [
  "colored",
  "hex",
  "inkwell",
+ "libc",
  "md5",
  "mimalloc",
  "num",

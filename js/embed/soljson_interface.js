@@ -1,15 +1,15 @@
 mergeInto(LibraryManager.library, {
     soljson_compile: function(inputPtr, inputLen) {
         const inputJson = UTF8ToString(inputPtr, inputLen);
-        var output = Module.soljson.cwrap('solidity_compile', 'string', ['string'])(inputJson);
-        return stringToNewUTF8(output)
+        const output = Module.soljson.cwrap('solidity_compile', 'string', ['string'])(inputJson);
+        return stringToNewUTF8(output);
     },
     soljson_version: function() {
-        var version = Module.soljson.cwrap("solidity_version", "string", [])();
-        return stringToNewUTF8(version)
+        const version = Module.soljson.cwrap("solidity_version", "string", [])();
+        return stringToNewUTF8(version);
     },
     resolc_compile: function(inputPtr, inputLen) {
-        var inputJson = UTF8ToString(inputPtr, inputLen);
+        const inputJson = UTF8ToString(inputPtr, inputLen);
         const path = require('path');
         const createRevive = require(path.resolve(__dirname, './resolc.js'));
         const revive = createRevive();
@@ -19,7 +19,7 @@ mergeInto(LibraryManager.library, {
         let stdoutString = "";
         revive.setStdoutCallback(function(char) {
             if (char.charCodeAt(0) === '\n') {
-                exit
+                exit;
             }
             stdoutString += char;
         });
@@ -37,7 +37,7 @@ mergeInto(LibraryManager.library, {
             return stringToNewUTF8(error);
         } else {
             const json = JSON.stringify({ type: 'success', data: stdoutString });
-            return stringToNewUTF8(json)
+            return stringToNewUTF8(json);
         }
     },
 });

@@ -3,8 +3,7 @@
     "private": true,
     "scripts": {
         "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests",
-        "build:revive": "npm run build -w js",
-        "test:revive": "npm run test -w js"
+        "test:revive": "npm run example:node -w js"
     },
     "workspaces": [
         "crates/solidity/src/tests/cli-tests",

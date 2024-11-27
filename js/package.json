@@ -1,14 +1,12 @@
 {
   "name": "revive",
-  "version": "1.0.0",
-  "description": "Revive compiler",
-  "main": "resolc.js",
+  "private": true,
   "dependencies": {
     "solc": "^0.8.28"
   },
   "scripts": {
-    "start-web": "http-server ./examples/web/",
-    "start-node": "node ./examples//node/run_revive.js"
+    "example:web": "http-server ./examples/web/",
+    "example:node": "node ./examples/node/run_revive.js"
   },
   "devDependencies": {
     "http-server": "^14.1.1"

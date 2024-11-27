@@ -25,7 +25,6 @@ install-npm:
 install-wasm:
 	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
 	npm install
-	npm run build:revive
 
 # install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
 ifeq ($(origin REVIVE_INSTALL_DIR), undefined)

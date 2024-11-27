@@ -19,7 +19,7 @@ mergeInto(LibraryManager.library, {
         } else if (typeof require === 'function') {
             // Running in Node.js
             const path = require('path');
-            createRevive = require(path.resolve(__dirname, './resolc.js'));  // `createRevive` is returned from the required module
+            createRevive = require(path.resolve(__dirname, './resolc.js'));
             var revive = createRevive();
         } else {
             throw new Error('Unknown environment: Unable to load resolc.js');

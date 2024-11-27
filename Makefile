@@ -9,8 +9,8 @@ RUSTFLAGS_EMSCRIPTEN := \
 	-Clink-arg=-sALLOW_MEMORY_GROWTH \
 	-Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8,cwrap \
 	-Clink-arg=-sMODULARIZE \
-	-Clink-arg=-sEXPORT_ES6 \
 	-Clink-arg=-sEXPORT_NAME=createRevive \
+	-Clink-arg=-sWASM_ASYNC_COMPILATION=0 \
 	-Clink-arg=--js-library=js/embed/soljson_interface.js \
 	-Clink-arg=--pre-js=js/embed/pre.js
 

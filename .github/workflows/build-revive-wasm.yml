@@ -75,6 +75,5 @@ jobs:
           name: revive-wasm
           path: |
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.js
-            ${{ env.REVIVE_WASM_INSTALL_DIR }}/worker.js
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
           retention-days: 1

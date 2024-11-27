@@ -2,19 +2,15 @@
   "name": "revive",
   "version": "1.0.0",
   "description": "Revive compiler",
-  "main": "run_revive.js",
+  "main": "resolc.js",
   "dependencies": {
     "solc": "^0.8.28"
   },
   "scripts": {
-    "build": "mkdir -p src && cp ../target/wasm32-unknown-emscripten/release/resolc.js ../target/wasm32-unknown-emscripten/release/resolc.wasm ./src && npx rollup -c",
-    "test": "npm run build && node run_revive.js"
+    "start-web": "http-server ./examples/web/",
+    "start-node": "node ./examples//node/run_revive.js"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "@babel/preset-env": "^7.26.0",
-    "@rollup/plugin-babel": "^6.0.4",
-    "rollup": "^4.27.3",
-    "rollup-plugin-copy": "^3.5.0"
+    "http-server": "^14.1.1"
   }
 }

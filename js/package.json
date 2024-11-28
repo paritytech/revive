@@ -5,7 +5,8 @@
     "solc": "^0.8.28"
   },
   "scripts": {
-    "example:web": "http-server ./examples/web/",
+    "fetch:soljson": "wget https://binaries.soliditylang.org/wasm/soljson-v0.8.28+commit.7893614a.js -O ./examples/web/soljson.js",
+    "example:web": "npm run fetch:soljson && http-server ./examples/web/",
     "example:node": "node ./examples/node/run_revive.js"
   },
   "devDependencies": {

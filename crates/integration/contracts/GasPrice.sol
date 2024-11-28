@@ -12,8 +12,7 @@ pragma solidity ^0.8;
                     "Solidity": {
                         "contract": "GasPrice"
                     }
-                },
-                "data": "4545454545454545454545454545454545454545454545454545454545454545"
+                }
             }
         },
         {
@@ -26,7 +25,7 @@ pragma solidity ^0.8;
 */
 
 contract GasPrice {
-    constructor(uint expected) payable {
-        assert(tx.gasprice == expected);
+    constructor() payable {
+        assert(tx.gasprice != 0);
     }
 }

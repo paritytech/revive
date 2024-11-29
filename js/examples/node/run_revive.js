@@ -1,5 +1,5 @@
 const soljson = require('solc/soljson');
-const createRevive = require('./dist/revive-cjs/resolc.js');
+const createRevive = require('./resolc.js');
 
 const compilerStandardJsonInput = {
     language: 'Solidity',
@@ -52,8 +52,8 @@ async function runCompiler() {
 
   // Compile the Solidity source code
   let x = m.callMain(['--standard-json']);
-  console.log("Stdout: " + stdoutString)
-  console.error("Stderr: " + stderrString)
+  console.log("Stdout: " + stdoutString);
+  console.error("Stderr: " + stderrString);
 }
 
 runCompiler().catch(err => {

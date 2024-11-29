@@ -8,6 +8,7 @@ use std::collections::HashSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+use sha3::Digest;
 
 use crate::evmla::ethereal_ir::entry_link::EntryLink;
 use crate::evmla::ethereal_ir::EtherealIR;
@@ -45,7 +46,7 @@ impl Assembly {
     /// Gets the contract `keccak256` hash.
     pub fn keccak256(&self) -> String {
         let json = serde_json::to_vec(self).expect("Always valid");
-        revive_llvm_context::polkavm_utils::keccak256(json.as_slice())
+        hex::encode(sha3::Keccak256::digest(json.as_slice()))
     }
 
     /// Sets the full contract path.

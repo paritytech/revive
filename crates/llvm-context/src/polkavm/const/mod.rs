@@ -3,7 +3,7 @@
 /// The LLVM framework version.
 pub const LLVM_VERSION: semver::Version = semver::Version::new(18, 1, 4);
 
-/// The register width sized type
+/// The pointer width sized type.
 pub static XLEN: usize = revive_common::BIT_LENGTH_X32;
 
 /// The heap memory pointer pointer global variable name.

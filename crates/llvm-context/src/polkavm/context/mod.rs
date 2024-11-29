@@ -165,8 +165,9 @@ where
 
     fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
         let size = self.solidity().immutables_size() as u32;
-        let exports = revive_runtime_api::immutable_data::module(self.llvm(), size);
-        self.module.link_in_module(exports).map_err(|error| {
+        let immutables = revive_runtime_api::immutable_data::module(self.llvm(), size);
+
+        self.module.link_in_module(immutables).map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` immutable data module linking error: {}",
                 contract_path,
@@ -202,6 +203,16 @@ where
         );
     }
 
+    /// Configure the revive datalayout.
+    fn set_data_layout(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        let source_module = revive_stdlib::module(llvm, "revive_stdlib").unwrap();
+        let data_layout = source_module.get_data_layout();
+        module.set_data_layout(&data_layout);
+    }
+
     /// Initializes a new LLVM context.
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
@@ -211,6 +222,7 @@ where
         include_metadata_hash: bool,
         debug_config: DebugConfig,
     ) -> Self {
+        Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
@@ -261,7 +273,7 @@ where
         self.link_immutable_data(contract_path)?;
 
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
-        target_machine.set_target_data(self.module());
+        self.module().set_triple(&target_machine.get_triple());
 
         self.debug_config
             .dump_llvm_ir_unoptimized(contract_path, self.module())?;

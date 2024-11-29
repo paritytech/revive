@@ -8,14 +8,7 @@ SECTIONS {
     .text : { KEEP(*(.text.polkavm_export)) *(.text .text.*) }
 }"#;
 
-#[cfg(not(feature = "riscv-64"))]
-const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv32.a";
-#[cfg(feature = "riscv-64")]
 const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
-
-#[cfg(not(feature = "riscv-64"))]
-const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv32";
-#[cfg(feature = "riscv-64")]
 const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv64";
 
 fn invoke_lld(cmd_args: &[&str]) -> bool {

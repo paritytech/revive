@@ -90,7 +90,7 @@ where
     let is_success = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         success,
-        context.xlen_type().const_zero(),
+        context.integer_const(revive_common::BIT_LENGTH_X64, 0),
         "is_success",
     )?;
 
@@ -139,8 +139,12 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, 0)
+            .as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, 0)
+            .as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),
         input_length.as_basic_value_enum(),
@@ -168,7 +172,7 @@ where
     let is_success = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         success,
-        context.xlen_type().const_zero(),
+        context.integer_const(revive_common::BIT_LENGTH_X64, 0),
         "is_success",
     )?;
 

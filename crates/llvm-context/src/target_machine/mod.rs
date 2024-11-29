@@ -20,28 +20,16 @@ pub struct TargetMachine {
 
 impl TargetMachine {
     /// The LLVM target name.
-    #[cfg(not(feature = "riscv-64"))]
-    pub const VM_TARGET_NAME: &'static str = "riscv32";
-    #[cfg(feature = "riscv-64")]
     pub const VM_TARGET_NAME: &'static str = "riscv64";
 
     /// The LLVM target triple.
-    #[cfg(not(feature = "riscv-64"))]
-    pub const VM_TARGET_TRIPLE: &'static str = "riscv32-unknown-unknown-elf";
-    #[cfg(feature = "riscv-64")]
     pub const VM_TARGET_TRIPLE: &'static str = "riscv64-unknown-unknown-elf";
 
-    /// The LLVM target cpu
-    #[cfg(not(feature = "riscv-64"))]
-    pub const VM_TARGET_CPU: &'static str = "generic-rv32";
-    #[cfg(feature = "riscv-64")]
     pub const VM_TARGET_CPU: &'static str = "generic-rv64";
 
     /// LLVM target features.
-    #[cfg(feature = "riscv-zbb")]
-    pub const VM_FEATURES: &'static str = "+zbb,+a,+e,+m,+c,+fast-unaligned-access,+xtheadcondmov";
-    #[cfg(not(feature = "riscv-zbb"))]
-    pub const VM_FEATURES: &'static str = "+a,+e,+m,+c,+fast-unaligned-access,+xtheadcondmov";
+    pub const VM_FEATURES: &'static str =
+        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov";
 
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.
@@ -68,12 +56,6 @@ impl TargetMachine {
             target_machine,
             optimizer_settings: optimizer_settings.to_owned(),
         })
-    }
-
-    /// Sets the target-specific data in the module.
-    pub fn set_target_data(&self, module: &inkwell::module::Module) {
-        module.set_triple(&self.target_machine.get_triple());
-        module.set_data_layout(&self.target_machine.get_target_data().get_data_layout());
     }
 
     /// Writes the LLVM module to a memory buffer.

@@ -1,7 +1,7 @@
 ; Adapted from: https://github.com/matter-labs/era-compiler-llvm/blob/v1.4.0/llvm/lib/Target/EraVM/eravm-stdlib.ll
 
-target datalayout = "e-m:e-p:32:32-i64:64-n32-S128"
-target triple = "riscv32-unknown-unknown-elf"
+target datalayout = "e-m:e-p:32:64-p1:32:64-i64:64-i128:128-n32:64-S64"
+target triple = "riscv64-unknown-none-elf"
 
 define i256 @__addmod(i256 %arg1, i256 %arg2, i256 %modulo) #4 {
 entry:

@@ -26,6 +26,6 @@ pragma solidity ^0.8;
 
 contract GasPrice {
     constructor() payable {
-        assert(tx.gasprice != 0);
+        assert(tx.gasprice == 1);
     }
 }

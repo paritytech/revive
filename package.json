@@ -2,9 +2,11 @@
     "name": "root",
     "private": true,
     "scripts": {
-        "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests"
+        "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests",
+        "test:revive": "npm run example:node -w js"
     },
     "workspaces": [
-        "crates/solidity/src/tests/cli-tests"
+        "crates/solidity/src/tests/cli-tests",
+        "js"
     ]
 }

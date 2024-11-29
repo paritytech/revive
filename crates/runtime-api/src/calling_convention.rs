@@ -106,3 +106,30 @@ pub fn call(context: &Context) -> StructType {
         false,
     )
 }
+
+/// Returns a packed struct argument type for the `delegate_call` API.
+pub fn delegate_call(context: &Context) -> StructType {
+    context.struct_type(
+        &[
+            // flags: u32,
+            context.i32_type().as_basic_type_enum(),
+            // address_ptr:
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // ref_time_limit: u64,
+            context.i64_type().as_basic_type_enum(),
+            // proof_size_limit: u64,
+            context.i64_type().as_basic_type_enum(),
+            // deposit_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // input_data_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // input_data_len: u32,
+            context.i32_type().as_basic_type_enum(),
+            // output_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+            // output_len_ptr: u32,
+            context.ptr_type(Default::default()).as_basic_type_enum(),
+        ],
+        true,
+    )
+}

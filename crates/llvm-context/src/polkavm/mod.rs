@@ -4,10 +4,8 @@ pub mod r#const;
 pub mod context;
 pub mod evm;
 pub mod metadata_hash;
-pub mod utils;
 
 pub use self::r#const::*;
-use self::utils::keccak256;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
@@ -15,6 +13,7 @@ use crate::optimizer::settings::Settings as OptimizerSettings;
 use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+use sha3::Digest;
 
 use self::context::build::Build;
 use self::context::Context;
@@ -55,7 +54,7 @@ pub fn build_assembly_text(
         assembly_text.to_owned(),
         metadata_hash,
         bytecode.to_owned(),
-        keccak256(bytecode),
+        hex::encode(sha3::Keccak256::digest(bytecode)),
     ))
 }
 

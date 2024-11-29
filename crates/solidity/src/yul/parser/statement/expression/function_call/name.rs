@@ -202,8 +202,8 @@ pub enum Name {
     /// size of memory, i.e. largest accessed memory index
     MSize,
 
-    /// verbatim instruction with 0 inputs and 0 outputs
-    /// only works in the Yul mode, so it is mostly used as a tool for extending Yul for zkSync
+    /// verbatim instruction with 0 inputs and 0 outputs only works in the Yul mode,
+    /// so it is mostly used as a tool for extending Yul for PolkaVM
     Verbatim {
         /// the number of input arguments
         input_size: usize,

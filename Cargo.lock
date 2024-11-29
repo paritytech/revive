@@ -4454,7 +4454,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "cc",
  "libc",
@@ -7998,7 +7998,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "alloy-primitives 0.8.14",
  "criterion",
@@ -8010,11 +8010,11 @@ dependencies = [
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 
 [[package]]
 name = "revive-common"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "anyhow",
  "serde",
@@ -8024,7 +8024,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives 0.8.14",
@@ -8037,7 +8037,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "alloy-primitives 0.8.14",
  "alloy-sol-types 0.8.14",
@@ -8058,7 +8058,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8072,7 +8072,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "anyhow",
  "hex",
@@ -8097,7 +8097,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "alloy-primitives 0.8.14",
  "hex",
@@ -8112,7 +8112,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8121,7 +8121,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solidity"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -8149,7 +8149,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0-dev.5"
+version = "0.1.0-dev.6"
 dependencies = [
  "inkwell",
 ]

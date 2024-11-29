@@ -76,7 +76,7 @@ POLKAVM_IMPORT(void, block_number, uint32_t)
 
 POLKAVM_IMPORT(uint64_t, call, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, delegate_call, uint32_t)
+POLKAVM_IMPORT(uint64_t, delegate_call, uint32_t)
 
 POLKAVM_IMPORT(void, caller, uint32_t)
 

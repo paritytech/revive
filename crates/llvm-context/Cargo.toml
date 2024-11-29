@@ -13,15 +13,6 @@ description = "Shared front end code of the revive PolkaVM compilers"
 [lib]
 doctest = false
 
-[features]
-riscv-zbb = []
-riscv-64 = [
-    "revive-linker/riscv-64",
-    "revive-builtins/riscv-64",
-    "revive-runtime-api/riscv-64",
-    "revive-common/riscv-64",
-]
-
 [dependencies]
 anyhow = { workspace = true }
 semver = { workspace = true }

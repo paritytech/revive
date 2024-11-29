@@ -5,17 +5,13 @@ set -euo pipefail
 INSTALL_DIR="${PWD}/llvm18.0"
 mkdir -p ${INSTALL_DIR}
 
-
-# Clone LLVM 18 (any revision after commit bd32aaa is supposed to work)
-if [ ! -d "llvm-project" ]; then
-  git clone --depth 1 --branch release/18.x https://github.com/llvm/llvm-project.git
-fi
-
-
 # Build LLVM, clang
 LLVM_SRC_PREFIX=${PWD}/llvm-project
 LLVM_SRC_DIR=${LLVM_SRC_PREFIX}/llvm
 LLVM_BUILD_DIR=${PWD}/build/llvm
+
+./clone-llvm.sh "${LLVM_SRC_PREFIX}"
+
 if [ ! -d ${LLVM_BUILD_DIR} ] ; then
 	mkdir -p ${LLVM_BUILD_DIR}
 fi

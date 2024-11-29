@@ -1,8 +1,5 @@
 use std::{env, fs, io::Read, path::Path, process::Command};
 
-#[cfg(not(feature = "riscv-64"))]
-pub const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv32.a";
-#[cfg(feature = "riscv-64")]
 pub const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
 
 fn main() {

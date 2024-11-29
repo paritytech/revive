@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
@@ -17,9 +17,10 @@ use crate::build::contract::Contract as ContractBuild;
 use crate::build::Build;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
+use crate::process::Process;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
-use crate::solc::Compiler as SolcCompiler;
+use crate::solc::Compiler;
 use crate::yul::lexer::Lexer;
 use crate::yul::parser::statement::object::Object;
 
@@ -66,18 +67,30 @@ impl Project {
         debug_config: revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
-        let results: BTreeMap<String, anyhow::Result<ContractBuild>> = self
-            .contracts
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let iter = self.contracts.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = self.contracts.into_iter();
+
+        let results: BTreeMap<String, anyhow::Result<ContractBuild>> = iter
             .map(|(full_path, contract)| {
-                let process_output = crate::process::call(ProcessInput::new(
+                let process_input = ProcessInput::new(
                     contract,
                     project.clone(),
                     include_metadata_hash,
                     optimizer_settings.clone(),
                     debug_config.clone(),
-                ));
-
+                );
+                let process_output = {
+                    #[cfg(target_os = "emscripten")]
+                    {
+                        crate::WorkerProcess::call(process_input)
+                    }
+                    #[cfg(not(target_os = "emscripten"))]
+                    {
+                        crate::NativeProcess::call(process_input)
+                    }
+                };
                 (full_path, process_output.map(|output| output.build))
             })
             .collect();
@@ -155,9 +168,9 @@ impl Project {
     }
 
     /// Parses the Yul source code file and returns the source data.
-    pub fn try_from_yul_path(
+    pub fn try_from_yul_path<T: Compiler>(
         path: &Path,
-        solc_validator: Option<&SolcCompiler>,
+        solc_validator: Option<&T>,
     ) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path)
             .map_err(|error| anyhow::anyhow!("Yul file {:?} reading error: {}", path, error))?;
@@ -166,16 +179,16 @@ impl Project {
 
     /// Parses the test Yul source code string and returns the source data.
     /// Only for integration testing purposes.
-    pub fn try_from_yul_string(
+    pub fn try_from_yul_string<T: Compiler>(
         path: &Path,
         source_code: &str,
-        solc_validator: Option<&SolcCompiler>,
+        solc_validator: Option<&T>,
     ) -> anyhow::Result<Self> {
         if let Some(solc) = solc_validator {
             solc.validate_yul(path)?;
         }
 
-        let source_version = SolcVersion::new_simple(SolcCompiler::LAST_SUPPORTED_VERSION);
+        let source_version = SolcVersion::new_simple(crate::solc::LAST_SUPPORTED_VERSION);
         let path = path.to_string_lossy().to_string();
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
 

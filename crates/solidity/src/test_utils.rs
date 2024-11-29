@@ -9,13 +9,14 @@ use once_cell::sync::Lazy;
 
 use crate::project::Project;
 use crate::solc::pipeline::Pipeline as SolcPipeline;
+use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
 use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
 use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
-use crate::solc::Compiler as SolcCompiler;
+use crate::solc::Compiler;
 use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
@@ -81,7 +82,8 @@ pub fn build_solidity_with_options(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -126,7 +128,8 @@ pub fn build_solidity_with_options_evm(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -179,7 +182,8 @@ pub fn build_solidity_and_detect_missing_libraries(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
-    let _ = crate::process::EXECUTABLE.set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -215,8 +219,11 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
-    let project =
-        Project::try_from_yul_string(PathBuf::from("test.yul").as_path(), source_code, None)?;
+    let project = Project::try_from_yul_string::<SolcCompiler>(
+        PathBuf::from("test.yul").as_path(),
+        source_code,
+        None,
+    )?;
     let _build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
 
     Ok(())

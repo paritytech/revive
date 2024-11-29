@@ -8,7 +8,4 @@ authors.workspace = true
 build = "build.rs"
 description = "compiler builtins for the revive compiler"
 
-[features]
-riscv-64 = []
-
 [dependencies]

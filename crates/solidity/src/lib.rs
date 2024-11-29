@@ -15,15 +15,22 @@ pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
 pub use self::missing_libraries::MissingLibraries;
 pub use self::process::input::Input as ProcessInput;
+#[cfg(not(target_os = "emscripten"))]
+pub use self::process::native_process::NativeProcess;
 pub use self::process::output::Output as ProcessOutput;
-pub use self::process::run as run_process;
-pub use self::process::EXECUTABLE;
+#[cfg(target_os = "emscripten")]
+pub use self::process::worker_process::WorkerProcess;
+pub use self::process::Process;
 pub use self::project::contract::Contract as ProjectContract;
 pub use self::project::Project;
 pub use self::r#const::*;
 pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
 pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
 pub use self::solc::pipeline::Pipeline as SolcPipeline;
+#[cfg(not(target_os = "emscripten"))]
+pub use self::solc::solc_compiler::SolcCompiler;
+#[cfg(target_os = "emscripten")]
+pub use self::solc::soljson_compiler::SoljsonCompiler;
 pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
 pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
@@ -38,10 +45,10 @@ pub use self::solc::standard_json::output::contract::evm::EVM as SolcStandardJso
 pub use self::solc::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
 pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
 pub use self::solc::version::Version as SolcVersion;
-pub use self::solc::Compiler as SolcCompiler;
+pub use self::solc::Compiler;
 pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
-
+#[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;
 pub mod tests;
 
@@ -49,9 +56,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// Runs the Yul mode.
-pub fn yul(
+pub fn yul<T: Compiler>(
     input_files: &[PathBuf],
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
@@ -65,10 +72,10 @@ pub fn yul(
         ),
     };
 
-    if solc.version()?.default != SolcCompiler::LAST_SUPPORTED_VERSION {
+    if solc.version()?.default != solc::LAST_SUPPORTED_VERSION {
         anyhow::bail!(
                 "The Yul mode is only supported with the most recent version of the Solidity compiler: {}",
-                SolcCompiler::LAST_SUPPORTED_VERSION,
+                solc::LAST_SUPPORTED_VERSION,
             );
     }
 
@@ -105,10 +112,10 @@ pub fn llvm_ir(
 
 /// Runs the standard output mode.
 #[allow(clippy::too_many_arguments)]
-pub fn standard_output(
+pub fn standard_output<T: Compiler>(
     input_files: &[PathBuf],
     libraries: Vec<String>,
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -188,8 +195,8 @@ pub fn standard_output(
 
 /// Runs the standard JSON mode.
 #[allow(clippy::too_many_arguments)]
-pub fn standard_json(
-    solc: &mut SolcCompiler,
+pub fn standard_json<T: Compiler>(
+    solc: &mut T,
     detect_missing_libraries: bool,
     force_evmla: bool,
     base_path: Option<String>,
@@ -256,11 +263,11 @@ pub fn standard_json(
 
 /// Runs the combined JSON mode.
 #[allow(clippy::too_many_arguments)]
-pub fn combined_json(
+pub fn combined_json<T: Compiler>(
     format: String,
     input_files: &[PathBuf],
     libraries: Vec<String>,
-    solc: &mut SolcCompiler,
+    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,

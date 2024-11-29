@@ -1,5 +1,19 @@
 .PHONY: install format test test-solidity test-cli test-integration test-workspace clean docs docs-build
 
+RUSTFLAGS_EMSCRIPTEN := \
+	-Clink-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
+	-Clink-arg=-sNO_INVOKE_RUN \
+	-Clink-arg=-sEXIT_RUNTIME \
+	-Clink-arg=-sINITIAL_MEMORY=64MB \
+	-Clink-arg=-sTOTAL_MEMORY=3GB \
+	-Clink-arg=-sALLOW_MEMORY_GROWTH \
+	-Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8,cwrap \
+	-Clink-arg=-sMODULARIZE \
+	-Clink-arg=-sEXPORT_NAME=createRevive \
+	-Clink-arg=-sWASM_ASYNC_COMPILATION=0 \
+	-Clink-arg=--js-library=js/embed/soljson_interface.js \
+	-Clink-arg=--pre-js=js/embed/pre.js
+
 install: install-bin install-npm
 
 install-bin:
@@ -7,6 +21,10 @@ install-bin:
 
 install-npm:
 	npm install && npm fund
+
+install-wasm:
+	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	npm install
 
 # install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
 ifeq ($(origin REVIVE_INSTALL_DIR), undefined)
@@ -58,4 +76,6 @@ clean:
 	rm -rf node_modules ; \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
-	rm -f package-lock.json
+	rm -f package-lock.json ; \
+	rm -rf js/dist ; \
+	rm -f js/src/resolc.{wasm,js}

@@ -165,8 +165,9 @@ where
 
     fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
         let size = self.solidity().immutables_size() as u32;
-        let exports = revive_runtime_api::immutable_data::module(self.llvm(), size);
-        self.module.link_in_module(exports).map_err(|error| {
+        let immutables = revive_runtime_api::immutable_data::module(self.llvm(), size);
+
+        self.module.link_in_module(immutables).map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` immutable data module linking error: {}",
                 contract_path,
@@ -272,7 +273,7 @@ where
         self.link_immutable_data(contract_path)?;
 
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
-        target_machine.set_target_data(self.module());
+        self.module().set_triple(&target_machine.get_triple());
 
         self.debug_config
             .dump_llvm_ir_unoptimized(contract_path, self.module())?;

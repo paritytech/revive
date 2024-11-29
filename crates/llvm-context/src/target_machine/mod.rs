@@ -58,12 +58,6 @@ impl TargetMachine {
         })
     }
 
-    /// Sets the target-specific data in the module.
-    pub fn set_target_data(&self, module: &inkwell::module::Module) {
-        module.set_triple(&self.target_machine.get_triple());
-        module.set_data_layout(&self.target_machine.get_target_data().get_data_layout());
-    }
-
     /// Writes the LLVM module to a memory buffer.
     pub fn write_to_memory_buffer(
         &self,

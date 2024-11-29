@@ -17,12 +17,12 @@ where
 
 /// Translates the `gas_price` instruction.
 pub fn gas_price<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    Ok(context.word_const(1).as_basic_value_enum())
 }
 
 /// Translates the `tx.origin` instruction.

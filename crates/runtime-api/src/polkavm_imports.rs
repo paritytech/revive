@@ -64,9 +64,11 @@ pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
 
 pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
+pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
+
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 27] = [
+pub static IMPORTS: [&str; 28] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -94,6 +96,7 @@ pub static IMPORTS: [&str; 27] = [
     SET_IMMUTABLE_DATA,
     SET_STORAGE,
     VALUE_TRANSFERRED,
+    WEIGHT_TO_FEE,
 ];
 
 /// Creates a LLVM module from the [BITCODE].

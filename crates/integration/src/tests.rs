@@ -46,6 +46,7 @@ test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
 test_spec!(block_hash, "BlockHash", "BlockHash.sol");
 test_spec!(delegate, "Delegate", "Delegate.sol");
+test_spec!(gas_price, "GasPrice", "GasPrice.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

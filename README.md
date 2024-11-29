@@ -1,5 +1,5 @@
 ![CI](https://github.com/paritytech/revive/actions/workflows/rust.yml/badge.svg)
-[![Docs](https://img.shields.io/badge/Docs-contracts.polkadot.io-brightgreen.svg)](https://contracts.polakdot.io)
+[![Docs](https://img.shields.io/badge/Docs-contracts.polkadot.io-brightgreen.svg)](https://contracts.polkadot.io)
 
 # revive
 

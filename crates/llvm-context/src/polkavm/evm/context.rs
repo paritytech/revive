@@ -22,20 +22,7 @@ pub fn gas_price<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let ref_time_limit = context.integer_const(revive_common::BIT_LENGTH_X64, 1);
-    let proof_size_limit = context.integer_const(revive_common::BIT_LENGTH_X64, 0);
-    let output_pointer = context.build_alloca_at_entry(context.word_type(), "weight_to_fee_output");
-
-    context.build_runtime_call(
-        revive_runtime_api::polkavm_imports::WEIGHT_TO_FEE,
-        &[
-            ref_time_limit.into(),
-            proof_size_limit.into(),
-            output_pointer.to_int(context).into(),
-        ],
-    );
-
-    context.build_load(output_pointer, "gas_price")
+    Ok(context.word_const(1).as_basic_value_enum())
 }
 
 /// Translates the `tx.origin` instruction.

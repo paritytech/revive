@@ -15,7 +15,8 @@ var Module = {
 
     // Function to set input data for stdin
     setStdinData: function(data) {
-        this.stdinData = data;
+        const encoder = new TextEncoder();
+        this.stdinData = encoder.encode(data);
     },
 
     // `preRun` is called before the program starts running
@@ -25,7 +26,7 @@ var Module = {
             if (Module.stdinData.length === 0) {
                 return null; // End of input (EOF)
             }
-            const char = Module.stdinData.charCodeAt(0);
+            const char = Module.stdinData.at(0);
             Module.stdinData = Module.stdinData.slice(1); // Remove the character from input
             return char;
         }

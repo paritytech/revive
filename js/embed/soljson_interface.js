@@ -24,28 +24,17 @@ mergeInto(LibraryManager.library, {
         } else {
             throw new Error('Unknown environment: Unable to load resolc.js');
         }
-        revive.setStdinData(inputJson);
-
-        let stdoutString = "";
-        revive.setStdoutCallback(function(char) {
-            if (char.charCodeAt(0) === '\n') {
-                exit;
-            }
-            stdoutString += char;
-        });
-
-        let stderrString = "";
-        revive.setStderrCallback(function(char) {
-            stderrString += char;
-        });
+        revive.writeToStdin(inputJson);
 
         // Call main on the new instance
         const result = revive.callMain(['--recursive-process']);
 
         if (result) {
+            const stderrString = revive.readFromStderr();
             const error = JSON.stringify({ type: 'error', message: stderrString || "Unknown error" });
             return stringToNewUTF8(error);
         } else {
+            const stdoutString = revive.readFromStdout();
             const json = JSON.stringify({ type: 'success', data: stdoutString });
             return stringToNewUTF8(json);
         }

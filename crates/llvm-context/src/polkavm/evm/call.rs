@@ -60,8 +60,8 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
+        context.integer_const(64, u64::MAX).as_basic_value_enum(),
+        context.integer_const(64, u64::MAX).as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         value_pointer.value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),
@@ -140,10 +140,10 @@ where
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
         context
-            .integer_const(revive_common::BIT_LENGTH_X64, 0)
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
             .as_basic_value_enum(),
         context
-            .integer_const(revive_common::BIT_LENGTH_X64, 0)
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
             .as_basic_value_enum(),
         context.sentinel_pointer().value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),

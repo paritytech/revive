@@ -1,18 +1,21 @@
 .PHONY: install format test test-solidity test-cli test-integration test-workspace clean docs docs-build
 
 RUSTFLAGS_EMSCRIPTEN := \
-	-Clink-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
-	-Clink-arg=-sNO_INVOKE_RUN \
-	-Clink-arg=-sEXIT_RUNTIME \
-	-Clink-arg=-sINITIAL_MEMORY=64MB \
-	-Clink-arg=-sTOTAL_MEMORY=3GB \
-	-Clink-arg=-sALLOW_MEMORY_GROWTH \
-	-Clink-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8,cwrap \
-	-Clink-arg=-sMODULARIZE \
-	-Clink-arg=-sEXPORT_NAME=createRevive \
-	-Clink-arg=-sWASM_ASYNC_COMPILATION=0 \
-	-Clink-arg=--js-library=js/embed/soljson_interface.js \
-	-Clink-arg=--pre-js=js/embed/pre.js
+	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
+	-C link-arg=-sNO_INVOKE_RUN=1 \
+	-C link-arg=-sEXIT_RUNTIME=1 \
+	-C link-arg=-sALLOW_MEMORY_GROWTH=1 \
+	-C link-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8 \
+	-C link-arg=-sMODULARIZE=1 \
+	-C link-arg=-sEXPORT_NAME=createRevive \
+	-C link-arg=-sWASM_ASYNC_COMPILATION=0 \
+	-C link-arg=-sDYNAMIC_EXECUTION=0 \
+	-C link-arg=-sALLOW_TABLE_GROWTH=1 \
+	-C link-arg=--js-library=js/embed/soljson_interface.js \
+	-C link-arg=--pre-js=js/embed/pre.js \
+	-C link-arg=-sNODEJS_CATCH_EXIT=0 \
+	-C link-arg=-sDISABLE_EXCEPTION_CATCHING=0 \
+	-C opt-level=3
 
 install: install-bin install-npm
 

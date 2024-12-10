@@ -29,24 +29,10 @@ onmessage = async function (e) {
     m.soljson = Module;
 
     // Set input data for stdin
-    m.setStdinData(JSON.stringify(sourceCode));
-
-    var stdoutString = "";
-    m.setStdoutCallback(function(char) {
-        if (char.charCodeAt(0) === '\n') {
-            console.log("new line")
-            exit
-        }
-        stdoutString += char;
-    });
-
-    var stderrString = "";
-    m.setStderrCallback(function(char) {
-        stderrString += char;
-    });
+    m.writeToStdin(JSON.stringify(sourceCode));
 
     // Compile the Solidity source code
     m.callMain(['--standard-json']);
 
-  postMessage({output: stdoutString || stderrString});
+  postMessage({output: m.readFromStdout() || m.readFromStderr()});
 };

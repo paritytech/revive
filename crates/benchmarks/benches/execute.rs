@@ -46,7 +46,7 @@ fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkG
 where
     M: Measurement,
 {
-    return c.benchmark_group(group_name);
+    c.benchmark_group(group_name)
 }
 
 fn bench_baseline(c: &mut Criterion) {

@@ -81,7 +81,7 @@ impl Entry {
         )?;
         context
             .builder()
-            .build_store(call_data_size_pointer, value)?;
+            .build_store(call_data_size_pointer, value_truncated)?;
         Ok(())
     }
 

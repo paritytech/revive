@@ -13,11 +13,13 @@ where
 {
     let output_pointer = context.build_alloca_at_entry(context.word_type(), "call_data_output");
     let offset = context.safe_truncate_int_to_xlen(offset)?;
+
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::CALL_DATA_LOAD,
         &[output_pointer.to_int(context).into(), offset.into()],
     );
-    context.build_load(output_pointer, "call_data_load")
+
+    context.build_load(output_pointer, "call_data_load_value")
 }
 
 /// Translates the calldata size.
@@ -27,7 +29,15 @@ pub fn size<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    context.get_global_value(crate::polkavm::GLOBAL_CALLDATA_SIZE)
+    let value = context.get_global_value(crate::polkavm::GLOBAL_CALLDATA_SIZE)?;
+    Ok(context
+        .builder()
+        .build_int_z_extend(
+            value.into_int_value(),
+            context.word_type(),
+            "call_data_size_value",
+        )?
+        .into())
 }
 
 /// Translates the calldata copy.
@@ -40,17 +50,17 @@ pub fn copy<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let offset = context.safe_truncate_int_to_xlen(source_offset)?;
+    let source_offset = context.safe_truncate_int_to_xlen(source_offset)?;
     let size = context.safe_truncate_int_to_xlen(size)?;
     let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;
-    let destination = context.build_heap_gep(destination_offset, size)?;
+    let output_pointer = context.build_heap_gep(destination_offset, size)?;
 
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::CALL_DATA_COPY,
         &[
-            destination.to_int(context).into(),
+            output_pointer.to_int(context).into(),
             size.into(),
-            offset.into(),
+            source_offset.into(),
         ],
     );
 

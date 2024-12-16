@@ -43,9 +43,9 @@ impl Entry {
 
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
-            context.word_type(),
+            context.xlen_type(),
             AddressSpace::Stack,
-            context.word_undef(),
+            context.xlen_type().get_undef(),
         );
 
         context.set_global(
@@ -59,7 +59,7 @@ impl Entry {
     }
 
     /// Populate the calldata size global value.
-    pub fn load_calldata<D>(context: &mut Context<D>) -> anyhow::Result<()>
+    pub fn load_calldata_size<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
@@ -67,15 +67,21 @@ impl Entry {
             .get_global(polkavm::GLOBAL_CALLDATA_SIZE)?
             .value
             .as_pointer_value();
-        let call_data_size_pointer_arg = context.builder().build_ptr_to_int(
-            call_data_size_pointer,
-            context.xlen_type(),
-            "call_data_size_pointer",
-        )?;
+        let call_data_size_pointer_arg =
+            context.build_alloca_at_entry(context.word_type(), "call_data_size_pointer_arg");
         context.build_runtime_call(
             revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
-            &[call_data_size_pointer_arg.into()],
+            &[call_data_size_pointer_arg.to_int(context).into()],
         );
+        let value = context.build_load(call_data_size_pointer_arg, "call_data_size_load")?;
+        let value_truncated = context.builder().build_int_truncate(
+            value.into_int_value(),
+            context.xlen_type(),
+            "call_data_size_truncated",
+        )?;
+        context
+            .builder()
+            .build_store(call_data_size_pointer, value)?;
         Ok(())
     }
 
@@ -180,7 +186,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         Self::initialize_globals(context)?;
-        Self::load_calldata(context)?;
+        Self::load_calldata_size(context)?;
         Self::leave_entry(context)?;
 
         context.build_unconditional_branch(context.current_function().borrow().return_block());

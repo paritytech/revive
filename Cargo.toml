@@ -68,7 +68,6 @@ git2 = "0.19.0"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-#polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "447902eff4a574e66894ad60cb41999b05bf5e84" }
 polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", branch = "cl/calldatacopy" }
 
 # llvm

@@ -34,26 +34,12 @@ async function runCompiler() {
   m.soljson = soljson;
 
   // Set input data for stdin
-  m.setStdinData(JSON.stringify(compilerStandardJsonInput));
-
-  var stdoutString = "";
-  m.setStdoutCallback(function(char) {
-      if (char.charCodeAt(0) === '\n') {
-        console.log("new line")
-        exit
-      }
-      stdoutString += char;
-  });
-
-  var stderrString = "";
-  m.setStderrCallback(function(char) {
-    stderrString += char;
-  });
+  m.writeToStdin(JSON.stringify(compilerStandardJsonInput));
 
   // Compile the Solidity source code
   let x = m.callMain(['--standard-json']);
-  console.log("Stdout: " + stdoutString);
-  console.error("Stderr: " + stderrString);
+  console.log("Stdout: " + m.readFromStdout());
+  console.error("Stderr: " + m.readFromStderr());
 }
 
 runCompiler().catch(err => {

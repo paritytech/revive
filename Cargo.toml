@@ -68,7 +68,7 @@ git2 = "0.19.0"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "4a0e3f624f42816cb4ca687d3ff9bba8e1a6bf19" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", branch = "cl/register-ret" }
 
 # llvm
 [workspace.dependencies.inkwell]

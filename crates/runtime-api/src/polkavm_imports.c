@@ -80,7 +80,7 @@ POLKAVM_IMPORT(uint64_t, call_data_copy, uint32_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(uint64_t, call_data_load, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, call_data_size, uint32_t)
+POLKAVM_IMPORT(uint64_t, call_data_size)
 
 POLKAVM_IMPORT(uint64_t, delegate_call, uint32_t)
 
@@ -88,7 +88,7 @@ POLKAVM_IMPORT(void, caller, uint32_t)
 
 POLKAVM_IMPORT(void, chain_id, uint32_t)
 
-POLKAVM_IMPORT(void, code_size, uint32_t, uint32_t)
+POLKAVM_IMPORT(uint64_t, code_size, uint32_t)
 
 POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
@@ -112,7 +112,7 @@ POLKAVM_IMPORT(uint64_t, set_storage, uint32_t, uint32_t, uint32_t, uint32_t, ui
 
 POLKAVM_IMPORT(void, return_data_copy, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(void, return_data_size, uint32_t)
+POLKAVM_IMPORT(uint64_t, return_data_size)
 
 POLKAVM_IMPORT(void, set_immutable_data, uint32_t, uint32_t);
 

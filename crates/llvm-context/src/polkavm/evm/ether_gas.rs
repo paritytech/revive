@@ -1,7 +1,5 @@
 //! Translates the value and balance operations.
 
-use inkwell::values::BasicValue;
-
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -12,7 +10,15 @@ pub fn gas<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context.integer_const(256, 0).as_basic_value_enum())
+    let ref_time_left_value = context
+        .build_runtime_call(revive_runtime_api::polkavm_imports::REF_TIME_LEFT, &[])
+        .expect("the ref_time_left syscall method should return a value")
+        .into_int_value();
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(ref_time_left_value, context.word_type(), "gas_left")?
+        .into())
 }
 
 /// Translates the `value` instruction.

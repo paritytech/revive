@@ -27,7 +27,7 @@ where
             runtime::FUNCTION_LOAD_IMMUTABLE_DATA,
             context.void_type().fn_type(Default::default(), false),
             0,
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
         )?;
 
         Ok(())

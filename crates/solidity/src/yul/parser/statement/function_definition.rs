@@ -211,7 +211,7 @@ where
             self.identifier.as_str(),
             function_type,
             self.result.len(),
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
         )?;
         revive_llvm_context::PolkaVMFunction::set_attributes(
             context.llvm(),

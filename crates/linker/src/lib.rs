@@ -57,6 +57,7 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
         "--relocatable",
         "--emit-relocs",
         "--no-relax",
+        "--unique",
         "--gc-sections",
         "--library-path",
         dir.path().to_str().expect("should be utf8"),

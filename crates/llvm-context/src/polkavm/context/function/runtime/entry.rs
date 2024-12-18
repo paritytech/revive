@@ -18,23 +18,12 @@ impl Entry {
     /// The call flags argument index.
     pub const ARGUMENT_INDEX_CALL_FLAGS: usize = 0;
 
-    /// Reserve 1kb for calldata.
-    pub const MAX_CALLDATA_SIZE: usize = 1024;
-
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
     pub fn initialize_globals<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
-        let calldata_type = context.array_type(context.byte_type(), Self::MAX_CALLDATA_SIZE);
-        context.set_global(
-            crate::polkavm::GLOBAL_CALLDATA_POINTER,
-            calldata_type,
-            AddressSpace::Stack,
-            calldata_type.get_undef(),
-        );
-
         context.set_global(
             crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER,
             context.llvm().ptr_type(AddressSpace::Heap.into()),
@@ -53,9 +42,9 @@ impl Entry {
 
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
-            context.word_type(),
+            context.xlen_type(),
             AddressSpace::Stack,
-            context.word_undef(),
+            context.xlen_type().get_undef(),
         );
 
         context.set_global(
@@ -68,54 +57,30 @@ impl Entry {
         Ok(())
     }
 
-    /// Load the calldata via seal `input` and initialize the calldata end
-    /// and calldata size globals.
-    pub fn load_calldata<D>(context: &mut Context<D>) -> anyhow::Result<()>
+    /// Populate the calldata size global value.
+    pub fn load_calldata_size<D>(context: &mut Context<D>) -> anyhow::Result<()>
     where
         D: Dependency + Clone,
     {
-        let input_pointer = context
-            .get_global(crate::polkavm::GLOBAL_CALLDATA_POINTER)?
+        let call_data_size_pointer = context
+            .get_global(crate::polkavm::GLOBAL_CALLDATA_SIZE)?
             .value
             .as_pointer_value();
-        let input_pointer_casted = context.builder.build_ptr_to_int(
-            input_pointer,
-            context.xlen_type(),
-            "input_pointer_casted",
-        )?;
-
-        let length_pointer = context.build_alloca_at_entry(context.xlen_type(), "len_ptr");
-        let length_pointer_casted = context.builder.build_ptr_to_int(
-            length_pointer.value,
-            context.xlen_type(),
-            "length_pointer_casted",
-        )?;
-
-        context.build_store(
-            length_pointer,
-            context.integer_const(crate::polkavm::XLEN, Self::MAX_CALLDATA_SIZE as u64),
-        )?;
+        let call_data_size_pointer_arg =
+            context.build_alloca_at_entry(context.word_type(), "call_data_size_pointer_arg");
         context.build_runtime_call(
-            revive_runtime_api::polkavm_imports::INPUT,
-            &[input_pointer_casted.into(), length_pointer_casted.into()],
+            revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
+            &[call_data_size_pointer_arg.to_int(context).into()],
         );
-
-        // Store the calldata size
-        let calldata_size = context
-            .build_load(length_pointer, "input_size")?
-            .into_int_value();
-        let calldata_size_casted = context.builder().build_int_z_extend(
-            calldata_size,
-            context.word_type(),
-            "zext_input_len",
+        let value = context.build_load(call_data_size_pointer_arg, "call_data_size_load")?;
+        let value_truncated = context.builder().build_int_truncate(
+            value.into_int_value(),
+            context.xlen_type(),
+            "call_data_size_truncated",
         )?;
-        context.set_global(
-            crate::polkavm::GLOBAL_CALLDATA_SIZE,
-            context.word_type(),
-            AddressSpace::Stack,
-            calldata_size_casted,
-        );
-
+        context
+            .builder()
+            .build_store(call_data_size_pointer, value_truncated)?;
         Ok(())
     }
 
@@ -220,7 +185,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         Self::initialize_globals(context)?;
-        Self::load_calldata(context)?;
+        Self::load_calldata_size(context)?;
         Self::leave_entry(context)?;
 
         context.build_unconditional_branch(context.current_function().borrow().return_block());

@@ -26,6 +26,12 @@ pub static BLOCK_NUMBER: &str = "block_number";
 
 pub static CALL: &str = "call";
 
+pub static CALL_DATA_COPY: &str = "call_data_copy";
+
+pub static CALL_DATA_LOAD: &str = "call_data_load";
+
+pub static CALL_DATA_SIZE: &str = "call_data_size";
+
 pub static DELEGATE_CALL: &str = "delegate_call";
 
 pub static CALLER: &str = "caller";
@@ -43,8 +49,6 @@ pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
 pub static GET_STORAGE: &str = "get_storage";
 
 pub static HASH_KECCAK_256: &str = "hash_keccak_256";
-
-pub static INPUT: &str = "input";
 
 pub static INSTANTIATE: &str = "instantiate";
 
@@ -68,7 +72,7 @@ pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 28] = [
+pub static IMPORTS: [&str; 30] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -77,6 +81,9 @@ pub static IMPORTS: [&str; 28] = [
     BLOCK_HASH,
     BLOCK_NUMBER,
     CALL,
+    CALL_DATA_COPY,
+    CALL_DATA_LOAD,
+    CALL_DATA_SIZE,
     DELEGATE_CALL,
     CALLER,
     CHAIN_ID,
@@ -86,7 +93,6 @@ pub static IMPORTS: [&str; 28] = [
     GET_IMMUTABLE_DATA,
     GET_STORAGE,
     HASH_KECCAK_256,
-    INPUT,
     INSTANTIATE,
     NOW,
     ORIGIN,

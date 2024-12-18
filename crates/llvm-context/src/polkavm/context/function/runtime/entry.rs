@@ -2,7 +2,6 @@
 
 use inkwell::types::BasicType;
 
-use crate::polkavm;
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
@@ -64,7 +63,7 @@ impl Entry {
         D: Dependency + Clone,
     {
         let call_data_size_pointer = context
-            .get_global(polkavm::GLOBAL_CALLDATA_SIZE)?
+            .get_global(crate::polkavm::GLOBAL_CALLDATA_SIZE)?
             .value
             .as_pointer_value();
         let call_data_size_pointer_arg =

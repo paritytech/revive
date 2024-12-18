@@ -1,4 +1,4 @@
-use frame_support::runtime;
+use frame_support::{runtime, weights::constants::WEIGHT_REF_TIME_PER_SECOND};
 
 use pallet_revive::AccountId32Mapper;
 use polkadot_sdk::*;
@@ -46,6 +46,7 @@ mod runtime {
 #[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
 impl frame_system::Config for Runtime {
     type Block = Block;
+    type BlockWeights = BlockWeights;
     type AccountId = AccountId32;
     type AccountData = pallet_balances::AccountData<<Runtime as pallet_balances::Config>::Balance>;
 }
@@ -65,6 +66,10 @@ parameter_types! {
     pub const DepositPerByte: Balance = 1;
     pub const DepositPerItem: Balance = 2;
     pub const CodeHashLockupDepositPercent: Perbill = Perbill::from_percent(0);
+    pub BlockWeights: frame_system::limits::BlockWeights =
+        frame_system::limits::BlockWeights::simple_max(
+            Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
+        );
 }
 
 #[derive_impl(pallet_revive::config_preludes::TestDefaultConfig)]

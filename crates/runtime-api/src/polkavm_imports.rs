@@ -56,9 +56,9 @@ pub static NOW: &str = "now";
 
 pub static ORIGIN: &str = "origin";
 
-pub static RETURN: &str = "seal_return";
+pub static REF_TIME_LEFT: &str = "ref_time_left";
 
-pub static SET_STORAGE: &str = "set_storage";
+pub static RETURN: &str = "seal_return";
 
 pub static RETURNDATACOPY: &str = "return_data_copy";
 
@@ -66,13 +66,15 @@ pub static RETURNDATASIZE: &str = "return_data_size";
 
 pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
 
+pub static SET_STORAGE: &str = "set_storage";
+
 pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 30] = [
+pub static IMPORTS: [&str; 31] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -96,6 +98,7 @@ pub static IMPORTS: [&str; 30] = [
     INSTANTIATE,
     NOW,
     ORIGIN,
+    REF_TIME_LEFT,
     RETURN,
     RETURNDATACOPY,
     RETURNDATASIZE,

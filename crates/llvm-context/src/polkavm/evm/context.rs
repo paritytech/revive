@@ -7,12 +7,20 @@ use crate::polkavm::Dependency;
 
 /// Translates the `gas_limit` instruction.
 pub fn gas_limit<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let gas_limit_value = context
+        .build_runtime_call(revive_runtime_api::polkavm_imports::GAS_LIMIT, &[])
+        .expect("the gas_limit syscall method should return a value")
+        .into_int_value();
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(gas_limit_value, context.word_type(), "gas_limit")?
+        .into())
 }
 
 /// Translates the `gas_price` instruction.

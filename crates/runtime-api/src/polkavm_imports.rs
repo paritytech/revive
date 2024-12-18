@@ -44,6 +44,8 @@ pub static CODE_HASH: &str = "code_hash";
 
 pub static DEPOSIT_EVENT: &str = "deposit_event";
 
+pub static GAS_LIMIT: &str = "gas_limit";
+
 pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
 
 pub static GET_STORAGE: &str = "get_storage";
@@ -74,7 +76,7 @@ pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 31] = [
+pub static IMPORTS: [&str; 32] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -92,6 +94,7 @@ pub static IMPORTS: [&str; 31] = [
     CODE_SIZE,
     CODE_HASH,
     DEPOSIT_EVENT,
+    GAS_LIMIT,
     GET_IMMUTABLE_DATA,
     GET_STORAGE,
     HASH_KECCAK_256,

@@ -94,6 +94,8 @@ POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 
+POLKAVM_IMPORT(uint64_t, gas_limit);
+
 POLKAVM_IMPORT(void, get_immutable_data, uint32_t, uint32_t);
 
 POLKAVM_IMPORT(uint64_t, get_storage, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)

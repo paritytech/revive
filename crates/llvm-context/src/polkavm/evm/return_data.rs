@@ -10,17 +10,19 @@ pub fn size<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let output_pointer = context.build_alloca_at_entry(context.word_type(), "return_data_size");
-    let output_pointer_parameter = context.builder().build_ptr_to_int(
-        output_pointer.value,
-        context.xlen_type(),
-        "return_data_copy_output_pointer",
-    )?;
-    context.build_runtime_call(
-        revive_runtime_api::polkavm_imports::RETURNDATASIZE,
-        &[output_pointer_parameter.into()],
-    );
-    context.build_load(output_pointer, "return_data_size_load")
+    let return_data_size_value = context
+        .build_runtime_call(revive_runtime_api::polkavm_imports::RETURNDATASIZE, &[])
+        .expect("the return_data_size syscall method should return a value")
+        .into_int_value();
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(
+            return_data_size_value,
+            context.word_type(),
+            "return_data_size",
+        )?
+        .into())
 }
 
 /// Translates the return data copy, trapping if

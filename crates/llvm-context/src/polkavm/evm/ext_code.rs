@@ -16,19 +16,20 @@ where
         Some(address) => address,
         None => super::context::address(context)?.into_int_value(),
     };
-
     let address_pointer = context.build_address_argument_store(address)?;
-    let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
-    context.build_runtime_call(
-        revive_runtime_api::polkavm_imports::CODE_SIZE,
-        &[
-            address_pointer.to_int(context).into(),
-            output_pointer.to_int(context).into(),
-        ],
-    );
+    let code_size_value = context
+        .build_runtime_call(
+            revive_runtime_api::polkavm_imports::CODE_SIZE,
+            &[address_pointer.to_int(context).into()],
+        )
+        .expect("the code_size syscall method should return a value")
+        .into_int_value();
 
-    context.build_load(output_pointer, "code_size")
+    Ok(context
+        .builder()
+        .build_int_z_extend(code_size_value, context.word_type(), "code_size")?
+        .into())
 }
 
 /// Translates the `extcodehash` instruction.

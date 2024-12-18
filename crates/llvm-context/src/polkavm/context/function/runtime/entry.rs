@@ -66,21 +66,14 @@ impl Entry {
             .get_global(crate::polkavm::GLOBAL_CALLDATA_SIZE)?
             .value
             .as_pointer_value();
-        let call_data_size_pointer_arg =
-            context.build_alloca_at_entry(context.word_type(), "call_data_size_pointer_arg");
-        context.build_runtime_call(
-            revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
-            &[call_data_size_pointer_arg.to_int(context).into()],
-        );
-        let value = context.build_load(call_data_size_pointer_arg, "call_data_size_load")?;
-        let value_truncated = context.builder().build_int_truncate(
-            value.into_int_value(),
-            context.xlen_type(),
-            "call_data_size_truncated",
-        )?;
+        let call_data_size_value = context
+            .build_runtime_call(revive_runtime_api::polkavm_imports::CALL_DATA_SIZE, &[])
+            .expect("the call_data_size syscall method should return a value")
+            .into_int_value();
         context
             .builder()
-            .build_store(call_data_size_pointer, value_truncated)?;
+            .build_store(call_data_size_pointer, call_data_size_value)?;
+
         Ok(())
     }
 

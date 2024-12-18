@@ -1163,7 +1163,7 @@ where
             self.name.as_str(),
             function_type,
             output_size,
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
         )?;
         function
             .borrow_mut()

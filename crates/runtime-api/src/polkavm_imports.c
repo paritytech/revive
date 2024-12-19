@@ -70,6 +70,8 @@ POLKAVM_IMPORT(void, balance, uint32_t)
 
 POLKAVM_IMPORT(void, balance_of, uint32_t, uint32_t)
 
+POLKAVM_IMPORT(void, base_fee, uint32_t)
+
 POLKAVM_IMPORT(void, block_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, block_number, uint32_t)

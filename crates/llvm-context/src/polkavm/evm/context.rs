@@ -137,7 +137,7 @@ pub fn basefee<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context.word_const(0).as_basic_value_enum())
+    context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::BASE_FEE)
 }
 
 /// Translates the `address` instruction.

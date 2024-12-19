@@ -30,7 +30,15 @@ pub fn gas_price<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context.word_const(1).as_basic_value_enum())
+    let gas_price_value = context
+        .build_runtime_call(revive_runtime_api::polkavm_imports::GAS_PRICE, &[])
+        .expect("the gas_price syscall method should return a value")
+        .into_int_value();
+
+    Ok(context
+        .builder()
+        .build_int_z_extend(gas_price_value, context.word_type(), "gas_price")?
+        .into())
 }
 
 /// Translates the `tx.origin` instruction.

@@ -32,8 +32,6 @@ pub static CALL_DATA_LOAD: &str = "call_data_load";
 
 pub static CALL_DATA_SIZE: &str = "call_data_size";
 
-pub static DELEGATE_CALL: &str = "delegate_call";
-
 pub static CALLER: &str = "caller";
 
 pub static CHAIN_ID: &str = "chain_id";
@@ -42,9 +40,13 @@ pub static CODE_SIZE: &str = "code_size";
 
 pub static CODE_HASH: &str = "code_hash";
 
+pub static DELEGATE_CALL: &str = "delegate_call";
+
 pub static DEPOSIT_EVENT: &str = "deposit_event";
 
 pub static GAS_LIMIT: &str = "gas_limit";
+
+pub static GAS_PRICE: &str = "gas_price";
 
 pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
 
@@ -76,7 +78,7 @@ pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 32] = [
+pub static IMPORTS: [&str; 33] = [
     SBRK,
     MEMORY_SIZE,
     ADDRESS,
@@ -88,13 +90,14 @@ pub static IMPORTS: [&str; 32] = [
     CALL_DATA_COPY,
     CALL_DATA_LOAD,
     CALL_DATA_SIZE,
-    DELEGATE_CALL,
     CALLER,
     CHAIN_ID,
     CODE_SIZE,
     CODE_HASH,
+    DELEGATE_CALL,
     DEPOSIT_EVENT,
     GAS_LIMIT,
+    GAS_PRICE,
     GET_IMMUTABLE_DATA,
     GET_STORAGE,
     HASH_KECCAK_256,

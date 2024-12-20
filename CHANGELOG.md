@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## v0.1.0-dev.7
+
+This is a development pre-release.
+
+### Added
+- Implement the `GASPRICE` opcode.
+- Implement the `BASEFEE` opcode.
+- Implement the `GASLIMIT` opcode.
+
+### Changed
+- The `GAS` opcode now returns the remaining `ref_time`.
+- Contracts can now be supplied call data input of arbitrary size.
+- Some syscalls now return the value in a register, slightly improving  emitted contract code.
+- Calls forward maximum weight limits instead of 0, anticipating a change in polkadot-sdk where weight limits of 0 no longer interprets as uncapped limit.
+
+### Fixed
+- A linker bug which was preventing certain contracts from linking with the PVM linker. 
+- JS: Fix encoding conversion from JS string (UTF-16) to UTF-8.
+- The git commit hash slug is always displayed in the version string. 
+
 ## v0.1.0-dev.6
 
 This is a development pre-release.

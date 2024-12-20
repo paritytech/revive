@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0-dev.6"
+version = "0.1.0-dev.7"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,18 +14,18 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.80.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0-dev.6", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0-dev.6", path = "crates/builtins" }
-revive-common = { version = "0.1.0-dev.6", path = "crates/common" }
-revive-differential = { version = "0.1.0-dev.6", path = "crates/differential" }
-revive-integration = { version = "0.1.0-dev.6", path = "crates/integration" }
-revive-linker = { version = "0.1.0-dev.6", path = "crates/linker" }
-lld-sys = { version = "0.1.0-dev.6", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0-dev.6", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0-dev.6", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0-dev.6", path = "crates/runner" }
-revive-solidity = { version = "0.1.0-dev.6", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0-dev.6", path = "crates/stdlib" }
+revive-benchmarks = { version = "0.1.0-dev.7", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.7", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.7", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.7", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.7", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.7", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.7", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.7", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.7", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.7", path = "crates/runner" }
+revive-solidity = { version = "0.1.0-dev.7", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.7", path = "crates/stdlib" }
 
 hex = "0.4"
 petgraph = "0.6"

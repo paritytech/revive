@@ -17,6 +17,14 @@ Discussion around the development is hosted on the [Polkadot Forum](https://foru
 
 `resolc` depends on the [solc](https://github.com/ethereum/solidity) binary installed on your system.
 
+Building from source requires a compatible LLVM build.
+
+### LLVM
+
+`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [build-llvm.sh](build-llvm.sh) build script to compile a compatible LLVM build locally in `$PWD/llvm18.0` (don't forget to add that to `$PATH` afterwards).
+
+### The `resolc` Solidity frontend
+
 To install the `resolc` Solidity frontend executable:
 
 ```bash
@@ -25,11 +33,6 @@ export PATH=${PWD}/llvm18.0/bin:$PATH
 make install-bin
 resolc --version
 ```
-
-### LLVM
-
-`revive` requires a build of LLVM 18.1.4 or later including `compiler-rt`. Use the provided [build-llvm.sh](build-llvm.sh) build script to compile a compatible LLVM build locally in `$PWD/llvm18.0` (don't forget to add that to `$PATH` afterwards).
-
 ### Cross-compilation to WASM
 
 Cross-compiles the Revive compiler to WASM for running it in a Node.js or browser environment.

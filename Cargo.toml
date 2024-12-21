@@ -11,7 +11,7 @@ authors = [
 license = "MIT/Apache-2.0"
 edition = "2021"
 repository = "https://github.com/paritytech/revive"
-rust-version = "1.80.0"
+rust-version = "1.81.0"
 
 [workspace.dependencies]
 revive-benchmarks = { version = "0.1.0-dev.7", path = "crates/benchmarks" }

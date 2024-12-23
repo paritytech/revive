@@ -1,0 +1,30 @@
+name: Test
+run-name: Test ${{ github.ref_name }}
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Release:
+    # runs-on: ubuntu-20.04
+    runs-on: parity-large
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: build llvm
+        run: docker build -t revive-llvm:latest --progress=plain --build-arg RUST_VERSION=1.80 -f .github/Dockerfile-llvm .
+
+      - name: build revive
+        run: docker build -t revive:latest --progress=plain -f .github/Dockerfile
+
+      - name: get binary
+        run: docker run --rm revive:latest -v output:/app/output cp /app/release/revive/resolc /app/output .
+
+      # docker push revive:latest
+
+      - run: gh release upload ${{ github.ref_name }} output/resolc

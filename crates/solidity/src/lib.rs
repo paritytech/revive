@@ -52,7 +52,7 @@ pub use self::warning::Warning;
 pub mod test_utils;
 pub mod tests;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 /// Runs the Yul mode.
@@ -149,7 +149,7 @@ pub fn standard_output<T: Compiler>(
         suppressed_warnings,
     )?;
 
-    let source_code_files = solc_input
+    let mut source_code_files: BTreeMap<String, String> = solc_input
         .sources
         .iter()
         .map(|(path, source)| (path.to_owned(), source.content.to_owned()))
@@ -177,6 +177,17 @@ pub fn standard_output<T: Compiler>(
 
         if has_errors {
             anyhow::bail!("Error(s) found. Compilation aborted");
+        }
+    }
+
+    // load import callbacks unspecified in input
+    if let Some(sources) = &solc_output.sources {
+        for source_path in sources.keys() {
+            if !source_code_files.contains_key(source_path) {
+                let source = std::fs::read_to_string(source_path)
+                    .map_err(|e| anyhow::anyhow!("Can't read source file at `{}`: {}", source_path, e))?;
+                let _ = source_code_files.insert(source_path.clone(), source);
+            }
         }
     }
 

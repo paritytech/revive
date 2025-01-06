@@ -184,8 +184,9 @@ pub fn standard_output<T: Compiler>(
     if let Some(sources) = &solc_output.sources {
         for source_path in sources.keys() {
             if !source_code_files.contains_key(source_path) {
-                let source = std::fs::read_to_string(source_path)
-                    .map_err(|e| anyhow::anyhow!("Can't read source file at `{}`: {}", source_path, e))?;
+                let source = std::fs::read_to_string(source_path).map_err(|e| {
+                    anyhow::anyhow!("Can't read source file at `{}`: {}", source_path, e)
+                })?;
                 let _ = source_code_files.insert(source_path.clone(), source);
             }
         }

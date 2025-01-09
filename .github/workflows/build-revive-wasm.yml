@@ -79,7 +79,7 @@ jobs:
           retention-days: 1
 
   test-wasm:
-    #needs: build-revive-wasm
+    needs: build-revive-wasm
     strategy:
       matrix:
         os: ['ubuntu-22.04', 'macos-12', 'windows-2022']

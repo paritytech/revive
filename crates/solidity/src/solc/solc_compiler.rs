@@ -5,6 +5,8 @@ use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
 
+use tracing::trace;
+
 use crate::solc::combined_json::CombinedJson;
 use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
@@ -62,7 +64,10 @@ impl Compiler for SolcCompiler {
         allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
-
+        trace!("In standard_json");
+        trace!("include-paths: {:?}", include_paths.clone());
+        trace!("base_path: {:?}", base_path.clone());
+        trace!("allow_paths-paths: {:?}", allow_paths.clone());
         let mut full_include_paths = include_paths.clone();
         if let Some(base) = &base_path {
             if let Ok(entries) = std::fs::read_dir(base) {
@@ -75,6 +80,7 @@ impl Compiler for SolcCompiler {
                 }
             }
         }
+        trace!("full_include_paths: {:?}", full_include_paths.clone());
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());

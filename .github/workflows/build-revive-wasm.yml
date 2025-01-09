@@ -103,12 +103,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          if [[ "${{ matrix.os }}" == "windows-2022" ]]; then
             Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
             iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
             # Install Bun via Scoop
             scoop install bun
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          elif [[ "${{ matrix.os }}" == "macos-12" ]]; then
             curl -fsSL https://bun.sh/install | bash
             echo "$HOME/.bun/bin" >> $GITHUB_PATH
           else

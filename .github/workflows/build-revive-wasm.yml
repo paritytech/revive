@@ -105,14 +105,12 @@ jobs:
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             curl -fsSL https://bun.sh/install | bash
-            export PATH="$HOME/.bun/bin:$PATH"
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             curl -fsSL https://bun.sh/install | bash
-            export PATH="$HOME/.bun/bin:$PATH"
           else
             curl -fsSL https://bun.sh/install | bash
-            export PATH="$HOME/.bun/bin:$PATH"
           fi
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
       - name: Confirm Installations
         run: |

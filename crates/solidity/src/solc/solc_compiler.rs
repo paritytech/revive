@@ -1,6 +1,7 @@
 //! The Solidity compiler.
 
 use std::io::Write;
+use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -9,8 +10,17 @@ use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
+use once_cell::sync::Lazy;
+use semver::VersionReq;
 
 use super::Compiler;
+// `--base-path` was introduced in 0.6.9 <https://github.com/ethereum/solidity/releases/tag/v0.6.9>
+pub static SUPPORTS_BASE_PATH: Lazy<VersionReq> =
+    Lazy::new(|| VersionReq::parse(">=0.6.9").unwrap());
+
+// `--include-path` was introduced in 0.8.8 <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
+pub static SUPPORTS_INCLUDE_PATH: Lazy<VersionReq> =
+    Lazy::new(|| VersionReq::parse(">=0.8.8").unwrap());
 
 /// The Solidity compiler.
 pub struct SolcCompiler {
@@ -53,23 +63,43 @@ impl Compiler for SolcCompiler {
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
 
+        let mut full_include_paths = include_paths.clone();
+        if let Some(base) = &base_path {
+            if let Ok(entries) = std::fs::read_dir(base) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        if entry.path().is_dir() {
+                            full_include_paths.push(entry.path().to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
-        command.arg("--standard-json");
+        if let Some(path) = &allow_paths {
+            if !path.is_empty() {
+                command.arg("--allow-paths");
+                command.arg(Path::new(path));
+            }
+        }
+        if let Some(base_path) = &base_path {
+            if SUPPORTS_BASE_PATH.matches(&version.default) {
+                command.arg("--base-path").arg(base_path);
 
-        if let Some(base_path) = base_path {
-            command.arg("--base-path");
-            command.arg(base_path);
+                if SUPPORTS_INCLUDE_PATH.matches(&version.default) {
+                    for path in include_paths.iter().filter(|p| *p != base_path) {
+                        command.arg("--include-path").arg(Path::new(path));
+                    }
+                }
+            }
+            command.arg("--allow-paths").arg(base_path);
+            command.current_dir(base_path);
         }
-        for include_path in include_paths.into_iter() {
-            command.arg("--include-path");
-            command.arg(include_path);
-        }
-        if let Some(allow_paths) = allow_paths {
-            command.arg("--allow-paths");
-            command.arg(allow_paths);
-        }
+
+        command.arg("--standard-json");
 
         input.normalize(&version.default);
 

@@ -79,7 +79,7 @@ jobs:
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
           retention-days: 1
 
-  test-wasm:
+  test-revive-wasm:
     needs: build-revive-wasm
     strategy:
       matrix:

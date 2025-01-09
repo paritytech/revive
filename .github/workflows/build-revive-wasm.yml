@@ -107,7 +107,7 @@ jobs:
           Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
           iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
           scoop install bun
-          echo "$env:USERPROFILE\scoop\apps\bun\current\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
+          Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
 
       - name: Install Bun on macOS and Linux
         if: runner.os != 'Windows'

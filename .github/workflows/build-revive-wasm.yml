@@ -70,6 +70,10 @@ jobs:
           source ./emsdk/emsdk_env.sh
           make install-wasm
 
+      - name: Test revive
+        run: |
+          make test-wasm
+
       - uses: actions/upload-artifact@v4
         with:
           name: revive-wasm

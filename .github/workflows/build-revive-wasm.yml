@@ -81,3 +81,50 @@ jobs:
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.js
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
           retention-days: 1
+
+  test-wasm:
+    needs: build-revive-wasm
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Target Directory
+        run: mkdir -p ${{ env.REVIVE_WASM_INSTALL_DIR }}
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: revive-wasm
+          path: ${{ env.REVIVE_WASM_INSTALL_DIR }}
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+          else
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+          fi
+
+      - name: Confirm Installations
+        run: |
+          node --version
+          bun --version
+
+      - name: Test revive
+        run: |
+          echo "Running tests for ${{ matrix.os }}"
+          npm install
+          npm run test:wasm

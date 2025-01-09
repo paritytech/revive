@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
   EMSCRIPTEN_VERSION: 3.1.64
+  BUN_VERSION: 1.1.43
 
 jobs:
   build-revive-wasm:
@@ -82,7 +83,7 @@ jobs:
     needs: build-revive-wasm
     strategy:
       matrix:
-        os: ['ubuntu-22.04', 'macos-12', 'windows-2022']
+        os: ['ubuntu-24.04', 'macos-14', 'windows-2022']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -106,13 +107,13 @@ jobs:
         run: |
           Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
           iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
-          scoop install bun
+          scoop install bun@${{ env.BUN_VERSION }}
           Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
 
       - name: Install Bun on macOS and Linux
         if: runner.os != 'Windows'
         run: |
-          curl -fsSL https://bun.sh/install | bash
+          curl -fsSL https://bun.sh/install | bash -s bun-v${{ env.BUN_VERSION }}
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
       - name: Confirm Installations

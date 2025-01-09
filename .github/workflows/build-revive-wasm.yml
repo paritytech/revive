@@ -101,17 +101,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install Bun on Windows
+        if: runner.os == 'Windows'
         run: |
-          if [[ "${{ matrix.os }}" == "windows-2022" ]]; then
-            pwsh -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser; iex (new-object net.webclient).downloadstring('https://get.scoop.sh'); scoop install bun"
-          elif [[ "${{ matrix.os }}" == "macos-12" ]]; then
-            curl -fsSL https://bun.sh/install | bash
-            echo "$HOME/.bun/bin" >> $GITHUB_PATH
-          else
-            curl -fsSL https://bun.sh/install | bash
-            echo "$HOME/.bun/bin" >> $GITHUB_PATH
-          fi
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
+          scoop install bun
+
+      - name: Install Bun on macOS and Linux
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
       - name: Confirm Installations
         run: |

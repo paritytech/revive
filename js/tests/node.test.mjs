@@ -29,34 +29,6 @@ const validCompilerInput = {
   },
 };
 
-const invalidCompilerInput = {
-  language: 'Solidity',
-  sources: {
-    'BrokenContract.sol': {
-      content: `
-        // SPDX-License-Identifier: UNLICENSED
-        pragma solidity ^0.8.0;
-        contract BrokenContract {
-          function greet() public pure returns (string memory) {
-            return "Hello" // Missing semicolon
-          }
-        }
-      `,
-    },
-  },
-  settings: {
-    optimizer: {
-      enabled: true,
-      runs: 200,
-    },
-    outputSelection: {
-      '*': {
-        '*': ['abi', 'evm.bytecode'],
-      },
-    },
-  },
-};
-
 describe('Compile Function Tests', function () {
   it('should successfully compile valid Solidity code', async function () {
     const result = await compile(validCompilerInput);
@@ -72,6 +44,24 @@ describe('Compile Function Tests', function () {
   });
 
   it('should throw an error for invalid Solidity code', async function () {
+    const invalidCompilerInput = {
+      ...validCompilerInput,
+      sources: {
+        'MyContract.sol': {
+          content: `
+            // SPDX-License-Identifier: UNLICENSED
+            pragma solidity ^0.8.0; 
+            import "nonexistent/console.sol";
+            contract MyContract { 
+              function greet() public pure returns (string memory) { 
+                return "Hello" // Missing semicolon
+              } 
+            }
+          `,
+        },
+      },
+    };
+
     const result = await compile(invalidCompilerInput);
     expect(result).to.be.a('string');
     const output = JSON.parse(result);
@@ -82,7 +72,7 @@ describe('Compile Function Tests', function () {
     expect(output.errors[0].type).to.contain("ParserError");
   });
 
-  it('should return missing import error for invalid imports', async function () {
+  it('should return not found error for missing imports', async function () {
     const compilerInputWithImport = {
       ...validCompilerInput,
       sources: {

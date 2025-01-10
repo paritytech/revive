@@ -1,4 +1,4 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace clean docs docs-build
+.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean docs docs-build
 
 RUSTFLAGS_EMSCRIPTEN := \
 	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
@@ -25,9 +25,11 @@ install-bin:
 install-npm:
 	npm install && npm fund
 
-install-wasm:
+install-wasm: install-npm
 	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
-	npm install
+
+test-wasm: install-wasm
+	npm run test:wasm
 
 # install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
 ifeq ($(origin REVIVE_INSTALL_DIR), undefined)

@@ -81,12 +81,6 @@ bench: install-bin
 	cargo criterion --all --all-features --message-format=json \
 	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
-docs: docs-build
-	mdbook serve --open docs/
-
-docs-build:
-	mdbook test docs/ && mdbook build docs/
-
 clean:
 	cargo clean ; \
 	revive-llvm clean ; \

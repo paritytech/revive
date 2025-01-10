@@ -1,0 +1,41 @@
+[package]
+name = "revive-llvm-builder"
+description = "revive LLVM compiler framework builder"
+authors = [
+    "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
+    "Anton Baliasnikov <aba@matterlabs.dev>",
+    "Cyrill Leutwiler <cyrill@parity.io>",
+]
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "revive-llvm"
+path = "src/revive_llvm/main.rs"
+
+[lib]
+doctest = false
+
+[dependencies]
+clap = { workspace = true, features = ["std", "derive"] }
+anyhow = { workspace = true }
+serde = { workspace = true, features = [ "derive" ] }
+toml = { workspace = true }
+num_cpus = { workspace = true }
+fs_extra = { workspace = true }
+path-slash = { workspace = true }
+regex = { workspace = true }
+downloader = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
+http = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+assert_fs = { workspace = true }
+rstest = { workspace = true }

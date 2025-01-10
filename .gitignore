@@ -6,9 +6,7 @@
 /*.yul
 /*.ll
 /*.s
-/llvm-project
-/llvm18.0
-/llvm18.0-emscripten
+/llvm*
 node_modules
 artifacts
 tmp

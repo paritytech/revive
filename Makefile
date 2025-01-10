@@ -53,10 +53,14 @@ test-solidity: install
 	cargo test --package revive-solidity
 
 test-workspace: install
-	cargo test --workspace
+	cargo test --workspace --exclude revive-llvm-builder
 
 test-cli: install
 	npm run test:cli
+
+test-llvm-builder:
+	@echo "warning: the llvm-builder tests will take many hours"
+	cargo test --package revive-llvm-builder -- --test-threads=1
 
 bench-pvm: install-bin
 	cargo criterion --bench execute --features bench-pvm-interpreter --message-format=json \

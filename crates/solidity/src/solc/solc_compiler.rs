@@ -65,9 +65,6 @@ impl Compiler for SolcCompiler {
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
         trace!("In standard_json");
-        trace!("include-paths: {:?}", include_paths.clone());
-        trace!("base_path: {:?}", base_path.clone());
-        trace!("allow_paths-paths: {:?}", allow_paths.clone());
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());

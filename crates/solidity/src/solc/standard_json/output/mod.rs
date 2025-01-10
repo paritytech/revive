@@ -59,9 +59,6 @@ impl Output {
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Project> {
         trace!("Starting try_to_project");
-        trace!("Contracts present: {}", self.contracts.is_some());
-        trace!("Errors present: {}", self.errors.is_some());
-        trace!("Source files count: {}", source_code_files.len());
 
         if let SolcPipeline::EVMLA = pipeline {
             self.preprocess_dependencies()?;

@@ -9,7 +9,7 @@ use std::str::FromStr;
 use anyhow::Context;
 use clap::Parser;
 
-use self::arguments::Arguments;
+use self::arguments::{Arguments, Subcommand};
 
 /// The default path to the LLVM lock file.
 pub const LLVM_LOCK_DEFAULT_PATH: &str = "LLVM.lock";
@@ -29,14 +29,17 @@ fn main() {
 fn main_inner() -> anyhow::Result<()> {
     let arguments = Arguments::parse();
 
-    match arguments {
-        Arguments::Clone { deep, target_env } => {
+    revive_llvm_builder::llvm_path::DIRECTORY_LLVM_TARGET
+        .get_or_init(|| PathBuf::from(format!("./target-llvm/{}/", arguments.target_env)));
+
+    match arguments.subcommand {
+        Subcommand::Clone { deep } => {
             let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from("LLVM.lock"))?;
-            revive_llvm_builder::clone(lock, deep, target_env)?;
+            revive_llvm_builder::clone(lock, deep, arguments.target_env)?;
         }
-        Arguments::Build {
+
+        Subcommand::Build {
             build_type,
-            target_env,
             targets,
             llvm_projects,
             enable_rtti,
@@ -91,7 +94,7 @@ fn main_inner() -> anyhow::Result<()> {
 
             revive_llvm_builder::build(
                 build_type,
-                target_env,
+                arguments.target_env,
                 targets,
                 projects,
                 enable_rtti,
@@ -105,15 +108,18 @@ fn main_inner() -> anyhow::Result<()> {
                 enable_valgrind,
             )?;
         }
-        Arguments::Checkout { force } => {
+
+        Subcommand::Checkout { force } => {
             let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from("LLVM.lock"))?;
             revive_llvm_builder::checkout(lock, force)?;
         }
-        Arguments::Clean => {
+
+        Subcommand::Clean => {
             revive_llvm_builder::clean()
                 .with_context(|| "Unable to remove target LLVM directory")?;
         }
-        Arguments::Builtins {
+
+        Subcommand::Builtins {
             build_type,
             default_target,
             extra_args,

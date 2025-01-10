@@ -8175,6 +8175,7 @@ dependencies = [
  "http",
  "log",
  "num_cpus",
+ "once_cell",
  "path-slash",
  "predicates",
  "regex",

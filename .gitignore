@@ -1,4 +1,5 @@
 /target
+/target-llvm
 *.dot
 .vscode/
 .DS_Store

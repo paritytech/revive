@@ -21,33 +21,36 @@ Building from source requires a compatible LLVM build.
 
 ### LLVM
 
-`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [build-llvm.sh](build-llvm.sh) build script to compile a compatible LLVM build locally in `$PWD/llvm18.0` (don't forget to add that to `$PATH` afterwards).
+`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally (don't forget to add it to `$PATH` afterwards).
 
 ### The `resolc` Solidity frontend
 
 To install the `resolc` Solidity frontend executable:
 
 ```bash
-bash build-llvm.sh
-export PATH=${PWD}/llvm18.0/bin:$PATH
+# Build LLVM for your default host target
+make install-llvm
+
+# Build the resolc frontend executable
+export PATH=${PWD}/target-llvm/gnu/target-final/bin:$PATH
 make install-bin
 resolc --version
 ```
+
 ### Cross-compilation to WASM
 
-Cross-compiles the Revive compiler to WASM for running it in a Node.js or browser environment.
-
-Install [emscripten](https://emscripten.org/docs/getting_started/downloads.html). Tested on version 3.1.64.
-To build resolc.js execute:
+Cross-compile resolc.js frontend executable to Wasm for running it in a Node.js or browser environment:
 
 ```bash
-bash build-llvm.sh
-export PATH=${PWD}/llvm18.0/bin:$PATH
-export EMSDK_ROOT=<PATH_TO_EMSCRIPTEN_SDK>
-bash emscripten-build-llvm.sh
-source $EMSDK_ROOT/emsdk_env.sh
-export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
-export PATH=$PATH:$PWD/llvm18.0-emscripten/bin/
+# Build LLVM for the emscripten target
+cargo install --path llvm-builder
+revive-llvm --target-env emscripten clone
+revive-llvm --target-env emscripten build
+
+# Build the resolc frontend executable
+source emsdk/emsdk_env.sh
+export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
+export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
 make install-wasm
 ```
 

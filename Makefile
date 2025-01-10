@@ -1,4 +1,4 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean docs docs-build
+.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean install-llvm install-llvm-builder
 
 RUSTFLAGS_EMSCRIPTEN := \
 	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
@@ -27,6 +27,13 @@ install-npm:
 
 install-wasm: install-npm
 	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+
+install-llvm-builder:
+	cargo install --path crates/llvm-builder
+
+install-llvm: install-llvm-builder
+	revive-llvm clone
+	revive-llvm build
 
 test-wasm: install-wasm
 	npm run test:wasm
@@ -82,9 +89,11 @@ docs-build:
 
 clean:
 	cargo clean ; \
+	revive-llvm clean ; \
 	rm -rf node_modules ; \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
+	cargo uninstall revive-llvm-builder ; \
 	rm -f package-lock.json ; \
 	rm -rf js/dist ; \
 	rm -f js/src/resolc.{wasm,js}

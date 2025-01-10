@@ -5,17 +5,24 @@ use revive_llvm_builder::ccache_variant::CcacheVariant;
 
 /// The revive LLVM builder arguments.
 #[derive(Debug, Parser)]
-#[command(version, about, long_about = None)]
-pub enum Arguments {
+#[command(version, about)]
+pub struct Arguments {
+    /// Target environment to build LLVM (gnu, musl, emscripten).
+    #[arg(long, default_value_t = revive_llvm_builder::target_env::TargetEnv::GNU)]
+    pub target_env: revive_llvm_builder::target_env::TargetEnv,
+
+    #[command(subcommand)]
+    pub subcommand: Subcommand,
+}
+
+/// The revive LLVM builder arguments.
+#[derive(Debug, clap::Subcommand)]
+pub enum Subcommand {
     /// Clone the branch specified in `LLVM.lock`.
     Clone {
         /// Clone with full commits history.
         #[arg(long)]
         deep: bool,
-
-        /// Target environment to build LLVM (gnu, musl, emscripten).
-        #[arg(long, default_value_t = revive_llvm_builder::target_env::TargetEnv::GNU)]
-        target_env: revive_llvm_builder::target_env::TargetEnv,
     },
 
     /// Build the LLVM framework.
@@ -24,16 +31,18 @@ pub enum Arguments {
         #[arg(long, default_value_t = revive_llvm_builder::BuildType::Release)]
         build_type: revive_llvm_builder::BuildType,
 
-        /// Target environment to build LLVM (`gnu` or `musl`).
-        #[arg(long, default_value = "gnu")]
-        target_env: revive_llvm_builder::target_env::TargetEnv,
-
         /// Additional targets to build LLVM with.
         #[arg(long)]
         targets: Vec<String>,
 
         /// LLVM projects to build LLVM with.
-        #[arg(long)]
+        #[arg(
+            long,
+            default_values_t = vec![
+                revive_llvm_builder::llvm_project::LLVMProject::CLANG,
+                revive_llvm_builder::llvm_project::LLVMProject::LLD
+            ]
+        )]
         llvm_projects: Vec<revive_llvm_builder::llvm_project::LLVMProject>,
 
         /// Whether to build LLVM with run-time type information (RTTI) enabled.
@@ -62,7 +71,7 @@ pub enum Arguments {
         ccache_variant: Option<CcacheVariant>,
 
         /// Whether to build with assertions enabled or not.
-        #[arg(long)]
+        #[arg(long, default_value_t = true)]
         enable_assertions: bool,
 
         /// Build LLVM with sanitizer enabled (`Address`, `Memory`, `MemoryWithOrigins`, `Undefined`, `Thread`, `DataFlow`, or `Address;Undefined`).
@@ -77,7 +86,7 @@ pub enum Arguments {
     /// Checkout the branch specified in `LLVM.lock`.
     Checkout {
         /// Remove all artifacts preventing the checkout (removes all local changes!).
-        #[structopt(long = "force")]
+        #[arg(long)]
         force: bool,
     },
 

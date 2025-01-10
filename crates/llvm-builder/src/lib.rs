@@ -18,7 +18,7 @@ pub use self::lock::Lock;
 pub use self::platforms::Platform;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 pub use target_triple::TargetTriple;
 
@@ -137,7 +137,7 @@ pub fn build(
     log::trace!("sanitzer: {:?}", &sanitizer);
     log::trace!("enable valgrind: {:?}", &enable_valgrind);
 
-    std::fs::create_dir_all(LLVMPath::DIRECTORY_LLVM_TARGET)?;
+    std::fs::create_dir_all(llvm_path::DIRECTORY_LLVM_TARGET.get().unwrap())?;
 
     if cfg!(target_arch = "x86_64") {
         if cfg!(target_os = "linux") {
@@ -298,6 +298,23 @@ pub fn build(
 
 /// Executes the build artifacts cleaning.
 pub fn clean() -> anyhow::Result<()> {
-    std::fs::remove_dir_all(PathBuf::from(LLVMPath::DIRECTORY_LLVM_TARGET))?;
+    let remove_if_exists = |path: &Path| {
+        if !path.exists() {
+            return Ok(());
+        }
+        std::fs::remove_dir_all(path)
+    };
+
+    remove_if_exists(
+        llvm_path::DIRECTORY_LLVM_TARGET
+            .get()
+            .expect("target_env is always set because of the default value")
+            .parent()
+            .expect("target_env parent directory is target-llvm"),
+    )?;
+    remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_EMSDK_SOURCE))?;
+    remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE))?;
+    remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_LLVM_HOST_SOURCE))?;
+
     Ok(())
 }

@@ -92,9 +92,13 @@ pub fn download_musl(name: &str) -> anyhow::Result<()> {
     log::info!("downloading musl {name}");
     let tar_file_name = format!("{name}.tar.gz");
     let url = format!("{}/{tar_file_name}", MUSL_SNAPSHOTS_URL);
-    download(url.as_str(), crate::LLVMPath::DIRECTORY_LLVM_TARGET)?;
+    let target_path = crate::llvm_path::DIRECTORY_LLVM_TARGET
+        .get()
+        .unwrap()
+        .to_string_lossy();
+    download(url.as_str(), &target_path)?;
     let musl_tarball = crate::LLVMPath::musl_source(tar_file_name.as_str())?;
-    unpack_tar(musl_tarball, crate::LLVMPath::DIRECTORY_LLVM_TARGET)?;
+    unpack_tar(musl_tarball, &target_path)?;
     Ok(())
 }
 

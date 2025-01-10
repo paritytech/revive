@@ -90,7 +90,7 @@ Obtain a compatible build for your host platform from the release section of thi
       revive-llvm build --enable assertions --llvm-projects clang --llvm-projects lld 
       ```
 
-      The build artifacts will end up in the `./target-llvm/target-final/` directory.
+      Build artifacts end up in the `./target-llvm/target-final/` directory by default.
       You now need to add the bin directory to `$PATH`: `export PATH=${PWD}/target-llvm/target-final/bin:$PATH`
       If built with the `--enable-tests` option, test tools will be in the `./target-llvm/build-final/` directory, along   with copies of the build artifacts. For all supported build options, run `revive-llvm build --help`.
 
@@ -123,12 +123,12 @@ The following target platforms are supported:
 <details>
 <summary>Building for Emscripten</summary>
 
-   * Via a emsdk build we can run revive in the browser and on node.js.
+   * Via an emsdk build we can run revive in the browser and on node.js.
 
      Clone and build the LLVM framework using the `revive-llvm` tool:
       ```shell
-      revive-llvm clone --target-env musl
-      revive-llvm build --target-env musl --enable assertions --llvm-projects clang --llvm-projects lld 
+      revive-llvm clone --target-env emscripten
+      revive-llvm build --target-env emscripten --enable assertions --llvm-projects clang --llvm-projects lld 
       ```
 
 </details>

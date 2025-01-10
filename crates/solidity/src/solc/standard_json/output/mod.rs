@@ -189,7 +189,6 @@ impl Output {
                 messages.extend(polkavm_messages);
             }
         }
-        trace!("preprocess_ast: found errors {:?}", self.errors.clone());
         self.errors = match self.errors.take() {
             Some(mut errors) => {
                 errors.extend(messages);

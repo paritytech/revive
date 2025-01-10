@@ -68,66 +68,71 @@ impl Compiler for SolcCompiler {
         trace!("include-paths: {:?}", include_paths.clone());
         trace!("base_path: {:?}", base_path.clone());
         trace!("allow_paths-paths: {:?}", allow_paths.clone());
-        let mut full_include_paths = include_paths.clone();
-        if let Some(base) = &base_path {
-            if let Ok(entries) = std::fs::read_dir(base) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        if entry.path().is_dir() {
-                            full_include_paths.push(entry.path().to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-        trace!("full_include_paths: {:?}", full_include_paths.clone());
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
-        if let Some(path) = &allow_paths {
-            if !path.is_empty() {
-                command.arg("--allow-paths");
-                command.arg(Path::new(path));
-            }
-        }
+
         if let Some(base_path) = &base_path {
             if SUPPORTS_BASE_PATH.matches(&version.default) {
                 command.arg("--base-path").arg(base_path);
 
                 if SUPPORTS_INCLUDE_PATH.matches(&version.default) {
+                    // `--base-path` and `--include-path` conflict if set to the same path, so
+                    // as a precaution, we ensure here that the `--base-path` is not also used
+                    // for `--include-path`
                     for path in include_paths.iter().filter(|p| *p != base_path) {
                         command.arg("--include-path").arg(Path::new(path));
                     }
                 }
             }
-            command.arg("--allow-paths").arg(base_path);
             command.current_dir(base_path);
         }
-
+        if let Some(path) = &allow_paths {
+            if !path.is_empty() {
+                command.arg("--allow-paths");
+                command.arg(path);
+            }
+        }
         command.arg("--standard-json");
 
         input.normalize(&version.default);
-
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
+        trace!("Normalized input: {:#?}", input);
 
         let input_json = serde_json::to_vec(&input).expect("Always valid");
+        trace!("Input JSON length: {}", input_json.len());
+        trace!(
+            "Input JSON content: {}",
+            String::from_utf8_lossy(&input_json)
+        );
 
-        let process = command.spawn().map_err(|error| {
+        let mut process = command.spawn().map_err(|error| {
             anyhow::anyhow!("{} subprocess spawning error: {:?}", self.executable, error)
         })?;
-        process
-            .stdin
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("{} stdin getting error", self.executable))?
-            .write_all(input_json.as_slice())
-            .map_err(|error| {
+
+        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
+        {
+            let mut stdin = process
+                .stdin
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("{} stdin getting error", self.executable))?;
+
+            stdin.write_all(input_json.as_slice()).map_err(|error| {
                 anyhow::anyhow!("{} stdin writing error: {:?}", self.executable, error)
             })?;
 
+            stdin.flush().map_err(|error| {
+                anyhow::anyhow!("{} stdin flushing error: {:?}", self.executable, error)
+            })?;
+        }
         let output = process.wait_with_output().map_err(|error| {
             anyhow::anyhow!("{} subprocess output error: {:?}", self.executable, error)
         })?;
+
+        trace!("Solc stdout: {}", String::from_utf8_lossy(&output.stdout));
+        trace!("Solc stderr: {}", String::from_utf8_lossy(&output.stderr));
+        trace!("Solc exit status: {}", output.status);
+
         if !output.status.success() {
             anyhow::bail!(
                 "{} error: {}",
@@ -138,6 +143,7 @@ impl Compiler for SolcCompiler {
 
         let mut output: StandardJsonOutput =
             revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
+                trace!("Failed to parse output as StandardJsonOutput");
                 anyhow::anyhow!(
                     "{} subprocess output parsing error: {}\n{}",
                     self.executable,
@@ -151,7 +157,11 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
+
+        trace!("Parsed output structure: {:#?}", output);
+
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
+        trace!("Preprocessed output: {:#?}", output);
 
         Ok(output)
     }

@@ -24,9 +24,9 @@ use crate::yul::parser::statement::object::Object;
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
-
+use tracing::{error, trace, warn};
 /// The `solc --standard-json` output.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Output {
     /// The file-contract hashmap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -58,21 +58,54 @@ impl Output {
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Project> {
+        trace!("Starting try_to_project");
+        trace!("Contracts present: {}", self.contracts.is_some());
+        trace!("Errors present: {}", self.errors.is_some());
+        trace!("Source files count: {}", source_code_files.len());
+
         if let SolcPipeline::EVMLA = pipeline {
             self.preprocess_dependencies()?;
         }
 
         let files = match self.contracts.as_ref() {
-            Some(files) => files,
-            None => {
-                anyhow::bail!(
-                    "{}",
-                    self.errors
-                        .as_ref()
-                        .map(|errors| serde_json::to_string_pretty(errors).expect("Always valid"))
-                        .unwrap_or_else(|| "Unknown project assembling error".to_owned())
-                );
+            Some(files) => {
+                trace!("Found contracts: {:#?}", files.keys());
+                files
             }
+            None => &{
+                match &self.errors {
+                    Some(errors) if !errors.is_empty() => {
+                        // Here we want to ensure that we check for actual errors
+                        // Warnings are valid and shouldnt be treated as regualar errors
+                        // As such we need to
+                        //1. Filter errors for severity "error"
+                        //2. If we do have errors only then do we bail
+                        //3. If we dont have errors we simply return empty files
+                        let has_errors = errors.iter().any(|e| e.severity == "error");
+
+                        if has_errors {
+                            error!("Compiler errors found: {:#?}", errors);
+                            anyhow::bail!(
+                                "{}",
+                                serde_json::to_string_pretty(errors).expect("Always valid")
+                            );
+                        }
+
+                        warn!("Compiler warnings found: {:#?}", errors);
+                        BTreeMap::new()
+                    }
+                    Some(_) => {
+                        error!("Empty errors array found");
+                        anyhow::bail!("Compilation produced no output and no errors");
+                    }
+                    None => {
+                        error!("No contracts and no errors found");
+                        anyhow::bail!(
+                            "Unknown project assembling error - no contracts or errors present"
+                        );
+                    }
+                }
+            },
         };
         let mut project_contracts = BTreeMap::new();
 
@@ -159,7 +192,7 @@ impl Output {
                 messages.extend(polkavm_messages);
             }
         }
-
+        trace!("preprocess_ast: found errors {:?}", self.errors.clone());
         self.errors = match self.errors.take() {
             Some(mut errors) => {
                 errors.extend(messages);

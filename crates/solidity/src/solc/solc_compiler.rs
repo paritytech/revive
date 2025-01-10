@@ -85,6 +85,7 @@ impl Compiler for SolcCompiler {
             }
             command.current_dir(base_path);
         }
+        
         if let Some(path) = &allow_paths {
             if !path.is_empty() {
                 command.arg("--allow-paths");

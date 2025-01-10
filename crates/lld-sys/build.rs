@@ -29,6 +29,7 @@ fn set_rustc_link_flags(llvm_config_path: &Path) {
     );
 
     for lib in [
+        // These are required by ld.lld
         "lldELF",
         "lldCommon",
         "lldMachO",
@@ -91,9 +92,13 @@ fn set_rustc_link_flags(llvm_config_path: &Path) {
     }
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     if target_os == "linux" {
-        println!("cargo:rustc-link-lib=dylib=stdc++");
-        println!("cargo:rustc-link-lib=tinfo");
+        if target_env == "musl" {
+            println!("cargo:rustc-link-lib=static=c++");
+        } else {
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
     }
 }
 

@@ -137,6 +137,14 @@ pub fn build(
     log::trace!("sanitzer: {:?}", &sanitizer);
     log::trace!("enable valgrind: {:?}", &enable_valgrind);
 
+    if !PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE).exists() {
+        log::error!(
+            "LLVM project source directory {} does not exist (run `revive-llvm --target-env {} clone`)",
+            LLVMPath::DIRECTORY_LLVM_SOURCE,
+            target_env
+        )
+    }
+
     std::fs::create_dir_all(llvm_path::DIRECTORY_LLVM_TARGET.get().unwrap())?;
 
     if cfg!(target_arch = "x86_64") {
@@ -310,6 +318,7 @@ pub fn clean() -> anyhow::Result<()> {
         if !path.exists() {
             return Ok(());
         }
+        log::info!("deleting {}", path.display());
         std::fs::remove_dir_all(path)
     };
 

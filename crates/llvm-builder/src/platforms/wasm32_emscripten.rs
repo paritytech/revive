@@ -174,6 +174,10 @@ fn build_target(
                 "Ninja",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
                 "-DCMAKE_BUILD_WITH_INSTALL_RPATH=1",
+                // Enable thin LTO but emscripten has various issues with it.
+                // FIXME: https://github.com/paritytech/revive/issues/148
+                //"-DLLVM_ENABLE_LTO='Thin'",
+                //"-DCMAKE_EXE_LINKER_FLAGS='-Wl,-u,htons -Wl,-u,htonl -Wl,-u,fileno -Wl,-u,ntohs'",
                 &format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     target_directory.to_string_lossy()

@@ -117,9 +117,9 @@ fn clone_build_and_clean_musl() -> anyhow::Result<()> {
     let mut build_cmd = Command::cargo_bin(common::REVIVE_LLVM)?;
     build_cmd.current_dir(test_dir);
     build_cmd
-        .arg("build")
         .arg("--target-env")
         .arg("musl")
+        .arg("build")
         .arg("--llvm-projects")
         .arg("clang")
         .arg("--llvm-projects")
@@ -245,7 +245,7 @@ fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
 
     let emsdk_wrapped_build_command = format!(
         "source {}emsdk_env.sh && \
-            {} build --target-env emscripten --llvm-projects clang --llvm-projects lld",
+            {} --target-env emscripten build --llvm-projects clang --llvm-projects lld",
         revive_llvm_builder::LLVMPath::DIRECTORY_EMSDK_SOURCE,
         Command::cargo_bin(common::REVIVE_LLVM)?
             .get_program()
@@ -253,9 +253,9 @@ fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
     );
 
     Command::cargo_bin(common::REVIVE_LLVM)?
-        .arg("clone")
         .arg("--target-env")
         .arg("emscripten")
+        .arg("clone")
         .current_dir(test_dir)
         .assert()
         .success()

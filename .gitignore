@@ -15,3 +15,4 @@ package-lock.json
 /*.html
 /build
 soljson.js
+emsdk

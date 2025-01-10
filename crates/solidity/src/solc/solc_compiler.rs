@@ -1,11 +1,5 @@
 //! The Solidity compiler.
 
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
-
-use tracing::trace;
-
 use crate::solc::combined_json::CombinedJson;
 use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
@@ -13,6 +7,9 @@ use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
 use once_cell::sync::Lazy;
 use semver::VersionReq;
+use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
 
 use super::Compiler;
 // `--base-path` was introduced in 0.6.9 <https://github.com/ethereum/solidity/releases/tag/v0.6.9>
@@ -63,7 +60,6 @@ impl Compiler for SolcCompiler {
         allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
-        trace!("In standard_json");
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
@@ -94,14 +90,8 @@ impl Compiler for SolcCompiler {
         command.arg("--standard-json");
 
         input.normalize(&version.default);
-        trace!("Normalized input: {:#?}", input);
 
         let input_json = serde_json::to_vec(&input).expect("Always valid");
-        trace!("Input JSON length: {}", input_json.len());
-        trace!(
-            "Input JSON content: {}",
-            String::from_utf8_lossy(&input_json)
-        );
 
         let mut process = command.spawn().map_err(|error| {
             anyhow::anyhow!("{} subprocess spawning error: {:?}", self.executable, error)
@@ -126,10 +116,6 @@ impl Compiler for SolcCompiler {
             anyhow::anyhow!("{} subprocess output error: {:?}", self.executable, error)
         })?;
 
-        trace!("Solc stdout: {}", String::from_utf8_lossy(&output.stdout));
-        trace!("Solc stderr: {}", String::from_utf8_lossy(&output.stderr));
-        trace!("Solc exit status: {}", output.status);
-
         if !output.status.success() {
             anyhow::bail!(
                 "{} error: {}",
@@ -140,7 +126,6 @@ impl Compiler for SolcCompiler {
 
         let mut output: StandardJsonOutput =
             revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
-                trace!("Failed to parse output as StandardJsonOutput");
                 anyhow::anyhow!(
                     "{} subprocess output parsing error: {}\n{}",
                     self.executable,
@@ -155,10 +140,7 @@ impl Compiler for SolcCompiler {
                 )
             })?;
 
-        trace!("Parsed output structure: {:#?}", output);
-
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
-        trace!("Preprocessed output: {:#?}", output);
 
         Ok(output)
     }

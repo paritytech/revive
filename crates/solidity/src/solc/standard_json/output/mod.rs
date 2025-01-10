@@ -24,7 +24,6 @@ use crate::yul::parser::statement::object::Object;
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
-use tracing::{error, trace, warn};
 /// The `solc --standard-json` output.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Output {
@@ -58,17 +57,12 @@ impl Output {
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Project> {
-        trace!("Starting try_to_project");
-
         if let SolcPipeline::EVMLA = pipeline {
             self.preprocess_dependencies()?;
         }
 
         let files = match self.contracts.as_ref() {
-            Some(files) => {
-                trace!("Found contracts: {:#?}", files.keys());
-                files
-            }
+            Some(files) => files,
             None => &{
                 match &self.errors {
                     Some(errors) if !errors.is_empty() => {
@@ -81,22 +75,18 @@ impl Output {
                         let has_errors = errors.iter().any(|e| e.severity == "error");
 
                         if has_errors {
-                            error!("Compiler errors found: {:#?}", errors);
                             anyhow::bail!(
                                 "{}",
                                 serde_json::to_string_pretty(errors).expect("Always valid")
                             );
                         }
 
-                        warn!("Compiler warnings found: {:#?}", errors);
                         BTreeMap::new()
                     }
                     Some(_) => {
-                        error!("Empty errors array found");
                         anyhow::bail!("Compilation produced no output and no errors");
                     }
                     None => {
-                        error!("No contracts and no errors found");
                         anyhow::bail!(
                             "Unknown project assembling error - no contracts or errors present"
                         );

@@ -1,7 +1,6 @@
 //! The Solidity compiler.
 
 use std::io::Write;
-use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
 

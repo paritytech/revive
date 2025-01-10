@@ -15,7 +15,7 @@ fn main() {
         .expect("llvm-config output should be utf8");
 
     let mut lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
-        .join("linux")
+        .join("unknown")
         .join(BUILTINS_ARCHIVE_FILE);
     if !lib_path.exists() {
         lib_path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())

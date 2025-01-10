@@ -1,4 +1,5 @@
-llvm-*/
+llvm*/
+target-llvm/
 target/
 node_modules/
 utils/

@@ -83,11 +83,11 @@ Obtain a compatible build for your host platform from the release section of thi
 
    * Clone and build the LLVM framework using the `revive-llvm` tool.
 
-     The clang and lld projects are required for the `resolc` Solidity frontend executable. Enabling assertions is always a good idea:
+     The clang and lld projects are required for the `resolc` Solidity frontend executable. Enabling assertions is always a good idea (enabled by default anyways):
 
       ```shell
       revive-llvm clone
-      revive-llvm build --enable assertions --llvm-projects clang --llvm-projects lld 
+      revive-llvm build --enable-assertions --llvm-projects clang --llvm-projects lld 
       ```
 
       Build artifacts end up in the `./target-llvm/target-final/` directory by default.
@@ -114,8 +114,8 @@ The following target platforms are supported:
 
      Clone and build the LLVM framework using the `revive-llvm` tool:
       ```shell
-      revive-llvm clone --target-env musl
-      revive-llvm build --target-env musl --enable assertions --llvm-projects clang --llvm-projects lld 
+      revive-llvm --target-env musl clone
+      revive-llvm --target-env musl build --enable-assertions --llvm-projects clang --llvm-projects lld 
       ```
 
 </details>
@@ -127,8 +127,8 @@ The following target platforms are supported:
 
      Clone and build the LLVM framework using the `revive-llvm` tool:
       ```shell
-      revive-llvm clone --target-env emscripten
-      revive-llvm build --target-env emscripten --enable assertions --llvm-projects clang --llvm-projects lld 
+      revive-llvm --target-env emscripten clone
+      revive-llvm --target-env emscripten build --enable-assertions --llvm-projects clang --llvm-projects lld 
       ```
 
 </details>

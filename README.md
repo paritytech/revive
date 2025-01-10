@@ -42,16 +42,19 @@ resolc --version
 Cross-compile resolc.js frontend executable to Wasm for running it in a Node.js or browser environment:
 
 ```bash
-# Build LLVM for the emscripten target
-cargo install --path llvm-builder
+# Install the Emscripten SDK
+make install-llvm-builder
 revive-llvm --target-env emscripten clone
+source emsdk/emsdk_env.sh
+
+# Build LLVM for the emscripten target
 revive-llvm --target-env emscripten build
 
 # Build the resolc frontend executable
-source emsdk/emsdk_env.sh
 export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
 export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
 make install-wasm
+make test-wasm
 ```
 
 ### Development

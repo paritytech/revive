@@ -27,3 +27,6 @@ RUN make install-bin
 FROM alpine:latest
 ADD https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux /usr/bin/solc
 COPY --from=resolc-builder /root/.cargo/bin/resolc /usr/bin/resolc
+
+RUN apk add --no-cache libc6-compat
+RUN chmod +x /usr/bin/solc 

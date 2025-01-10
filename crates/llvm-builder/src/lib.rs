@@ -119,7 +119,7 @@ pub fn build(
     default_target: Option<TargetTriple>,
     enable_tests: bool,
     enable_coverage: bool,
-    extra_args: Vec<String>,
+    extra_args: &[String],
     ccache_variant: Option<ccache_variant::CcacheVariant>,
     enable_assertions: bool,
     sanitizer: Option<sanitizer::Sanitizer>,
@@ -292,6 +292,14 @@ pub fn build(
     } else {
         anyhow::bail!("Unsupported target architecture");
     }
+
+    crate::builtins::build(
+        build_type,
+        default_target,
+        extra_args,
+        ccache_variant,
+        sanitizer,
+    )?;
 
     Ok(())
 }

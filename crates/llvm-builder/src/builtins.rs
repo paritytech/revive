@@ -29,12 +29,15 @@ const CMAKE_STATIC_ARGS: [&str; 14] = [
 ];
 
 /// Dynamic cmake arguments for building the compiler-rt builtins.
-fn cmake_dynamic_args(build_type: crate::BuildType) -> anyhow::Result<[String; 11]> {
+fn cmake_dynamic_args(build_type: crate::BuildType) -> anyhow::Result<[String; 12]> {
     let llvm_compiler_rt_target = crate::LLVMPath::llvm_target_compiler_rt()?;
     let llvm_target_final = crate::LLVMPath::llvm_target_final()?;
 
     let mut clang_path = llvm_target_final.to_path_buf();
     clang_path.push("bin/clang");
+
+    let mut clangxx_path = llvm_target_final.to_path_buf();
+    clangxx_path.push("bin/clang++");
 
     let mut llvm_config_path = llvm_target_final.to_path_buf();
     llvm_config_path.push("bin/llvm-config");
@@ -62,6 +65,7 @@ fn cmake_dynamic_args(build_type: crate::BuildType) -> anyhow::Result<[String; 1
         format!("-DCMAKE_ASM_FLAGS='{}'", C_FLAGS.join(" ")),
         format!("-DCMAKE_CXX_FLAGS='{}'", C_FLAGS.join(" ")),
         format!("-DCMAKE_C_COMPILER='{}'", clang_path.to_string_lossy()),
+        format!("-DCMAKE_CXX_COMPILER='{}'", clangxx_path.to_string_lossy()),
         format!("-DCMAKE_AR='{}'", ar_path.to_string_lossy()),
         format!("-DCMAKE_NM='{}'", nm_path.to_string_lossy()),
         format!("-DCMAKE_RANLIB='{}'", ranlib_path.to_string_lossy()),
@@ -76,7 +80,7 @@ fn cmake_dynamic_args(build_type: crate::BuildType) -> anyhow::Result<[String; 1
 pub fn build(
     build_type: crate::BuildType,
     default_target: Option<crate::TargetTriple>,
-    extra_args: Vec<String>,
+    extra_args: &[String],
     ccache_variant: Option<crate::ccache_variant::CcacheVariant>,
     sanitizer: Option<crate::sanitizer::Sanitizer>,
 ) -> anyhow::Result<()> {

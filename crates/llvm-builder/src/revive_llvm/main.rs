@@ -101,7 +101,7 @@ fn main_inner() -> anyhow::Result<()> {
                 default_target,
                 enable_tests,
                 enable_coverage,
-                extra_args_unescaped,
+                &extra_args_unescaped,
                 ccache_variant,
                 enable_assertions,
                 sanitizer,
@@ -129,7 +129,7 @@ fn main_inner() -> anyhow::Result<()> {
             revive_llvm_builder::builtins::build(
                 build_type,
                 default_target,
-                extra_args,
+                &extra_args,
                 ccache_variant,
                 sanitizer,
             )?;

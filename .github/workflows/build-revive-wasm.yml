@@ -40,6 +40,12 @@ jobs:
           revive-llvm --target-env emscripten clone
           source emsdk/emsdk_env.sh
 
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          source emsdk/emsdk_env.sh
+          revive-llvm --target-env emscripten build
+
       - run: |
           rustup show
           cargo --version
@@ -47,13 +53,7 @@ jobs:
           cargo +nightly --version
           cmake --version
           bash --version
-          llvm-config --version
-
-      - name: Build LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          source emsdk/emsdk_env.sh
-          revive-llvm --target-env emscripten build
+          target-llvm/emscripten/target-final/bin/llvm-config --version
 
       - name: Use Cached LLVM
         if: steps.cache-llvm.outputs.cache-hit == 'true'

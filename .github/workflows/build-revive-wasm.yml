@@ -32,7 +32,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5 curl git libssl-dev pkg-config clang lld
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
 
           # Clone LLVM and install the Emscripten SDK

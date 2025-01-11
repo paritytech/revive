@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-ubuntu-x86:
-    runs-on: ubuntu-22.04
+    runs-on: parity-large
 
     steps:
       - uses: actions/checkout@v4
@@ -23,18 +23,16 @@ jobs:
           chmod +x solc/solc
           echo "$(pwd)/solc/" >> $GITHUB_PATH
 
-      - name: Install LLVM
-        run: |
-          curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-          tar Jxf llvm.tar.xz
-          mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
-          echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
-
       - name: Install apt dependencies
         run: |
           sudo add-apt-repository -y ppa:ethereum/ethereum
           sudo apt update
-          sudo apt install -y libtinfo5 ethereum
+          sudo apt install -y libtinfo5 ethereum cmake ninja-build curl git libssl-dev pkg-config clang lld
+
+      - name: Install LLVM
+        run: |
+          make install-llvm
+          echo "$(pwd)/target-llvm/gnu/target-final/bin" >> $GITHUB_PATH
 
       - name: Format
         run: make format

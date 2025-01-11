@@ -14,13 +14,9 @@ fn main() {
         .read_to_string(&mut llvm_lib_dir)
         .expect("llvm-config output should be utf8");
 
-    let mut lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
+    let lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
         .join("unknown")
         .join(BUILTINS_ARCHIVE_FILE);
-    if !lib_path.exists() {
-        lib_path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join(BUILTINS_ARCHIVE_FILE);
-    }
     let archive = fs::read(lib_path).expect("clang builtins not found");
 
     let out_dir = env::var_os("OUT_DIR").expect("has OUT_DIR");

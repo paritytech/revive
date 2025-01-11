@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-revive-wasm:
-    runs-on: ubuntu-22.04
+    runs-on: parity-large
     defaults:
       run:
         shell: bash
@@ -26,24 +26,19 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            llvm18.0-emscripten
+            target-llvm
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
           key: llvm-build-${{ runner.os }}-${{ hashFiles('clone-llvm.sh', 'emscripten-build-llvm.sh') }}
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5 curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
-          # Install LLVM required for the compiler runtime, runtime-api and stdlib
-          curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-          tar Jxf llvm.tar.xz
-          mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
-          echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
-          # Install Emscripten
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
+
+          # Clone LLVM and install the Emscripten SDK
+          make install-llvm-builder
+          revive-llvm --target-env emscripten clone
+          source emsdk/emsdk_env.sh
 
       - run: |
           rustup show
@@ -57,8 +52,8 @@ jobs:
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          export EMSDK_ROOT=${PWD}/emsdk
-          ./emscripten-build-llvm.sh
+          source emsdk/emsdk_env.sh
+          revive-llvm --target-env emscripten build
 
       - name: Use Cached LLVM
         if: steps.cache-llvm.outputs.cache-hit == 'true'
@@ -67,8 +62,9 @@ jobs:
 
       - name: Build revive
         run: |
-          export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
-          source ./emsdk/emsdk_env.sh
+          source emsdk/emsdk_env.sh
+          export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
+          export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
           make install-wasm
 
       - uses: actions/upload-artifact@v4

@@ -170,7 +170,7 @@ pub fn get_xcode_version() -> anyhow::Result<u32> {
 
 /// Install the Emscripten SDK.
 pub fn install_emsdk() -> anyhow::Result<()> {
-    log::info!("'installing emsdk v{EMSDK_VERSION}");
+    log::info!("installing emsdk v{EMSDK_VERSION}");
 
     let emsdk_source_path = PathBuf::from(crate::LLVMPath::DIRECTORY_EMSDK_SOURCE);
 

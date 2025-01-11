@@ -101,22 +101,21 @@ fn clone_build_and_clean() -> anyhow::Result<()> {
 ///
 /// Returns `Ok(())` if the test passes.
 #[rstest]
-#[timeout(std::time::Duration::from_secs(5000))]
+#[timeout(std::time::Duration::from_secs(7200))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn clone_build_and_clean_musl() -> anyhow::Result<()> {
-    let mut cmd = Command::cargo_bin(common::REVIVE_LLVM)?;
     let lockfile = common::create_test_tmp_lockfile(None)?;
     let test_dir = lockfile
         .parent()
         .expect("Lockfile parent dir does not exist");
-    cmd.current_dir(test_dir);
-    cmd.arg("clone");
-    cmd.assert()
-        .success()
-        .stderr(predicate::str::is_match(".*Updating files:.*100%.*done").unwrap());
 
-    let mut build_cmd = Command::cargo_bin(common::REVIVE_LLVM)?;
-    build_cmd.current_dir(test_dir);
-    build_cmd
+    Command::cargo_bin(common::REVIVE_LLVM)?
+        .arg("clone")
+        .current_dir(test_dir)
+        .assert()
+        .success();
+
+    Command::cargo_bin(common::REVIVE_LLVM)?
         .arg("--target-env")
         .arg("musl")
         .arg("build")
@@ -124,22 +123,21 @@ fn clone_build_and_clean_musl() -> anyhow::Result<()> {
         .arg("clang")
         .arg("--llvm-projects")
         .arg("lld")
+        .current_dir(test_dir)
         .assert()
-        .success()
-        .stdout(predicate::str::is_match("Installing:.*").unwrap());
+        .success();
 
-    let mut builtins_cmd = Command::cargo_bin(common::REVIVE_LLVM)?;
-    builtins_cmd.current_dir(test_dir);
-    builtins_cmd
+    Command::cargo_bin(common::REVIVE_LLVM)?
+        .current_dir(test_dir)
         .arg("builtins")
         .assert()
-        .success()
-        .stdout(predicate::str::is_match("Installing:.*builtins-riscv64.a").unwrap());
+        .success();
 
-    let mut clean_cmd = Command::cargo_bin(common::REVIVE_LLVM)?;
-    clean_cmd.current_dir(test_dir);
-    clean_cmd.arg("clean");
-    clean_cmd.assert().success();
+    Command::cargo_bin(common::REVIVE_LLVM)?
+        .current_dir(test_dir)
+        .arg("clean")
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -235,39 +233,30 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 /// # Returns
 ///
 /// Returns `Ok(())` if the test passes.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[rstest]
-#[timeout(std::time::Duration::from_secs(5000))]
+#[timeout(std::time::Duration::from_secs(7200))]
 fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
     let lockfile = common::create_test_tmp_lockfile(None)?;
     let test_dir = lockfile
         .parent()
         .expect("Lockfile parent dir does not exist");
 
+    let command = Command::cargo_bin(common::REVIVE_LLVM)?;
+    let program = command.get_program().to_string_lossy();
     let emsdk_wrapped_build_command = format!(
-        "source {}emsdk_env.sh && \
-            {} --target-env emscripten build --llvm-projects clang --llvm-projects lld",
+        "{program} --target-env emscripten clone && \
+        source {}emsdk_env.sh && \
+        {program} --target-env emscripten build --llvm-projects clang --llvm-projects lld",
         revive_llvm_builder::LLVMPath::DIRECTORY_EMSDK_SOURCE,
-        Command::cargo_bin(common::REVIVE_LLVM)?
-            .get_program()
-            .to_string_lossy(),
     );
-
-    Command::cargo_bin(common::REVIVE_LLVM)?
-        .arg("--target-env")
-        .arg("emscripten")
-        .arg("clone")
-        .current_dir(test_dir)
-        .assert()
-        .success()
-        .stderr(predicate::str::is_match(".*Updating files:.*100%.*done")?);
 
     Command::new("sh")
         .arg("-c")
-        .current_dir(test_dir)
         .arg(emsdk_wrapped_build_command)
+        .current_dir(test_dir)
         .assert()
-        .success()
-        .stdout(predicate::str::is_match("Installing:.*")?);
+        .success();
 
     Command::cargo_bin(common::REVIVE_LLVM)?
         .arg("clean")

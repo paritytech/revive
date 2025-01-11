@@ -65,6 +65,7 @@ jobs:
           source emsdk/emsdk_env.sh
           export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
           export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
+          export PATH=$PATH:${PWD}/target-llvm/emscripten/target-host/bin/
           make install-wasm
 
       - uses: actions/upload-artifact@v4
@@ -79,7 +80,7 @@ jobs:
     needs: build-revive-wasm
     strategy:
       matrix:
-        os: ['ubuntu-24.04', 'macos-14', 'windows-2022']
+        os: ["ubuntu-24.04", "macos-14", "windows-2022"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +97,7 @@ jobs:
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Bun on Windows
         if: runner.os == 'Windows'

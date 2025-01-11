@@ -128,6 +128,7 @@ fn main_inner() -> anyhow::Result<()> {
         } => {
             revive_llvm_builder::builtins::build(
                 build_type,
+                arguments.target_env,
                 default_target,
                 &extra_args,
                 ccache_variant,

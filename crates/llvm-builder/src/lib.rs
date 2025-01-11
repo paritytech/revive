@@ -20,13 +20,14 @@ pub use self::platforms::Platform;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+pub use target_env::TargetEnv;
 pub use target_triple::TargetTriple;
 
 /// Executes the LLVM repository cloning.
-pub fn clone(lock: Lock, deep: bool, target_env: target_env::TargetEnv) -> anyhow::Result<()> {
+pub fn clone(lock: Lock, deep: bool, target_env: TargetEnv) -> anyhow::Result<()> {
     utils::check_presence("git")?;
 
-    if target_env == target_env::TargetEnv::Emscripten {
+    if target_env == TargetEnv::Emscripten {
         utils::install_emsdk()?;
     }
 
@@ -112,7 +113,7 @@ pub fn checkout(lock: Lock, force: bool) -> anyhow::Result<()> {
 #[allow(clippy::too_many_arguments)]
 pub fn build(
     build_type: BuildType,
-    target_env: target_env::TargetEnv,
+    target_env: TargetEnv,
     targets: HashSet<Platform>,
     llvm_projects: HashSet<llvm_project::LLVMProject>,
     enable_rtti: bool,
@@ -125,17 +126,17 @@ pub fn build(
     sanitizer: Option<sanitizer::Sanitizer>,
     enable_valgrind: bool,
 ) -> anyhow::Result<()> {
-    log::trace!("build type: {:?}", &build_type);
-    log::trace!("target env: {:?}", &target_env);
-    log::trace!("targets: {:?}", &targets);
-    log::trace!("llvm projects: {:?}", &llvm_projects);
-    log::trace!("enable rtti: {:?}", &enable_rtti);
-    log::trace!("default target: {:?}", &default_target);
-    log::trace!("eneable tests: {:?}", &enable_tests);
-    log::trace!("enable_coverage: {:?}", &enable_coverage);
-    log::trace!("extra args: {:?}", &extra_args);
-    log::trace!("sanitzer: {:?}", &sanitizer);
-    log::trace!("enable valgrind: {:?}", &enable_valgrind);
+    log::trace!("build type: {:?}", build_type);
+    log::trace!("target env: {:?}", target_env);
+    log::trace!("targets: {:?}", targets);
+    log::trace!("llvm projects: {:?}", llvm_projects);
+    log::trace!("enable rtti: {:?}", enable_rtti);
+    log::trace!("default target: {:?}", default_target);
+    log::trace!("eneable tests: {:?}", enable_tests);
+    log::trace!("enable_coverage: {:?}", enable_coverage);
+    log::trace!("extra args: {:?}", extra_args);
+    log::trace!("sanitzer: {:?}", sanitizer);
+    log::trace!("enable valgrind: {:?}", enable_valgrind);
 
     if !PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE).exists() {
         log::error!(
@@ -149,7 +150,7 @@ pub fn build(
 
     if cfg!(target_arch = "x86_64") {
         if cfg!(target_os = "linux") {
-            if target_env == target_env::TargetEnv::MUSL {
+            if target_env == TargetEnv::MUSL {
                 platforms::x86_64_linux_musl::build(
                     build_type,
                     targets,
@@ -164,7 +165,7 @@ pub fn build(
                     sanitizer,
                     enable_valgrind,
                 )?;
-            } else if target_env == target_env::TargetEnv::GNU {
+            } else if target_env == TargetEnv::GNU {
                 platforms::x86_64_linux_gnu::build(
                     build_type,
                     targets,
@@ -179,7 +180,7 @@ pub fn build(
                     sanitizer,
                     enable_valgrind,
                 )?;
-            } else if target_env == target_env::TargetEnv::Emscripten {
+            } else if target_env == TargetEnv::Emscripten {
                 platforms::wasm32_emscripten::build(
                     build_type,
                     targets,
@@ -230,7 +231,7 @@ pub fn build(
         }
     } else if cfg!(target_arch = "aarch64") {
         if cfg!(target_os = "linux") {
-            if target_env == target_env::TargetEnv::MUSL {
+            if target_env == TargetEnv::MUSL {
                 platforms::aarch64_linux_musl::build(
                     build_type,
                     targets,
@@ -245,7 +246,7 @@ pub fn build(
                     sanitizer,
                     enable_valgrind,
                 )?;
-            } else if target_env == target_env::TargetEnv::GNU {
+            } else if target_env == TargetEnv::GNU {
                 platforms::aarch64_linux_gnu::build(
                     build_type,
                     targets,
@@ -264,7 +265,7 @@ pub fn build(
                 anyhow::bail!("Unsupported target environment for aarch64 and Linux");
             }
         } else if cfg!(target_os = "macos") {
-            if target_env == target_env::TargetEnv::Emscripten {
+            if target_env == TargetEnv::Emscripten {
                 platforms::wasm32_emscripten::build(
                     build_type,
                     targets,
@@ -301,8 +302,38 @@ pub fn build(
         anyhow::bail!("Unsupported target architecture");
     }
 
+    /*
+    if target_env == TargetEnv::Emscripten {
+        log::info!("building builtins requires a native target environment");
+        build(
+            build_type,
+            TargetEnv::GNU,
+            targets,
+            &[LLVMProject::CLANG, LLVMProject::LLD].into(),
+            enable_rtti,
+            default_target,
+            enable_tests,
+            enable_coverage,
+            extra_args,
+            ccache_variant,
+            enable_assertions,
+            sanitizer,
+            enable_valgrind,
+        )?;
+    } else {
+        crate::builtins::build(
+            build_type,
+            target_env,
+            default_target,
+            extra_args,
+            ccache_variant,
+            sanitizer,
+        )?;
+    }
+    */
     crate::builtins::build(
         build_type,
+        target_env,
         default_target,
         extra_args,
         ccache_variant,

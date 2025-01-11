@@ -54,7 +54,7 @@ pub fn build(
         llvm_module_llvm.as_path(),
         llvm_build_final.as_path(),
         llvm_target_final.as_path(),
-        llvm_build_host.as_path(),
+        llvm_target_host.as_path(),
         enable_tests,
         enable_coverage,
         extra_args,
@@ -64,7 +64,7 @@ pub fn build(
         enable_valgrind,
     )?;
 
-    let mut source_path = llvm_build_host.clone();
+    let mut source_path = llvm_target_host.clone();
     source_path.push("bin/llvm-config");
 
     let mut destination_path = llvm_target_final.clone();
@@ -101,15 +101,17 @@ fn build_host(
                 "-G",
                 "Ninja",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
-                format!(
+                &format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     target_directory.to_string_lossy()
-                )
-                .as_str(),
+                ),
                 "-DLLVM_BUILD_SHARED_LIBS='Off'",
                 "-DCMAKE_BUILD_TYPE='Release'",
-                "-DLLVM_TARGETS_TO_BUILD='WebAssembly'",
-                "-DLLVM_ENABLE_PROJECTS='clang'",
+                &format!(
+                    "-DLLVM_TARGETS_TO_BUILD='WebAssembly;{}'",
+                    crate::Platform::PolkaVM
+                ),
+                "-DLLVM_ENABLE_PROJECTS='clang;lld'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::SHARED_BUILD_OPTS_NOT_MUSL)
@@ -119,16 +121,7 @@ fn build_host(
         "LLVM host building cmake config",
     )?;
 
-    crate::utils::command(
-        Command::new("cmake")
-            .arg("--build")
-            .arg(build_directory)
-            .arg("--")
-            .arg("llvm-tblgen")
-            .arg("clang-tblgen")
-            .arg("llvm-config"),
-        "LLVM Emscripten host utilities build",
-    )?;
+    crate::utils::ninja(build_directory)?;
 
     Ok(())
 }
@@ -144,7 +137,7 @@ fn build_target(
     source_directory: &Path,
     build_directory: &Path,
     target_directory: &Path,
-    host_build_directory: &Path,
+    host_target_directory: &Path,
     enable_tests: bool,
     enable_coverage: bool,
     extra_args: &[String],
@@ -153,10 +146,10 @@ fn build_target(
     sanitizer: Option<crate::sanitizer::Sanitizer>,
     enable_valgrind: bool,
 ) -> anyhow::Result<()> {
-    let mut llvm_tblgen_path = host_build_directory.to_path_buf();
+    let mut llvm_tblgen_path = host_target_directory.to_path_buf();
     llvm_tblgen_path.push("bin/llvm-tblgen");
 
-    let mut clang_tblgen_path = host_build_directory.to_path_buf();
+    let mut clang_tblgen_path = host_target_directory.to_path_buf();
     clang_tblgen_path.push("bin/clang-tblgen");
 
     crate::utils::command(

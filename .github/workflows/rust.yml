@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-ubuntu-x86:
-    runs-on: parity-large
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4

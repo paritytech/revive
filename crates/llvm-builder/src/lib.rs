@@ -302,35 +302,6 @@ pub fn build(
         anyhow::bail!("Unsupported target architecture");
     }
 
-    /*
-    if target_env == TargetEnv::Emscripten {
-        log::info!("building builtins requires a native target environment");
-        build(
-            build_type,
-            TargetEnv::GNU,
-            targets,
-            &[LLVMProject::CLANG, LLVMProject::LLD].into(),
-            enable_rtti,
-            default_target,
-            enable_tests,
-            enable_coverage,
-            extra_args,
-            ccache_variant,
-            enable_assertions,
-            sanitizer,
-            enable_valgrind,
-        )?;
-    } else {
-        crate::builtins::build(
-            build_type,
-            target_env,
-            default_target,
-            extra_args,
-            ccache_variant,
-            sanitizer,
-        )?;
-    }
-    */
     crate::builtins::build(
         build_type,
         target_env,

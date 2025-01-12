@@ -8,6 +8,7 @@ authors.workspace = true
 description = "Execute revive contracts in a simulated blockchain runtime"
 
 [features]
+std = ["polkadot-sdk/std"]
 default = ["solidity"]
 solidity = ["revive-solidity", "revive-differential"]
 

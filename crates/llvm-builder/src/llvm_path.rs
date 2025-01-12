@@ -135,4 +135,17 @@ impl LLVMPath {
             log::debug!("llvm compiler-rt build: {}", absolute_path.display())
         })
     }
+
+    /// Returns the path to the LLVM target final bin path.
+    ///
+    pub fn llvm_target_final_bin(
+        target_env: crate::target_env::TargetEnv,
+    ) -> anyhow::Result<PathBuf> {
+        let mut path = Self::llvm_target_final()?;
+        path.push("bin");
+        path.push(format!("{target_env}"));
+        crate::utils::absolute_path(path).inspect(|absolute_path| {
+            log::debug!("llvm target final bin: {}", absolute_path.display())
+        })
+    }
 }

@@ -8,6 +8,9 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// The default lock file location.
+pub const LLVM_LOCK_DEFAULT_PATH: &str = "LLVM.lock";
+
 /// The lock file data.
 ///
 /// This file describes the exact reference of the LLVM framework.

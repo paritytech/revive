@@ -1,32 +1,26 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
-
-const LLVM_LINK_PREFIX: &str = "LLVM_LINK_PREFIX";
-
-fn locate_llvm_config() -> PathBuf {
-    let prefix = env::var_os(LLVM_LINK_PREFIX)
-        .map(|p| PathBuf::from(p).join("bin"))
-        .unwrap_or_default();
-    prefix.join("llvm-config")
+/// Link against the target environment's LLVM libraries if requested.
+fn locate_llvm_config() -> std::path::PathBuf {
+    match std::env::var(revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX) {
+        Ok(path) => std::path::PathBuf::from(path)
+            .join("bin")
+            .join("llvm-config"),
+        _ => revive_llvm_builder::utils::llvm_host_tool("llvm-config"),
+    }
 }
 
-fn llvm_config(llvm_config_path: &Path, arg: &str) -> String {
-    let output = std::process::Command::new(llvm_config_path)
-        .args([arg])
+fn llvm_config(arg: &str) -> String {
+    let llvm_config = locate_llvm_config();
+    let output = std::process::Command::new(&llvm_config)
+        .arg(arg)
         .output()
-        .unwrap_or_else(|_| panic!("`llvm-config {arg}` failed"));
+        .unwrap_or_else(|error| panic!("`{} {arg}` failed: {error}", llvm_config.display()));
 
     String::from_utf8(output.stdout)
-        .unwrap_or_else(|_| panic!("output of `llvm-config {arg}` should be utf8"))
+        .unwrap_or_else(|_| panic!("output of `{} {arg}` should be utf8", llvm_config.display()))
 }
 
-fn set_rustc_link_flags(llvm_config_path: &Path) {
-    println!(
-        "cargo:rustc-link-search=native={}",
-        llvm_config(llvm_config_path, "--libdir")
-    );
+fn set_rustc_link_flags() {
+    println!("cargo:rustc-link-search=native={}", llvm_config("--libdir"));
 
     for lib in [
         // These are required by ld.lld
@@ -103,11 +97,16 @@ fn set_rustc_link_flags(llvm_config_path: &Path) {
 }
 
 fn main() {
-    println!("cargo:rerun-if-env-changed={}", LLVM_LINK_PREFIX);
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+    );
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX
+    );
 
-    let llvm_config_path = locate_llvm_config();
-
-    llvm_config(&llvm_config_path, "--cxxflags")
+    llvm_config("--cxxflags")
         .split_whitespace()
         .fold(&mut cc::Build::new(), |builder, flag| builder.flag(flag))
         .flag("-Wno-unused-parameter")
@@ -115,7 +114,7 @@ fn main() {
         .file("src/linker.cpp")
         .compile("liblinker.a");
 
-    set_rustc_link_flags(&llvm_config_path);
+    set_rustc_link_flags();
 
     println!("cargo:rerun-if-changed=build.rs");
 }

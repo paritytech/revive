@@ -33,10 +33,11 @@ pub fn clone(lock: Lock, deep: bool, target_env: TargetEnv) -> anyhow::Result<()
 
     let destination_path = PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE);
     if destination_path.exists() {
-        anyhow::bail!(
-            "The repository is already cloned at {:?}. Use `checkout` instead",
-            destination_path
+        log::warn!(
+            "LLVM repository directory {} already exists, falling back to checkout",
+            destination_path.display()
         );
+        return checkout(lock, false);
     }
 
     let mut clone_args = vec!["clone", "--branch", lock.branch.as_str()];

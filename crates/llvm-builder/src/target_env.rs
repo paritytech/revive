@@ -1,9 +1,10 @@
 //! The target environments to build LLVM.
 
 /// The list of target environments used as constants.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TargetEnv {
     /// The GNU target environment.
+    #[default]
     GNU,
     /// The MUSL target environment.
     MUSL,

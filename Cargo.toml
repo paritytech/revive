@@ -26,6 +26,7 @@ revive-runtime-api = { version = "0.1.0-dev.7", path = "crates/runtime-api" }
 revive-runner = { version = "0.1.0-dev.7", path = "crates/runner" }
 revive-solidity = { version = "0.1.0-dev.7", path = "crates/solidity" }
 revive-stdlib = { version = "0.1.0-dev.7", path = "crates/stdlib" }
+revive-llvm-builder = { version = "0.1.0-dev.7", path = "crates/llvm-builder" }
 
 hex = "0.4"
 petgraph = "0.6"

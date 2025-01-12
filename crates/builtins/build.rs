@@ -3,12 +3,20 @@ use std::{env, fs, io::Read, path::Path, process::Command};
 pub const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
 
 fn main() {
-    let mut llvm_lib_dir = String::new();
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+    );
 
-    Command::new("llvm-config")
-        .args(["--libdir"])
+    let llvm_config = revive_llvm_builder::utils::llvm_host_tool("llvm-config");
+    let mut llvm_lib_dir = String::new();
+    Command::new(&llvm_config)
+        .arg("--libdir")
         .output()
-        .expect("llvm-config should be able to provide LD path")
+        .expect(&format!(
+            "{} should be able to provide LD path",
+            llvm_config.display()
+        ))
         .stdout
         .as_slice()
         .read_to_string(&mut llvm_lib_dir)
@@ -17,7 +25,8 @@ fn main() {
     let lib_path = std::path::PathBuf::from(llvm_lib_dir.trim())
         .join("unknown")
         .join(BUILTINS_ARCHIVE_FILE);
-    let archive = fs::read(lib_path).expect("clang builtins not found");
+    let archive = fs::read(&lib_path).expect("clang builtins not found");
+    println!("cargo:rerun-if-env-changed={}", lib_path.display());
 
     let out_dir = env::var_os("OUT_DIR").expect("has OUT_DIR");
     let archive_path = Path::new(&out_dir).join(BUILTINS_ARCHIVE_FILE);

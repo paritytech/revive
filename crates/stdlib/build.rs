@@ -1,18 +1,23 @@
 use std::{env, fs, path::Path, process::Command};
 
 fn main() {
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+    );
+
     let lib = "stdlib.bc";
     let out_dir = env::var_os("OUT_DIR").expect("env should have $OUT_DIR");
     let bitcode_path = Path::new(&out_dir).join(lib);
-
-    let output = Command::new("llvm-as")
+    let llvm_as = revive_llvm_builder::utils::llvm_host_tool("llvm-as");
+    let output = Command::new(llvm_as)
         .args([
             "-o",
             bitcode_path.to_str().expect("$OUT_DIR should be UTF-8"),
             "stdlib.ll",
         ])
         .output()
-        .expect("should be able to invoke llvm-as");
+        .unwrap_or_else(|error| panic!("failed to execute llvm-as: {}", error));
 
     assert!(
         output.status.success(),

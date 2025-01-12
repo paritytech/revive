@@ -4498,6 +4498,7 @@ version = "0.1.0-dev.7"
 dependencies = [
  "cc",
  "libc",
+ "revive-llvm-builder",
 ]
 
 [[package]]
@@ -8053,6 +8054,9 @@ dependencies = [
 [[package]]
 name = "revive-builtins"
 version = "0.1.0-dev.7"
+dependencies = [
+ "revive-llvm-builder",
+]
 
 [[package]]
 name = "revive-common"
@@ -8182,6 +8186,7 @@ dependencies = [
  "anyhow",
  "inkwell",
  "revive-common",
+ "revive-llvm-builder",
 ]
 
 [[package]]
@@ -8218,6 +8223,7 @@ name = "revive-stdlib"
 version = "0.1.0-dev.7"
 dependencies = [
  "inkwell",
+ "revive-llvm-builder",
 ]
 
 [[package]]

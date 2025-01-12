@@ -11,9 +11,6 @@ use clap::Parser;
 
 use self::arguments::{Arguments, Subcommand};
 
-/// The default path to the LLVM lock file.
-pub const LLVM_LOCK_DEFAULT_PATH: &str = "LLVM.lock";
-
 fn main() {
     env_logger::init();
 
@@ -29,12 +26,13 @@ fn main() {
 fn main_inner() -> anyhow::Result<()> {
     let arguments = Arguments::parse();
 
-    revive_llvm_builder::llvm_path::DIRECTORY_LLVM_TARGET
-        .get_or_init(|| PathBuf::from(format!("./target-llvm/{}/", arguments.target_env)));
+    revive_llvm_builder::utils::directory_target_llvm(arguments.target_env);
 
     match arguments.subcommand {
         Subcommand::Clone { deep } => {
-            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from("LLVM.lock"))?;
+            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from(
+                revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH,
+            ))?;
             revive_llvm_builder::clone(lock, deep, arguments.target_env)?;
         }
 
@@ -110,7 +108,9 @@ fn main_inner() -> anyhow::Result<()> {
         }
 
         Subcommand::Checkout { force } => {
-            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from("LLVM.lock"))?;
+            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from(
+                revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH,
+            ))?;
             revive_llvm_builder::checkout(lock, force)?;
         }
 

@@ -14,7 +14,7 @@ const EXPORTS_BC: &str = "polkavm_exports.bc";
 const EXPORTS_RUST: &str = "polkavm_exports.rs";
 
 fn compile(source_path: &str, bitcode_path: &str) {
-    let output = Command::new("clang")
+    let output = Command::new(revive_llvm_builder::utils::llvm_host_tool("clang"))
         .args([
             TARGET_FLAG,
             "-Xclang",
@@ -37,7 +37,7 @@ fn compile(source_path: &str, bitcode_path: &str) {
             source_path,
         ])
         .output()
-        .expect("should be able to invoke C clang");
+        .unwrap_or_else(|error| panic!("failed to execute clang: {}", error));
 
     assert!(
         output.status.success(),
@@ -59,6 +59,11 @@ fn build_module(source_path: &str, bitcode_path: &str, rust_file: &str) {
 }
 
 fn main() {
+    println!(
+        "cargo:rerun-if-env-changed={}",
+        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+    );
+
     build_module(IMPORTS_SOUCE, IMPORTS_BC, IMPORTS_RUST);
     build_module(EXPORTS_SOUCE, EXPORTS_BC, EXPORTS_RUST);
 

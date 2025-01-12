@@ -3,7 +3,6 @@ use assert_fs::fixture::FileWriteStr;
 pub const REVIVE_LLVM: &str = "revive-llvm";
 pub const REVIVE_LLVM_REPO_URL: &str = "https://github.com/llvm/llvm-project";
 pub const REVIVE_LLVM_REPO_TEST_BRANCH: &str = "release/18.x";
-pub const LLVM_LOCK_FILE: &str = "LLVM.lock";
 
 pub struct TestDir {
     _lockfile: assert_fs::NamedTempFile,
@@ -13,7 +12,8 @@ pub struct TestDir {
 /// Creates a temporary lock file for testing.
 impl TestDir {
     pub fn with_lockfile(reference: Option<String>) -> anyhow::Result<Self> {
-        let file = assert_fs::NamedTempFile::new(LLVM_LOCK_FILE)?;
+        let file =
+            assert_fs::NamedTempFile::new(revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH)?;
         let lock = revive_llvm_builder::Lock {
             url: REVIVE_LLVM_REPO_URL.to_string(),
             branch: REVIVE_LLVM_REPO_TEST_BRANCH.to_string(),

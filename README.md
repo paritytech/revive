@@ -21,38 +21,37 @@ Building from source requires a compatible LLVM build.
 
 ### LLVM
 
-`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally (don't forget to add it to `$PATH` afterwards).
+`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation directory afterwards.
 
 ### The `resolc` Solidity frontend
 
 To install the `resolc` Solidity frontend executable:
 
 ```bash
-# Build LLVM for your default host target
+# Build the host LLVM dependency with PolkaVM target support
 make install-llvm
 
 # Build the resolc frontend executable
-export PATH=${PWD}/target-llvm/gnu/target-final/bin:$PATH
 make install-bin
 resolc --version
 ```
 
 ### Cross-compilation to WASM
 
-Cross-compile resolc.js frontend executable to Wasm for running it in a Node.js or browser environment:
+Cross-compile resolc.js frontend executable to Wasm for running it in a Node.js or browser environment. The `REVIVE_LLVM_TARGET_PREFIX` environment variable is used to control the target environment LLVM dependency.
 
 ```bash
-# Install the Emscripten SDK
-make install-llvm-builder
+# Build the host LLVM dependency with PolkaVM target support
+make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+
+# Build the target LLVM dependency with PolkaVM target support
 revive-llvm --target-env emscripten clone
 source emsdk/emsdk_env.sh
-
-# Build LLVM for the emscripten target
 revive-llvm --target-env emscripten build
+export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
 
 # Build the resolc frontend executable
-export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
-export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
 make install-wasm
 make test-wasm
 ```

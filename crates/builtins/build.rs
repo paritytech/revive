@@ -13,10 +13,12 @@ fn main() {
     Command::new(&llvm_config)
         .arg("--libdir")
         .output()
-        .expect(&format!(
-            "{} should be able to provide LD path",
-            llvm_config.display()
-        ))
+        .unwrap_or_else(|_| {
+            panic!(
+                "{} should be able to provide LD path",
+                llvm_config.display()
+            )
+        })
         .stdout
         .as_slice()
         .read_to_string(&mut llvm_lib_dir)

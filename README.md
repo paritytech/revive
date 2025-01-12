@@ -49,7 +49,7 @@ export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
 revive-llvm --target-env emscripten clone
 source emsdk/emsdk_env.sh
 revive-llvm --target-env emscripten build
-export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
+export REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final
 
 # Build the resolc frontend executable
 make install-wasm

@@ -1,15 +1,5 @@
-/// Link against the target environment's LLVM libraries if requested.
-fn locate_llvm_config() -> std::path::PathBuf {
-    match std::env::var(revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX) {
-        Ok(path) => std::path::PathBuf::from(path)
-            .join("bin")
-            .join("llvm-config"),
-        _ => revive_llvm_builder::utils::llvm_host_tool("llvm-config"),
-    }
-}
-
 fn llvm_config(arg: &str) -> String {
-    let llvm_config = locate_llvm_config();
+    let llvm_config = revive_llvm_builder::utils::llvm_host_tool("llvm-config");
     let output = std::process::Command::new(&llvm_config)
         .arg(arg)
         .output()
@@ -20,7 +10,15 @@ fn llvm_config(arg: &str) -> String {
 }
 
 fn set_rustc_link_flags() {
-    println!("cargo:rustc-link-search=native={}", llvm_config("--libdir"));
+    let llvm_lib_path = match std::env::var(revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX) {
+        Ok(path) => std::path::PathBuf::from(path)
+            .join("lib")
+            .to_string_lossy()
+            .to_string(),
+        _ => llvm_config("--libdir"),
+    };
+
+    println!("cargo:rustc-link-search=native={}", llvm_lib_path);
 
     for lib in [
         // These are required by ld.lld

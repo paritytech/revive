@@ -64,21 +64,6 @@ pub fn build(
         enable_valgrind,
     )?;
 
-    let mut source_path = llvm_target_host.clone();
-    source_path.push("bin/llvm-config");
-
-    let mut destination_path = llvm_target_final.clone();
-    destination_path.push("bin/llvm-config");
-
-    fs_extra::file::copy(
-        source_path,
-        destination_path,
-        &fs_extra::file::CopyOptions {
-            overwrite: true,
-            ..Default::default()
-        },
-    )?;
-
     Ok(())
 }
 

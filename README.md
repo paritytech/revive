@@ -21,7 +21,7 @@ Building from source requires a compatible LLVM build.
 
 ### LLVM
 
-`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation directory afterwards.
+`revive` requires a build of LLVM v18.1.8 with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation directory afterwards.
 
 ### The `resolc` Solidity frontend
 
@@ -30,6 +30,7 @@ To install the `resolc` Solidity frontend executable:
 ```bash
 # Build the host LLVM dependency with PolkaVM target support
 make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
 
 # Build the resolc frontend executable
 make install-bin

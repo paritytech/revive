@@ -38,13 +38,6 @@ install-llvm: install-llvm-builder
 test-wasm: install-wasm
 	npm run test:wasm
 
-# install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
-ifeq ($(origin REVIVE_INSTALL_DIR), undefined)
-REVIVE_INSTALL_DIR=`pwd`/release/revive-debian
-endif
-install-revive:
-	cargo install --path crates/solidity --root $(REVIVE_INSTALL_DIR)
-
 format:
 	cargo fmt --all --check
 

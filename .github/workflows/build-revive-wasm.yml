@@ -28,23 +28,28 @@ jobs:
           path: |
             target-llvm
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
-          key: llvm-build-${{ runner.os }}-${{ hashFiles('clone-llvm.sh', 'emscripten-build-llvm.sh') }}
+          key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', '.github/trigger-wasm-llvm-build') }}
 
       - name: Install Dependencies
         run: |
+          # system dependencies
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
-
+          # host LLVM
+          curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
+          mkdir llvm18
+          tar Jxf llvm.tar.xz -C llvm18/
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
           # Clone LLVM and install the Emscripten SDK
           make install-llvm-builder
           revive-llvm --target-env emscripten clone
-          source emsdk/emsdk_env.sh
 
-      - name: Build LLVM
+      - name: Build target LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
           source emsdk/emsdk_env.sh
           revive-llvm --target-env emscripten build
+          echo "REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final" >> $GITHUB_ENV
 
       - run: |
           rustup show
@@ -53,7 +58,6 @@ jobs:
           cargo +nightly --version
           cmake --version
           bash --version
-          target-llvm/emscripten/target-final/bin/llvm-config --version
 
       - name: Use Cached LLVM
         if: steps.cache-llvm.outputs.cache-hit == 'true'
@@ -63,9 +67,6 @@ jobs:
       - name: Build revive
         run: |
           source emsdk/emsdk_env.sh
-          export LLVM_LINK_PREFIX=${PWD}/target-llvm/emscripten/target-final
-          export PATH=$PATH:${PWD}/target-llvm/emscripten/target-final/bin/
-          export PATH=$PATH:${PWD}/target-llvm/emscripten/target-host/bin/
           make install-wasm
 
       - uses: actions/upload-artifact@v4

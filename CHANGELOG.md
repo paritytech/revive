@@ -10,6 +10,9 @@ This is a development pre-release.
 ### Changed
 - The minimum supported Rust version is `1.81.0`.
 
+### Fixed
+- Decouple the LLVM target dependency from the LLVM host dependency.
+
 ## v0.1.0-dev.7
 
 This is a development pre-release.

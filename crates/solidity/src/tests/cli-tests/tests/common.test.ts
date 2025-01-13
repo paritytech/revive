@@ -1,5 +1,8 @@
 import { executeCommand, isFolderExist, isFileExist, isFileEmpty } from "../src/helper";
 import { paths } from '../src/entities';
+import * as shell from 'shelljs';
+import * as path from 'path';
+
 
 
 //id1762
@@ -141,4 +144,54 @@ describe("Run resolc with source debug information, check LLVM debug-info", () =
             expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
         });
     }
+});
+
+
+
+describe("Standard JSON compilation with path options", () => {
+    const contractsDir = path.join(shell.tempdir(), 'contracts-test');
+    const inputFile = path.join(__dirname, '..', 'src/contracts/compiled/1.json');
+
+    beforeAll(() => {
+        shell.mkdir('-p', contractsDir);
+
+        const input = JSON.parse(shell.cat(inputFile).toString());
+
+        Object.entries(input.sources).forEach(([sourcePath, source]: [string, any]) => {
+            const filePath = path.join(contractsDir, sourcePath);
+            shell.mkdir('-p', path.dirname(filePath));
+            shell.ShellString(source.content).to(filePath);
+            // I added this here to ensure that we can check for any files
+            // Not being written to temp dirs BUUUT i can remove it
+            console.log(`Wrote source file: ${sourcePath}`);
+        });
+    });
+
+    afterAll(() => {
+        shell.rm('-rf', contractsDir);
+    });
+
+    describe("Output with all path options", () => {
+        let result: { exitCode: number; output: string };
+
+        beforeAll(() => {
+            const tempInputFile = path.join(contractsDir, 'temp-input.json');
+            shell.cp(inputFile, tempInputFile);
+
+            const command = `cat "${tempInputFile}" | resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
+
+            result = executeCommand(command);
+
+            shell.rm(tempInputFile);
+
+        });
+
+        it("Compiler run successful", () => {
+            // Here we want to filter any warnings from the errors
+            // Respone since warnings arent really errors but exists
+            // As precautionary measures for devs
+            const parsedResults = JSON.parse(result.output)
+            expect(parsedResults.errors.filter((error: { type: string; }) => error.type != 'Warning')).toEqual([]);
+        });
+    });
 });

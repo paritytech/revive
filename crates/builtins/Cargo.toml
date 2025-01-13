@@ -8,4 +8,5 @@ authors.workspace = true
 build = "build.rs"
 description = "compiler builtins for the revive compiler"
 
-[dependencies]
+[build-dependencies]
+revive-build-utils = { workspace = true }

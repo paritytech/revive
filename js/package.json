@@ -13,6 +13,7 @@
     "test:all": "npm run test:node && npm run test:bun"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "chai": "^5.1.2",
     "http-server": "^14.1.1",
     "mocha": "^11.0.1"

@@ -21,34 +21,40 @@ Building from source requires a compatible LLVM build.
 
 ### LLVM
 
-`revive` requires a build of LLVM 18.1.4 or later with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [build-llvm.sh](build-llvm.sh) build script to compile a compatible LLVM build locally in `$PWD/llvm18.0` (don't forget to add that to `$PATH` afterwards).
+`revive` requires a build of LLVM v18.1.8 with the RISC-V _embedded_ target, including `compiler-rt`. Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation directory afterwards.
 
 ### The `resolc` Solidity frontend
 
 To install the `resolc` Solidity frontend executable:
 
 ```bash
-bash build-llvm.sh
-export PATH=${PWD}/llvm18.0/bin:$PATH
+# Build the host LLVM dependency with PolkaVM target support
+make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+
+# Build the resolc frontend executable
 make install-bin
 resolc --version
 ```
+
 ### Cross-compilation to WASM
 
-Cross-compiles the Revive compiler to WASM for running it in a Node.js or browser environment.
-
-Install [emscripten](https://emscripten.org/docs/getting_started/downloads.html). Tested on version 3.1.64.
-To build resolc.js execute:
+Cross-compile resolc.js frontend executable to Wasm for running it in a Node.js or browser environment. The `REVIVE_LLVM_TARGET_PREFIX` environment variable is used to control the target environment LLVM dependency.
 
 ```bash
-bash build-llvm.sh
-export PATH=${PWD}/llvm18.0/bin:$PATH
-export EMSDK_ROOT=<PATH_TO_EMSCRIPTEN_SDK>
-bash emscripten-build-llvm.sh
-source $EMSDK_ROOT/emsdk_env.sh
-export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
-export PATH=$PATH:$PWD/llvm18.0-emscripten/bin/
+# Build the host LLVM dependency with PolkaVM target support
+make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+
+# Build the target LLVM dependency with PolkaVM target support
+revive-llvm --target-env emscripten clone
+source emsdk/emsdk_env.sh
+revive-llvm --target-env emscripten build
+export REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final
+
+# Build the resolc frontend executable
 make install-wasm
+make test-wasm
 ```
 
 ### Development

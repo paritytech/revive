@@ -114,10 +114,11 @@ jobs:
           curl -fsSL https://bun.sh/install | bash -s bun-v${{ env.BUN_VERSION }}
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      - name: Confirm Installations
+      - name: Run Playwright tests
         run: |
-          node --version
-          bun --version
+          cd js
+          npx playwright install --with-deps
+          npx playwright test
 
       - name: Test revive
         run: |

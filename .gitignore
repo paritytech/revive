@@ -15,4 +15,8 @@ package-lock.json
 /*.html
 /build
 soljson.js
+node_modules/
+test-results
+playwright-report
+.cache
 emsdk

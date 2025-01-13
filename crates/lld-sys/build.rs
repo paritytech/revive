@@ -1,24 +1,13 @@
-fn llvm_config(arg: &str) -> String {
-    let llvm_config = revive_llvm_builder::utils::llvm_host_tool("llvm-config");
-    let output = std::process::Command::new(&llvm_config)
-        .arg(arg)
-        .output()
-        .unwrap_or_else(|error| panic!("`{} {arg}` failed: {error}", llvm_config.display()));
-
-    String::from_utf8(output.stdout)
-        .unwrap_or_else(|_| panic!("output of `{} {arg}` should be utf8", llvm_config.display()))
-}
-
 fn set_rustc_link_flags() {
-    let llvm_lib_path = match std::env::var(revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX) {
-        Ok(path) => std::path::PathBuf::from(path)
-            .join("lib")
-            .to_string_lossy()
-            .to_string(),
-        _ => llvm_config("--libdir"),
+    let llvm_lib_path = match std::env::var(revive_build_utils::REVIVE_LLVM_TARGET_PREFIX) {
+        Ok(path) => std::path::PathBuf::from(path).join("lib"),
+        _ => revive_build_utils::llvm_lib_dir(),
     };
 
-    println!("cargo:rustc-link-search=native={}", llvm_lib_path);
+    println!(
+        "cargo:rustc-link-search=native={}",
+        llvm_lib_path.to_string_lossy()
+    );
 
     for lib in [
         // These are required by ld.lld
@@ -97,14 +86,14 @@ fn set_rustc_link_flags() {
 fn main() {
     println!(
         "cargo:rerun-if-env-changed={}",
-        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+        revive_build_utils::REVIVE_LLVM_HOST_PREFIX
     );
     println!(
         "cargo:rerun-if-env-changed={}",
-        revive_llvm_builder::utils::REVIVE_LLVM_TARGET_PREFIX
+        revive_build_utils::REVIVE_LLVM_TARGET_PREFIX
     );
 
-    llvm_config("--cxxflags")
+    revive_build_utils::llvm_cxx_flags()
         .split_whitespace()
         .fold(&mut cc::Build::new(), |builder, flag| builder.flag(flag))
         .flag("-Wno-unused-parameter")

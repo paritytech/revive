@@ -3,13 +3,13 @@ use std::{env, fs, path::Path, process::Command};
 fn main() {
     println!(
         "cargo:rerun-if-env-changed={}",
-        revive_llvm_builder::utils::REVIVE_LLVM_HOST_PREFIX
+        revive_build_utils::REVIVE_LLVM_HOST_PREFIX
     );
 
     let lib = "stdlib.bc";
     let out_dir = env::var_os("OUT_DIR").expect("env should have $OUT_DIR");
     let bitcode_path = Path::new(&out_dir).join(lib);
-    let llvm_as = revive_llvm_builder::utils::llvm_host_tool("llvm-as");
+    let llvm_as = revive_build_utils::llvm_host_tool("llvm-as");
     let output = Command::new(llvm_as)
         .args([
             "-o",

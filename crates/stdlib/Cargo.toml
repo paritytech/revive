@@ -10,4 +10,4 @@ description = "revive compiler stdlib components"
 inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-0"] }
 
 [build-dependencies]
-revive-llvm-builder = { workspace = true }
+revive-build-utils = { workspace = true }

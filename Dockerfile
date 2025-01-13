@@ -9,7 +9,7 @@ COPY . .
 
 RUN make install-llvm-builder
 RUN revive-llvm --target-env musl clone
-RUN revive-llvm --target-env musl build --enable-assertions --llvm-projects clang --llvm-projects lld
+RUN revive-llvm --target-env musl build
 
 FROM messense/rust-musl-cross:x86_64-musl AS resolc-builder
 WORKDIR /opt/revive
@@ -21,7 +21,7 @@ RUN apt update && \
 COPY . .
 COPY --from=llvm-builder /opt/revive/target-llvm /opt/revive/target-llvm
 
-ENV PATH=/opt/revive/target-llvm/musl/target-final/bin:$PATH
+ENV LLVM_SYS_181_PREFIX=/opt/revive/target-llvm/musl/target-final
 RUN make install-bin
 
 FROM alpine:latest

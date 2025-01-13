@@ -9,4 +9,4 @@ build = "build.rs"
 description = "compiler builtins for the revive compiler"
 
 [build-dependencies]
-revive-llvm-builder = { workspace = true }
+revive-build-utils = { workspace = true }

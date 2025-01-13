@@ -39,12 +39,6 @@ pub const EMSDK_SOURCE_URL: &str = "https://github.com/emscripten-core/emsdk.git
 /// The emscripten SDK version.
 pub const EMSDK_VERSION: &str = "3.1.64";
 
-/// The revive LLVM host dependency directory prefix environment variable.
-pub const REVIVE_LLVM_HOST_PREFIX: &str = "LLVM_SYS_181_PREFIX";
-
-/// The revive LLVM target dependency directory prefix environment variable.
-pub const REVIVE_LLVM_TARGET_PREFIX: &str = "REVIVE_LLVM_TARGET_PREFIX";
-
 /// The subprocess runner.
 ///
 /// Checks the status and prints `stderr`.
@@ -233,14 +227,4 @@ pub fn directory_target_llvm(target_env: crate::target_env::TargetEnv) -> PathBu
     crate::llvm_path::DIRECTORY_LLVM_TARGET
         .get_or_init(|| PathBuf::from(format!("./target-llvm/{}/", target_env)))
         .clone()
-}
-
-/// The LLVM host binary path.
-///
-/// Respects the [`REVIVE_LLVM_HOST_PREFIX`] environment variable.
-pub fn llvm_host_tool(name: &str) -> PathBuf {
-    std::env::var_os(REVIVE_LLVM_HOST_PREFIX)
-        .map(Into::<std::path::PathBuf>::into)
-        .unwrap_or_else(|| panic!("{} is not set. install LLVM using the revive-llvm-builder crate and export the {} pointing to it", REVIVE_LLVM_HOST_PREFIX, REVIVE_LLVM_HOST_PREFIX))
-        .join("bin").join(name)
 }

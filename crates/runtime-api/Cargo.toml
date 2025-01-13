@@ -14,4 +14,4 @@ inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "
 revive-common = { workspace = true }
 
 [build-dependencies]
-revive-llvm-builder = { workspace = true }
+revive-build-utils = { workspace = true }

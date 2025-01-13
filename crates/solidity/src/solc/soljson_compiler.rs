@@ -35,20 +35,24 @@ impl Compiler for SoljsonCompiler {
         _allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
+        input.normalize(&version.default);
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
-        let input_json = serde_json::to_string(&input).expect("Always valid");
-        let out = Self::compile_standard_json(input_json)?;
+        let input_json = serde_json::to_vec(&input).expect("Always valid");
+        let out = Self::compile_standard_json(String::from_utf8_lossy(&input_json).to_string())
+            .map_err(|error| anyhow::anyhow!("Soljson subprocess error: {:?}", error))?;
+
         let mut output: StandardJsonOutput = revive_common::deserialize_from_slice(out.as_bytes())
             .map_err(|error| {
                 anyhow::anyhow!(
-                    "Soljson output parsing error: {}\n{}",
+                    "Soljson subprocess output parsing error: {}\n{}",
                     error,
                     revive_common::deserialize_from_slice::<serde_json::Value>(out.as_bytes())
                         .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
+
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
 
         Ok(output)

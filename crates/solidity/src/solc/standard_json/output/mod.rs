@@ -24,9 +24,8 @@ use crate::yul::parser::statement::object::Object;
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
-
 /// The `solc --standard-json` output.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Output {
     /// The file-contract hashmap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,15 +63,36 @@ impl Output {
 
         let files = match self.contracts.as_ref() {
             Some(files) => files,
-            None => {
-                anyhow::bail!(
-                    "{}",
-                    self.errors
-                        .as_ref()
-                        .map(|errors| serde_json::to_string_pretty(errors).expect("Always valid"))
-                        .unwrap_or_else(|| "Unknown project assembling error".to_owned())
-                );
-            }
+            None => &{
+                match &self.errors {
+                    Some(errors) if !errors.is_empty() => {
+                        // Here we want to ensure that we check for actual errors
+                        // Warnings are valid and shouldnt be treated as regualar errors
+                        // As such we need to
+                        //1. Filter errors for severity "error"
+                        //2. If we do have errors only then do we bail
+                        //3. If we dont have errors we simply return empty files
+                        let has_errors = errors.iter().any(|e| e.severity == "error");
+
+                        if has_errors {
+                            anyhow::bail!(
+                                "{}",
+                                serde_json::to_string_pretty(errors).expect("Always valid")
+                            );
+                        }
+
+                        BTreeMap::new()
+                    }
+                    Some(_) => {
+                        anyhow::bail!("Compilation produced no output and no errors");
+                    }
+                    None => {
+                        anyhow::bail!(
+                            "Unknown project assembling error - no contracts or errors present"
+                        );
+                    }
+                }
+            },
         };
         let mut project_contracts = BTreeMap::new();
 
@@ -159,7 +179,6 @@ impl Output {
                 messages.extend(polkavm_messages);
             }
         }
-
         self.errors = match self.errors.take() {
             Some(mut errors) => {
                 errors.extend(messages);

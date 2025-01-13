@@ -114,6 +114,9 @@ jobs:
           curl -fsSL https://bun.sh/install | bash -s bun-v${{ env.BUN_VERSION }}
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
+      - name: Install packages
+        run: npm install
+
       - name: Run Playwright tests
         run: |
           cd js
@@ -123,5 +126,4 @@ jobs:
       - name: Test revive
         run: |
           echo "Running tests for ${{ matrix.os }}"
-          npm install
           npm run test:wasm

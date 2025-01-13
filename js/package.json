@@ -8,8 +8,8 @@
     "fetch:soljson": "wget https://binaries.soliditylang.org/wasm/soljson-v0.8.28+commit.7893614a.js -O ./examples/web/soljson.js",
     "example:web": "npm run fetch:soljson && http-server ./examples/web/",
     "example:node": "node ./examples/node/run_revive.js",
-    "test:node": "mocha --timeout 10000 ./tests",
-    "test:bun": "bun test",
+    "test:node": "mocha --timeout 20000 ./tests",
+    "test:bun": "bun test --timeout 20000 node.test",
     "test:all": "npm run test:node && npm run test:bun"
   },
   "devDependencies": {

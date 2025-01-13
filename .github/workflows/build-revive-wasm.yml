@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-revive-wasm:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
@@ -26,24 +26,30 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            llvm18.0-emscripten
+            target-llvm
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
-          key: llvm-build-${{ runner.os }}-${{ hashFiles('clone-llvm.sh', 'emscripten-build-llvm.sh') }}
+          key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', '.github/trigger-wasm-llvm-build') }}
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build libncurses5
+          # system dependencies
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
-          # Install LLVM required for the compiler runtime, runtime-api and stdlib
-          curl -sSL --output llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.4/clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-          tar Jxf llvm.tar.xz
-          mv clang+llvm-18.1.4-x86_64-linux-gnu-ubuntu-18.04 llvm18/
-          echo "$(pwd)/llvm18/bin" >> $GITHUB_PATH
-          # Install Emscripten
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
+          # host LLVM
+          curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
+          mkdir llvm18
+          tar Jxf llvm.tar.xz -C llvm18/
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
+          # Clone LLVM and install the Emscripten SDK
+          make install-llvm-builder
+          revive-llvm --target-env emscripten clone
+
+      - name: Build target LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          source emsdk/emsdk_env.sh
+          revive-llvm --target-env emscripten build
+          echo "REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final" >> $GITHUB_ENV
 
       - run: |
           rustup show
@@ -52,13 +58,6 @@ jobs:
           cargo +nightly --version
           cmake --version
           bash --version
-          llvm-config --version
-
-      - name: Build LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          export EMSDK_ROOT=${PWD}/emsdk
-          ./emscripten-build-llvm.sh
 
       - name: Use Cached LLVM
         if: steps.cache-llvm.outputs.cache-hit == 'true'
@@ -67,8 +66,7 @@ jobs:
 
       - name: Build revive
         run: |
-          export LLVM_LINK_PREFIX=${PWD}/llvm18.0-emscripten
-          source ./emsdk/emsdk_env.sh
+          source emsdk/emsdk_env.sh
           make install-wasm
 
       - uses: actions/upload-artifact@v4
@@ -83,7 +81,7 @@ jobs:
     needs: build-revive-wasm
     strategy:
       matrix:
-        os: ['ubuntu-24.04', 'macos-14', 'windows-2022']
+        os: ["ubuntu-24.04", "macos-14", "windows-2022"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +98,7 @@ jobs:
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Bun on Windows
         if: runner.os == 'Windows'

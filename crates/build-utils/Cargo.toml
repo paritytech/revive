@@ -1,0 +1,15 @@
+[package]
+name = "revive-build-utils"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors = [
+    "Cyrill Leutwiler <cyrill@parity.io>",
+]
+description = "Shared build utilities of the revive compiler"
+
+[lib]
+doctest = false
+
+[dependencies]

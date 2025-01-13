@@ -1,4 +1,4 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean docs docs-build
+.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean install-llvm install-llvm-builder
 
 RUSTFLAGS_EMSCRIPTEN := \
 	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
@@ -28,15 +28,15 @@ install-npm:
 install-wasm: install-npm
 	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
 
+install-llvm-builder:
+	cargo install --path crates/llvm-builder
+
+install-llvm: install-llvm-builder
+	revive-llvm clone
+	revive-llvm build
+
 test-wasm: install-wasm
 	npm run test:wasm
-
-# install-revive: Build and install to the directory specified in REVIVE_INSTALL_DIR
-ifeq ($(origin REVIVE_INSTALL_DIR), undefined)
-REVIVE_INSTALL_DIR=`pwd`/release/revive-debian
-endif
-install-revive:
-	cargo install --path crates/solidity --root $(REVIVE_INSTALL_DIR)
 
 format:
 	cargo fmt --all --check
@@ -53,10 +53,14 @@ test-solidity: install
 	cargo test --package revive-solidity
 
 test-workspace: install
-	cargo test --workspace
+	cargo test --workspace --exclude revive-llvm-builder
 
 test-cli: install
 	npm run test:cli
+
+test-llvm-builder:
+	@echo "warning: the llvm-builder tests will take many hours"
+	cargo test --package revive-llvm-builder -- --test-threads=1
 
 bench-pvm: install-bin
 	cargo criterion --bench execute --features bench-pvm-interpreter --message-format=json \
@@ -72,9 +76,11 @@ bench: install-bin
 
 clean:
 	cargo clean ; \
+	revive-llvm clean ; \
 	rm -rf node_modules ; \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
+	cargo uninstall revive-llvm-builder ; \
 	rm -f package-lock.json ; \
 	rm -rf js/dist ; \
 	rm -f js/src/resolc.{wasm,js}

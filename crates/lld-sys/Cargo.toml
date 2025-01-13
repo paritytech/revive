@@ -13,3 +13,4 @@ libc = { workspace = true }
 
 [build-dependencies]
 cc = { workspace = true }
+revive-build-utils = { workspace = true }

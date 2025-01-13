@@ -67,14 +67,10 @@ Obtain a compatible build for your host platform from the release section of thi
 </details>
 
 <details>
-<summary>4. Create the `LLVM.lock` file.</summary>
+<summary>4. (Optional) Create the `LLVM.lock` file.</summary>
 
-   * In a directory in which you want the `llvm` directory, create an `LLVM.lock` file with the URL and branch or tag you want to build, for example:
-
-      ```properties
-      url = "https://github.com/llvm/llvm-project.git"
-      branch = "release/18.x"
-      ```
+   * The `LLVM.lock` dictates the LLVM source tree being used.
+     A default `./LLVM.lock` pointing to the release used for development is already provided.
 
 </details>
 
@@ -83,20 +79,21 @@ Obtain a compatible build for your host platform from the release section of thi
 
    * Clone and build the LLVM framework using the `revive-llvm` tool.
 
-     The clang and lld projects are required for the `resolc` Solidity frontend executable. Enabling assertions is always a good idea (enabled by default anyways):
+     The clang and lld projects are required for the `resolc` Solidity frontend executable; they are enabled by default. LLVM assertions are also enabled by default.
 
       ```shell
       revive-llvm clone
-      revive-llvm build --enable-assertions --llvm-projects clang --llvm-projects lld 
+      revive-llvm build
       ```
 
-      Build artifacts end up in the `./target-llvm/target-final/` directory by default.
-      You now need to add the bin directory to `$PATH`: `export PATH=${PWD}/target-llvm/target-final/bin:$PATH`
-      If built with the `--enable-tests` option, test tools will be in the `./target-llvm/build-final/` directory, along   with copies of the build artifacts. For all supported build options, run `revive-llvm build --help`.
+      Build artifacts end up in the `./target-llvm/gnu/target-final/` directory by default.
+      The `gnu` directory depends on the supported archticture and will either be `gnu`, `musl` or `emscripten`.
+      You now need to export the final target directory `$LLVM_SYS_181_PREFIX`: `export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final`
+      If built with the `--enable-tests` option, test tools will be in the `./target-llvm/gnu/build-final/` directory, along with copies of the build artifacts. For all supported build options, run `revive-llvm build --help`.
 
 </details>
 
-## Supported architectures
+## Supported target architectures
 
 The following target platforms are supported:
 - Linux GNU (x86)

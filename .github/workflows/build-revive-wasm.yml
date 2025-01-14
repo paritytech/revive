@@ -50,8 +50,8 @@ jobs:
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
           curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
-          mkdir llvm18
-          tar Jxf llvm.tar.xz -C llvm18/
+          mkdir -p target-llvm/gnu/target-final
+          tar Jxf llvm.tar.xz -C target-final/
 
       - name: Build target LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'

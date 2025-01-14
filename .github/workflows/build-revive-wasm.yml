@@ -31,16 +31,17 @@ jobs:
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
           key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', 'Cargo.toml', 'Cargo.lock', 'crates/llvm-builder/**', '.github/workflows/build-revive-wasm.yml') }}
 
-      - name: Install Dependencies
+      - name: Install system dependencies
         run: |
-          # system dependencies
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
-          # Clone LLVM and install LLVM and the Emscripten SDK
+
+      - name: Install LLVM build dependencies
+        run: |
           make install-llvm-builder
           revive-llvm --target-env emscripten clone
 
-      - name: Setup revive environment variable
+      - name: Setup revive environment variables
         run: |
           echo "LLVM_SYS_181_PREFIX=$(pwd)/${HOST_LLVM_DIR}" >> $GITHUB_ENV
           echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/target-llvm/emscripten/target-final" >> $GITHUB_ENV

@@ -106,6 +106,7 @@ jobs:
           Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
           iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
           scoop install bun@${{ env.BUN_VERSION }}
+          scoop install wget
           Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
 
       - name: Install Bun on macOS and Linux
@@ -114,13 +115,16 @@ jobs:
           curl -fsSL https://bun.sh/install | bash -s bun-v${{ env.BUN_VERSION }}
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      - name: Confirm Installations
+      - name: Install packages
+        run: npm install
+
+      - name: Run Playwright tests
         run: |
-          node --version
-          bun --version
+          cd js
+          npx playwright install --with-deps
+          npx playwright test
 
       - name: Test revive
         run: |
           echo "Running tests for ${{ matrix.os }}"
-          npm install
           npm run test:wasm

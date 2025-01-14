@@ -27,6 +27,8 @@ jobs:
         with:
           path: |
             target-llvm
+            llvm
+            emsdk
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
           key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', '.github/trigger-wasm-llvm-build') }}
 
@@ -35,21 +37,27 @@ jobs:
           # system dependencies
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
           rustup target add wasm32-unknown-emscripten
-          # host LLVM
+          # Clone LLVM and install LLVM and the Emscripten SDK
+          make install-llvm-builder
+          revive-llvm --target-env emscripten clone
+
+      - name: Setup revive environment variable
+        run: |
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
+          echo "REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final" >> $GITHUB_ENV
+          
+      - name: Build host LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
           curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
           mkdir llvm18
           tar Jxf llvm.tar.xz -C llvm18/
-          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
-          # Clone LLVM and install the Emscripten SDK
-          make install-llvm-builder
-          revive-llvm --target-env emscripten clone
 
       - name: Build target LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
           source emsdk/emsdk_env.sh
           revive-llvm --target-env emscripten build
-          echo "REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final" >> $GITHUB_ENV
 
       - run: |
           rustup show

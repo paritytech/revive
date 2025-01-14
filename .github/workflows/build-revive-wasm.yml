@@ -26,7 +26,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            target-llvm
+            target-llvm/emscripten/target-final
+            target-llvm/gnu/target-final
           # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
           key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', '.github/trigger-wasm-llvm-build') }}
 

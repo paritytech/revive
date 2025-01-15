@@ -1,6 +1,5 @@
 import * as shell from 'shelljs';
 import * as fs from 'fs';
-import { ExecOptions } from 'shelljs';
 
 interface CommandResult {
     output: string;
@@ -9,27 +8,29 @@ interface CommandResult {
 
 export const executeCommand = (command: string, stdin?: string): CommandResult => {
     const result = shell.exec(command, {
+        silent: true,
         async: false,
-        silent: true,  
-        stdin: stdin   
-    } as ExecOptions);
+        ...(stdin && { input: stdin })
+    });
+
+    const shellResult = result as shell.ShellString;
 
     return {
-        exitCode: result.code,
-        output: result.stdout.trim() || result.stderr.trim(),
+        exitCode: shellResult.code,
+        output: shellResult.stdout?.trim() || shellResult.stderr?.trim() || ''
     };
 };
 
-export const isFolderExist = (folder: string): boolean  => {
+export const isFolderExist = (folder: string): boolean => {
     return shell.test('-d', folder);
 };
 
-export const isFileExist = (pathToFileDir: string, fileName: string, fileExtension:string): boolean  => {     
-    return shell.ls(pathToFileDir).stdout.includes(fileName + fileExtension); 
+export const isFileExist = (pathToFileDir: string, fileName: string, fileExtension: string): boolean => {
+    return shell.ls(pathToFileDir).stdout.includes(fileName + fileExtension);
 };
 
-export const isFileEmpty = (file: string): boolean  => {
+export const isFileEmpty = (file: string): boolean => {
     if (fs.existsSync(file)) {
         return (fs.readFileSync(file).length === 0);
-    } 
+    }
 };

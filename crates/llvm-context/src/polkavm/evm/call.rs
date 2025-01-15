@@ -48,6 +48,9 @@ where
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
     context.build_store(output_length_pointer, output_length)?;
 
+    let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
+    context.build_store(deposit_pointer, context.word_type().const_all_ones())?;
+
     let flags = if static_call {
         REENTRANT_CALL_FLAG | STATIC_CALL_FLAG
     } else {
@@ -60,9 +63,13 @@ where
     let arguments = &[
         flags.as_basic_value_enum(),
         address_pointer.value.as_basic_value_enum(),
-        context.integer_const(64, u64::MAX).as_basic_value_enum(),
-        context.integer_const(64, u64::MAX).as_basic_value_enum(),
-        context.sentinel_pointer().value.as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
+            .as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
+            .as_basic_value_enum(),
+        deposit_pointer.value.as_basic_value_enum(),
         value_pointer.value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),
         input_length.as_basic_value_enum(),
@@ -132,6 +139,9 @@ where
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
     context.build_store(output_length_pointer, output_length)?;
 
+    let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
+    context.build_store(deposit_pointer, context.word_type().const_all_ones())?;
+
     let flags = context.xlen_type().const_int(0u64, false);
 
     let argument_type = revive_runtime_api::calling_convention::delegate_call(context.llvm());
@@ -145,7 +155,7 @@ where
         context
             .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
             .as_basic_value_enum(),
-        context.sentinel_pointer().value.as_basic_value_enum(),
+        deposit_pointer.value.as_basic_value_enum(),
         input_pointer.value.as_basic_value_enum(),
         input_length.as_basic_value_enum(),
         output_pointer.value.as_basic_value_enum(),

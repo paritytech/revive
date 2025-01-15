@@ -30,7 +30,6 @@ regex = { workspace = true }
 downloader = { workspace = true }
 tar = { workspace = true }
 flate2 = { workspace = true }
-http = { workspace = true }
 env_logger = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }

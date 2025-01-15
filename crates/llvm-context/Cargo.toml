@@ -22,7 +22,6 @@ regex = { workspace = true }
 once_cell = { workspace = true }
 num = { workspace = true }
 hex = { workspace = true }
-sha2 = { workspace = true }
 sha3 = { workspace = true }
 md5 = { workspace = true }
 inkwell = { workspace = true }

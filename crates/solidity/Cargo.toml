@@ -19,7 +19,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-colored = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 which = { workspace = true }
@@ -30,7 +29,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 semver = { workspace = true }
 once_cell = { workspace = true }
-rand = { workspace = true }
 regex = { workspace = true }
 hex = { workspace = true }
 num = { workspace = true }
@@ -49,7 +47,7 @@ libc = { workspace = true }
 inkwell = { workspace = true, features = ["target-riscv", "llvm18-0-no-llvm-linking"]}
 
 [build-dependencies]
-git2 = { workspace = true }
+git2 = { workspace = true, default-features = false }
 
 [features]
 parallel = ["rayon"]

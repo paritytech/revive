@@ -14,7 +14,9 @@ env:
 
 jobs:
   build-revive-wasm:
-    runs-on: ubuntu-24.04
+    runs-on: parity-large
+    container:
+      image: "paritytech/ci-unified:latest"
     defaults:
       run:
         shell: bash
@@ -34,7 +36,14 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
-          rustup target add wasm32-unknown-emscripten
+
+      - name: Install Rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rust-src
+          target: wasm32-unknown-emscripten
 
       - name: Install LLVM build dependencies
         run: |
@@ -45,7 +54,7 @@ jobs:
         run: |
           echo "LLVM_SYS_181_PREFIX=$(pwd)/${HOST_LLVM_DIR}" >> $GITHUB_ENV
           echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/target-llvm/emscripten/target-final" >> $GITHUB_ENV
-          
+
       - name: Get host LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |

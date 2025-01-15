@@ -78,7 +78,7 @@ assert_fs = "1.1.2"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.1", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "243b751abbb94369bbd92c83d8ab159ddfc3c556" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", branch = "evm-contracts-limit-nested-calls-gas" }
 
 # llvm
 [workspace.dependencies.inkwell]

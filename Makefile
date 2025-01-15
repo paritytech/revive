@@ -1,4 +1,4 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean install-llvm install-llvm-builder
+.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean install-llvm install-llvm-builder machete
 
 RUSTFLAGS_EMSCRIPTEN := \
 	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
@@ -44,7 +44,11 @@ format:
 clippy:
 	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
 
-test: format clippy test-cli test-workspace
+machete:
+	cargo install cargo-machete
+	cargo machete
+
+test: format clippy machete test-cli test-workspace
 
 test-integration: install-bin
 	cargo test --package revive-integration

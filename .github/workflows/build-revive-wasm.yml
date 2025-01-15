@@ -15,8 +15,6 @@ env:
 jobs:
   build-revive-wasm:
     runs-on: parity-large
-    container:
-      image: "paritytech/ci-unified:latest"
     defaults:
       run:
         shell: bash

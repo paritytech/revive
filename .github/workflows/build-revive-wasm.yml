@@ -53,12 +53,10 @@ jobs:
           echo "LLVM_SYS_181_PREFIX=$(pwd)/${HOST_LLVM_DIR}" >> $GITHUB_ENV
           echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/target-llvm/emscripten/target-final" >> $GITHUB_ENV
 
-      - name: Get host LLVM
+      - name: Build host LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
-          mkdir -p "$(pwd)/${HOST_LLVM_DIR}"
-          tar Jxf llvm.tar.xz -C "$(pwd)/${HOST_LLVM_DIR}"
+          revive-llvm build
 
       - name: Build target LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'

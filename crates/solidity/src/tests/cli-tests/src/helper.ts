@@ -1,5 +1,6 @@
 import * as shell from 'shelljs';
 import * as fs from 'fs';
+import { ExecOptions } from 'shelljs';
 
 interface CommandResult {
     output: string;
@@ -11,7 +12,7 @@ export const executeCommand = (command: string, stdin?: string): CommandResult =
         async: false,
         silent: true,  
         stdin: stdin   
-    });
+    } as ExecOptions);
 
     return {
         exitCode: result.code,

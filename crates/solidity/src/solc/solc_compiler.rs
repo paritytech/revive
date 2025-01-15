@@ -5,21 +5,12 @@ use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
-use once_cell::sync::Lazy;
-use semver::VersionReq;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
 use super::Compiler;
-// `--base-path` was introduced in 0.6.9 <https://github.com/ethereum/solidity/releases/tag/v0.6.9>
-pub static SUPPORTS_BASE_PATH: Lazy<VersionReq> =
-    Lazy::new(|| VersionReq::parse(">=0.6.9").unwrap());
-
-// `--include-path` was introduced in 0.8.8 <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
-pub static SUPPORTS_INCLUDE_PATH: Lazy<VersionReq> =
-    Lazy::new(|| VersionReq::parse(">=0.8.8").unwrap());
-
+use crate::solc::{FIRST_SUPPORTS_BASE_PATH, FIRST_SUPPORTS_INCLUDE_PATH};
 /// The Solidity compiler.
 pub struct SolcCompiler {
     /// The binary executable name.
@@ -64,58 +55,55 @@ impl Compiler for SolcCompiler {
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
+        command.arg("--standard-json");
 
         if let Some(base_path) = &base_path {
-            if SUPPORTS_BASE_PATH.matches(&version.default) {
-                command.arg("--base-path").arg(base_path);
-
-                if SUPPORTS_INCLUDE_PATH.matches(&version.default) {
-                    // `--base-path` and `--include-path` conflict if set to the same path, so
-                    // as a precaution, we ensure here that the `--base-path` is not also used
-                    // for `--include-path`
-                    for path in include_paths.iter().filter(|p| *p != base_path) {
-                        command.arg("--include-path").arg(Path::new(path));
-                    }
-                }
+            if !FIRST_SUPPORTS_BASE_PATH.matches(&version.default) {
+                anyhow::bail!(
+                    "--base-path not supported this version {} of solc",
+                    &version.default
+                );
             }
-            command.current_dir(base_path);
+            command.arg("--base-path").arg(base_path);
         }
 
-        if let Some(path) = &allow_paths {
-            if !path.is_empty() {
-                command.arg("--allow-paths");
-                command.arg(path);
-            }
+        if !include_paths.is_empty() && !FIRST_SUPPORTS_INCLUDE_PATH.matches(&version.default) {
+            anyhow::bail!(
+                "--include-path not supported this version {} of solc",
+                &version.default
+            );
         }
-        command.arg("--standard-json");
+
+        for include_path in include_paths.into_iter() {
+            command.arg("--include-path");
+            command.arg(include_path);
+        }
+        if let Some(allow_paths) = allow_paths {
+            command.arg("--allow-paths");
+            command.arg(allow_paths);
+        }
 
         input.normalize(&version.default);
 
+        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
+
         let input_json = serde_json::to_vec(&input).expect("Always valid");
 
-        let mut process = command.spawn().map_err(|error| {
+        let process = command.spawn().map_err(|error| {
             anyhow::anyhow!("{} subprocess spawning error: {:?}", self.executable, error)
         })?;
-
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
-        {
-            let mut stdin = process
-                .stdin
-                .take()
-                .ok_or_else(|| anyhow::anyhow!("{} stdin getting error", self.executable))?;
-
-            stdin.write_all(input_json.as_slice()).map_err(|error| {
+        process
+            .stdin
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("{} stdin getting error", self.executable))?
+            .write_all(input_json.as_slice())
+            .map_err(|error| {
                 anyhow::anyhow!("{} stdin writing error: {:?}", self.executable, error)
             })?;
 
-            stdin.flush().map_err(|error| {
-                anyhow::anyhow!("{} stdin flushing error: {:?}", self.executable, error)
-            })?;
-        }
         let output = process.wait_with_output().map_err(|error| {
             anyhow::anyhow!("{} subprocess output error: {:?}", self.executable, error)
         })?;
-
         if !output.status.success() {
             anyhow::bail!(
                 "{} error: {}",
@@ -139,7 +127,6 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
-
         output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
 
         Ok(output)

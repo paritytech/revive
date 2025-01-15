@@ -161,9 +161,6 @@ describe("Standard JSON compilation with path options", () => {
             const filePath = path.join(contractsDir, sourcePath);
             shell.mkdir('-p', path.dirname(filePath));
             shell.ShellString(source.content).to(filePath);
-            // I added this here to ensure that we can check for any files
-            // Not being written to temp dirs BUUUT i can remove it
-            console.log(`Wrote source file: ${sourcePath}`);
         });
     });
 
@@ -177,19 +174,17 @@ describe("Standard JSON compilation with path options", () => {
         beforeAll(() => {
             const tempInputFile = path.join(contractsDir, 'temp-input.json');
             shell.cp(inputFile, tempInputFile);
+            const inputContent = shell.cat(inputFile).toString();
 
-            const command = `cat "${tempInputFile}" | resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
+            const command = `resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
 
-            result = executeCommand(command);
+            result = executeCommand(command,inputContent);
 
             shell.rm(tempInputFile);
 
         });
 
-        it("Compiler run successful", () => {
-            // Here we want to filter any warnings from the errors
-            // Respone since warnings arent really errors but exists
-            // As precautionary measures for devs
+        it("Compiler run successful without emiting warnings", () => {
             const parsedResults = JSON.parse(result.output)
             expect(parsedResults.errors.filter((error: { type: string; }) => error.type != 'Warning')).toEqual([]);
         });

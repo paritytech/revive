@@ -65,26 +65,15 @@ impl Output {
             Some(files) => files,
             None => &{
                 match &self.errors {
-                    Some(errors) if !errors.is_empty() => {
-                        // Here we want to ensure that we check for actual errors
-                        // Warnings are valid and shouldnt be treated as regualar errors
-                        // As such we need to
-                        //1. Filter errors for severity "error"
-                        //2. If we do have errors only then do we bail
-                        //3. If we dont have errors we simply return empty files
+                    Some(errors) => {
                         let has_errors = errors.iter().any(|e| e.severity == "error");
-
                         if has_errors {
                             anyhow::bail!(
                                 "{}",
                                 serde_json::to_string_pretty(errors).expect("Always valid")
                             );
                         }
-
                         BTreeMap::new()
-                    }
-                    Some(_) => {
-                        anyhow::bail!("Compilation produced no output and no errors");
                     }
                     None => {
                         anyhow::bail!(

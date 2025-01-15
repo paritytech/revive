@@ -6,8 +6,13 @@ interface CommandResult {
     exitCode: number;
 }
 
-export const executeCommand = (command: string): CommandResult  => {
-    const result  = shell.exec(command, {async: false});
+export const executeCommand = (command: string, stdin?: string): CommandResult => {
+    const result = shell.exec(command, {
+        async: false,
+        silent: true,  
+        stdin: stdin   
+    });
+
     return {
         exitCode: result.code,
         output: result.stdout.trim() || result.stderr.trim(),

@@ -8,18 +8,12 @@ authors.workspace = true
 description = "revive compiler integration test cases"
 
 [dependencies]
-polkavm = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-sol-types = { workspace = true }
 hex = { workspace = true }
-env_logger = { workspace = true }
-log = { workspace = true }
 serde_json = { workspace = true }
 
 revive-solidity = { workspace = true }
-revive-differential = { workspace = true }
-revive-llvm-context = { workspace = true }
-revive-common = { workspace = true }
 revive-runner = { workspace = true }
 
 [dev-dependencies]

@@ -18,8 +18,6 @@ anyhow = { workspace = true }
 semver = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-regex = { workspace = true }
-once_cell = { workspace = true }
 num = { workspace = true }
 hex = { workspace = true }
 sha3 = { workspace = true }
@@ -31,5 +29,4 @@ polkavm-common = { workspace = true }
 revive-common = { workspace = true }
 revive-runtime-api = { workspace = true }
 revive-linker = { workspace = true }
-revive-builtins = { workspace = true }
 revive-stdlib = { workspace = true }

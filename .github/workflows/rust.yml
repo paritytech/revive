@@ -36,6 +36,9 @@ jobs:
           sudo apt update
           sudo apt install -y ethereum
 
+      - name: Machete
+        uses: bnjbvr/cargo-machete@main
+
       - name: Format
         run: make format
 

@@ -1,21 +1,24 @@
-.PHONY: install format test test-solidity test-cli test-integration test-workspace test-wasm clean install-llvm install-llvm-builder machete
-
-RUSTFLAGS_EMSCRIPTEN := \
-	-C link-arg=-sEXPORTED_FUNCTIONS=_main,_free,_malloc \
-	-C link-arg=-sNO_INVOKE_RUN=1 \
-	-C link-arg=-sEXIT_RUNTIME=1 \
-	-C link-arg=-sALLOW_MEMORY_GROWTH=1 \
-	-C link-arg=-sEXPORTED_RUNTIME_METHODS=FS,callMain,stringToNewUTF8 \
-	-C link-arg=-sMODULARIZE=1 \
-	-C link-arg=-sEXPORT_NAME=createRevive \
-	-C link-arg=-sWASM_ASYNC_COMPILATION=0 \
-	-C link-arg=-sDYNAMIC_EXECUTION=0 \
-	-C link-arg=-sALLOW_TABLE_GROWTH=1 \
-	-C link-arg=--js-library=js/embed/soljson_interface.js \
-	-C link-arg=--pre-js=js/embed/pre.js \
-	-C link-arg=-sNODEJS_CATCH_EXIT=0 \
-	-C link-arg=-sDISABLE_EXCEPTION_CATCHING=0 \
-	-C opt-level=3
+.PHONY: \
+	install \
+	install-bin \
+	install-npm \
+	install-wasm \
+	install-llvm-builder \
+	install-llvm \
+	format \
+	clippy \
+	machete \
+	test \
+	test-integration \
+	test-solidity \
+	test-workspace \
+	test-cli \
+	test-wasm \
+	test-llvm-builder
+	bench \
+	bench-pvm \
+	bench-evm \
+	clean
 
 install: install-bin install-npm
 
@@ -26,7 +29,7 @@ install-npm:
 	npm install && npm fund
 
 install-wasm: install-npm
-	RUSTFLAGS='$(RUSTFLAGS_EMSCRIPTEN)' cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
 
 install-llvm-builder:
 	cargo install --path crates/llvm-builder
@@ -34,9 +37,6 @@ install-llvm-builder:
 install-llvm: install-llvm-builder
 	revive-llvm clone
 	revive-llvm build
-
-test-wasm: install-wasm
-	npm run test:wasm
 
 format:
 	cargo fmt --all --check
@@ -62,9 +62,16 @@ test-workspace: install
 test-cli: install
 	npm run test:cli
 
+test-wasm: install-wasm
+	npm run test:wasm
+
 test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
+
+bench: install-bin
+	cargo criterion --all --all-features --message-format=json \
+	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
 bench-pvm: install-bin
 	cargo criterion --bench execute --features bench-pvm-interpreter --message-format=json \
@@ -73,10 +80,6 @@ bench-pvm: install-bin
 bench-evm: install-bin
 	cargo criterion --bench execute --features bench-evm --message-format=json \
 	| criterion-table > crates/benchmarks/EVM.md
-
-bench: install-bin
-	cargo criterion --all --all-features --message-format=json \
-	| criterion-table > crates/benchmarks/BENCHMARKS.md
 
 clean:
 	cargo clean ; \

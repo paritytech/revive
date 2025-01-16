@@ -1,68 +1,52 @@
 import { expect } from 'chai';
 import { compile } from '../examples/node/revive.js';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const validCompilerInput = {
-  language: 'Solidity',
-  sources: {
-    'MyContract.sol': {
-      content: `
-        // SPDX-License-Identifier: UNLICENSED
-        pragma solidity ^0.8.0; 
-        contract MyContract { 
-          function greet() public pure returns (string memory) { 
-            return "Hello"; 
-          } 
-        }
-      `,
-    },
-  },
-  settings: {
-    optimizer: {
-      enabled: true,
-      runs: 200,
-    },
-    outputSelection: {
-      '*': {
-        '*': ['abi', 'evm.bytecode'],
-      },
-    },
-  },
-};
+function loadFixture(fixture) {
+  const fixturePath = path.resolve(__dirname, `../fixtures/${fixture}`);
+  return  JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+}
 
 describe('Compile Function Tests', function () {
   it('should successfully compile valid Solidity code', async function () {
-    const result = await compile(validCompilerInput);
+    const standardInput = loadFixture('storage.json')
 
-    // Ensure result contains compiled contract
+    const result = await compile(standardInput);
     expect(result).to.be.a('string');
     const output = JSON.parse(result);
     expect(output).to.have.property('contracts');
-    expect(output.contracts['MyContract.sol']).to.have.property('MyContract');
-    expect(output.contracts['MyContract.sol'].MyContract).to.have.property('abi');
-    expect(output.contracts['MyContract.sol'].MyContract).to.have.property('evm');
-    expect(output.contracts['MyContract.sol'].MyContract.evm).to.have.property('bytecode');
+    expect(output.contracts['fixtures/storage.sol']).to.have.property('Storage');
+    expect(output.contracts['fixtures/storage.sol'].Storage).to.have.property('abi');
+    expect(output.contracts['fixtures/storage.sol'].Storage).to.have.property('evm');
+    expect(output.contracts['fixtures/storage.sol'].Storage.evm).to.have.property('bytecode');
   });
 
-  it('should throw an error for invalid Solidity code', async function () {
-    const invalidCompilerInput = {
-      ...validCompilerInput,
-      sources: {
-        'MyContract.sol': {
-          content: `
-            // SPDX-License-Identifier: UNLICENSED
-            pragma solidity ^0.8.0; 
-            import "nonexistent/console.sol";
-            contract MyContract { 
-              function greet() public pure returns (string memory) { 
-                return "Hello" // Missing semicolon
-              } 
-            }
-          `,
-        },
-      },
-    };
+  if (typeof globalThis.Bun == 'undefined') {
+    // Running this test with Bun on a Linux host causes:
+    // RuntimeError: Out of bounds memory access (evaluating 'getWasmTableEntry(index)(a1, a2, a3, a4, a5)')
+    // Once this issue is resolved, the test will be re-enabled.
+    it('should successfully compile large Solidity code', async function () {
+      const standardInput = loadFixture('token.json')
 
-    const result = await compile(invalidCompilerInput);
+      const result = await compile(standardInput);
+      expect(result).to.be.a('string');
+      const output = JSON.parse(result);
+      expect(output).to.have.property('contracts');
+      expect(output.contracts['fixtures/token.sol']).to.have.property('MyToken');
+      expect(output.contracts['fixtures/token.sol'].MyToken).to.have.property('abi');
+      expect(output.contracts['fixtures/token.sol'].MyToken).to.have.property('evm');
+      expect(output.contracts['fixtures/token.sol'].MyToken.evm).to.have.property('bytecode');
+    });
+  }
+
+  it('should throw an error for invalid Solidity code', async function () {
+    const standardInput = loadFixture('invalid_contract_content.json')
+
+    const result = await compile(standardInput);
     expect(result).to.be.a('string');
     const output = JSON.parse(result);
     expect(output).to.have.property('errors');
@@ -73,25 +57,9 @@ describe('Compile Function Tests', function () {
   });
 
   it('should return not found error for missing imports', async function () {
-    const compilerInputWithImport = {
-      ...validCompilerInput,
-      sources: {
-        'MyContract.sol': {
-          content: `
-            // SPDX-License-Identifier: UNLICENSED
-            pragma solidity ^0.8.0; 
-            import "nonexistent/console.sol";
-            contract MyContract { 
-              function greet() public pure returns (string memory) { 
-                return "Hello"; 
-              } 
-            }
-          `,
-        },
-      },
-    };
+    const standardInput = loadFixture('missing_import.json')
 
-    let result = await compile(compilerInputWithImport);
+    const result = await compile(standardInput);    
     const output = JSON.parse(result);
     expect(output).to.have.property('errors');
     expect(output.errors).to.be.an('array');

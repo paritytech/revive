@@ -425,8 +425,6 @@ impl Specs {
                                 code,
                                 data,
                                 salt.0,
-                                DebugInfo::Skip,
-                                CollectEvents::Skip,
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -463,8 +461,6 @@ impl Specs {
                                 gas_limit.unwrap_or(GAS_LIMIT),
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
                                 data,
-                                DebugInfo::Skip,
-                                CollectEvents::Skip,
                             );
                             results.push(CallResult::Exec {
                                 result,

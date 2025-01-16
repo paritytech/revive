@@ -185,8 +185,9 @@ describe("Standard JSON compilation with path options", () => {
         });
 
         it("Compiler run successful without emiting warnings", () => {
-            console.log("result.output: ", result.output)
-            const parsedResults = JSON.parse(result.output)
+            const cleanOutput = result.output.trim().replace(/[\r\n]+/g, '');
+            const parsedResults = JSON.parse(cleanOutput);
+            console.log("result.output: ", parsedResults)
             expect(parsedResults.errors.filter((error: { type: string; }) => error.type != 'Warning')).toEqual([]);
         });
     });

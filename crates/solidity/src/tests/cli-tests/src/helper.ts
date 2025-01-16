@@ -16,7 +16,7 @@ export const executeCommand = (command: string, stdin?: string): CommandResult =
 
         return {
             exitCode: proc.status,
-            output: proc.stdout || proc.stderr || ''
+            output: Buffer.from(proc.stdout || proc.stderr || '').toString('utf8')
         };
     }
 

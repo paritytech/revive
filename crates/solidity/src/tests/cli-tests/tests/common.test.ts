@@ -1,4 +1,4 @@
-import { executeCommand, isFolderExist, isFileExist, isFileEmpty } from "../src/helper";
+import { executeCommand, isFolderExist, isFileExist, isFileEmpty, executeCommandWithStdin } from "../src/helper";
 import { paths } from '../src/entities';
 import * as shell from 'shelljs';
 import * as path from 'path';
@@ -171,14 +171,14 @@ describe("Standard JSON compilation with path options", () => {
     describe("Output with all path options", () => {
         let result: { exitCode: number; output: string };
 
-        beforeAll(() => {
+        beforeAll(async () => {
             const tempInputFile = path.join(contractsDir, 'temp-input.json');
             shell.cp(inputFile, tempInputFile);
             const inputContent = shell.cat(inputFile).toString();
 
             const command = `resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
 
-            result = executeCommand(command, inputContent);
+            result = await executeCommandWithStdin(command, inputContent);
 
             shell.rm(tempInputFile);
 

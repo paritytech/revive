@@ -19,7 +19,7 @@ path = "src/revive_llvm/main.rs"
 doctest = false
 
 [dependencies]
-clap = { workspace = true, features = ["std", "derive"] }
+clap = { workspace = true, features = ["help", "std", "derive"] }
 anyhow = { workspace = true }
 serde = { workspace = true, features = [ "derive" ] }
 toml = { workspace = true }

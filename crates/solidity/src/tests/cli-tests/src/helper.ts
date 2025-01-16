@@ -12,7 +12,8 @@ export const executeCommand = (command: string, stdin?: string): CommandResult =
         const process = spawnSync(command, [], {
             input: stdin,
             shell: true,
-            encoding: 'utf-8'
+            encoding: 'utf8',
+            maxBuffer: 30 * 1024 * 1024
         });
 
         return {

@@ -4,7 +4,6 @@ import * as shell from 'shelljs';
 import * as path from 'path';
 
 
-
 //id1762
 describe("Run resolc without any options", () => {
     const command = 'resolc';
@@ -185,9 +184,7 @@ describe("Standard JSON compilation with path options", () => {
         });
 
         it("Compiler run successful without emiting warnings", () => {
-            const cleanOutput = result.output.trim().replace(/[\r\n]+/g, '');
-            const parsedResults = JSON.parse(cleanOutput);
-            console.log("result.output: ", parsedResults)
+            const parsedResults = JSON.parse(result.output)
             expect(parsedResults.errors.filter((error: { type: string; }) => error.type != 'Warning')).toEqual([]);
         });
     });

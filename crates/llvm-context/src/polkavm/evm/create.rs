@@ -53,13 +53,20 @@ where
     );
     context.build_store(address_pointer, context.word_const(0))?;
 
+    let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
+    context.build_store(deposit_pointer, context.word_type().const_all_ones())?;
+
     let argument_type = revive_runtime_api::calling_convention::instantiate(context.llvm());
     let argument_pointer = context.build_alloca_at_entry(argument_type, "instantiate_arguments");
     let arguments = &[
         code_hash_pointer.value.as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
-        context.integer_const(64, 0).as_basic_value_enum(),
-        context.sentinel_pointer().value.as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
+            .as_basic_value_enum(),
+        context
+            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
+            .as_basic_value_enum(),
+        deposit_pointer.value.as_basic_value_enum(),
         value_pointer.value.as_basic_value_enum(),
         input_data_pointer.value.as_basic_value_enum(),
         input_length.as_basic_value_enum(),

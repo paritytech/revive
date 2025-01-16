@@ -1,0 +1,22 @@
+{
+    "language": "Solidity",
+    "sources": {
+      "fixtures/storage.sol": {
+        "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\nimport \"nonexistent/console.sol\";\ncontract MyContract { function f() public { } }"
+      }
+    },
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "*": [
+            "abi"
+          ]
+        }
+      }
+    }
+  }
+  

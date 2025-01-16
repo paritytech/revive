@@ -7,17 +7,23 @@ interface CommandResult {
 }
 
 export const executeCommand = (command: string, stdin?: string): CommandResult => {
-    const result = shell.exec(command, {
-        silent: true,
-        async: false,
-        ...(stdin && { input: stdin })
-    });
+    if (stdin) {
+        const proc = require('child_process').spawnSync(command, [], {
+            input: stdin,
+            shell: true,
+            encoding: 'utf-8'
+        });
 
-    const shellResult = result as shell.ShellString;
+        return {
+            exitCode: proc.status,
+            output: proc.stdout || proc.stderr || ''
+        };
+    }
 
+    const result = shell.exec(command, { silent: true, async: false });
     return {
-        exitCode: shellResult.code,
-        output: shellResult.stdout?.trim() || shellResult.stderr?.trim() || ''
+        exitCode: result.code,
+        output: result.stdout || result.stderr || ''
     };
 };
 

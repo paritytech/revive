@@ -178,7 +178,7 @@ describe("Standard JSON compilation with path options", () => {
 
             const command = `resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
 
-            result = executeCommand(command,inputContent);
+            result = executeCommand(command, inputContent);
 
             shell.rm(tempInputFile);
 

@@ -8,15 +8,15 @@ interface CommandResult {
 
 export const executeCommand = (command: string, stdin?: string): CommandResult => {
     if (stdin) {
-        const proc = require('child_process').spawnSync(command, [], {
+        const process = require('child_process').spawnSync(command, [], {
             input: stdin,
             shell: true,
             encoding: 'utf-8'
         });
-
+        
         return {
-            exitCode: proc.status,
-            output: Buffer.from(proc.stdout || proc.stderr || '').toString('utf8')
+            exitCode: process.status || 0,
+            output: (process.stdout || process.stderr || '').toString()
         };
     }
 

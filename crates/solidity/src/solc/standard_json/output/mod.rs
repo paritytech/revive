@@ -63,24 +63,11 @@ impl Output {
 
         let files = match self.contracts.as_ref() {
             Some(files) => files,
-            None => &{
-                match &self.errors {
-                    Some(errors) => {
-                        let has_errors = errors.iter().any(|e| e.severity == "error");
-                        if has_errors {
-                            anyhow::bail!(
-                                "{}",
-                                serde_json::to_string_pretty(errors).expect("Always valid")
-                            );
-                        }
-                        BTreeMap::new()
-                    }
-                    None => {
-                        anyhow::bail!(
-                            "Unknown project assembling error - no contracts or errors present"
-                        );
-                    }
+            None => match &self.errors {
+                Some(errors) if errors.iter().any(|e| e.severity == "error") => {
+                    anyhow::bail!(serde_json::to_string_pretty(errors).expect("Always valid"));
                 }
+                _ => &BTreeMap::new(),
             },
         };
         let mut project_contracts = BTreeMap::new();

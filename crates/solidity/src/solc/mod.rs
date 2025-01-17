@@ -9,6 +9,8 @@ pub mod soljson_compiler;
 pub mod standard_json;
 pub mod version;
 
+use once_cell::sync::Lazy;
+use semver::VersionReq;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -29,6 +31,13 @@ pub const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13)
 
 /// The last supported version of `solc`.
 pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 28);
+/// `--base-path` was introduced in 0.6.9 <https://github.com/ethereum/solidity/releases/tag/v0.6.9>
+pub static FIRST_SUPPORTS_BASE_PATH: Lazy<VersionReq> =
+    Lazy::new(|| VersionReq::parse(">=0.6.9").unwrap());
+
+/// `--include-path` was introduced in 0.8.8 <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
+pub static FIRST_SUPPORTS_INCLUDE_PATH: Lazy<VersionReq> =
+    Lazy::new(|| VersionReq::parse(">=0.8.8").unwrap());
 
 /// The Solidity compiler.
 pub trait Compiler {

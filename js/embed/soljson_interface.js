@@ -10,20 +10,7 @@ mergeInto(LibraryManager.library, {
     },
     resolc_compile: function(inputPtr, inputLen) {
         const inputJson = UTF8ToString(inputPtr, inputLen);
-
-        // Check if running in a web worker or node.js
-        if (typeof importScripts === 'function') {
-            // Running in a web worker
-            importScripts('./resolc.js');
-            var revive = createRevive()
-        } else if (typeof require === 'function') {
-            // Running in Node.js
-            const path = require('path');
-            createRevive = require(path.resolve(__dirname, './resolc.js'));
-            var revive = createRevive();
-        } else {
-            throw new Error('Unknown environment: Unable to load resolc.js');
-        }
+        var revive = createRevive();
         revive.writeToStdin(inputJson);
 
         // Call main on the new instance

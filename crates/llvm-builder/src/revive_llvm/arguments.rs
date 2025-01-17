@@ -36,13 +36,7 @@ pub enum Subcommand {
         targets: Vec<String>,
 
         /// LLVM projects to build LLVM with.
-        #[arg(
-            long,
-            default_values_t = vec![
-                revive_llvm_builder::llvm_project::LLVMProject::CLANG,
-                revive_llvm_builder::llvm_project::LLVMProject::LLD
-            ]
-        )]
+        #[arg(long)]
         llvm_projects: Vec<revive_llvm_builder::llvm_project::LLVMProject>,
 
         /// Whether to build LLVM with run-time type information (RTTI) enabled.

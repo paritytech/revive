@@ -38,6 +38,7 @@ inkwell = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
+
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "*", default-features = false }
 

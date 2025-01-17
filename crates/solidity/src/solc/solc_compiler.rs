@@ -1,16 +1,18 @@
 //! The Solidity compiler.
 
+use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
+
 use crate::solc::combined_json::CombinedJson;
 use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
 
 use super::Compiler;
 use crate::solc::{FIRST_SUPPORTS_BASE_PATH, FIRST_SUPPORTS_INCLUDE_PATH};
+
 /// The Solidity compiler.
 pub struct SolcCompiler {
     /// The binary executable name.

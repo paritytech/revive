@@ -11,6 +11,7 @@ use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
 
 use super::Compiler;
+use crate::solc::{FIRST_SUPPORTS_BASE_PATH, FIRST_SUPPORTS_INCLUDE_PATH};
 
 /// The Solidity compiler.
 pub struct SolcCompiler {
@@ -58,10 +59,23 @@ impl Compiler for SolcCompiler {
         command.stdout(std::process::Stdio::piped());
         command.arg("--standard-json");
 
-        if let Some(base_path) = base_path {
-            command.arg("--base-path");
-            command.arg(base_path);
+        if let Some(base_path) = &base_path {
+            if !FIRST_SUPPORTS_BASE_PATH.matches(&version.default) {
+                anyhow::bail!(
+                    "--base-path not supported this version {} of solc",
+                    &version.default
+                );
+            }
+            command.arg("--base-path").arg(base_path);
         }
+
+        if !include_paths.is_empty() && !FIRST_SUPPORTS_INCLUDE_PATH.matches(&version.default) {
+            anyhow::bail!(
+                "--include-path not supported this version {} of solc",
+                &version.default
+            );
+        }
+
         for include_path in include_paths.into_iter() {
             command.arg("--include-path");
             command.arg(include_path);

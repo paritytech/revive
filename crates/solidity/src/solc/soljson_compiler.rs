@@ -35,6 +35,7 @@ impl Compiler for SoljsonCompiler {
         _allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
         let version = self.version()?;
+        input.normalize(&version.default);
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
         let input_json = serde_json::to_string(&input).expect("Always valid");

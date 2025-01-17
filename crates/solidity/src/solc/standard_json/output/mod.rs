@@ -24,9 +24,8 @@ use crate::yul::parser::statement::object::Object;
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
-
 /// The `solc --standard-json` output.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Output {
     /// The file-contract hashmap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -64,15 +63,12 @@ impl Output {
 
         let files = match self.contracts.as_ref() {
             Some(files) => files,
-            None => {
-                anyhow::bail!(
-                    "{}",
-                    self.errors
-                        .as_ref()
-                        .map(|errors| serde_json::to_string_pretty(errors).expect("Always valid"))
-                        .unwrap_or_else(|| "Unknown project assembling error".to_owned())
-                );
-            }
+            None => match &self.errors {
+                Some(errors) if errors.iter().any(|e| e.severity == "error") => {
+                    anyhow::bail!(serde_json::to_string_pretty(errors).expect("Always valid"));
+                }
+                _ => &BTreeMap::new(),
+            },
         };
         let mut project_contracts = BTreeMap::new();
 
@@ -159,7 +155,6 @@ impl Output {
                 messages.extend(polkavm_messages);
             }
         }
-
         self.errors = match self.errors.take() {
             Some(mut errors) => {
                 errors.extend(messages);

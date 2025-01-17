@@ -83,7 +83,7 @@ Obtain a compatible build for your host platform from the release section of thi
 
       ```shell
       revive-llvm clone
-      revive-llvm build
+      revive-llvm build --llvm-projects lld --llvm-projects clang
       ```
 
       Build artifacts end up in the `./target-llvm/gnu/target-final/` directory by default.

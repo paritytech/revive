@@ -1,5 +1,7 @@
 import { executeCommand, isFolderExist, isFileExist, isFileEmpty } from "../src/helper";
 import { paths } from '../src/entities';
+import * as shell from 'shelljs';
+import * as path from 'path';
 
 
 //id1762
@@ -141,4 +143,49 @@ describe("Run resolc with source debug information, check LLVM debug-info", () =
             expect(result.output).not.toMatch(/([Ee]rror|[Ff]ail)/i);
         });
     }
+});
+
+
+
+describe("Standard JSON compilation with path options", () => {
+    const contractsDir = path.join(shell.tempdir(), 'contracts-test');
+    const inputFile = path.join(__dirname, '..', 'src/contracts/compiled/1.json');
+
+    beforeAll(() => {
+        shell.mkdir('-p', contractsDir);
+
+        const input = JSON.parse(shell.cat(inputFile).toString());
+
+        Object.entries(input.sources).forEach(([sourcePath, source]: [string, any]) => {
+            const filePath = path.join(contractsDir, sourcePath);
+            shell.mkdir('-p', path.dirname(filePath));
+            shell.ShellString(source.content).to(filePath);
+        });
+    });
+
+    afterAll(() => {
+        shell.rm('-rf', contractsDir);
+    });
+
+    describe("Output with all path options", () => {
+        let result: { exitCode: number; output: string };
+
+        beforeAll(() => {
+            const tempInputFile = path.join(contractsDir, 'temp-input.json');
+            shell.cp(inputFile, tempInputFile);
+            const inputContent = shell.cat(inputFile).toString();
+
+            const command = `resolc --standard-json --base-path "${contractsDir}" --include-path "${contractsDir}" --allow-paths "${contractsDir}"`;
+
+            result = executeCommand(command, inputContent);
+
+            shell.rm(tempInputFile);
+
+        });
+
+        it("Compiler run successful without emiting warnings", () => {
+            const parsedResults = JSON.parse(result.output)
+            expect(parsedResults.errors.filter((error: { type: string; }) => error.type != 'Warning')).toEqual([]);
+        });
+    });
 });

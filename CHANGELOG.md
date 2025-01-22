@@ -2,16 +2,23 @@
 
 ## Unreleased
 
+## v0.1.0-dev.8
+
 This is a development pre-release.
 
 ### Added
 - The `revive-llvm-builder` crate with the `revive-llvm` helper utility for streamlined management of the LLVM framework dependency.
+- Initial support for running `resolc` in the browser.
 
 ### Changed
+- Suported contracts runtime is polkadot-sdk git version `d62a90c8c729acd98c7e9a5cab9803b8b211ffc5`.
 - The minimum supported Rust version is `1.81.0`.
+- Error out early instead of invoking `solc` with invalid base or include path flags.
 
 ### Fixed
 - Decouple the LLVM target dependency from the LLVM host dependency.
+- Do not error out if no files and no errors were produced. This aligns resolc closer to solc.
+- Fixes input normalization in the Wasm version.
 
 ## v0.1.0-dev.7
 

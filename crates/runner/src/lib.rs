@@ -29,7 +29,7 @@ use hex::{FromHex, ToHex};
 use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    pallet_revive::{CollectEvents, ContractResult, DebugInfo},
+    pallet_revive::ContractResult,
     polkadot_runtime_common::BuildStorage,
     polkadot_sdk_frame::testing_prelude::*,
     sp_core::{H160, H256},
@@ -179,11 +179,11 @@ impl VerifyCallExpectation {
 #[derive(Clone, Debug)]
 pub enum CallResult {
     Exec {
-        result: ContractResult<ExecReturnValue, Balance, EventRecord>,
+        result: ContractResult<ExecReturnValue, Balance>,
         wall_time: Duration,
     },
     Instantiate {
-        result: ContractResult<InstantiateReturnValue, Balance, EventRecord>,
+        result: ContractResult<InstantiateReturnValue, Balance>,
         wall_time: Duration,
         code_hash: H256,
     },

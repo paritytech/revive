@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0-dev.7"
+version = "0.1.0-dev.8"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,19 +14,19 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0-dev.7", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0-dev.7", path = "crates/builtins" }
-revive-common = { version = "0.1.0-dev.7", path = "crates/common" }
-revive-differential = { version = "0.1.0-dev.7", path = "crates/differential" }
-revive-integration = { version = "0.1.0-dev.7", path = "crates/integration" }
-revive-linker = { version = "0.1.0-dev.7", path = "crates/linker" }
-lld-sys = { version = "0.1.0-dev.7", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0-dev.7", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0-dev.7", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0-dev.7", path = "crates/runner" }
-revive-solidity = { version = "0.1.0-dev.7", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0-dev.7", path = "crates/stdlib" }
-revive-build-utils = { version = "0.1.0-dev.7", path = "crates/build-utils" }
+revive-benchmarks = { version = "0.1.0-dev.8", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.8", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.8", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.8", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.8", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.8", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.8", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.8", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.8", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.8", path = "crates/runner" }
+revive-solidity = { version = "0.1.0-dev.8", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.8", path = "crates/stdlib" }
+revive-build-utils = { version = "0.1.0-dev.8", path = "crates/build-utils" }
 
 hex = "0.4.3"
 cc = "1.0"
@@ -48,10 +48,10 @@ which = "7.0"
 path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.18.0"
-polkavm-linker = "0.18.0"
-polkavm-disassembler = "0.18.0"
-polkavm = "0.18.0"
+polkavm-common = "0.19.0"
+polkavm-linker = "0.19.0"
+polkavm-disassembler = "0.19.0"
+polkavm = "0.19.0"
 alloy-primitives = { version = "0.8.19", features = ["serde"] }
 alloy-sol-types = "0.8.19"
 alloy-genesis = "0.9.2"
@@ -73,7 +73,7 @@ assert_fs = "1.1.2"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "cb0d8544dc8828c7b5e7f6a5fc20ce8c6ef9bbb4" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "d62a90c8c729acd98c7e9a5cab9803b8b211ffc5" }
 
 # llvm
 [workspace.dependencies.inkwell]

@@ -9,7 +9,7 @@ COPY . .
 
 RUN make install-llvm-builder
 RUN revive-llvm --target-env musl clone
-RUN revive-llvm --target-env musl build
+RUN revive-llvm --target-env musl build  --llvm-projects lld --llvm-projects clang
 
 FROM messense/rust-musl-cross:x86_64-musl AS resolc-builder
 WORKDIR /opt/revive

@@ -58,39 +58,48 @@ where
     };
     let flags = context.xlen_type().const_int(flags as u64, false);
 
-    let argument_type = revive_runtime_api::calling_convention::call(context.llvm());
-    let argument_pointer = context.build_alloca_at_entry(argument_type, "call_arguments");
-    let arguments = &[
-        flags.as_basic_value_enum(),
-        address_pointer.value.as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        deposit_pointer.value.as_basic_value_enum(),
-        value_pointer.value.as_basic_value_enum(),
-        input_pointer.value.as_basic_value_enum(),
-        input_length.as_basic_value_enum(),
-        output_pointer.value.as_basic_value_enum(),
-        output_length_pointer.value.as_basic_value_enum(),
-    ];
-    revive_runtime_api::calling_convention::spill(
+    let flags_and_callee = revive_runtime_api::calling_convention::pack_hi_lo_reg(
         context.builder(),
-        argument_pointer.value,
-        argument_type,
-        arguments,
+        context.llvm(),
+        flags,
+        address_pointer.to_int(context),
+        "address_and_callee",
+    )?;
+    let deposit_and_value = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        deposit_pointer.to_int(context),
+        value_pointer.to_int(context),
+        "deposit_and_value",
+    )?;
+    let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        input_length,
+        input_pointer.to_int(context),
+        "input_data",
+    )?;
+    let output_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        output_length_pointer.to_int(context),
+        output_pointer.to_int(context),
+        "output_data",
     )?;
 
     let name = revive_runtime_api::polkavm_imports::CALL;
-    let argument_pointer = context.builder().build_ptr_to_int(
-        argument_pointer.value,
-        context.xlen_type(),
-        "call_argument_pointer",
-    )?;
     let success = context
-        .build_runtime_call(name, &[argument_pointer.into()])
+        .build_runtime_call(
+            name,
+            &[
+                flags_and_callee.into(),
+                context.register_type().const_all_ones().into(),
+                context.register_type().const_all_ones().into(),
+                deposit_and_value.into(),
+                input_data.into(),
+                output_data.into(),
+            ],
+        )
         .unwrap_or_else(|| panic!("{name} should return a value"))
         .into_int_value();
 
@@ -144,38 +153,41 @@ where
 
     let flags = context.xlen_type().const_int(0u64, false);
 
-    let argument_type = revive_runtime_api::calling_convention::delegate_call(context.llvm());
-    let argument_pointer = context.build_alloca_at_entry(argument_type, "delegate_call_arguments");
-    let arguments = &[
-        flags.as_basic_value_enum(),
-        address_pointer.value.as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        deposit_pointer.value.as_basic_value_enum(),
-        input_pointer.value.as_basic_value_enum(),
-        input_length.as_basic_value_enum(),
-        output_pointer.value.as_basic_value_enum(),
-        output_length_pointer.value.as_basic_value_enum(),
-    ];
-    revive_runtime_api::calling_convention::spill(
+    let flags_and_callee = revive_runtime_api::calling_convention::pack_hi_lo_reg(
         context.builder(),
-        argument_pointer.value,
-        argument_type,
-        arguments,
+        context.llvm(),
+        flags,
+        address_pointer.to_int(context),
+        "address_and_callee",
+    )?;
+    let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        input_length,
+        input_pointer.to_int(context),
+        "input_data",
+    )?;
+    let output_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        output_length_pointer.to_int(context),
+        output_pointer.to_int(context),
+        "output_data",
     )?;
 
     let name = revive_runtime_api::polkavm_imports::DELEGATE_CALL;
-    let argument_pointer = context.builder().build_ptr_to_int(
-        argument_pointer.value,
-        context.xlen_type(),
-        "delegate_call_argument_pointer",
-    )?;
     let success = context
-        .build_runtime_call(name, &[argument_pointer.into()])
+        .build_runtime_call(
+            name,
+            &[
+                flags_and_callee.into(),
+                context.register_type().const_all_ones().into(),
+                context.register_type().const_all_ones().into(),
+                deposit_pointer.to_int(context).into(),
+                input_data.into(),
+                output_data.into(),
+            ],
+        )
         .unwrap_or_else(|| panic!("{name} should return a value"))
         .into_int_value();
 

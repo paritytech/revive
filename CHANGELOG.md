@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v0.1.0-dev.9
+
+This is a development pre-release.
+
+### Added
+
+### Changed 
+- Syscalls with more than 6 arguments now pack them into registers.
+
+### Fixed
+
 ## v0.1.0-dev.8
 
 This is a development pre-release.

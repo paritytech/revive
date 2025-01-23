@@ -28,8 +28,19 @@ install-bin:
 install-npm:
 	npm install && npm fund
 
+TARGET_PATH=target/wasm32-unknown-emscripten/release
+WASM_FILE=$(TARGET_PATH)/resolc.wasm
+JS_FILE=$(TARGET_PATH)/resolc.js
+OUTPUT_FILE=$(TARGET_PATH)/resolc_packed.js
+
 install-wasm: install-npm
 	cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	@if [ ! -f $(WASM_FILE) ]; then echo "Error: Missing $(WASM_FILE)"; exit 1; fi
+	@if [ ! -f $(JS_FILE) ]; then echo "Error: Missing $(JS_FILE)"; exit 1; fi
+	@echo "let moduleArgs = { wasmBinary: readBinary(\"data:application/octet-stream;base64,$$(base64 -w 0 $(WASM_FILE))\") };" > $(OUTPUT_FILE)
+	@cat $(JS_FILE) >> $(OUTPUT_FILE)
+	@echo "createRevive = createRevive.bind(null, moduleArgs);" >> $(OUTPUT_FILE)
+	@echo "Combined script written to $(OUTPUT_FILE)"
 
 install-llvm-builder:
 	cargo install --path crates/llvm-builder

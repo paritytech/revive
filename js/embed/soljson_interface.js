@@ -13,9 +13,6 @@ mergeInto(LibraryManager.library, {
   resolc_compile: function (inputPtr, inputLen) {
     const inputJson = UTF8ToString(inputPtr, inputLen);
     var revive = createRevive();
-    // Allow GC to clean up the data
-    revive.wasmBinary = undefined
-    revive.soljson = undefined
     revive.writeToStdin(inputJson);
 
     // Call main on the new instance

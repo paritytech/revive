@@ -28,22 +28,9 @@ install-bin:
 install-npm:
 	npm install && npm fund
 
-RESOLC_WASM_TARGET_DIR=target/wasm32-unknown-emscripten/release
-RESOLC_WASM=$(RESOLC_WASM_TARGET_DIR)/resolc.wasm
-RESOLC_JS=$(RESOLC_WASM_TARGET_DIR)/resolc.js
-RESOLC_JS_PACKED=$(RESOLC_WASM_TARGET_DIR)/resolc_packed.js
-
 install-wasm: install-npm
 	cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
-	@echo "let moduleArgs = { wasmBinary: (function(source, uncompressedSize) {" > $(RESOLC_JS_PACKED)
-	@cat js/utils/mini-lz4.js >> $(RESOLC_JS_PACKED)
-	@cat js/utils/base64DecToArr.js >> $(RESOLC_JS_PACKED)
-	@echo "return uncompress(base64DecToArr(source), uncompressedSize);})(" >> $(RESOLC_JS_PACKED)
-	@echo "\"$$(lz4c --no-frame-crc --best --favor-decSpeed "${RESOLC_WASM}" - | tail -c +8 | base64 -w 0 )\"," >> $(RESOLC_JS_PACKED)
-	@echo "$$(wc -c < $(RESOLC_WASM)))};" >> $(RESOLC_JS_PACKED)
-	@cat $(RESOLC_JS) >> $(RESOLC_JS_PACKED)
-	@echo "createRevive = createRevive.bind(null, moduleArgs);" >> $(RESOLC_JS_PACKED)
-	@echo "Combined script written to $(RESOLC_JS_PACKED)"
+	npm run build:package
 
 install-llvm-builder:
 	cargo install --path crates/llvm-builder

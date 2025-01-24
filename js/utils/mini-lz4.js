@@ -1,5 +1,7 @@
 function uncompress(source, uncompressedSize) {
 /*
+Source https://github.com/ethereum/solidity/blob/develop/scripts/ci/mini-lz4.js
+====
 based off https://github.com/emscripten-core/emscripten/blob/main/third_party/mini-lz4.js
 The license only applies to the body of this function (``uncompress``).
 ====

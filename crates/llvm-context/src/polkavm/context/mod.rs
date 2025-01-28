@@ -1339,9 +1339,15 @@ where
         self.llvm.custom_width_int_type(bit_length as u32)
     }
 
-    /// Returns the register witdh sized type.
+    /// Returns the XLEN witdh sized type.
     pub fn xlen_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
+    }
+
+    /// Returns the PolkaVM native register width sized type.
+    pub fn register_type(&self) -> inkwell::types::IntType<'ctx> {
+        self.llvm
+            .custom_width_int_type(revive_common::BIT_LENGTH_X64 as u32)
     }
 
     /// Returns the sentinel pointer value.

@@ -85,6 +85,7 @@ impl ExtBuilder {
             .unwrap();
         pallet_balances::GenesisConfig::<Runtime> {
             balances: self.balance_genesis_config,
+            dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();

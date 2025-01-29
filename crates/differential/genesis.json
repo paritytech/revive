@@ -18,7 +18,7 @@
         "terminalTotalDifficulty": 0,
         "terminalTotalDifficultyPassed": true
     },
-    "coinbase": "0x0000000000000000000000000000000000000000",
+    "coinbase": "0xffffffffffffffffffffffffffffffffffffffff",
     "difficulty": "0x20000",
     "extraData": "",
     "gasLimit": "0xffffffff",

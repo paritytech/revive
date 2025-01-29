@@ -13,5 +13,6 @@ rustflags = [
     "-Clink-arg=--js-library=js/embed/soljson_interface.js",
     "-Clink-arg=--pre-js=js/embed/pre.js",
     "-Clink-arg=-sNODEJS_CATCH_EXIT=0",
+    "-Clink-arg=-sDISABLE_EXCEPTION_CATCHING=0",
     "-Copt-level=3"
 ]

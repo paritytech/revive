@@ -142,6 +142,7 @@ fn build_target(
             .env("EMCC_DEBUG", "2")
             .env("CXXFLAGS", "-Dwait4=__syscall_wait4")
             .env("LDFLAGS", "-lnodefs.js -s NO_INVOKE_RUN -s EXIT_RUNTIME -s INITIAL_MEMORY=64MB -s ALLOW_MEMORY_GROWTH -s EXPORTED_RUNTIME_METHODS=FS,callMain,NODEFS -s MODULARIZE -s EXPORT_ES6 -s WASM_BIGINT")
+            .env("LDFLAGS", "-lnodefs.js -s NO_INVOKE_RUN=1 -s EXIT_RUNTIME=1 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=FS,callMain,NODEFS -s MODULARIZE=1 -s WASM_BIGINT=1 -s ALLOW_TABLE_GROWTH=1 -s NODEJS_CATCH_EXIT=0 -sDYNAMIC_EXECUTION=0")
             .arg("cmake")
             .args([
                 "-S",

@@ -7,6 +7,13 @@ function loadFixture(fixture) {
   return JSON.parse(fs.readFileSync(fixturePath, "utf-8"));
 }
 
+async function loadTestPage(page) {
+  await page.goto("http://127.0.0.1:8080");
+  const outputElement = page.locator("#output");
+  await outputElement.waitFor({ state: "visible" });
+  await page.setContent("");
+}
+
 async function runWorker(page, input) {
   return await page.evaluate((input) => {
     return new Promise((resolve, reject) => {
@@ -29,8 +36,7 @@ async function runWorker(page, input) {
 test("should successfully compile valid Solidity code in browser", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:8080");
-  await page.setContent("");
+  await loadTestPage(page);
   const standardInput = loadFixture("storage.json");
   const result = await runWorker(page, standardInput);
 
@@ -52,8 +58,7 @@ test("should successfully compile valid Solidity code in browser", async ({
 test("should successfully compile large valid Solidity code in browser", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:8080");
-  await page.setContent("");
+  await loadTestPage(page);
   const standardInput = loadFixture("token.json");
   const result = await runWorker(page, standardInput);
 
@@ -71,8 +76,7 @@ test("should successfully compile large valid Solidity code in browser", async (
 test("should throw an error for invalid Solidity code in browser", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:8080");
-  await page.setContent("");
+  await loadTestPage(page);
   const standardInput = loadFixture("invalid_contract_content.json");
   const result = await runWorker(page, standardInput);
 
@@ -88,8 +92,7 @@ test("should throw an error for invalid Solidity code in browser", async ({
 test("should return not found error for missing imports in browser", async ({
   page,
 }) => {
-  await page.goto("http://127.0.0.1:8080");
-  await page.setContent("");
+  await loadTestPage(page);
   const standardInput = loadFixture("missing_import.json");
   const result = await runWorker(page, standardInput);
 

@@ -5,8 +5,7 @@
     "solc": "^0.8.28"
   },
   "scripts": {
-    "fetch:soljson": "wget https://binaries.soliditylang.org/wasm/soljson-v0.8.28+commit.7893614a.js -O ./examples/web/soljson.js",
-    "example:web": "npm run fetch:soljson && http-server ./examples/web/",
+    "example:web": "http-server ./examples/web/",
     "example:node": "node ./examples/node/run_revive.js",
     "test:node": "mocha --timeout 60000 ./tests",
     "test:bun": "bun test --timeout 60000 node.test",

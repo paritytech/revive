@@ -12,6 +12,7 @@ This is a development pre-release.
 - Syscalls with more than 6 arguments now pack them into registers.
 
 ### Fixed
+- Remove reloading of the resolc.js file (fix issue with relative path in web worker)
 
 ## v0.1.0-dev.8
 

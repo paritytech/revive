@@ -50,6 +50,7 @@ test_spec!(gas_price, "GasPrice", "GasPrice.sol");
 test_spec!(gas_left, "GasLeft", "GasLeft.sol");
 test_spec!(gas_limit, "GasLimit", "GasLimit.sol");
 test_spec!(base_fee, "BaseFee", "BaseFee.sol");
+test_spec!(coinbase, "Coinbase", "Coinbase.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

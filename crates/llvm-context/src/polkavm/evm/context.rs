@@ -122,12 +122,20 @@ where
 
 /// Translates the `coinbase` instruction.
 pub fn coinbase<'ctx, D>(
-    _context: &mut Context<'ctx, D>,
+    context: &mut Context<'ctx, D>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
     D: Dependency + Clone,
 {
-    todo!()
+    let pointer = context.build_alloca_at_entry(
+        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
+        "coinbase_output",
+    );
+    context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::BLOCK_AUTHOR,
+        &[pointer.to_int(context).into()],
+    );
+    context.build_load_address(pointer)
 }
 
 /// Translates the `basefee` instruction.

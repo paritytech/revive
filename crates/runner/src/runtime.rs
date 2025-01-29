@@ -1,5 +1,4 @@
-use frame_support::{runtime, weights::constants::WEIGHT_REF_TIME_PER_SECOND};
-
+use frame_support::{runtime, traits::FindAuthor, weights::constants::WEIGHT_REF_TIME_PER_SECOND};
 use pallet_revive::AccountId32Mapper;
 use polkadot_sdk::*;
 use polkadot_sdk::{
@@ -11,8 +10,6 @@ pub type Balance = u128;
 pub type AccountId = pallet_revive::AccountId32Mapper<Runtime>;
 pub type Block = frame_system::mocking::MockBlock<Runtime>;
 pub type Hash = <Runtime as frame_system::Config>::Hash;
-pub type EventRecord =
-    frame_system::EventRecord<<Runtime as frame_system::Config>::RuntimeEvent, Hash>;
 
 #[runtime]
 mod runtime {
@@ -26,7 +23,8 @@ mod runtime {
         RuntimeHoldReason,
         RuntimeSlashReason,
         RuntimeLockId,
-        RuntimeTask
+        RuntimeTask,
+        RuntimeViewFunction
     )]
     pub struct Runtime;
 
@@ -88,4 +86,14 @@ impl pallet_revive::Config for Runtime {
     type InstantiateOrigin = EnsureSigned<AccountId32>;
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;
     type ChainId = ConstU64<420_420_420>;
+    type FindAuthor = Self;
+}
+
+impl FindAuthor<<Runtime as frame_system::Config>::AccountId> for Runtime {
+    fn find_author<'a, I>(_digests: I) -> Option<<Runtime as frame_system::Config>::AccountId>
+    where
+        I: 'a + IntoIterator<Item = (frame_support::ConsensusEngineId, &'a [u8])>,
+    {
+        Some([0xff; 32].into())
+    }
 }

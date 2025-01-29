@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+This is a development pre-release.
+
+### Added
+- Support for the `coinbase` opcode.
+
+### Changed 
+
+### Fixed
+
 ## v0.1.0-dev.9
 
 This is a development pre-release.

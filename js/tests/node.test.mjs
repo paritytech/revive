@@ -33,7 +33,7 @@ describe("Compile Function Tests", function () {
     ).to.have.property("bytecode");
   });
 
-  if (typeof globalThis.Bun == "undefined" || true) {
+  if (typeof globalThis.Bun == "undefined") {
     // Running this test with Bun on a Linux host causes:
     // RuntimeError: Out of bounds memory access (evaluating 'getWasmTableEntry(index)(a1, a2, a3, a4, a5)')
     // Once this issue is resolved, the test will be re-enabled.

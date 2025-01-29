@@ -57,7 +57,12 @@ test("should successfully compile valid Solidity code in browser", async ({
 
 test("should successfully compile large valid Solidity code in browser", async ({
   page,
+  browserName,
 }) => {
+  if (browserName === "firefox") {
+    // Skipping tests with large contracts on Firefox due to out-of-memory issues.
+    test.skip();
+  }
   await loadTestPage(page);
   const standardInput = loadFixture("token.json");
   const result = await runWorker(page, standardInput);

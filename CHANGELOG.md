@@ -8,6 +8,7 @@ This is a development pre-release.
 - Support for the `coinbase` opcode.
 
 ### Changed 
+- Removed support for legacy EVM assembly (EVMLA) translation.
 
 ### Fixed
 

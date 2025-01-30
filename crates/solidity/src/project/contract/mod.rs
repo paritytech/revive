@@ -54,7 +54,6 @@ impl Contract {
 
     /// Returns the contract identifier, which is:
     /// - the Yul object identifier for Yul
-    /// - the full contract path for EVM legacy assembly
     /// - the module name for LLVM IR
     pub fn identifier(&self) -> &str {
         match self.ir {

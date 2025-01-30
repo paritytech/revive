@@ -125,26 +125,6 @@ impl Error {
         }
     }
 
-    /// Returns the internal function pointer usage error.
-    pub fn message_internal_function_pointer(src: Option<&str>) -> Self {
-        let message = r#"
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Error: Internal function pointers are not supported in EVM legacy assembly pipeline.             │
-│ Please use the Yul IR codegen instead.                                                           │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
-            .to_owned();
-
-        Self {
-            component: "general".to_owned(),
-            error_code: None,
-            formatted_message: message.clone(),
-            message,
-            severity: "error".to_owned(),
-            source_location: src.map(SourceLocation::from_str).and_then(Result::ok),
-            r#type: "Error".to_owned(),
-        }
-    }
-
     /// Appends the contract path to the message..
     pub fn push_contract_path(&mut self, path: &str) {
         self.formatted_message

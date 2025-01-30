@@ -5,8 +5,6 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 pub const CALLEE_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT
 
@@ -46,7 +44,6 @@ fn default() {
         sources,
         BTreeMap::new(),
         Some(remappings),
-        SolcPipeline::Yul,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");

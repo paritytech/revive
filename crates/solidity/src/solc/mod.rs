@@ -1,7 +1,6 @@
 //! The Solidity compiler.
 
 pub mod combined_json;
-pub mod pipeline;
 #[cfg(not(target_os = "emscripten"))]
 pub mod solc_compiler;
 #[cfg(target_os = "emscripten")]
@@ -15,7 +14,6 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use self::combined_json::CombinedJson;
-use self::pipeline::Pipeline;
 use self::standard_json::input::Input as StandardJsonInput;
 use self::standard_json::output::Output as StandardJsonOutput;
 use self::version::Version;
@@ -45,7 +43,6 @@ pub trait Compiler {
     fn standard_json(
         &mut self,
         input: StandardJsonInput,
-        pipeline: Pipeline,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,

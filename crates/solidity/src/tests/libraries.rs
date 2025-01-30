@@ -4,8 +4,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 pub const LIBRARY_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -38,29 +36,24 @@ fn not_specified() {
     let mut sources = BTreeMap::new();
     sources.insert("test.sol".to_owned(), LIBRARY_TEST_SOURCE.to_owned());
 
-    for pipeline in [SolcPipeline::EVMLA, SolcPipeline::Yul] {
-        let output = super::build_solidity_and_detect_missing_libraries(
-            sources.clone(),
-            BTreeMap::new(),
-            pipeline,
-        )
-        .expect("Test failure");
-        assert!(
-            output
-                .contracts
-                .as_ref()
-                .expect("Always exists")
-                .get("test.sol")
-                .expect("Always exists")
-                .get("SimpleContract")
-                .expect("Always exists")
-                .missing_libraries
-                .as_ref()
-                .expect("Always exists")
-                .contains("test.sol:SimpleLibrary"),
-            "Missing library not detected"
-        );
-    }
+    let output =
+        super::build_solidity_and_detect_missing_libraries(sources.clone(), BTreeMap::new())
+            .expect("Test failure");
+    assert!(
+        output
+            .contracts
+            .as_ref()
+            .expect("Always exists")
+            .get("test.sol")
+            .expect("Always exists")
+            .get("SimpleContract")
+            .expect("Always exists")
+            .missing_libraries
+            .as_ref()
+            .expect("Always exists")
+            .contains("test.sol:SimpleLibrary"),
+        "Missing library not detected"
+    );
 }
 
 #[test]
@@ -75,28 +68,23 @@ fn specified() {
         .entry("SimpleLibrary".to_string())
         .or_insert("0x00000000000000000000000000000000DEADBEEF".to_string());
 
-    for pipeline in [SolcPipeline::EVMLA, SolcPipeline::Yul] {
-        let output = super::build_solidity_and_detect_missing_libraries(
-            sources.clone(),
-            libraries.clone(),
-            pipeline,
-        )
-        .expect("Test failure");
-        assert!(
-            output
-                .contracts
-                .as_ref()
-                .expect("Always exists")
-                .get("test.sol")
-                .expect("Always exists")
-                .get("SimpleContract")
-                .expect("Always exists")
-                .missing_libraries
-                .as_ref()
-                .cloned()
-                .unwrap_or_default()
-                .is_empty(),
-            "The list of missing libraries must be empty"
-        );
-    }
+    let output =
+        super::build_solidity_and_detect_missing_libraries(sources.clone(), libraries.clone())
+            .expect("Test failure");
+    assert!(
+        output
+            .contracts
+            .as_ref()
+            .expect("Always exists")
+            .get("test.sol")
+            .expect("Always exists")
+            .get("SimpleContract")
+            .expect("Always exists")
+            .missing_libraries
+            .as_ref()
+            .cloned()
+            .unwrap_or_default()
+            .is_empty(),
+        "The list of missing libraries must be empty"
+    );
 }

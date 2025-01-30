@@ -239,7 +239,6 @@ pub enum Code {
     Solidity {
         path: Option<std::path::PathBuf>,
         solc_optimizer: Option<bool>,
-        pipeline: Option<revive_solidity::SolcPipeline>,
         contract: String,
     },
     /// Read the contract blob from disk
@@ -264,7 +263,6 @@ impl From<Code> for pallet_revive::Code {
                 path,
                 contract,
                 solc_optimizer,
-                pipeline,
             } => {
                 let Some(path) = path else {
                     panic!("Solidity source of contract '{contract}' missing path");
@@ -276,7 +274,6 @@ impl From<Code> for pallet_revive::Code {
                     &contract,
                     &source_code,
                     solc_optimizer.unwrap_or(true),
-                    pipeline.unwrap_or(revive_solidity::SolcPipeline::Yul),
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),

@@ -8,8 +8,6 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::evmla::assembly::Assembly;
-
 use self::bytecode::Bytecode;
 use self::bytecode::DeployedBytecode;
 use self::extra_metadata::ExtraMetadata;
@@ -19,9 +17,6 @@ use self::extra_metadata::ExtraMetadata;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
-    /// The contract EVM legacy assembly code.
-    #[serde(rename = "legacyAssembly", skip_serializing_if = "Option::is_none")]
-    pub assembly: Option<Assembly>,
     /// The contract PolkaVM assembly code.
     #[serde(rename = "assembly", skip_serializing_if = "Option::is_none")]
     pub assembly_text: Option<String>,

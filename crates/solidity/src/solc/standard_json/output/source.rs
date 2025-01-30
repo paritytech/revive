@@ -130,32 +130,6 @@ impl Source {
         ))
     }
 
-    /// Checks the AST node for the internal function pointers value usage.
-    pub fn check_internal_function_pointer(
-        ast: &serde_json::Value,
-    ) -> Option<SolcStandardJsonOutputError> {
-        let ast = ast.as_object()?;
-
-        if ast.get("nodeType")?.as_str()? != "VariableDeclaration" {
-            return None;
-        }
-
-        let type_descriptions = ast.get("typeDescriptions")?.as_object()?;
-        if !type_descriptions
-            .get("typeIdentifier")?
-            .as_str()?
-            .contains("function_internal")
-        {
-            return None;
-        }
-
-        Some(
-            SolcStandardJsonOutputError::message_internal_function_pointer(
-                ast.get("src")?.as_str(),
-            ),
-        )
-    }
-
     /// Returns the list of messages for some specific parts of the AST.
     pub fn get_messages(
         ast: &serde_json::Value,

@@ -67,4 +67,38 @@ describe('Compile Function Tests', function () {
     expect(output.errors[0].message).to.exist;
     expect(output.errors[0].message).to.include('Source "nonexistent/console.sol" not found');
   });
+
+  it("should successfully compile a valid Solidity contract that instantiates another contract", async function () {
+    const standardInput = loadFixture("instantiate.json");
+
+    const result = await compile(standardInput);
+    expect(result).to.be.a("string");
+    const output = JSON.parse(result);
+    expect(output).to.have.property("contracts");
+    expect(output.contracts["fixtures/instantiate.sol"]).to.have.property(
+      "ChildContract",
+    );
+    expect(output.contracts["fixtures/instantiate.sol"].ChildContract).to.have.property(
+      "abi",
+    );
+    expect(output.contracts["fixtures/instantiate.sol"].ChildContract).to.have.property(
+      "evm",
+    );
+    expect(
+      output.contracts["fixtures/instantiate.sol"].ChildContract.evm,
+    ).to.have.property("bytecode");
+    expect(output.contracts["fixtures/instantiate.sol"]).to.have.property(
+      "MainContract",
+    );
+    expect(output.contracts["fixtures/instantiate.sol"].MainContract).to.have.property(
+      "abi",
+    );
+    expect(output.contracts["fixtures/instantiate.sol"].MainContract).to.have.property(
+      "evm",
+    );
+    expect(
+      output.contracts["fixtures/instantiate.sol"].MainContract.evm,
+    ).to.have.property("bytecode");
+  });
+
 });

@@ -1,8 +1,6 @@
 //! The LLVM IR generator function.
 
-pub mod block;
 pub mod declaration;
-pub mod evmla_data;
 pub mod intrinsics;
 pub mod llvm_runtime;
 pub mod r#return;
@@ -19,7 +17,6 @@ use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::pointer::Pointer;
 
 use self::declaration::Declaration;
-use self::evmla_data::EVMLAData;
 use self::r#return::Return;
 use self::yul_data::YulData;
 
@@ -45,8 +42,6 @@ pub struct Function<'ctx> {
 
     /// The Yul compiler data.
     yul_data: Option<YulData>,
-    /// The EVM legacy assembly compiler data.
-    evmla_data: Option<EVMLAData<'ctx>>,
 }
 
 impl<'ctx> Function<'ctx> {
@@ -72,7 +67,6 @@ impl<'ctx> Function<'ctx> {
             return_block,
 
             yul_data: None,
-            evmla_data: None,
         }
     }
 
@@ -298,29 +292,6 @@ impl<'ctx> Function<'ctx> {
     /// Returns the function return block.
     pub fn return_block(&self) -> inkwell::basic_block::BasicBlock<'ctx> {
         self.return_block
-    }
-
-    /// Sets the EVM legacy assembly data.
-    pub fn set_evmla_data(&mut self, data: EVMLAData<'ctx>) {
-        self.evmla_data = Some(data);
-    }
-
-    /// Returns the EVM legacy assembly data reference.
-    /// # Panics
-    /// If the EVM data has not been initialized.
-    pub fn evmla(&self) -> &EVMLAData<'ctx> {
-        self.evmla_data
-            .as_ref()
-            .expect("The EVM data must have been initialized")
-    }
-
-    /// Returns the EVM legacy assembly data mutable reference.
-    /// # Panics
-    /// If the EVM data has not been initialized.
-    pub fn evmla_mut(&mut self) -> &mut EVMLAData<'ctx> {
-        self.evmla_data
-            .as_mut()
-            .expect("The EVM data must have been initialized")
     }
 
     /// Sets the Yul data.

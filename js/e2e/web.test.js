@@ -85,3 +85,22 @@ test('should return not found error for missing imports in browser', async ({pag
   expect(output.errors[0]).toHaveProperty('message');
   expect(output.errors[0].message).toContain('Source "nonexistent/console.sol" not found');
 });
+
+test('should successfully compile a valid Solidity contract that instantiates another contract in browser', async ({ page }) => {
+  await page.goto("http://127.0.0.1:8080");
+  await page.setContent("");
+  const standardInput = loadFixture('instantiate.json')
+  const result = await runWorker(page, standardInput);
+  
+  expect(typeof result).toBe('string');
+  let output = JSON.parse(result);
+  expect(output).toHaveProperty('contracts');
+  expect(output.contracts['fixtures/instantiate.sol']).toHaveProperty('ChildContract');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract).toHaveProperty('abi');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract).toHaveProperty('evm');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract.evm).toHaveProperty('bytecode');
+  expect(output.contracts['fixtures/instantiate.sol']).toHaveProperty('MainContract');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract).toHaveProperty('abi');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract).toHaveProperty('evm');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract.evm).toHaveProperty('bytecode');
+});

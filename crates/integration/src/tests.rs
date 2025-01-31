@@ -51,6 +51,7 @@ test_spec!(gas_left, "GasLeft", "GasLeft.sol");
 test_spec!(gas_limit, "GasLimit", "GasLimit.sol");
 test_spec!(base_fee, "BaseFee", "BaseFee.sol");
 test_spec!(coinbase, "Coinbase", "Coinbase.sol");
+test_spec!(create2, "CreateB", "Create2.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -435,33 +436,3 @@ fn ext_code_size() {
     }
     .run();
 }
-
-/*
-// These test were implement for the mock-runtime and need to be ported yet.
-
-#[test]
-fn create2_failure() {
-    let mut state = State::default();
-    let contract_a = Contract::create_a();
-    state.upload_code(&contract_a.pvm_runtime);
-
-    let contract = Contract::create_b();
-    let (state, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata.clone())
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // The address already exists, which should cause the contract to revert
-
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Revert);
-}
-*/

@@ -10,6 +10,7 @@ This is a development pre-release.
 ### Changed 
 
 ### Fixed
+- Solidity: Add the solc `--libraries` files to sources.
 
 ## v0.1.0-dev.9
 

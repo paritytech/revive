@@ -64,11 +64,17 @@ impl Input {
         via_ir: bool,
         suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
+        let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
+        let libraries = Settings::parse_libraries(library_map)?;
+        for library_file in libraries.keys() {
+            paths.insert(PathBuf::from(library_file));
+        }
+
         #[cfg(feature = "parallel")]
         let iter = paths.into_par_iter(); // Parallel iterator
-
         #[cfg(not(feature = "parallel"))]
         let iter = paths.iter(); // Sequential iterator
+
         let sources = iter
             .map(|path| {
                 let source = Source::try_from(path.as_path()).unwrap_or_else(|error| {
@@ -77,8 +83,6 @@ impl Input {
                 (path.to_string_lossy().to_string(), source)
             })
             .collect();
-
-        let libraries = Settings::parse_libraries(library_map)?;
 
         Ok(Self {
             language,

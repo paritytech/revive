@@ -14,5 +14,6 @@ rustflags = [
     "-Clink-arg=--pre-js=js/embed/pre.js",
     "-Clink-arg=-sNODEJS_CATCH_EXIT=0",
     "-Clink-arg=-sDISABLE_EXCEPTION_CATCHING=0",
+    "-Clink-arg=-sSTACK_SIZE=128kb",
     "-Copt-level=3"
 ]

@@ -26,7 +26,7 @@ async function runWorker(page, input) {
   }, input);
 }
 
-test('should successfully compile valid Solidity code in browser', async ({ page }) => {
+test('should successfully compile valid Solidity code in the browser', async ({ page }) => {
   await page.goto("http://127.0.0.1:8080");
   await page.setContent("");
   const standardInput = loadFixture('storage.json')
@@ -41,7 +41,7 @@ test('should successfully compile valid Solidity code in browser', async ({ page
   expect(output.contracts['fixtures/storage.sol'].Storage.evm).toHaveProperty('bytecode');
 });
 
-test('should successfully compile large valid Solidity code in browser', async ({ page }) => {
+test('should successfully compile large valid Solidity code in the browser', async ({ page }) => {
   await page.goto("http://127.0.0.1:8080");
   await page.setContent("");
   const standardInput = loadFixture('token.json')
@@ -56,7 +56,7 @@ test('should successfully compile large valid Solidity code in browser', async (
   expect(output.contracts['fixtures/token.sol'].MyToken.evm).toHaveProperty('bytecode');
 });
 
-test('should throw an error for invalid Solidity code in browser', async ({ page }) => {
+test('should throw an error for invalid Solidity code in the browser', async ({ page }) => {
   await page.goto("http://127.0.0.1:8080");
   await page.setContent("");
   const standardInput = loadFixture('invalid_contract_content.json')
@@ -71,7 +71,7 @@ test('should throw an error for invalid Solidity code in browser', async ({ page
   expect(output.errors[0].type).toContain('ParserError');
 });
 
-test('should return not found error for missing imports in browser', async ({page}) => {
+test('should return not found error for missing imports in the browser', async ({page}) => {
   await page.goto("http://127.0.0.1:8080");
   await page.setContent("");
   const standardInput = loadFixture('missing_import.json')
@@ -84,4 +84,38 @@ test('should return not found error for missing imports in browser', async ({pag
   expect(output.errors.length).toBeGreaterThan(0);
   expect(output.errors[0]).toHaveProperty('message');
   expect(output.errors[0].message).toContain('Source "nonexistent/console.sol" not found');
+});
+
+test('should successfully compile a valid Solidity contract that instantiates another contract in the browser', async ({ page }) => {
+  await page.goto("http://127.0.0.1:8080");
+  await page.setContent("");
+  const standardInput = loadFixture('instantiate.json')
+  const result = await runWorker(page, standardInput);
+  
+  expect(typeof result).toBe('string');
+  let output = JSON.parse(result);
+  expect(output).toHaveProperty('contracts');
+  expect(output.contracts['fixtures/instantiate.sol']).toHaveProperty('ChildContract');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract).toHaveProperty('abi');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract).toHaveProperty('evm');
+  expect(output.contracts['fixtures/instantiate.sol'].ChildContract.evm).toHaveProperty('bytecode');
+  expect(output.contracts['fixtures/instantiate.sol']).toHaveProperty('MainContract');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract).toHaveProperty('abi');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract).toHaveProperty('evm');
+  expect(output.contracts['fixtures/instantiate.sol'].MainContract.evm).toHaveProperty('bytecode');
+});
+
+test('should successfully compile a valid Solidity contract that instantiates the token contracts in the browser', async ({ page }) => {
+  await page.goto("http://127.0.0.1:8080");
+  await page.setContent("");
+  const standardInput = loadFixture('instantiate_tokens.json')
+  const result = await runWorker(page, standardInput);
+
+  expect(typeof result).toBe('string');
+  let output = JSON.parse(result);
+  expect(output).toHaveProperty('contracts');
+  expect(output.contracts['fixtures/instantiate_tokens.sol']).toHaveProperty('TokensFactory');
+  expect(output.contracts['fixtures/instantiate_tokens.sol'].TokensFactory).toHaveProperty('abi');
+  expect(output.contracts['fixtures/instantiate_tokens.sol'].TokensFactory).toHaveProperty('evm');
+  expect(output.contracts['fixtures/instantiate_tokens.sol'].TokensFactory.evm).toHaveProperty('bytecode');
 });

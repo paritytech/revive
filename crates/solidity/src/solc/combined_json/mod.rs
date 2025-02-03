@@ -80,11 +80,9 @@ impl CombinedJson {
         file_path.push(format!("combined.{}", revive_common::EXTENSION_JSON));
 
         if file_path.exists() && !overwrite {
-            writeln!(
-                std::io::stderr(),
+            anyhow::bail!(
                 "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
-            )?;
-            return Ok(());
+            );
         }
 
         File::create(&file_path)

@@ -64,10 +64,9 @@ impl Contract {
             file_path.push(file_name);
 
             if file_path.exists() && !overwrite {
-                writeln!(
-                    std::io::stderr(),
+                anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
-                )?;
+                );
             } else {
                 let assembly_text = self.build.assembly_text;
 
@@ -88,10 +87,9 @@ impl Contract {
             file_path.push(file_name);
 
             if file_path.exists() && !overwrite {
-                writeln!(
-                    std::io::stderr(),
+                anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
-                )?;
+                );
             } else {
                 File::create(&file_path)
                     .map_err(|error| {

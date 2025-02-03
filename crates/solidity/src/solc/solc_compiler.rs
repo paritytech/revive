@@ -5,13 +5,12 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::solc::combined_json::CombinedJson;
-use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
+use crate::solc::FIRST_INCLUDE_PATH_VERSION;
 
 use super::Compiler;
-use crate::solc::{FIRST_SUPPORTS_BASE_PATH, FIRST_SUPPORTS_INCLUDE_PATH};
 
 /// The Solidity compiler.
 pub struct SolcCompiler {
@@ -47,45 +46,35 @@ impl Compiler for SolcCompiler {
     fn standard_json(
         &mut self,
         mut input: StandardJsonInput,
-        pipeline: Pipeline,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
-        let version = self.version()?;
+        let version = self.version()?.default;
+
+        if !include_paths.is_empty() && version < FIRST_INCLUDE_PATH_VERSION {
+            anyhow::bail!("--include-path is not supported in solc {version}");
+        }
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
         command.arg("--standard-json");
 
-        if let Some(base_path) = &base_path {
-            if !FIRST_SUPPORTS_BASE_PATH.matches(&version.default) {
-                anyhow::bail!(
-                    "--base-path not supported this version {} of solc",
-                    &version.default
-                );
-            }
-            command.arg("--base-path").arg(base_path);
-        }
-
-        if !include_paths.is_empty() && !FIRST_SUPPORTS_INCLUDE_PATH.matches(&version.default) {
-            anyhow::bail!(
-                "--include-path not supported this version {} of solc",
-                &version.default
-            );
-        }
-
         for include_path in include_paths.into_iter() {
             command.arg("--include-path");
             command.arg(include_path);
+        }
+        if let Some(base_path) = base_path {
+            command.arg("--base-path");
+            command.arg(base_path);
         }
         if let Some(allow_paths) = allow_paths {
             command.arg("--allow-paths");
             command.arg(allow_paths);
         }
 
-        input.normalize(&version.default);
+        input.normalize(&version);
 
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
@@ -129,7 +118,7 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
-        output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
+        output.preprocess_ast(suppressed_warnings.as_slice())?;
 
         Ok(output)
     }

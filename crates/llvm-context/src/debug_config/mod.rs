@@ -39,30 +39,6 @@ impl DebugConfig {
         Ok(())
     }
 
-    /// Dumps the EVM legacy assembly IR.
-    pub fn dump_evmla(&self, contract_path: &str, code: &str) -> anyhow::Result<()> {
-        if let Some(output_directory) = self.output_directory.as_ref() {
-            let mut file_path = output_directory.to_owned();
-            let full_file_name = Self::full_file_name(contract_path, None, IRType::EVMLA);
-            file_path.push(full_file_name);
-            std::fs::write(file_path, code)?;
-        }
-
-        Ok(())
-    }
-
-    /// Dumps the Ethereal IR.
-    pub fn dump_ethir(&self, contract_path: &str, code: &str) -> anyhow::Result<()> {
-        if let Some(output_directory) = self.output_directory.as_ref() {
-            let mut file_path = output_directory.to_owned();
-            let full_file_name = Self::full_file_name(contract_path, None, IRType::EthIR);
-            file_path.push(full_file_name);
-            std::fs::write(file_path, code)?;
-        }
-
-        Ok(())
-    }
-
     /// Dumps the unoptimized LLVM IR.
     pub fn dump_llvm_ir_unoptimized(
         &self,

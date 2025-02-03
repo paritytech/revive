@@ -33,7 +33,6 @@ regex = { workspace = true }
 hex = { workspace = true }
 num = { workspace = true }
 sha3 = { workspace = true }
-md5 = { workspace = true }
 inkwell = { workspace = true }
 
 revive-common = { workspace = true }

@@ -157,7 +157,6 @@ fn main_inner() -> anyhow::Result<()> {
         revive_solidity::standard_json(
             &mut solc,
             arguments.detect_missing_libraries,
-            arguments.force_evmla,
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
@@ -173,7 +172,6 @@ fn main_inner() -> anyhow::Result<()> {
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
-            arguments.force_evmla,
             include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,
@@ -193,7 +191,6 @@ fn main_inner() -> anyhow::Result<()> {
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
-            arguments.force_evmla,
             include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,

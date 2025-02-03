@@ -8,7 +8,6 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 use crate::project::Project;
-use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
@@ -31,7 +30,6 @@ const DEBUG_CONFIG: revive_llvm_context::DebugConfig =
 struct CachedBlob {
     contract_name: String,
     solc_optimizer_enabled: bool,
-    pipeline: SolcPipeline,
 }
 
 /// Checks if the required executables are present in `${PATH}`.
@@ -54,17 +52,9 @@ pub fn build_solidity(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
-    pipeline: SolcPipeline,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
-    build_solidity_with_options(
-        sources,
-        libraries,
-        remappings,
-        pipeline,
-        optimizer_settings,
-        true,
-    )
+    build_solidity_with_options(sources, libraries, remappings, optimizer_settings, true)
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
@@ -74,7 +64,6 @@ pub fn build_solidity_with_options(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
-    pipeline: SolcPipeline,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
@@ -93,7 +82,7 @@ pub fn build_solidity_with_options(
         sources.clone(),
         libraries.clone(),
         remappings,
-        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
             None,
@@ -101,14 +90,12 @@ pub fn build_solidity_with_options(
             false,
         ),
         None,
-        pipeline == SolcPipeline::Yul,
         None,
     )?;
 
-    let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
+    let mut output = solc.standard_json(input, None, vec![], None)?;
 
-    let project =
-        output.try_to_project(sources, libraries, pipeline, &solc_version, &DEBUG_CONFIG)?;
+    let project = output.try_to_project(sources, libraries, &solc_version, &DEBUG_CONFIG)?;
 
     let build: crate::Build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
     build.write_to_standard_json(&mut output, &solc_version)?;
@@ -121,7 +108,6 @@ pub fn build_solidity_with_options_evm(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
     remappings: Option<BTreeSet<String>>,
-    pipeline: SolcPipeline,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();
@@ -139,7 +125,7 @@ pub fn build_solidity_with_options_evm(
         sources.clone(),
         libraries.clone(),
         remappings,
-        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
             None,
@@ -147,11 +133,10 @@ pub fn build_solidity_with_options_evm(
             false,
         ),
         None,
-        pipeline == SolcPipeline::Yul,
         None,
     )?;
 
-    let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
+    let mut output = solc.standard_json(input, None, vec![], None)?;
 
     let mut contracts = BTreeMap::new();
     if let Some(files) = output.contracts.as_mut() {
@@ -176,7 +161,6 @@ pub fn build_solidity_with_options_evm(
 pub fn build_solidity_and_detect_missing_libraries(
     sources: BTreeMap<String, String>,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
-    pipeline: SolcPipeline,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
@@ -193,17 +177,15 @@ pub fn build_solidity_and_detect_missing_libraries(
         sources.clone(),
         libraries.clone(),
         None,
-        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
-        pipeline == SolcPipeline::Yul,
         None,
     )?;
 
-    let mut output = solc.standard_json(input, pipeline, None, vec![], None)?;
+    let mut output = solc.standard_json(input, None, vec![], None)?;
 
-    let project =
-        output.try_to_project(sources, libraries, pipeline, &solc_version, &DEBUG_CONFIG)?;
+    let project = output.try_to_project(sources, libraries, &solc_version, &DEBUG_CONFIG)?;
 
     let missing_libraries = project.get_missing_libraries();
     missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;
@@ -234,7 +216,6 @@ pub fn check_solidity_warning(
     source_code: &str,
     warning_substring: &str,
     libraries: BTreeMap<String, BTreeMap<String, String>>,
-    pipeline: SolcPipeline,
     skip_for_revive_edition: bool,
     suppressed_warnings: Option<Vec<Warning>>,
 ) -> anyhow::Result<bool> {
@@ -253,14 +234,13 @@ pub fn check_solidity_warning(
         sources.clone(),
         libraries,
         None,
-        SolcStandardJsonInputSettingsSelection::new_required(pipeline),
+        SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
-        pipeline == SolcPipeline::Yul,
         suppressed_warnings,
     )?;
 
-    let output = solc.standard_json(input, pipeline, None, vec![], None)?;
+    let output = solc.standard_json(input, None, vec![], None)?;
     let contains_warning = output
         .errors
         .ok_or_else(|| anyhow::anyhow!("Solidity compiler messages not found"))?
@@ -273,7 +253,7 @@ pub fn check_solidity_warning(
 /// Compile the blob of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_blob_with_options(contract_name, source_code, true, SolcPipeline::Yul)
+    compile_blob_with_options(contract_name, source_code, true)
 }
 
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
@@ -298,10 +278,8 @@ fn compile_evm(
     solc_optimizer_enabled: bool,
     runtime: bool,
 ) -> Vec<u8> {
-    let pipeline = SolcPipeline::Yul;
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
-        pipeline,
         solc_optimizer_enabled,
     };
 
@@ -319,7 +297,6 @@ fn compile_evm(
         [(file_name.into(), source_code.into())].into(),
         Default::default(),
         None,
-        pipeline,
         solc_optimizer_enabled,
     )
     .expect("source should compile");
@@ -343,12 +320,10 @@ pub fn compile_blob_with_options(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
-    pipeline: SolcPipeline,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solc_optimizer_enabled,
-        pipeline,
     };
 
     if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
@@ -360,7 +335,6 @@ pub fn compile_blob_with_options(
         [(file_name.into(), source_code.into())].into(),
         Default::default(),
         None,
-        pipeline,
         revive_llvm_context::OptimizerSettings::cycles(),
         solc_optimizer_enabled,
     )

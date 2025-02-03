@@ -3,9 +3,7 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::output::error::Error as SolcStandardJsonOutputError;
-use crate::solc::version::Version as SolcVersion;
 use crate::warning::Warning;
 
 /// The `solc --standard-json` output source.
@@ -132,37 +130,9 @@ impl Source {
         ))
     }
 
-    /// Checks the AST node for the internal function pointers value usage.
-    pub fn check_internal_function_pointer(
-        ast: &serde_json::Value,
-    ) -> Option<SolcStandardJsonOutputError> {
-        let ast = ast.as_object()?;
-
-        if ast.get("nodeType")?.as_str()? != "VariableDeclaration" {
-            return None;
-        }
-
-        let type_descriptions = ast.get("typeDescriptions")?.as_object()?;
-        if !type_descriptions
-            .get("typeIdentifier")?
-            .as_str()?
-            .contains("function_internal")
-        {
-            return None;
-        }
-
-        Some(
-            SolcStandardJsonOutputError::message_internal_function_pointer(
-                ast.get("src")?.as_str(),
-            ),
-        )
-    }
-
     /// Returns the list of messages for some specific parts of the AST.
     pub fn get_messages(
         ast: &serde_json::Value,
-        version: &SolcVersion,
-        pipeline: SolcPipeline,
         suppressed_warnings: &[Warning],
     ) -> Vec<SolcStandardJsonOutputError> {
         let mut messages = Vec::new();
@@ -189,31 +159,16 @@ impl Source {
                 messages.push(message);
             }
         }
-        if SolcPipeline::EVMLA == pipeline && version.l2_revision.is_none() {
-            if let Some(message) = Self::check_internal_function_pointer(ast) {
-                messages.push(message);
-            }
-        }
 
         match ast {
             serde_json::Value::Array(array) => {
                 for element in array.iter() {
-                    messages.extend(Self::get_messages(
-                        element,
-                        version,
-                        pipeline,
-                        suppressed_warnings,
-                    ));
+                    messages.extend(Self::get_messages(element, suppressed_warnings));
                 }
             }
             serde_json::Value::Object(object) => {
                 for (_key, value) in object.iter() {
-                    messages.extend(Self::get_messages(
-                        value,
-                        version,
-                        pipeline,
-                        suppressed_warnings,
-                    ));
+                    messages.extend(Self::get_messages(value, suppressed_warnings));
                 }
             }
             _ => {}

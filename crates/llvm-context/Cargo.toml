@@ -21,7 +21,6 @@ serde = { workspace = true, features = ["derive"] }
 num = { workspace = true }
 hex = { workspace = true }
 sha3 = { workspace = true }
-md5 = { workspace = true }
 inkwell = { workspace = true }
 polkavm-disassembler = { workspace = true }
 polkavm-common = { workspace = true }

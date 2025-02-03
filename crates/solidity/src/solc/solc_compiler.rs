@@ -163,8 +163,16 @@ impl Compiler for SolcCompiler {
             anyhow::anyhow!("{} subprocess error: {:?}", self.executable, error)
         })?;
         if !output.status.success() {
-            println!("{}", String::from_utf8_lossy(output.stdout.as_slice()));
-            println!("{}", String::from_utf8_lossy(output.stderr.as_slice()));
+            writeln!(
+                std::io::stdout(),
+                "{}",
+                String::from_utf8_lossy(output.stdout.as_slice())
+            )?;
+            writeln!(
+                std::io::stdout(),
+                "{}",
+                String::from_utf8_lossy(output.stderr.as_slice())
+            )?;
             anyhow::bail!(
                 "{} error: {}",
                 self.executable,

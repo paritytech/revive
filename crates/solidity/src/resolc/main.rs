@@ -2,6 +2,7 @@
 
 pub mod arguments;
 
+use std::io::Write;
 use std::str::FromStr;
 
 use revive_solidity::Process;
@@ -16,28 +17,27 @@ const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-/// The application entry point.
-fn main() {
+fn main() -> anyhow::Result<()> {
     std::process::exit(match main_inner() {
         Ok(()) => revive_common::EXIT_CODE_SUCCESS,
         Err(error) => {
-            eprintln!("{error}");
+            writeln!(std::io::stderr(), "{error}")?;
             revive_common::EXIT_CODE_FAILURE
         }
     })
 }
 
-/// The auxiliary `main` function to facilitate the `?` error conversion operator.
 fn main_inner() -> anyhow::Result<()> {
-    let arguments = Arguments::new();
+    let arguments = <Arguments as clap::Parser>::try_parse()?;
     arguments.validate()?;
 
     if arguments.version {
-        println!(
+        writeln!(
+            std::io::stdout(),
             "{} version {}",
             env!("CARGO_PKG_DESCRIPTION"),
             revive_solidity::ResolcVersion::default().long
-        );
+        )?;
         return Ok(());
     }
 
@@ -45,7 +45,7 @@ fn main_inner() -> anyhow::Result<()> {
         let license_mit = include_str!("../../../../LICENSE-MIT");
         let license_apache = include_str!("../../../../LICENSE-APACHE");
 
-        println!("{}\n{}\n", license_mit, license_apache);
+        writeln!(std::io::stdout(), "{}\n{}\n", license_mit, license_apache)?;
         return Ok(());
     }
 
@@ -211,26 +211,36 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.overwrite,
         )?;
 
-        eprintln!(
+        writeln!(
+            std::io::stderr(),
             "Compiler run successful. Artifact(s) can be found in directory {output_directory:?}."
-        );
+        )?;
     } else if arguments.output_assembly || arguments.output_binary {
         for (path, contract) in build.contracts.into_iter() {
             if arguments.output_assembly {
                 let assembly_text = contract.build.assembly_text;
 
-                println!("Contract `{}` assembly:\n\n{}", path, assembly_text);
+                writeln!(
+                    std::io::stdout(),
+                    "Contract `{}` assembly:\n\n{}",
+                    path,
+                    assembly_text
+                )?;
             }
             if arguments.output_binary {
-                println!(
+                writeln!(
+                    std::io::stdout(),
                     "Contract `{}` bytecode: 0x{}",
                     path,
                     hex::encode(contract.build.bytecode)
-                );
+                )?;
             }
         }
     } else {
-        eprintln!("Compiler run successful. No output requested. Use --asm and --bin flags.");
+        writeln!(
+            std::io::stderr(),
+            "Compiler run successful. No output requested. Use --asm and --bin flags."
+        )?;
     }
 
     Ok(())

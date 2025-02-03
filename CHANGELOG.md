@@ -8,10 +8,14 @@ This is a development pre-release.
 - Support for the `coinbase` opcode.
 
 ### Changed 
+- Missing the `--overwrite` flag emits an error instead of a warning.
+- The `resolc` executable prints the help by default.
 - Removed support for legacy EVM assembly (EVMLA) translation.
 
 ### Fixed
 - Solidity: Add the solc `--libraries` files to sources.
+- A data race in tests.
+- Fix `broken pipe` errors.
 
 ## v0.1.0-dev.9
 

@@ -10,7 +10,7 @@ describe("Run resolc without any options", () => {
     const result = executeCommand(command);
 
     it("Info with help is presented", () => {
-        expect(result.output).toMatch(/(No input sources specified|Error(s) found.)/i);
+        expect(result.output).toMatch(/(Usage: resolc)/i);
     });
 
     it("Exit code = 1", () => {
@@ -28,7 +28,7 @@ describe("Run resolc without any options", () => {
 //#1713
 describe("Default run a command from the help", () => {
 
-    const command = `resolc ${paths.pathToBasicSolContract} -O3 --bin --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
+    const command = `resolc ${paths.pathToBasicSolContract} --overwrite -O3 --bin --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
     const result = executeCommand(command);
 
     it("Compiler run successful", () => {
@@ -54,7 +54,7 @@ describe("Default run a command from the help", () => {
 //#1818
 describe("Default run a command from the help", () => {
 
-    const command = `resolc ${paths.pathToBasicSolContract} -O3 --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
+    const command = `resolc ${paths.pathToBasicSolContract} --overwrite -O3 --bin --asm --output-dir "${paths.pathToOutputDir}"`; // potential issue on resolc with full path on Windows cmd
     const result = executeCommand(command);
 
     it("Compiler run successful", () => {
@@ -81,8 +81,8 @@ describe("Default run a command from the help", () => {
 
 describe("Run resolc with source debug information", () => {
     const commands = [
-        `resolc -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`,
-        `resolc --disable-solc-optimizer -g ${paths.pathToBasicSolContract}  --bin --asm --output-dir "${paths.pathToOutputDir}"`
+        `resolc -g ${paths.pathToBasicSolContract} --overwrite --bin --asm --output-dir "${paths.pathToOutputDir}"`,
+        `resolc --disable-solc-optimizer -g ${paths.pathToBasicSolContract} --overwrite --bin --asm --output-dir "${paths.pathToOutputDir}"`
     ]; // potential issue on resolc with full path on Windows cmd`;
 
     for (var idx in commands) {
@@ -114,8 +114,8 @@ describe("Run resolc with source debug information", () => {
 
 describe("Run resolc with source debug information, check LLVM debug-info", () => {
     const commands = [
-        `resolc -g ${paths.pathToBasicSolContract} --debug-output-dir="${paths.pathToOutputDir}"`,
-        `resolc -g --disable-solc-optimizer ${paths.pathToBasicSolContract} --debug-output-dir="${paths.pathToOutputDir}"`
+        `resolc -g ${paths.pathToBasicSolContract} --overwrite --debug-output-dir="${paths.pathToOutputDir}"`,
+        `resolc -g --disable-solc-optimizer ${paths.pathToBasicSolContract} --overwrite --debug-output-dir="${paths.pathToOutputDir}"`
     ]; // potential issue on resolc with full path on Windows cmd`;
 
     for (var idx in commands) {

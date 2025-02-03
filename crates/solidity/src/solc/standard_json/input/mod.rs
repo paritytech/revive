@@ -68,12 +68,8 @@ impl Input {
             paths.insert(PathBuf::from(library_file));
         }
 
-        #[cfg(feature = "parallel")]
-        let iter = paths.into_par_iter(); // Parallel iterator
-        #[cfg(not(feature = "parallel"))]
-        let iter = paths.iter(); // Sequential iterator
-
-        let sources = iter
+        let sources = paths
+            .iter()
             .map(|path| {
                 let source = Source::try_from(path.as_path()).unwrap_or_else(|error| {
                     panic!("Source code file {path:?} reading error: {error}")

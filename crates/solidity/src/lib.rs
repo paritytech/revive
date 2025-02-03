@@ -51,6 +51,7 @@ pub mod test_utils;
 pub mod tests;
 
 use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Runs the Yul mode.
@@ -161,7 +162,7 @@ pub fn standard_output<T: Compiler>(
                 has_errors = true;
             }
 
-            eprintln!("{error}");
+            writeln!(std::io::stderr(), "{error}")?;
         }
 
         if has_errors {
@@ -278,10 +279,11 @@ pub fn combined_json<T: Compiler>(
             combined_json.write_to_directory(output_directory.as_path(), overwrite)?;
         }
         None => {
-            println!(
+            writeln!(
+                std::io::stdout(),
                 "{}",
                 serde_json::to_string(&combined_json).expect("Always valid")
-            );
+            )?;
         }
     }
     std::process::exit(0);

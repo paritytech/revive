@@ -170,18 +170,7 @@ pub struct Arguments {
     pub recursive_process_input: Option<String>,
 }
 
-impl Default for Arguments {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Arguments {
-    /// A shortcut constructor.
-    pub fn new() -> Self {
-        Self::parse()
-    }
-
     /// Validates the arguments.
     #[allow(clippy::collapsible_if)]
     pub fn validate(&self) -> anyhow::Result<()> {

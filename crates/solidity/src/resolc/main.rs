@@ -27,9 +27,8 @@ fn main() -> anyhow::Result<()> {
     })
 }
 
-/// The auxiliary `main` function to facilitate the `?` error conversion operator.
 fn main_inner() -> anyhow::Result<()> {
-    let arguments = Arguments::new();
+    let arguments = <Arguments as clap::Parser>::try_parse()?;
     arguments.validate()?;
 
     if arguments.version {

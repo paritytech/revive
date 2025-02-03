@@ -10,12 +10,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
 
-use crate::evmla::assembly::instruction::Instruction;
-use crate::evmla::assembly::Assembly;
 use crate::project::contract::ir::IR as ProjectContractIR;
 use crate::project::contract::Contract as ProjectContract;
 use crate::project::Project;
-use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::version::Version as SolcVersion;
 use crate::warning::Warning;
 use crate::yul::lexer::Lexer;
@@ -53,14 +50,9 @@ impl Output {
         &mut self,
         source_code_files: BTreeMap<String, String>,
         libraries: BTreeMap<String, BTreeMap<String, String>>,
-        pipeline: SolcPipeline,
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Project> {
-        if let SolcPipeline::EVMLA = pipeline {
-            self.preprocess_dependencies()?;
-        }
-
         let files = match self.contracts.as_ref() {
             Some(files) => files,
             None => match &self.errors {
@@ -76,38 +68,22 @@ impl Output {
             for (name, contract) in contracts.iter() {
                 let full_path = format!("{path}:{name}");
 
-                let source = match pipeline {
-                    SolcPipeline::Yul => {
-                        let ir_optimized = match contract.ir_optimized.to_owned() {
-                            Some(ir_optimized) => ir_optimized,
-                            None => continue,
-                        };
-                        if ir_optimized.is_empty() {
-                            continue;
-                        }
-
-                        debug_config.dump_yul(full_path.as_str(), ir_optimized.as_str())?;
-
-                        let mut lexer = Lexer::new(ir_optimized.to_owned());
-                        let object = Object::parse(&mut lexer, None).map_err(|error| {
-                            anyhow::anyhow!("Contract `{}` parsing error: {:?}", full_path, error)
-                        })?;
-
-                        ProjectContractIR::new_yul(ir_optimized.to_owned(), object)
-                    }
-                    SolcPipeline::EVMLA => {
-                        let evm = contract.evm.as_ref();
-                        let assembly = match evm.and_then(|evm| evm.assembly.to_owned()) {
-                            Some(assembly) => assembly.to_owned(),
-                            None => continue,
-                        };
-                        let extra_metadata = evm
-                            .and_then(|evm| evm.extra_metadata.to_owned())
-                            .unwrap_or_default();
-
-                        ProjectContractIR::new_evmla(assembly, extra_metadata)
-                    }
+                let ir_optimized = match contract.ir_optimized.to_owned() {
+                    Some(ir_optimized) => ir_optimized,
+                    None => continue,
                 };
+                if ir_optimized.is_empty() {
+                    continue;
+                }
+
+                debug_config.dump_yul(full_path.as_str(), ir_optimized.as_str())?;
+
+                let mut lexer = Lexer::new(ir_optimized.to_owned());
+                let object = Object::parse(&mut lexer, None).map_err(|error| {
+                    anyhow::anyhow!("Contract `{}` parsing error: {:?}", full_path, error)
+                })?;
+
+                let source = ProjectContractIR::new_yul(ir_optimized.to_owned(), object);
 
                 let source_code = source_code_files
                     .get(path.as_str())
@@ -133,12 +109,7 @@ impl Output {
     }
 
     /// Traverses the AST and returns the list of additional errors and warnings.
-    pub fn preprocess_ast(
-        &mut self,
-        version: &SolcVersion,
-        pipeline: SolcPipeline,
-        suppressed_warnings: &[Warning],
-    ) -> anyhow::Result<()> {
+    pub fn preprocess_ast(&mut self, suppressed_warnings: &[Warning]) -> anyhow::Result<()> {
         let sources = match self.sources.as_ref() {
             Some(sources) => sources,
             None => return Ok(()),
@@ -147,8 +118,7 @@ impl Output {
         let mut messages = Vec::new();
         for (path, source) in sources.iter() {
             if let Some(ast) = source.ast.as_ref() {
-                let mut polkavm_messages =
-                    Source::get_messages(ast, version, pipeline, suppressed_warnings);
+                let mut polkavm_messages = Source::get_messages(ast, suppressed_warnings);
                 for message in polkavm_messages.iter_mut() {
                     message.push_contract_path(path.as_str());
                 }
@@ -162,85 +132,6 @@ impl Output {
             }
             None => Some(messages),
         };
-
-        Ok(())
-    }
-
-    /// The pass, which replaces with dependency indexes with actual data.
-    fn preprocess_dependencies(&mut self) -> anyhow::Result<()> {
-        let files = match self.contracts.as_mut() {
-            Some(files) => files,
-            None => return Ok(()),
-        };
-        let mut hash_path_mapping = BTreeMap::new();
-
-        for (path, contracts) in files.iter() {
-            for (name, contract) in contracts.iter() {
-                let full_path = format!("{path}:{name}");
-                let hash = match contract
-                    .evm
-                    .as_ref()
-                    .and_then(|evm| evm.assembly.as_ref())
-                    .map(|assembly| assembly.keccak256())
-                {
-                    Some(hash) => hash,
-                    None => continue,
-                };
-
-                hash_path_mapping.insert(hash, full_path);
-            }
-        }
-
-        for (path, contracts) in files.iter_mut() {
-            for (name, contract) in contracts.iter_mut() {
-                let assembly = match contract.evm.as_mut().and_then(|evm| evm.assembly.as_mut()) {
-                    Some(assembly) => assembly,
-                    None => continue,
-                };
-
-                let full_path = format!("{path}:{name}");
-                Self::preprocess_dependency_level(
-                    full_path.as_str(),
-                    assembly,
-                    &hash_path_mapping,
-                )?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Preprocesses an assembly JSON structure dependency data map.
-    fn preprocess_dependency_level(
-        full_path: &str,
-        assembly: &mut Assembly,
-        hash_path_mapping: &BTreeMap<String, String>,
-    ) -> anyhow::Result<()> {
-        assembly.set_full_path(full_path.to_owned());
-
-        let deploy_code_index_path_mapping =
-            assembly.deploy_dependencies_pass(full_path, hash_path_mapping)?;
-        if let Some(deploy_code_instructions) = assembly.code.as_deref_mut() {
-            Instruction::replace_data_aliases(
-                deploy_code_instructions,
-                &deploy_code_index_path_mapping,
-            )?;
-        };
-
-        let runtime_code_index_path_mapping =
-            assembly.runtime_dependencies_pass(full_path, hash_path_mapping)?;
-        if let Some(runtime_code_instructions) = assembly
-            .data
-            .as_mut()
-            .and_then(|data_map| data_map.get_mut("0"))
-            .and_then(|data| data.get_assembly_mut())
-            .and_then(|assembly| assembly.code.as_deref_mut())
-        {
-            Instruction::replace_data_aliases(
-                runtime_code_instructions,
-                &runtime_code_index_path_mapping,
-            )?;
-        }
 
         Ok(())
     }

@@ -2,7 +2,6 @@
 
 pub(crate) mod build;
 pub(crate) mod r#const;
-pub(crate) mod evmla;
 pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
@@ -26,7 +25,6 @@ pub use self::project::Project;
 pub use self::r#const::*;
 pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
 pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
-pub use self::solc::pipeline::Pipeline as SolcPipeline;
 #[cfg(not(target_os = "emscripten"))]
 pub use self::solc::solc_compiler::SolcCompiler;
 #[cfg(target_os = "emscripten")]
@@ -53,6 +51,7 @@ pub mod test_utils;
 pub mod tests;
 
 use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Runs the Yul mode.
@@ -119,7 +118,6 @@ pub fn standard_output<T: Compiler>(
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
-    force_evmla: bool,
     include_metadata_hash: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -129,7 +127,6 @@ pub fn standard_output<T: Compiler>(
     debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
-    let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
 
     let solc_input = SolcStandardJsonInput::try_from_paths(
         SolcStandardJsonInputLanguage::Solidity,
@@ -137,7 +134,7 @@ pub fn standard_output<T: Compiler>(
         input_files,
         libraries,
         remappings,
-        SolcStandardJsonInputSettingsSelection::new_required(solc_pipeline),
+        SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
             None,
@@ -145,7 +142,6 @@ pub fn standard_output<T: Compiler>(
             optimizer_settings.is_fallback_to_size_enabled(),
         ),
         None,
-        solc_pipeline == SolcPipeline::Yul,
         suppressed_warnings,
     )?;
 
@@ -156,13 +152,7 @@ pub fn standard_output<T: Compiler>(
         .collect();
 
     let libraries = solc_input.settings.libraries.clone().unwrap_or_default();
-    let mut solc_output = solc.standard_json(
-        solc_input,
-        solc_pipeline,
-        base_path,
-        include_paths,
-        allow_paths,
-    )?;
+    let mut solc_output = solc.standard_json(solc_input, base_path, include_paths, allow_paths)?;
 
     if let Some(errors) = solc_output.errors.as_deref() {
         let mut has_errors = false;
@@ -172,7 +162,7 @@ pub fn standard_output<T: Compiler>(
                 has_errors = true;
             }
 
-            eprintln!("{error}");
+            writeln!(std::io::stderr(), "{error}")?;
         }
 
         if has_errors {
@@ -180,13 +170,8 @@ pub fn standard_output<T: Compiler>(
         }
     }
 
-    let project = solc_output.try_to_project(
-        source_code_files,
-        libraries,
-        solc_pipeline,
-        &solc_version,
-        &debug_config,
-    )?;
+    let project =
+        solc_output.try_to_project(source_code_files, libraries, &solc_version, &debug_config)?;
 
     let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
 
@@ -198,16 +183,14 @@ pub fn standard_output<T: Compiler>(
 pub fn standard_json<T: Compiler>(
     solc: &mut T,
     detect_missing_libraries: bool,
-    force_evmla: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
-    let solc_pipeline = SolcPipeline::new(&solc_version, force_evmla);
 
-    let solc_input = SolcStandardJsonInput::try_from_stdin(solc_pipeline)?;
+    let solc_input = SolcStandardJsonInput::try_from_stdin()?;
     let source_code_files = solc_input
         .sources
         .iter()
@@ -225,13 +208,7 @@ pub fn standard_json<T: Compiler>(
     };
 
     let libraries = solc_input.settings.libraries.clone().unwrap_or_default();
-    let mut solc_output = solc.standard_json(
-        solc_input,
-        solc_pipeline,
-        base_path,
-        include_paths,
-        allow_paths,
-    )?;
+    let mut solc_output = solc.standard_json(solc_input, base_path, include_paths, allow_paths)?;
 
     if let Some(errors) = solc_output.errors.as_deref() {
         for error in errors.iter() {
@@ -242,13 +219,8 @@ pub fn standard_json<T: Compiler>(
         }
     }
 
-    let project = solc_output.try_to_project(
-        source_code_files,
-        libraries,
-        solc_pipeline,
-        &solc_version,
-        &debug_config,
-    )?;
+    let project =
+        solc_output.try_to_project(source_code_files, libraries, &solc_version, &debug_config)?;
 
     if detect_missing_libraries {
         let missing_libraries = project.get_missing_libraries();
@@ -271,7 +243,6 @@ pub fn combined_json<T: Compiler>(
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
-    force_evmla: bool,
     include_metadata_hash: bool,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -289,7 +260,6 @@ pub fn combined_json<T: Compiler>(
         evm_version,
         solc_optimizer_enabled,
         optimizer_settings,
-        force_evmla,
         include_metadata_hash,
         base_path,
         include_paths,
@@ -309,10 +279,11 @@ pub fn combined_json<T: Compiler>(
             combined_json.write_to_directory(output_directory.as_path(), overwrite)?;
         }
         None => {
-            println!(
+            writeln!(
+                std::io::stdout(),
                 "{}",
                 serde_json::to_string(&combined_json).expect("Always valid")
-            );
+            )?;
         }
     }
     std::process::exit(0);

@@ -13,7 +13,6 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
 use crate::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
@@ -40,13 +39,13 @@ pub struct Input {
 
 impl Input {
     /// A shortcut constructor from stdin.
-    pub fn try_from_stdin(solc_pipeline: SolcPipeline) -> anyhow::Result<Self> {
+    pub fn try_from_stdin() -> anyhow::Result<Self> {
         let mut input: Self = serde_json::from_reader(std::io::BufReader::new(std::io::stdin()))?;
         input
             .settings
             .output_selection
             .get_or_insert_with(SolcStandardJsonInputSettingsSelection::default)
-            .extend_with_required(solc_pipeline);
+            .extend_with_required();
         Ok(input)
     }
 
@@ -61,7 +60,6 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: Option<SolcStandardJsonInputSettingsMetadata>,
-        via_ir: bool,
         suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
@@ -70,12 +68,8 @@ impl Input {
             paths.insert(PathBuf::from(library_file));
         }
 
-        #[cfg(feature = "parallel")]
-        let iter = paths.into_par_iter(); // Parallel iterator
-        #[cfg(not(feature = "parallel"))]
-        let iter = paths.iter(); // Sequential iterator
-
-        let sources = iter
+        let sources = paths
+            .iter()
             .map(|path| {
                 let source = Source::try_from(path.as_path()).unwrap_or_else(|error| {
                     panic!("Source code file {path:?} reading error: {error}")
@@ -92,7 +86,6 @@ impl Input {
                 libraries,
                 remappings,
                 output_selection,
-                via_ir,
                 optimizer,
                 metadata,
             ),
@@ -111,7 +104,6 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: Option<SolcStandardJsonInputSettingsMetadata>,
-        via_ir: bool,
         suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
         #[cfg(feature = "parallel")]
@@ -131,7 +123,6 @@ impl Input {
                 libraries,
                 remappings,
                 output_selection,
-                via_ir,
                 optimizer,
                 metadata,
             ),

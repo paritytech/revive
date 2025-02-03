@@ -4,8 +4,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 pub const SOURCE_CODE: &str = r#"
 // SPDX-License-Identifier: MIT
 
@@ -54,7 +52,6 @@ fn optimizer() {
         sources.clone(),
         BTreeMap::new(),
         None,
-        SolcPipeline::Yul,
         revive_llvm_context::OptimizerSettings::none(),
     )
     .expect("Build failure");
@@ -62,7 +59,6 @@ fn optimizer() {
         sources.clone(),
         BTreeMap::new(),
         None,
-        SolcPipeline::Yul,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Build failure");
@@ -70,7 +66,6 @@ fn optimizer() {
         sources,
         BTreeMap::new(),
         None,
-        SolcPipeline::Yul,
         revive_llvm_context::OptimizerSettings::size(),
     )
     .expect("Build failure");

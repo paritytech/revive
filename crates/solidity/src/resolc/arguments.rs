@@ -13,14 +13,14 @@ use path_slash::PathExt;
 /// output directory.
 /// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
 #[derive(Debug, Parser)]
-#[structopt(name = "The PolkaVM Solidity compiler")]
+#[command(name = "The PolkaVM Solidity compiler", arg_required_else_help = true)]
 pub struct Arguments {
     /// Print the version and exit.
-    #[structopt(long = "version")]
+    #[arg(long = "version")]
     pub version: bool,
 
     /// Print the licence and exit.
-    #[structopt(long = "license")]
+    #[arg(long = "license")]
     pub license: bool,
 
     /// Specify the input paths and remappings.
@@ -31,142 +31,142 @@ pub struct Arguments {
 
     /// Set the given path as the root of the source tree instead of the root of the filesystem.
     /// Passed to `solc` without changes.
-    #[structopt(long = "base-path")]
+    #[arg(long = "base-path")]
     pub base_path: Option<String>,
 
     /// Make an additional source directory available to the default import callback.
     /// Can be used multiple times. Can only be used if the base path has a non-empty value.
     /// Passed to `solc` without changes.
-    #[structopt(long = "include-path")]
+    #[arg(long = "include-path")]
     pub include_paths: Vec<String>,
 
     /// Allow a given path for imports. A list of paths can be supplied by separating them with a comma.
     /// Passed to `solc` without changes.
-    #[structopt(long = "allow-paths")]
+    #[arg(long = "allow-paths")]
     pub allow_paths: Option<String>,
 
     /// Create one file per component and contract/file at the specified directory, if given.
-    #[structopt(short = 'o', long = "output-dir")]
+    #[arg(short = 'o', long = "output-dir")]
     pub output_directory: Option<PathBuf>,
 
     /// Overwrite existing files (used together with -o).
-    #[structopt(long = "overwrite")]
+    #[arg(long = "overwrite")]
     pub overwrite: bool,
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[structopt(short = 'O', long = "optimization")]
+    #[arg(short = 'O', long = "optimization")]
     pub optimization: Option<char>,
 
     /// Try to recompile with -Oz if the bytecode is too large.
-    #[structopt(long = "fallback-Oz")]
+    #[arg(long = "fallback-Oz")]
     pub fallback_to_optimizing_for_size: bool,
 
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
     /// Beware that it will prevent libraries from being inlined.
-    #[structopt(long = "disable-solc-optimizer")]
+    #[arg(long = "disable-solc-optimizer")]
     pub disable_solc_optimizer: bool,
 
     /// Specify the path to the `solc` executable. By default, the one in `${PATH}` is used.
     /// Yul mode: `solc` is used for source code validation, as `resolc` itself assumes that the input Yul is valid.
     /// LLVM IR mode: `solc` is unused.
-    #[structopt(long = "solc")]
+    #[arg(long = "solc")]
     pub solc: Option<String>,
 
     /// The EVM target version to generate IR for.
     /// See https://github.com/paritytech/revive/blob/main/crates/common/src/evm_version.rs for reference.
-    #[structopt(long = "evm-version")]
+    #[arg(long = "evm-version")]
     pub evm_version: Option<String>,
 
     /// Specify addresses of deployable libraries. Syntax: `<libraryName>=<address> [, or whitespace] ...`.
     /// Addresses are interpreted as hexadecimal strings prefixed with `0x`.
-    #[structopt(short = 'l', long = "libraries")]
+    #[arg(short = 'l', long = "libraries")]
     pub libraries: Vec<String>,
 
     /// Output a single JSON document containing the specified information.
     /// Available arguments: `abi`, `hashes`, `metadata`, `devdoc`, `userdoc`, `storage-layout`, `ast`, `asm`, `bin`, `bin-runtime`.
-    #[structopt(long = "combined-json")]
+    #[arg(long = "combined-json")]
     pub combined_json: Option<String>,
 
     /// Switch to standard JSON input/output mode. Read from stdin, write the result to stdout.
     /// This is the default used by the Hardhat plugin.
-    #[structopt(long = "standard-json")]
+    #[arg(long = "standard-json")]
     pub standard_json: bool,
 
     /// Switch to missing deployable libraries detection mode.
     /// Only available for standard JSON input/output mode.
     /// Contracts are not compiled in this mode, and all compilation artifacts are not included.
-    #[structopt(long = "detect-missing-libraries")]
+    #[arg(long = "detect-missing-libraries")]
     pub detect_missing_libraries: bool,
 
     /// Switch to Yul mode.
     /// Only one input Yul file is allowed.
     /// Cannot be used with combined and standard JSON modes.
-    #[structopt(long = "yul")]
+    #[arg(long = "yul")]
     pub yul: bool,
 
     /// Switch to LLVM IR mode.
     /// Only one input LLVM IR file is allowed.
     /// Cannot be used with combined and standard JSON modes.
     /// Use this mode at your own risk, as LLVM IR input validation is not implemented.
-    #[structopt(long = "llvm-ir")]
+    #[arg(long = "llvm-ir")]
     pub llvm_ir: bool,
 
     /// Forcibly switch to EVM legacy assembly pipeline.
     /// It is useful for older revisions of `solc` 0.8, where Yul was considered highly experimental
     /// and contained more bugs than today.
-    #[structopt(long = "force-evmla")]
+    #[arg(long = "force-evmla")]
     pub force_evmla: bool,
 
     /// Set metadata hash mode.
     /// The only supported value is `none` that disables appending the metadata hash.
     /// Is enabled by default.
-    #[structopt(long = "metadata-hash")]
+    #[arg(long = "metadata-hash")]
     pub metadata_hash: Option<String>,
 
     /// Output PolkaVM assembly of the contracts.
-    #[structopt(long = "asm")]
+    #[arg(long = "asm")]
     pub output_assembly: bool,
 
     /// Output PolkaVM bytecode of the contracts.
-    #[structopt(long = "bin")]
+    #[arg(long = "bin")]
     pub output_binary: bool,
 
     /// Suppress specified warnings.
     /// Available arguments: `ecrecover`, `sendtransfer`, `extcodesize`, `txorigin`, `blocktimestamp`, `blocknumber`, `blockhash`.
-    #[structopt(long = "suppress-warnings")]
+    #[arg(long = "suppress-warnings")]
     pub suppress_warnings: Option<Vec<String>>,
 
     /// Generate source based debug information in the output code file. This only has an effect
     /// with the LLVM-IR code generator and is ignored otherwise.
-    #[structopt(short = 'g')]
+    #[arg(short = 'g')]
     pub emit_source_debug_info: bool,
 
     /// Dump all IRs to files in the specified directory.
     /// Only for testing and debugging.
-    #[structopt(long = "debug-output-dir")]
+    #[arg(long = "debug-output-dir")]
     pub debug_output_directory: Option<PathBuf>,
 
     /// Set the verify-each option in LLVM.
     /// Only for testing and debugging.
-    #[structopt(long = "llvm-verify-each")]
+    #[arg(long = "llvm-verify-each")]
     pub llvm_verify_each: bool,
 
     /// Set the debug-logging option in LLVM.
     /// Only for testing and debugging.
-    #[structopt(long = "llvm-debug-logging")]
+    #[arg(long = "llvm-debug-logging")]
     pub llvm_debug_logging: bool,
 
     /// Run this process recursively and provide JSON input to compile a single contract.
     /// Only for usage from within the compiler.
-    #[structopt(long = "recursive-process")]
+    #[arg(long = "recursive-process")]
     pub recursive_process: bool,
 
     /// Specify the input file to use instead of stdin when --recursive-process is given.
     /// This is only intended for use when developing the compiler.
     #[cfg(debug_assertions)]
-    #[structopt(long = "recursive-process-input")]
+    #[arg(long = "recursive-process-input")]
     pub recursive_process_input: Option<String>,
 }
 

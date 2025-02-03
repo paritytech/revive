@@ -3,8 +3,6 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 /// The `solc --standard-json` expected output selection flag.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(non_camel_case_types)]
@@ -44,15 +42,6 @@ pub enum Flag {
     /// The assembly code
     #[serde(rename = "evm.assembly")]
     Assembly,
-}
-
-impl From<SolcPipeline> for Flag {
-    fn from(pipeline: SolcPipeline) -> Self {
-        match pipeline {
-            SolcPipeline::Yul => Self::Yul,
-            SolcPipeline::EVMLA => Self::EVMLA,
-        }
-    }
 }
 
 impl std::fmt::Display for Flag {

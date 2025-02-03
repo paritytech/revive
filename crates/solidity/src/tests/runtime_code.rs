@@ -4,8 +4,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 #[test]
 #[should_panic(expected = "runtimeCode is not supported")]
 fn default() {
@@ -29,7 +27,6 @@ contract Test {
         sources,
         BTreeMap::new(),
         None,
-        SolcPipeline::Yul,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");

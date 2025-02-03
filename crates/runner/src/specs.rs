@@ -282,17 +282,11 @@ impl Specs {
                     let Code::Solidity {
                         path: Some(path),
                         solc_optimizer,
-                        pipeline,
                         contract,
                     } = code
                     else {
                         panic!("the differential runner requires Code::Solidity source");
                     };
-                    assert_ne!(
-                        pipeline,
-                        Some(revive_solidity::SolcPipeline::EVMLA),
-                        "yul pipeline must be enabled in differential mode"
-                    );
                     assert!(
                         salt.0.is_none(),
                         "salt is not supported in differential mode"

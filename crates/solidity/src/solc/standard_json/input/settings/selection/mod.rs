@@ -5,8 +5,6 @@ pub mod file;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::pipeline::Pipeline as SolcPipeline;
-
 use self::file::File as FileSelection;
 
 /// The `solc --standard-json` output selection.
@@ -19,17 +17,17 @@ pub struct Selection {
 
 impl Selection {
     /// Creates the selection required by our compilation process.
-    pub fn new_required(pipeline: SolcPipeline) -> Self {
+    pub fn new_required() -> Self {
         Self {
-            all: Some(FileSelection::new_required(pipeline)),
+            all: Some(FileSelection::new_required()),
         }
     }
 
     /// Extends the user's output selection with flag required by our compilation process.
-    pub fn extend_with_required(&mut self, pipeline: SolcPipeline) -> &mut Self {
+    pub fn extend_with_required(&mut self) -> &mut Self {
         self.all
-            .get_or_insert_with(|| FileSelection::new_required(pipeline))
-            .extend_with_required(pipeline);
+            .get_or_insert_with(FileSelection::new_required)
+            .extend_with_required();
         self
     }
 }

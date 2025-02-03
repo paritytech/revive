@@ -4,7 +4,6 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::solc::combined_json::CombinedJson;
-use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
@@ -29,7 +28,6 @@ impl Compiler for SoljsonCompiler {
     fn standard_json(
         &mut self,
         mut input: StandardJsonInput,
-        pipeline: Pipeline,
         _base_path: Option<String>,
         _include_paths: Vec<String>,
         _allow_paths: Option<String>,
@@ -50,7 +48,7 @@ impl Compiler for SoljsonCompiler {
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
-        output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
+        output.preprocess_ast(suppressed_warnings.as_slice())?;
 
         Ok(output)
     }

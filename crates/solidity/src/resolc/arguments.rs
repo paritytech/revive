@@ -113,12 +113,6 @@ pub struct Arguments {
     #[structopt(long = "llvm-ir")]
     pub llvm_ir: bool,
 
-    /// Forcibly switch to EVM legacy assembly pipeline.
-    /// It is useful for older revisions of `solc` 0.8, where Yul was considered highly experimental
-    /// and contained more bugs than today.
-    #[structopt(long = "force-evmla")]
-    pub force_evmla: bool,
-
     /// Set metadata hash mode.
     /// The only supported value is `none` that disables appending the metadata hash.
     /// Is enabled by default.
@@ -246,10 +240,6 @@ impl Arguments {
                 anyhow::bail!(
                     "`evm-version` is not used in Yul, LLVM IR and PolkaVM assembly modes."
                 );
-            }
-
-            if self.force_evmla {
-                anyhow::bail!("EVM legacy assembly mode is not supported in Yul, LLVM IR and PolkaVM assembly modes.");
             }
 
             if self.disable_solc_optimizer {

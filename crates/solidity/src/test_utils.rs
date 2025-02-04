@@ -29,6 +29,7 @@ const DEBUG_CONFIG: revive_llvm_context::DebugConfig =
 #[derive(Hash, PartialEq, Eq)]
 struct CachedBlob {
     contract_name: String,
+    solidity: String,
     solc_optimizer_enabled: bool,
 }
 
@@ -280,6 +281,7 @@ fn compile_evm(
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
+        solidity: source_code.to_owned(),
         solc_optimizer_enabled,
     };
 
@@ -323,6 +325,7 @@ pub fn compile_blob_with_options(
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
+        solidity: source_code.to_owned(),
         solc_optimizer_enabled,
     };
 

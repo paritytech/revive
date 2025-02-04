@@ -16,6 +16,7 @@ This is a development pre-release.
 - Solidity: Add the solc `--libraries` files to sources.
 - A data race in tests.
 - Fix `broken pipe` errors.
+- llvm-builder: Allow warnings.
 
 ## v0.1.0-dev.9
 

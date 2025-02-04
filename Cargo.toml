@@ -72,7 +72,7 @@ assert_fs = "1.1.2"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "2d53238a186ac1161ca9998471694eb1833efb1d" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "274a781e8ca1a9432c7ec87593bd93214abbff50" }
 
 # llvm
 [workspace.dependencies.inkwell]

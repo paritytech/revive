@@ -11,6 +11,7 @@ This is a development pre-release.
 - Missing the `--overwrite` flag emits an error instead of a warning.
 - The `resolc` executable prints the help by default.
 - Removed support for legacy EVM assembly (EVMLA) translation.
+- integration: identify cached code blobs on source code to fix potential confusions.
 
 ### Fixed
 - Solidity: Add the solc `--libraries` files to sources.

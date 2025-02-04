@@ -19,6 +19,7 @@ Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 - Solidity: Add the solc `--libraries` files to sources.
 - A data race in tests.
 - Fix `broken pipe` errors.
+- llvm-builder: Allow warnings.
 
 ## v0.1.0-dev.9
 

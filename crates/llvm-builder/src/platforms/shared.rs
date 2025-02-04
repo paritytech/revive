@@ -40,17 +40,9 @@ pub const SHARED_BUILD_OPTS_NOT_MUSL: [&str; 4] = [
 
 /// The shared build options to treat warnings as errors.
 ///
-/// Disabled on Windows due to the following upstream issue with MSYS2 with mingw-w64:
-/// ProgramTest.cpp:23:15: error: '__p__environ' redeclared without 'dllimport' attribute
-pub fn shared_build_opts_werror(target_env: TargetEnv) -> Vec<String> {
-    vec![format!(
-        "-DLLVM_ENABLE_WERROR='{}'",
-        if cfg!(target_os = "windows") || target_env == TargetEnv::Emscripten {
-            "Off"
-        } else {
-            "On"
-        },
-    )]
+/// Disabled because it makes the build very brittle.
+pub fn shared_build_opts_werror(_target_env: TargetEnv) -> Vec<String> {
+    vec!["-DLLVM_ENABLE_WERROR='Off'".to_string()]
 }
 
 /// The build options to set the default target.

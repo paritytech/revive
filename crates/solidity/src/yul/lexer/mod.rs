@@ -42,7 +42,6 @@ impl Lexer {
     }
 
     /// Advances the lexer, returning the next lexeme.
-    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Token, Error> {
         if let Some(peeked) = self.peeked.take() {
             return Ok(peeked);

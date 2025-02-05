@@ -42,7 +42,7 @@ format:
 	cargo fmt --all --check
 
 clippy:
-	cargo clippy --all-features --workspace --tests --benches -- --deny warnings --allow dead_code
+	cargo clippy --all-features --workspace --tests --benches -- --deny warnings
 
 machete:
 	cargo install cargo-machete

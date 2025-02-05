@@ -179,7 +179,6 @@ pub fn standard_output<T: Compiler>(
 }
 
 /// Runs the standard JSON mode.
-#[allow(clippy::too_many_arguments)]
 pub fn standard_json<T: Compiler>(
     solc: &mut T,
     detect_missing_libraries: bool,

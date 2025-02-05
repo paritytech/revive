@@ -33,13 +33,12 @@ impl Error {
     /// Returns the `ecrecover` function usage warning.
     pub fn message_ecrecover(src: Option<&str>) -> Self {
         let message = r#"
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.      │
-│ Polkadot comes with native account abstraction support, therefore it is highly recommended NOT   │
-│ to rely on the fact that the account has an ECDSA private key attached to it since accounts might│
-│ implement other signature schemes.                                                               │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
-            .to_owned();
+Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.
+Polkadot comes with native account abstraction support, therefore it is highly recommended NOT
+to rely on the fact that the account has an ECDSA private key attached to it since accounts might
+implement other signature schemes.
+"#
+        .to_owned();
 
         Self {
             component: "general".to_owned(),
@@ -55,17 +54,13 @@ impl Error {
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
     pub fn message_send_and_transfer(src: Option<&str>) -> Self {
         let message = r#"
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Warning: It looks like you are using '<address payable>.send/transfer(<X>)' without providing    │
-│ the gas amount. Such calls will fail depending on the pubdata costs.                             │
-│ This might be a false positive if you are using an interface (like IERC20) instead of the        │
-│ native Solidity `send/transfer`.                                                                 │
-│ Please use 'payable(<address>).call{value: <X>}("")' instead, but be careful with the reentrancy │
-│ attack. `send` and `transfer` send limited amount of gas that prevents reentrancy, whereas       │
-│ `<address>.call{value: <X>}` sends all gas to the callee. Learn more on                          │
-│ https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy                  │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
-            .to_owned();
+Warning: It looks like you are using '<address payable>.send/transfer(<X>)'. Such balance
+transfer calls will supply all remaining gas and disable call re-entrancy instead of
+supplying the 2300 gas stipend. However, the compiler uses a heuristic to detect the expected
+2300 gas stipend. You are advised to carefully test this to ensure the desired behavior.
+Learn more on https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy
+"#
+        .to_owned();
 
         Self {
             component: "general".to_owned(),
@@ -81,16 +76,15 @@ impl Error {
     /// Returns the `extcodesize` instruction usage warning.
     pub fn message_extcodesize(src: Option<&str>) -> Self {
         let message = r#"
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Warning: Your code or one of its dependencies uses the 'extcodesize' instruction, which is       │
-│ usually needed in the following cases:                                                           │
-│   1. To detect whether an address belongs to a smart contract.                                   │
-│   2. To detect whether the deploy code execution has finished.                                   │
-│ Polkadot comes with native account abstraction support (so smart contracts are just accounts     │
-│ coverned by code), and you should avoid differentiating between contracts and non-contract       |
-| addresses.                                                                                       │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
-            .to_owned();
+Warning: Your code or one of its dependencies uses the 'extcodesize' instruction, which is
+usually needed in the following cases:
+  1. To detect whether an address belongs to a smart contract.
+  2. To detect whether the deploy code execution has finished.
+Polkadot comes with native account abstraction support (so smart contracts are just accounts
+coverned by code), and you should avoid differentiating between contracts and non-contract
+addresses.
+"#
+        .to_owned();
 
         Self {
             component: "general".to_owned(),
@@ -106,13 +100,12 @@ impl Error {
     /// Returns the `origin` instruction usage warning.
     pub fn message_tx_origin(src: Option<&str>) -> Self {
         let message = r#"
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Warning: You are checking for 'tx.origin' in your code, which might lead to unexpected behavior. │
-│ Polkadot comes with native account abstraction support, and therefore the initiator of a         │
-│ transaction might be different from the contract calling your code. It is highly recommended NOT │
-│ to rely on tx.origin, but use msg.sender instead.                                                │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘"#
-            .to_owned();
+Warning: You are checking for 'tx.origin' in your code, which might lead to unexpected behavior.
+Polkadot comes with native account abstraction support, and therefore the initiator of a
+transaction might be different from the contract calling your code. It is highly recommended NOT
+to rely on tx.origin, but use msg.sender instead.
+"#
+        .to_owned();
 
         Self {
             component: "general".to_owned(),

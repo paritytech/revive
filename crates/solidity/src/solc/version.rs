@@ -36,4 +36,26 @@ impl Version {
             l2_revision: None,
         }
     }
+
+    pub fn validate(self, include_paths: &[String]) -> anyhow::Result<Self> {
+        if self.default < super::FIRST_SUPPORTED_VERSION {
+            anyhow::bail!(
+                "`solc` versions <{} are not supported, found {}",
+                super::FIRST_SUPPORTED_VERSION,
+                self.default
+            );
+        }
+        if self.default > super::LAST_SUPPORTED_VERSION {
+            anyhow::bail!(
+                "`solc` versions >{} are not supported, found {}",
+                super::LAST_SUPPORTED_VERSION,
+                self.default
+            );
+        }
+        if !include_paths.is_empty() && self.default < super::FIRST_INCLUDE_PATH_VERSION {
+            anyhow::bail!("--include-path is not supported in solc {}", self.default);
+        }
+
+        Ok(self)
+    }
 }

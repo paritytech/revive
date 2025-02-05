@@ -64,32 +64,33 @@ contract SendExample {
         require(success, "Failed to send Ether");
     }
 }
-    "#;
+"#;
+
+pub const BALANCE_CALLS_MESSAGE: &str =
+    "Warning: It looks like you are using '<address payable>.send/transfer(<X>)'";
 
 #[test]
 fn send() {
-    assert!(
-        super::check_solidity_warning(
-            SEND_TEST_SOURCE,
-            "Warning: It looks like you are using '<address payable>.send/transfer(<X>)' without providing",
-            BTreeMap::new(),
-            false,
-            None,
-        ).expect("Test failure")
-    );
+    assert!(super::check_solidity_warning(
+        SEND_TEST_SOURCE,
+        BALANCE_CALLS_MESSAGE,
+        BTreeMap::new(),
+        false,
+        None,
+    )
+    .expect("Test failure"));
 }
 
 #[test]
 fn send_suppressed() {
-    assert!(
-        !super::check_solidity_warning(
-            SEND_TEST_SOURCE,
-            "Warning: It looks like you are using '<address payable>.send/transfer(<X>)' without providing",
-            BTreeMap::new(),
-            false,
-            Some(vec![Warning::SendTransfer]),
-        ).expect("Test failure")
-    );
+    assert!(!super::check_solidity_warning(
+        SEND_TEST_SOURCE,
+        BALANCE_CALLS_MESSAGE,
+        BTreeMap::new(),
+        false,
+        Some(vec![Warning::SendTransfer]),
+    )
+    .expect("Test failure"));
 }
 
 pub const TRANSFER_TEST_SOURCE: &str = r#"
@@ -111,28 +112,26 @@ contract TransferExample {
 
 #[test]
 fn transfer() {
-    assert!(
-        super::check_solidity_warning(
-            TRANSFER_TEST_SOURCE,
-            "Warning: It looks like you are using '<address payable>.send/transfer(<X>)' without providing",
-            BTreeMap::new(),
-            false,
-            None,
-        ).expect("Test failure")
-    );
+    assert!(super::check_solidity_warning(
+        TRANSFER_TEST_SOURCE,
+        BALANCE_CALLS_MESSAGE,
+        BTreeMap::new(),
+        false,
+        None,
+    )
+    .expect("Test failure"));
 }
 
 #[test]
 fn transfer_suppressed() {
-    assert!(
-        !super::check_solidity_warning(
-            TRANSFER_TEST_SOURCE,
-            "Warning: It looks like you are using '<address payable>.send/transfer(<X>)' without providing",
-            BTreeMap::new(),
-            false,
-            Some(vec![Warning::SendTransfer]),
-        ).expect("Test failure")
-    );
+    assert!(!super::check_solidity_warning(
+        TRANSFER_TEST_SOURCE,
+        BALANCE_CALLS_MESSAGE,
+        BTreeMap::new(),
+        false,
+        Some(vec![Warning::SendTransfer]),
+    )
+    .expect("Test failure"));
 }
 
 pub const EXTCODESIZE_TEST_SOURCE: &str = r#"

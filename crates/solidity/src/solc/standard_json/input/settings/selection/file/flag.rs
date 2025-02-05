@@ -5,8 +5,6 @@ use serde::Serialize;
 
 /// The `solc --standard-json` expected output selection flag.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
-#[allow(non_camel_case_types)]
-#[allow(clippy::upper_case_acronyms)]
 pub enum Flag {
     /// The ABI JSON.
     #[serde(rename = "abi")]

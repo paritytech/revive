@@ -1,4 +1,4 @@
-//! The Solidity compiler.
+//! The Solidity compiler solc interface.
 
 use std::io::Write;
 use std::path::Path;
@@ -8,7 +8,6 @@ use crate::solc::combined_json::CombinedJson;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
-use crate::solc::FIRST_INCLUDE_PATH_VERSION;
 
 use super::Compiler;
 
@@ -16,8 +15,6 @@ use super::Compiler;
 pub struct SolcCompiler {
     /// The binary executable name.
     pub executable: String,
-    /// The lazily-initialized compiler version.
-    pub version: Option<Version>,
 }
 
 impl SolcCompiler {
@@ -34,10 +31,7 @@ impl SolcCompiler {
                 error
             );
         }
-        Ok(Self {
-            executable,
-            version: None,
-        })
+        Ok(Self { executable })
     }
 }
 
@@ -50,11 +44,7 @@ impl Compiler for SolcCompiler {
         include_paths: Vec<String>,
         allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
-        let version = self.version()?.default;
-
-        if !include_paths.is_empty() && version < FIRST_INCLUDE_PATH_VERSION {
-            anyhow::bail!("--include-path is not supported in solc {version}");
-        }
+        let version = self.version()?.validate(&include_paths)?.default;
 
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
@@ -225,10 +215,6 @@ impl Compiler for SolcCompiler {
 
     /// The `solc --version` mini-parser.
     fn version(&mut self) -> anyhow::Result<Version> {
-        if let Some(version) = self.version.as_ref() {
-            return Ok(version.to_owned());
-        }
-
         let mut command = std::process::Command::new(self.executable.as_str());
         command.arg("--version");
         let output = command.output().map_err(|error| {
@@ -274,24 +260,6 @@ impl Compiler for SolcCompiler {
             .and_then(|line| line.split('-').nth(1))
             .and_then(|version| version.parse().ok());
 
-        let version = Version::new(long, default, l2_revision);
-        if version.default < super::FIRST_SUPPORTED_VERSION {
-            anyhow::bail!(
-                "`solc` versions <{} are not supported, found {}",
-                super::FIRST_SUPPORTED_VERSION,
-                version.default
-            );
-        }
-        if version.default > super::LAST_SUPPORTED_VERSION {
-            anyhow::bail!(
-                "`solc` versions >{} are not supported, found {}",
-                super::LAST_SUPPORTED_VERSION,
-                version.default
-            );
-        }
-
-        self.version = Some(version.clone());
-
-        Ok(version)
+        Ok(Version::new(long, default, l2_revision))
     }
 }

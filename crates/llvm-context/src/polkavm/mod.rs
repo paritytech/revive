@@ -59,7 +59,6 @@ pub fn build_assembly_text(
 }
 
 /// Implemented by items which are translated into LLVM IR.
-#[allow(clippy::upper_case_acronyms)]
 pub trait WriteLLVM<D>
 where
     D: Dependency + Clone,

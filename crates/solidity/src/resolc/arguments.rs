@@ -166,7 +166,6 @@ pub struct Arguments {
 
 impl Arguments {
     /// Validates the arguments.
-    #[allow(clippy::collapsible_if)]
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.version && std::env::args().count() > 2 {
             anyhow::bail!("No other options are allowed while getting the compiler version.");
@@ -236,18 +235,14 @@ impl Arguments {
             }
         }
 
-        if self.llvm_ir {
-            if self.solc.is_some() {
-                anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
-            }
+        if self.llvm_ir && self.solc.is_some() {
+            anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
         }
 
-        if self.combined_json.is_some() {
-            if self.output_assembly || self.output_binary {
-                anyhow::bail!(
-                    "Cannot output assembly or binary outside of JSON in combined JSON mode."
-                );
-            }
+        if self.combined_json.is_some() && (self.output_assembly || self.output_binary) {
+            anyhow::bail!(
+                "Cannot output assembly or binary outside of JSON in combined JSON mode."
+            );
         }
 
         if self.standard_json {

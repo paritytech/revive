@@ -1,7 +1,6 @@
 //! The debug IR type.
 
 /// The debug IR type.
-#[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IRType {

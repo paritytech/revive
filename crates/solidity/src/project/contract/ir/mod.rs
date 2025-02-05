@@ -15,9 +15,7 @@ use self::yul::Yul;
 
 /// The contract source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
-#[allow(clippy::enum_variant_names)]
 pub enum IR {
     /// The Yul source code.
     Yul(Yul),

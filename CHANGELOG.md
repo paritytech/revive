@@ -21,6 +21,7 @@ Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 - A data race in tests.
 - Fix `broken pipe` errors.
 - llvm-builder: Allow warnings.
+- solidity: Fix the custom compiler warning messages.
 
 ## v0.1.0-dev.9
 

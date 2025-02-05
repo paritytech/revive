@@ -19,9 +19,6 @@ use self::version::Version;
 /// The first version of `solc` with the support of standard JSON interface.
 pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
-/// The first version of `solc`, where `--via-ir` codegen mode is supported.
-pub const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);
-
 /// The last supported version of `solc`.
 pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 28);
 

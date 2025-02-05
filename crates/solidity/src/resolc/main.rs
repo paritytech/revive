@@ -103,7 +103,7 @@ fn main_inner() -> anyhow::Result<()> {
     let mut solc = {
         #[cfg(target_os = "emscripten")]
         {
-            revive_solidity::SoljsonCompiler { version: None }
+            revive_solidity::SoljsonCompiler
         }
 
         #[cfg(not(target_os = "emscripten"))]

@@ -14,6 +14,7 @@ Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 - The `resolc` executable prints the help by default.
 - Removed support for legacy EVM assembly (EVMLA) translation.
 - integration: identify cached code blobs on source code to fix potential confusions.
+- Setting base, include or allow paths in emscripten is now a hard error.
 
 ### Fixed
 - Solidity: Add the solc `--libraries` files to sources.

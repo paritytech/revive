@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="27" failures="0" errors="0" time="2.146">
+  <testsuite name="Run with --yul by default" errors="0" failures="0" skipped="1" timestamp="2024-10-24T17:08:50" time="1.508" tests="6">
+    <testcase classname="Run with --yul by default Valid command exit code = 0" name="Run with --yul by default Valid command exit code = 0" time="0.003">
+    </testcase>
+    <testcase classname="Run with --yul by default --yul output is presented" name="Run with --yul by default --yul output is presented" time="0">
+    </testcase>
+    <testcase classname="Run with --yul by default solc exit code == resolc exit code" name="Run with --yul by default solc exit code == resolc exit code" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="Run with --yul by default run invalid: resolc --yul" name="Run with --yul by default run invalid: resolc --yul" time="0.001">
+    </testcase>
+    <testcase classname="Run with --yul by default Invalid command exit code = 1" name="Run with --yul by default Invalid command exit code = 1" time="0">
+    </testcase>
+    <testcase classname="Run with --yul by default Invalid solc exit code == Invalid resolc exit code" name="Run with --yul by default Invalid solc exit code == Invalid resolc exit code" time="0.041">
+    </testcase>
+  </testsuite>
+  <testsuite name="Run with --asm by default" errors="0" failures="0" skipped="0" timestamp="2024-10-24T17:08:50" time="1.512" tests="6">
+    <testcase classname="Run with --asm by default Valid command exit code = 0" name="Run with --asm by default Valid command exit code = 0" time="0.002">
+    </testcase>
+    <testcase classname="Run with --asm by default --asm output is presented" name="Run with --asm by default --asm output is presented" time="0.001">
+    </testcase>
+    <testcase classname="Run with --asm by default solc exit code == resolc exit code" name="Run with --asm by default solc exit code == resolc exit code" time="0.044">
+    </testcase>
+    <testcase classname="Run with --asm by default run invalid: resolc --asm" name="Run with --asm by default run invalid: resolc --asm" time="0">
+    </testcase>
+    <testcase classname="Run with --asm by default Invalid command exit code = 1" name="Run with --asm by default Invalid command exit code = 1" time="0.001">
+    </testcase>
+    <testcase classname="Run with --asm by default Invalid solc exit code == Invalid resolc exit code" name="Run with --asm by default Invalid solc exit code == Invalid resolc exit code" time="0.04">
+    </testcase>
+  </testsuite>
+  <testsuite name="Run resolc without any options" errors="0" failures="0" skipped="2" timestamp="2024-10-24T17:08:50" time="2.016" tests="15">
+    <testcase classname="Run resolc without any options Info with help is presented" name="Run resolc without any options Info with help is presented" time="0.002">
+    </testcase>
+    <testcase classname="Run resolc without any options Exit code = 1" name="Run resolc without any options Exit code = 1" time="0">
+    </testcase>
+    <testcase classname="Run resolc without any options solc exit code == resolc exit code" name="Run resolc without any options solc exit code == resolc exit code" time="0.044">
+    </testcase>
+    <testcase classname="Default run a command from the help Compiler run successful" name="Default run a command from the help Compiler run successful" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help Exit code = 0" name="Default run a command from the help Exit code = 0" time="0.001">
+    </testcase>
+    <testcase classname="Default run a command from the help Output dir is created" name="Default run a command from the help Output dir is created" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help Output file is created" name="Default run a command from the help Output file is created" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="Default run a command from the help the output file is not empty" name="Default run a command from the help the output file is not empty" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help No &apos;Error&apos;/&apos;Warning&apos;/&apos;Fail&apos; in the output" name="Default run a command from the help No &apos;Error&apos;/&apos;Warning&apos;/&apos;Fail&apos; in the output" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help Compiler run successful" name="Default run a command from the help Compiler run successful" time="0.001">
+    </testcase>
+    <testcase classname="Default run a command from the help Exit code = 0" name="Default run a command from the help Exit code = 0" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help Output dir is created" name="Default run a command from the help Output dir is created" time="0">
+    </testcase>
+    <testcase classname="Default run a command from the help Output files are created" name="Default run a command from the help Output files are created" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="Default run a command from the help the output files are not empty" name="Default run a command from the help the output files are not empty" time="0.003">
+    </testcase>
+    <testcase classname="Default run a command from the help No &apos;Error&apos;/&apos;Warning&apos;/&apos;Fail&apos; in the output" name="Default run a command from the help No &apos;Error&apos;/&apos;Warning&apos;/&apos;Fail&apos; in the output" time="0">
+    </testcase>
+  </testsuite>
+</testsuites>

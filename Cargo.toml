@@ -42,7 +42,6 @@ once_cell = "1.19"
 num = "0.4.3"
 sha1 = "0.10"
 sha3 = "0.10"
-md5 = "0.7.0"
 thiserror = "2.0"
 which = "7.0"
 path-slash = "0.2"
@@ -73,7 +72,7 @@ assert_fs = "1.1.2"
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "2d53238a186ac1161ca9998471694eb1833efb1d" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", rev = "274a781e8ca1a9432c7ec87593bd93214abbff50" }
 
 # llvm
 [workspace.dependencies.inkwell]

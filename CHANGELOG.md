@@ -4,12 +4,22 @@
 
 This is a development pre-release.
 
+Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
+
 ### Added
 - Support for the `coinbase` opcode.
 
 ### Changed 
+- Missing the `--overwrite` flag emits an error instead of a warning.
+- The `resolc` executable prints the help by default.
+- Removed support for legacy EVM assembly (EVMLA) translation.
+- integration: identify cached code blobs on source code to fix potential confusions.
 
 ### Fixed
+- Solidity: Add the solc `--libraries` files to sources.
+- A data race in tests.
+- Fix `broken pipe` errors.
+- llvm-builder: Allow warnings.
 
 ## v0.1.0-dev.9
 

@@ -54,11 +54,14 @@ implement other signature schemes.
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
     pub fn message_send_and_transfer(src: Option<&str>) -> Self {
         let message = r#"
-Warning: It looks like you are using '<address payable>.send/transfer(<X>)'. Such balance
-transfer calls will supply all remaining gas and disable call re-entrancy instead of
-supplying the 2300 gas stipend. However, the compiler uses a heuristic to detect the expected
-2300 gas stipend. You are advised to carefully test this to ensure the desired behavior.
+Warning: It looks like you are using '<address payable>.send/transfer(<X>)'.
+Using '<address payable>.send/transfer(<X>)' is deprecated and strongly discouraged!
+The resolc compiler uses a heuristic to detect '<address payable>.send/transfer(<X>)' calls,
+disables call re-entrancy and supplies all remaining gas instead of the 2300 gas stipend.
+However, detection is not guaranteed. You are advised to carefully test this, employ
+re-entrancy guards or use the withdrawal pattern instead!
 Learn more on https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy
+and https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from-contracts
 "#
         .to_owned();
 

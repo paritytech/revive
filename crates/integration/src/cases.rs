@@ -157,6 +157,20 @@ case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmet
 case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
 
 sol!(
+    contract Send {
+        function transfer_self(uint _amount) public payable;
+    }
+);
+case!("Send.sol", Send, transfer_selfCall, send_self, amount: U256);
+
+sol!(
+    contract Transfer {
+        function transfer_self(uint _amount) public payable;
+    }
+);
+case!("Transfer.sol", Transfer, transfer_selfCall, transfer_self, amount: U256);
+
+sol!(
     contract MStore8 {
         function mStore8(uint value) public pure returns (uint256 word);
     }

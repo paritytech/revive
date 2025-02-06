@@ -37,10 +37,10 @@ test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
 test_spec!(address, "Context", "Context.sol");
-test_spec!(balance, "Value", "Value.sol");
+test_spec!(value, "Value", "Value.sol");
 test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
-test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
@@ -52,6 +52,8 @@ test_spec!(gas_limit, "GasLimit", "GasLimit.sol");
 test_spec!(base_fee, "BaseFee", "BaseFee.sol");
 test_spec!(coinbase, "Coinbase", "Coinbase.sol");
 test_spec!(create2, "CreateB", "Create2.sol");
+test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(send, "Send", "Send.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -430,6 +432,50 @@ fn ext_code_size() {
                 gas_consumed: None,
             }),
         ],
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+#[should_panic(expected = "ReentranceDenied")]
+fn send_denies_reentrancy() {
+    let value = 1000;
+    Specs {
+        actions: vec![
+            instantiate("contracts/Send.sol", "Send").remove(0),
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::send_self(U256::from(value)).calldata,
+            },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+#[should_panic(expected = "ReentranceDenied")]
+fn transfer_denies_reentrancy() {
+    let value = 1000;
+    Specs {
+        actions: vec![
+            instantiate("contracts/Transfer.sol", "Transfer").remove(0),
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::transfer_self(U256::from(value)).calldata,
+            },
+        ],
+        differential: false,
         ..Default::default()
     }
     .run();

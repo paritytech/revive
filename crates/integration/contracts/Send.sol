@@ -9,7 +9,7 @@ pragma solidity ^0.8;
             "Instantiate": {
                 "code": {
                     "Solidity": {
-                        "contract": "Transfer"
+                        "contract": "Send"
                     }
                 },
                 "value": 211
@@ -58,7 +58,7 @@ pragma solidity ^0.8;
 }
 */
 
-contract Transfer {
+contract Send {
     constructor() payable {}
 
     function transfer_self(uint _amount) public payable {
@@ -66,7 +66,7 @@ contract Transfer {
     }
 
     function transfer_to(address payable _dest, uint _amount) public payable {
-        _dest.transfer(_amount);
+        if (_dest.send(_amount)) {}
     }
 
     fallback() external {}

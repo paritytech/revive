@@ -15,6 +15,8 @@ Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 - Removed support for legacy EVM assembly (EVMLA) translation.
 - integration: identify cached code blobs on source code to fix potential confusions.
 - Setting base, include or allow paths in emscripten is now a hard error.
+- Employ a heuristic to detect `address.transfer` and `address.send` calls.
+  If detected, the re-entrant call flag is not set and 0 deposit limit is endowed.
 
 ### Fixed
 - Solidity: Add the solc `--libraries` files to sources.

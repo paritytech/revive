@@ -48,7 +48,7 @@ where
         let flags = REENTRANT_CALL_FLAG | STATIC_CALL_FLAG;
         (
             context.xlen_type().const_int(flags as u64, false),
-            context.word_type().const_all_ones(),
+            context.word_type().const_zero(),
         )
     } else {
         call_reentrancy_heuristic(context, gas, input_length, output_length)?
@@ -216,7 +216,7 @@ where
         .as_basic_value_enum())
 }
 
-/// The Solidity `address.transfer`` and `address.send`` call detection heuristic.
+/// The Solidity `address.transfer` and `address.send` call detection heuristic.
 ///
 /// # Why
 /// This heuristic is an additional security feature to guard against re-entrancy attacks

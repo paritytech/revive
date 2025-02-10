@@ -1,0 +1,190 @@
+name: Release
+run-name: Release ${{ github.ref_name }}
+on:
+  push:
+    branches:
+      - 'es/release-revive'
+    #tags:
+    #  - "v[0-9]+.[0-9]+.[0-9]+"
+    #  - "v[0-9]+.[0-9]+.[0-9]+[a-zA-Z0-9]+"
+jobs:
+
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      TAG: ${{ steps.versions.outputs.TAG }}
+      PKG_VER: ${{ steps.versions.outputs.PKG_VER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: 'true'
+          fetch-depth: 0
+
+      - name: Versions
+        id: versions
+        run: |
+          export CURRENT_TAG=$(git describe --tags --abbrev=0)
+          export PKG_VER=v$(cat Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
+          echo "Current tag $CURRENT_TAG"
+          echo "Package version $PKG_VER"
+          #
+          echo "PKG_VER=$PKG_VER" >> $GITHUB_OUTPUT
+          if [ $CURRENT_TAG == $PKG_VER  ];
+            then
+              echo "Tag is up to date. Nothing to do.";
+              export TAG=old;
+            else
+              echo "Tag was updated.";
+              export TAG=new;
+            fi
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create/update tag
+        id: tag
+        if: ${{ steps.versions.outputs.TAG == 'new' }}
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            try {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'refs/tags/${{ steps.versions.outputs.PKG_VER }}',
+                sha: context.sha
+              })
+            } catch (err) {
+              if (err.status !== 422) throw err;
+              console.log("Tag already exists, updating")
+              await github.rest.git.updateRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'refs/tags/${{ steps.versions.outputs.PKG_VER }}',
+                sha: context.sha
+              });
+            }
+
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [tag]
+    steps:
+      - name: Create release
+        if: ${{ needs.tag.outputs.TAG == 'new' }}
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ needs.tag.outputs.PKG_VER }}
+          release_name: v${{ needs.tag.outputs.PKG_VER }}
+          draft: true
+          prerelease: true
+
+      - name: Log
+        run: |
+          echo "tag result:   ${{ needs.tag.outputs.TAG }}"
+          echo "pkg version:  ${{ needs.tag.outputs.PKG_VER }}"
+
+  build-linux-all:
+    runs-on: parity-large
+    needs: [create-release, tag]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install linux deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
+
+      - name: Install Rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rust-src
+          target: wasm32-unknown-emscripten
+
+      - name: versions
+        run: |
+          rustup show
+          cargo --version
+          cmake --version
+          echo "bash:" && bash --version
+          echo "ninja:" && ninja --version
+          echo "clang:" && clang --version
+
+      # Cache
+
+      - name: llvm-gnu-cache
+        id: llvm-gnu-cache
+        uses: actions/cache@v4
+        with:
+          path: target-llvm/gnu/target-final
+          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
+
+      - name: llvm-emscripten-cache
+        id: llvm-emscripten-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            target-llvm/emscripten/target-final
+            emsdk
+          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
+
+      # Build LLVM
+
+      - name: Build host LLVM
+        if: steps.llvm-gnu-cache.outputs.cache-hit != 'true'
+        run: |
+          revive-llvm clone
+          revive-llvm build --llvm-projects lld --llvm-projects clang
+
+      - name: Build emscripten LLVM
+        if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
+        run: |
+          revive-llvm --target-env emscripten clone
+          source emsdk/emsdk_env.sh
+          revive-llvm --target-env emscripten build --llvm-projects lld
+
+
+      - name: clean
+        # check removed files
+        run: |
+          cd target-llvm/gnu/target-final/bin/
+          rm diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
+             sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
+             dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
+             llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
+
+      # Build revive
+
+      - name: download solc
+        run: |
+          curl -o /usr/bin/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
+          chmod +x /usr/bin/solc
+
+      - name: build revive
+        run: |
+          LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
+          make install-bin
+
+          export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
+          rustup target add wasm32-unknown-emscripten
+          make install-wasm
+
+      - name: pack
+        run: |
+          tar -czf llvm-linux-gnu.tar.gz target-llvm/gnu/target-final
+          tar -czf llvm-linux-emscripten.tar.gz target-llvm/emscripten/target-final
+
+      - name: upload release assets
+        run: |
+          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/release/resolc --clobber
+          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/target/wasm32-unknown-emscripten/release/resolc.js --clobber
+          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/target/wasm32-unknown-emscripten/release/resolc.wasm --clobber
+          gh release upload ${{ needs.tag.outputs.PKG_VER }} llvm-linux-gnu.tar.gz --clobber
+          gh release upload ${{ needs.tag.outputs.PKG_VER }} llvm-linux-emscripten.tar.gz --clobber

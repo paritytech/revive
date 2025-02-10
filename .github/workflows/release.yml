@@ -100,20 +100,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: add gh repo
-        run: |
-          (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
-          	&& sudo mkdir -p -m 755 /etc/apt/keyrings \
-                  && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-                  && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-          	&& sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-          	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-          	&& sudo apt update \
-          	&& sudo apt install gh -y
-
       - name: install linux deps
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld nodejs npm gh
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build \
+          curl git libssl-dev pkg-config clang lld nodejs npm
 
       - name: Install Rust stable toolchain
         uses: actions-rs/toolchain@v1
@@ -171,12 +161,14 @@ jobs:
       # Save cache
 
       - name: llvm-gnu-cache save
+        if: steps.llvm-gnu-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: target-llvm/gnu/target-final
           key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
 
       - name: llvm-emscripten-cache save
+        if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -185,7 +177,7 @@ jobs:
           key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
 
       - name: clean
-        # check removed files
+        # check
         run: |
           cd target-llvm/gnu/target-final/bin/
           rm diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \

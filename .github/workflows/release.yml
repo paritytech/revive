@@ -217,6 +217,8 @@ jobs:
           tar -czf llvm-linux-emscripten.tar.gz target-llvm/emscripten/target-final
 
       - name: upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload ${{ needs.tag.outputs.PKG_VER }} target/release/resolc --clobber
           gh release upload ${{ needs.tag.outputs.PKG_VER }} target/target/wasm32-unknown-emscripten/release/resolc.js --clobber

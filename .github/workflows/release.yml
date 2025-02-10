@@ -95,6 +95,8 @@ jobs:
   build-linux-all:
     runs-on: parity-large
     needs: [create-release, tag]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 

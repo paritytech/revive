@@ -16,7 +16,14 @@
         "shanghaiTime": 0,
         "cancunTime": 0,
         "terminalTotalDifficulty": 0,
-        "terminalTotalDifficultyPassed": true
+        "terminalTotalDifficultyPassed": true,
+        "blobSchedule": {
+            "cancun": {
+                "target": 3,
+                "max": 6,
+                "baseFeeUpdateFraction": 3338477
+            }
+        }
     },
     "coinbase": "0xffffffffffffffffffffffffffffffffffffffff",
     "difficulty": "0x20000",

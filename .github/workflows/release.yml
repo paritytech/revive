@@ -118,7 +118,7 @@ jobs:
           echo "clang:" && clang --version
 
       - name: build revive-llvm
-        run: make install-llvm
+        run: make install-llvm-builder
 
       # Cache
 

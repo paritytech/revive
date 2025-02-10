@@ -30,11 +30,12 @@ jobs:
           tar Jxf llvm.tar.xz -C llvm18/
           echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
 
-      - name: Install apt dependencies
+      - name: Install geth
         run: |
-          sudo add-apt-repository -y ppa:ethereum/ethereum
-          sudo apt update
-          sudo apt install -y ethereum
+          git clone https://github.com/xermicus/go-ethereum
+          cd go-ethereum
+          make all
+          echo "$(pwd)/build/bin/" >> $GITHUB_PATH
 
       - name: Machete
         uses: bnjbvr/cargo-machete@main

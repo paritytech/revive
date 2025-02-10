@@ -3,10 +3,7 @@ run-name: Release ${{ github.ref_name }}
 on:
   push:
     branches:
-      - 'es/release-revive'
-    #tags:
-    #  - "v[0-9]+.[0-9]+.[0-9]+"
-    #  - "v[0-9]+.[0-9]+.[0-9]+[a-zA-Z0-9]+"
+      - 'main'
 jobs:
 
   tag:
@@ -68,6 +65,7 @@ jobs:
             }
 
   create-release:
+    if: ${{ needs.tag.outputs.TAG == 'new' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,7 +74,6 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Create release
-        if: ${{ needs.tag.outputs.TAG == 'new' }}
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

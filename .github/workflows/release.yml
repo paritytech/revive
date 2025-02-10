@@ -98,7 +98,7 @@ jobs:
 
       - name: install linux deps
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld nodejs npm
 
       - name: Install Rust stable toolchain
         uses: actions-rs/toolchain@v1

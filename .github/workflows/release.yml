@@ -3,7 +3,7 @@ run-name: Release ${{ github.ref_name }}
 on:
   push:
     branches:
-      - 'main'
+      - 'es/release-revive'
 jobs:
 
   tag:

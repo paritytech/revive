@@ -117,6 +117,9 @@ jobs:
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
 
+      - name: build revive-llvm
+        run: make install-llvm
+
       # Cache
 
       - name: llvm-gnu-cache

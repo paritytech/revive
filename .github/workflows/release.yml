@@ -188,7 +188,7 @@ jobs:
 
       - name: build revive
         run: |
-          LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
+          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
           make install-bin
 
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final

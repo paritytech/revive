@@ -234,7 +234,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/target/wasm32-unknown-emscripten/release/resolc.js
+          asset_path: ./target/wasm32-unknown-emscripten/release/resolc.js
           asset_name: resolc.js
           asset_content_type: application/octet-stream
 
@@ -244,7 +244,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: .target/target/wasm32-unknown-emscripten/release/resolc.wasm
+          asset_path: ./target/wasm32-unknown-emscripten/release/resolc.wasm
           asset_name: resolc.wasm
           asset_content_type: application/octet-stream
 

@@ -153,6 +153,10 @@ jobs:
           source emsdk/emsdk_env.sh
           revive-llvm --target-env emscripten build --llvm-projects lld
 
+      - name: source
+        if: steps.llvm-emscripten-cache.outputs.cache-hit == 'true'
+        run: source emsdk/emsdk_env.sh
+
       # Save cache
 
       - name: llvm-gnu-cache save

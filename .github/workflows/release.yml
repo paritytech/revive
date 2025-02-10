@@ -81,7 +81,7 @@ jobs:
         uses: actions/create-release@v1
         with:
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
-          release_name: v${{ needs.tag.outputs.PKG_VER }}
+          release_name: ${{ needs.tag.outputs.PKG_VER }}
           draft: true
           prerelease: true
 
@@ -120,18 +120,18 @@ jobs:
       - name: build revive-llvm
         run: make install-llvm-builder
 
-      # Cache
+      # Restore cache
 
-      - name: llvm-gnu-cache
+      - name: llvm-gnu-cache restore
         id: llvm-gnu-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: target-llvm/gnu/target-final
           key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
 
-      - name: llvm-emscripten-cache
+      - name: llvm-emscripten-cache restore
         id: llvm-emscripten-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             target-llvm/emscripten/target-final
@@ -153,6 +153,21 @@ jobs:
           source emsdk/emsdk_env.sh
           revive-llvm --target-env emscripten build --llvm-projects lld
 
+      # Save cache
+
+      - name: llvm-gnu-cache save
+        uses: actions/cache/save@v4
+        with:
+          path: target-llvm/gnu/target-final
+          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
+
+      - name: llvm-emscripten-cache save
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target-llvm/emscripten/target-final
+            emsdk
+          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
 
       - name: clean
         # check removed files
@@ -167,8 +182,9 @@ jobs:
 
       - name: download solc
         run: |
-          curl -o /usr/bin/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
-          chmod +x /usr/bin/solc
+          curl -o solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
+          chmod +x solc
+          echo "$PWD" >> $GITHUB_PATH
 
       - name: build revive
         run: |

@@ -216,12 +216,52 @@ jobs:
           tar -czf llvm-linux-gnu.tar.gz target-llvm/gnu/target-final
           tar -czf llvm-linux-emscripten.tar.gz target-llvm/emscripten/target-final
 
-      - name: upload release assets
+      - name: upload resolc
+        uses: actions/upload-release-asset@v1
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/release/resolc --clobber
-          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/target/wasm32-unknown-emscripten/release/resolc.js --clobber
-          gh release upload ${{ needs.tag.outputs.PKG_VER }} target/target/wasm32-unknown-emscripten/release/resolc.wasm --clobber
-          gh release upload ${{ needs.tag.outputs.PKG_VER }} llvm-linux-gnu.tar.gz --clobber
-          gh release upload ${{ needs.tag.outputs.PKG_VER }} llvm-linux-emscripten.tar.gz --clobber
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/release/resolc
+          asset_name: resolc
+          asset_content_type: application/octet-stream
+
+      - name: upload resolc.js
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/target/wasm32-unknown-emscripten/release/resolc.js
+          asset_name: resolc.js
+          asset_content_type: application/octet-stream
+
+      - name: upload resolc.wasm
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: .target/target/wasm32-unknown-emscripten/release/resolc.wasm
+          asset_name: resolc.wasm
+          asset_content_type: application/octet-stream
+
+      - name: upload llvm-linux-gnu.tar.gz
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./llvm-linux-gnu.tar.gz
+          asset_name: llvm-linux-gnu.tar.gz
+          asset_content_type: application/octet-stream
+
+      - name: upload llvm-linux-emscripten.tar.gz
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./llvm-linux-emscripten.tar.gz
+          asset_name: llvm-linux-emscripten.tar.gz
+          asset_content_type: application/octet-stream

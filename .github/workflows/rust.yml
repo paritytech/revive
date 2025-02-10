@@ -32,7 +32,7 @@ jobs:
 
       - name: Install geth
         run: |
-          git clone https://github.com/xermicus/go-ethereum
+          git clone https://github.com/xermicus/go-ethereum --branch=cl/fix-runner-state-dump --depth=1
           cd go-ethereum
           make all
           echo "$(pwd)/build/bin/" >> $GITHUB_PATH

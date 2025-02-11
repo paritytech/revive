@@ -1,4 +1,4 @@
-importScripts("./resolc_loader.js");
+importScripts("./resolc_web.js");
 
 // Handle messages from the main thread
 onmessage = async function (e) {

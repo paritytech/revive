@@ -10,7 +10,7 @@ const RESOLC_WASM_TARGET_DIR = path.join(
   "../target/wasm32-unknown-emscripten/release",
 );
 const RESOLC_JS = path.join(RESOLC_WASM_TARGET_DIR, "resolc.js");
-const RESOLC_LOADER_JS = path.join(RESOLC_WASM_TARGET_DIR, "resolc_loader.js");
+const RESOLC_WEB_JS = path.join(RESOLC_WASM_TARGET_DIR, "resolc_web.js");
 
 const resolcJs = fs.readFileSync(RESOLC_JS, "utf-8");
 
@@ -44,8 +44,8 @@ minify(packedJsContent)
       process.exit(1);
     }
 
-    fs.writeFileSync(RESOLC_LOADER_JS, minifiedJs.code, "utf-8");
-    console.log(`Combined script written to ${RESOLC_LOADER_JS}`);
+    fs.writeFileSync(RESOLC_WEB_JS, minifiedJs.code, "utf-8");
+    console.log(`Combined script written to ${RESOLC_WEB_JS}`);
   })
   .catch((err) => {
     console.error("Minification failed:", err);

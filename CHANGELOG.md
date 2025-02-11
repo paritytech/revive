@@ -6,8 +6,15 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 
+## v0.1.0-dev.10
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
+
 ### Added
 - Support for the `coinbase` opcode.
+- The resolc web JS version.
 
 ### Changed 
 - Missing the `--overwrite` flag emits an error instead of a warning.

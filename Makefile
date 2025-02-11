@@ -30,6 +30,7 @@ install-npm:
 
 install-wasm: install-npm
 	cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	npm run build:package
 
 install-llvm-builder:
 	cargo install --path crates/llvm-builder

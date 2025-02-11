@@ -1,51 +1,53 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Web Worker Example</title>
+    <style>
+      /* Ensure the pre tag wraps long lines */
+      pre {
+        white-space: pre-wrap; /* Wrap long lines */
+        word-wrap: break-word; /* Break long words */
+        max-width: 100%; /* Optional: Ensures it doesn't overflow container */
+        overflow-wrap: break-word; /* Another method for wrapping */
+      }
+    </style>
+  </head>
 
-    <head>
-        <meta charset="utf-8" />
-        <title>Web Worker Example</title>
-        <style>
-            /* Ensure the pre tag wraps long lines */
-            pre {
-                white-space: pre-wrap;     /* Wrap long lines */
-                word-wrap: break-word;     /* Break long words */
-                max-width: 100%;           /* Optional: Ensures it doesn't overflow container */
-                overflow-wrap: break-word; /* Another method for wrapping */
-            }
-        </style>
-    </head>
+  <body>
+    <h1>Revive Compilation Output</h1>
+    <pre id="output"></pre>
+    <script>
+      var outputElement = document.getElementById("output");
+      var worker = new Worker("./worker.js");
+      const standardJsonInput = {
+        language: "Solidity",
+        sources: {
+          contract: {
+            content: "contract MyContract { function f() public { } }",
+          },
+        },
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          outputSelection: {
+            "*": {
+              "*": ["abi"],
+            },
+          },
+        },
+      };
+      worker.addEventListener(
+        "message",
+        function (e) {
+          outputElement.textContent = e.data.output;
+        },
+        false,
+      );
 
-    <body>
-        <h1>Revive Compilation Output</h1>
-        <pre id="output"></pre>
-        <script>
-            var outputElement = document.getElementById('output');
-            var worker = new Worker('./worker.js');
-            const standardJsonInput = {
-                language: 'Solidity',
-                sources: {
-                    contract: {
-                        content: 'contract MyContract { function f() public { } }',
-                    }
-                },
-                settings: {
-                    optimizer: {
-                        enabled: true,
-                        runs: 200,
-                    },
-                    outputSelection: {
-                        '*': {
-                            '*': ['abi'],
-                        }
-                    }
-                }
-            };
-            worker.addEventListener('message', function (e) {
-                outputElement.textContent = e.data.output;
-            }, false);
-
-            worker.postMessage(JSON.stringify(standardJsonInput));
-        </script>
-    </body>
-
+      worker.postMessage(JSON.stringify(standardJsonInput));
+    </script>
+  </body>
 </html>

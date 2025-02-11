@@ -1,0 +1,1 @@
+../../../target/wasm32-unknown-emscripten/release/resolc_web.js

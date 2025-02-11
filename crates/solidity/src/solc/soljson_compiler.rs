@@ -1,10 +1,9 @@
-//! The Solidity compiler.
+//! The Solidity compiler solJson interface.
 
 use std::path::Path;
 use std::path::PathBuf;
 
 use crate::solc::combined_json::CombinedJson;
-use crate::solc::pipeline::Pipeline;
 use crate::solc::standard_json::input::Input as StandardJsonInput;
 use crate::solc::standard_json::output::Output as StandardJsonOutput;
 use crate::solc::version::Version;
@@ -19,23 +18,30 @@ extern "C" {
 }
 
 /// The Solidity compiler.
-pub struct SoljsonCompiler {
-    /// The lazily-initialized compiler version.
-    pub version: Option<Version>,
-}
+pub struct SoljsonCompiler;
 
 impl Compiler for SoljsonCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
         mut input: StandardJsonInput,
-        pipeline: Pipeline,
-        _base_path: Option<String>,
-        _include_paths: Vec<String>,
-        _allow_paths: Option<String>,
+        base_path: Option<String>,
+        include_paths: Vec<String>,
+        allow_paths: Option<String>,
     ) -> anyhow::Result<StandardJsonOutput> {
-        let version = self.version()?;
-        input.normalize(&version.default);
+        if !include_paths.is_empty() {
+            anyhow::bail!("configuring include paths is not supported with solJson")
+        }
+        if base_path.is_some() {
+            anyhow::bail!("configuring the base path is not supported with solJson")
+        }
+        if allow_paths.is_some() {
+            anyhow::bail!("configuring allow paths is not supported with solJson")
+        }
+
+        let version = self.version()?.validate(&include_paths)?.default;
+        input.normalize(&version);
+
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
         let input_json = serde_json::to_string(&input).expect("Always valid");
@@ -50,7 +56,7 @@ impl Compiler for SoljsonCompiler {
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
-        output.preprocess_ast(&version, pipeline, suppressed_warnings.as_slice())?;
+        output.preprocess_ast(suppressed_warnings.as_slice())?;
 
         Ok(output)
     }
@@ -76,31 +82,11 @@ impl Compiler for SoljsonCompiler {
             .ok_or_else(|| anyhow::anyhow!("Soljson version parsing: metadata dropping"))?
             .parse()
             .map_err(|error| anyhow::anyhow!("Soljson version parsing: {}", error))?;
-
         let l2_revision: Option<semver::Version> = version
             .split('-')
             .nth(1)
             .and_then(|version| version.parse().ok());
-
-        let version = Version::new(long, default, l2_revision);
-        if version.default < super::FIRST_SUPPORTED_VERSION {
-            anyhow::bail!(
-                "`Soljson` versions <{} are not supported, found {}",
-                super::FIRST_SUPPORTED_VERSION,
-                version.default
-            );
-        }
-        if version.default > super::LAST_SUPPORTED_VERSION {
-            anyhow::bail!(
-                "`Soljson` versions >{} are not supported, found {}",
-                super::LAST_SUPPORTED_VERSION,
-                version.default
-            );
-        }
-
-        self.version = Some(version.clone());
-
-        Ok(version)
+        Ok(Version::new(long, default, l2_revision))
     }
 }
 

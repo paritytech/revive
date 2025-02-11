@@ -1,7 +1,6 @@
 //! The Solidity compiler.
 
 pub mod combined_json;
-pub mod pipeline;
 #[cfg(not(target_os = "emscripten"))]
 pub mod solc_compiler;
 #[cfg(target_os = "emscripten")]
@@ -9,35 +8,22 @@ pub mod soljson_compiler;
 pub mod standard_json;
 pub mod version;
 
-use once_cell::sync::Lazy;
-use semver::VersionReq;
 use std::path::Path;
 use std::path::PathBuf;
 
 use self::combined_json::CombinedJson;
-use self::pipeline::Pipeline;
 use self::standard_json::input::Input as StandardJsonInput;
 use self::standard_json::output::Output as StandardJsonOutput;
 use self::version::Version;
 
 /// The first version of `solc` with the support of standard JSON interface.
-pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 4, 12);
-
-/// The first version of `solc`, where Yul codegen is considered robust enough.
-pub const FIRST_YUL_VERSION: semver::Version = semver::Version::new(0, 8, 0);
-
-/// The first version of `solc`, where `--via-ir` codegen mode is supported.
-pub const FIRST_VIA_IR_VERSION: semver::Version = semver::Version::new(0, 8, 13);
+pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
 /// The last supported version of `solc`.
 pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 28);
-/// `--base-path` was introduced in 0.6.9 <https://github.com/ethereum/solidity/releases/tag/v0.6.9>
-pub static FIRST_SUPPORTS_BASE_PATH: Lazy<VersionReq> =
-    Lazy::new(|| VersionReq::parse(">=0.6.9").unwrap());
 
-/// `--include-path` was introduced in 0.8.8 <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
-pub static FIRST_SUPPORTS_INCLUDE_PATH: Lazy<VersionReq> =
-    Lazy::new(|| VersionReq::parse(">=0.8.8").unwrap());
+/// `--include-path` was introduced in solc `0.8.8` <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
+pub const FIRST_INCLUDE_PATH_VERSION: semver::Version = semver::Version::new(0, 8, 8);
 
 /// The Solidity compiler.
 pub trait Compiler {
@@ -45,7 +31,6 @@ pub trait Compiler {
     fn standard_json(
         &mut self,
         input: StandardJsonInput,
-        pipeline: Pipeline,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,

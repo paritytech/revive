@@ -413,7 +413,7 @@ impl Evm {
         let stderr = str::from_utf8(output.stderr.as_slice())
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stderr failed to parse: {err}"));
 
-        let mut log: EvmLog = stdout.into();
+        let mut log: EvmLog = format!("{stdout}{stderr}").as_str().into();
         log.stderr = stderr.into();
         if self.bench {
             log.parse_gas_used_from_bench();

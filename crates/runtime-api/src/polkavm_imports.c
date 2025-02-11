@@ -72,11 +72,13 @@ POLKAVM_IMPORT(void, balance_of, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, base_fee, uint32_t)
 
+POLKAVM_IMPORT(void, block_author, uint32_t)
+
 POLKAVM_IMPORT(void, block_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, block_number, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, call, uint32_t)
+POLKAVM_IMPORT(uint64_t, call, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(uint64_t, call_data_copy, uint32_t, uint32_t, uint32_t)
 
@@ -92,7 +94,7 @@ POLKAVM_IMPORT(uint64_t, code_size, uint32_t)
 
 POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, delegate_call, uint32_t)
+POLKAVM_IMPORT(uint64_t, delegate_call, uint64_t, uint64_t, uint64_t, uint32_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 
@@ -106,7 +108,7 @@ POLKAVM_IMPORT(uint64_t, get_storage, uint32_t, uint32_t, uint32_t, uint32_t, ui
 
 POLKAVM_IMPORT(void, hash_keccak_256, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, instantiate, uint32_t)
+POLKAVM_IMPORT(uint64_t, instantiate, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, now, uint32_t)
 

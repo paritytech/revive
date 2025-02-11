@@ -6,7 +6,6 @@ pub mod attribute;
 pub mod build;
 pub mod code_type;
 pub mod debug_info;
-pub mod evmla_data;
 pub mod function;
 pub mod global;
 pub mod r#loop;
@@ -38,7 +37,6 @@ use self::attribute::Attribute;
 use self::build::Build;
 use self::code_type::CodeType;
 use self::debug_info::DebugInfo;
-use self::evmla_data::EVMLAData;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
 use self::function::llvm_runtime::LLVMRuntime;
@@ -95,8 +93,6 @@ where
     solidity_data: Option<SolidityData>,
     /// The Yul data.
     yul_data: Option<YulData>,
-    /// The EVM legacy assembly data.
-    evmla_data: Option<EVMLAData<'ctx>>,
 }
 
 impl<'ctx, D> Context<'ctx, D>
@@ -257,7 +253,6 @@ where
 
             solidity_data: None,
             yul_data: None,
-            evmla_data: None,
         }
     }
 
@@ -1339,9 +1334,15 @@ where
         self.llvm.custom_width_int_type(bit_length as u32)
     }
 
-    /// Returns the register witdh sized type.
+    /// Returns the XLEN witdh sized type.
     pub fn xlen_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
+    }
+
+    /// Returns the PolkaVM native register width sized type.
+    pub fn register_type(&self) -> inkwell::types::IntType<'ctx> {
+        self.llvm
+            .custom_width_int_type(revive_common::BIT_LENGTH_X64 as u32)
     }
 
     /// Returns the sentinel pointer value.
@@ -1566,29 +1567,6 @@ where
         self.yul_data
             .as_mut()
             .expect("The Yul data must have been initialized")
-    }
-
-    /// Sets the EVM legacy assembly data.
-    pub fn set_evmla_data(&mut self, data: EVMLAData<'ctx>) {
-        self.evmla_data = Some(data);
-    }
-
-    /// Returns the EVM legacy assembly data reference.
-    /// # Panics
-    /// If the EVM data has not been initialized.
-    pub fn evmla(&self) -> &EVMLAData<'ctx> {
-        self.evmla_data
-            .as_ref()
-            .expect("The EVMLA data must have been initialized")
-    }
-
-    /// Returns the EVM legacy assembly data mutable reference.
-    /// # Panics
-    /// If the EVM data has not been initialized.
-    pub fn evmla_mut(&mut self) -> &mut EVMLAData<'ctx> {
-        self.evmla_data
-            .as_mut()
-            .expect("The EVMLA data must have been initialized")
     }
 
     /// Returns the current number of immutables values in the contract.

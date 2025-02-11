@@ -3,7 +3,7 @@
 
 # revive
 
-YUL and EVM assembly recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
+YUL recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
 
 Visit [contracts.polkadot.io](https://contracts.polkadot.io) to learn more about contracts on Polkadot!
 

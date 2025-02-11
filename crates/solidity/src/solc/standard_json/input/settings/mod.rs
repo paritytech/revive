@@ -51,7 +51,6 @@ impl Settings {
         libraries: BTreeMap<String, BTreeMap<String, String>>,
         remappings: Option<BTreeSet<String>>,
         output_selection: Selection,
-        via_ir: bool,
         optimizer: Optimizer,
         metadata: Option<Metadata>,
     ) -> Self {
@@ -60,9 +59,9 @@ impl Settings {
             libraries: Some(libraries),
             remappings,
             output_selection: Some(output_selection),
-            via_ir: if via_ir { Some(true) } else { None },
             optimizer,
             metadata,
+            via_ir: Some(true),
         }
     }
 

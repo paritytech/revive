@@ -37,10 +37,10 @@ test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");
 test_spec!(address, "Context", "Context.sol");
-test_spec!(balance, "Value", "Value.sol");
+test_spec!(value, "Value", "Value.sol");
 test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
-test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
@@ -50,6 +50,11 @@ test_spec!(gas_price, "GasPrice", "GasPrice.sol");
 test_spec!(gas_left, "GasLeft", "GasLeft.sol");
 test_spec!(gas_limit, "GasLimit", "GasLimit.sol");
 test_spec!(base_fee, "BaseFee", "BaseFee.sol");
+test_spec!(coinbase, "Coinbase", "Coinbase.sol");
+test_spec!(create2, "CreateB", "Create2.sol");
+test_spec!(transfer, "Transfer", "Transfer.sol");
+test_spec!(send, "Send", "Send.sol");
+test_spec!(function_pointer, "FunctionPointer", "FunctionPointer.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -61,7 +66,6 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
             path: Some(path.into()),
             contract: contract.to_string(),
             solc_optimizer: None,
-            pipeline: None,
         },
         data: vec![],
         salt: OptionalHex::default(),
@@ -354,7 +358,6 @@ fn ext_code_size() {
                     path: Some("contracts/Baseline.sol".into()),
                     contract: "Baseline".to_string(),
                     solc_optimizer: None,
-                    pipeline: None,
                 },
                 data: vec![],
                 salt: OptionalHex::from([0; 32]),
@@ -435,32 +438,46 @@ fn ext_code_size() {
     .run();
 }
 
-/*
-// These test were implement for the mock-runtime and need to be ported yet.
+#[test]
+#[should_panic(expected = "ReentranceDenied")]
+fn send_denies_reentrancy() {
+    let value = 1000;
+    Specs {
+        actions: vec![
+            instantiate("contracts/Send.sol", "Send").remove(0),
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::send_self(U256::from(value)).calldata,
+            },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
 
 #[test]
-fn create2_failure() {
-    let mut state = State::default();
-    let contract_a = Contract::create_a();
-    state.upload_code(&contract_a.pvm_runtime);
-
-    let contract = Contract::create_b();
-    let (state, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata.clone())
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Success);
-
-    // The address already exists, which should cause the contract to revert
-
-    let (_, output) = state
-        .transaction()
-        .with_default_account(&contract.pvm_runtime)
-        .calldata(contract.calldata)
-        .call();
-
-    assert_eq!(output.flags, ReturnFlags::Revert);
+#[should_panic(expected = "ReentranceDenied")]
+fn transfer_denies_reentrancy() {
+    let value = 1000;
+    Specs {
+        actions: vec![
+            instantiate("contracts/Transfer.sol", "Transfer").remove(0),
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::transfer_self(U256::from(value)).calldata,
+            },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
 }
-*/

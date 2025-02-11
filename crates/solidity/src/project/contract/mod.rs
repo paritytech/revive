@@ -54,12 +54,10 @@ impl Contract {
 
     /// Returns the contract identifier, which is:
     /// - the Yul object identifier for Yul
-    /// - the full contract path for EVM legacy assembly
     /// - the module name for LLVM IR
     pub fn identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
-            IR::EVMLA(ref evm) => evm.assembly.full_path(),
             IR::LLVMIR(ref llvm_ir) => llvm_ir.path.as_str(),
         }
     }
@@ -68,7 +66,6 @@ impl Contract {
     pub fn drain_factory_dependencies(&mut self) -> HashSet<String> {
         match self.ir {
             IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
-            IR::EVMLA(ref mut evm) => evm.assembly.factory_dependencies.drain().collect(),
             IR::LLVMIR(_) => HashSet::new(),
         }
     }
@@ -128,10 +125,6 @@ impl Contract {
         match self.ir {
             IR::Yul(_) => {
                 context.set_yul_data(Default::default());
-            }
-            IR::EVMLA(_) => {
-                let evmla_data = revive_llvm_context::PolkaVMContextEVMLAData::new(version.default);
-                context.set_evmla_data(evmla_data);
             }
             IR::LLVMIR(_) => {}
         }

@@ -1,6 +1,5 @@
 //! The contract source code.
 
-pub mod evmla;
 pub mod llvm_ir;
 pub mod yul;
 
@@ -9,24 +8,17 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::evmla::assembly::Assembly;
-use crate::solc::standard_json::output::contract::evm::extra_metadata::ExtraMetadata;
 use crate::yul::parser::statement::object::Object;
 
-use self::evmla::EVMLA;
 use self::llvm_ir::LLVMIR;
 use self::yul::Yul;
 
 /// The contract source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[allow(non_camel_case_types)]
 #[allow(clippy::upper_case_acronyms)]
-#[allow(clippy::enum_variant_names)]
 pub enum IR {
     /// The Yul source code.
     Yul(Yul),
-    /// The EVM legacy assembly source code.
-    EVMLA(EVMLA),
     /// The LLVM IR source code.
     LLVMIR(LLVMIR),
 }
@@ -38,11 +30,6 @@ impl IR {
     }
 
     /// A shortcut constructor.
-    pub fn new_evmla(assembly: Assembly, extra_metadata: ExtraMetadata) -> Self {
-        Self::EVMLA(EVMLA::new(assembly, extra_metadata))
-    }
-
-    /// A shortcut constructor.
     pub fn new_llvm_ir(path: String, source: String) -> Self {
         Self::LLVMIR(LLVMIR::new(path, source))
     }
@@ -51,7 +38,6 @@ impl IR {
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         match self {
             Self::Yul(inner) => inner.get_missing_libraries(),
-            Self::EVMLA(inner) => inner.get_missing_libraries(),
             Self::LLVMIR(_inner) => HashSet::new(),
         }
     }
@@ -67,7 +53,6 @@ where
     ) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.declare(context),
-            Self::EVMLA(inner) => inner.declare(context),
             Self::LLVMIR(_inner) => Ok(()),
         }
     }
@@ -75,7 +60,6 @@ where
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.into_llvm(context),
-            Self::EVMLA(inner) => inner.into_llvm(context),
             Self::LLVMIR(_inner) => Ok(()),
         }
     }

@@ -26,15 +26,6 @@ where
 
     let code_hash_pointer = context.build_heap_gep(input_offset, input_length)?;
 
-    let input_data_pointer = context.build_gep(
-        code_hash_pointer,
-        &[context
-            .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false)],
-        context.byte_type(),
-        "input_ptr_parameter_offset",
-    );
-
     let value_pointer = context.build_alloca_at_entry(context.value_type(), "transferred_value");
     context.build_store(value_pointer, value)?;
 
@@ -56,40 +47,38 @@ where
     let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
     context.build_store(deposit_pointer, context.word_type().const_all_ones())?;
 
-    let argument_type = revive_runtime_api::calling_convention::instantiate(context.llvm());
-    let argument_pointer = context.build_alloca_at_entry(argument_type, "instantiate_arguments");
-    let arguments = &[
-        code_hash_pointer.value.as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        context
-            .integer_const(revive_common::BIT_LENGTH_X64, u64::MAX)
-            .as_basic_value_enum(),
-        deposit_pointer.value.as_basic_value_enum(),
-        value_pointer.value.as_basic_value_enum(),
-        input_data_pointer.value.as_basic_value_enum(),
-        input_length.as_basic_value_enum(),
-        address_pointer.value.as_basic_value_enum(),
-        context.sentinel_pointer().value.as_basic_value_enum(),
-        context.sentinel_pointer().value.as_basic_value_enum(),
-        salt_pointer.value.as_basic_value_enum(),
-    ];
-    revive_runtime_api::calling_convention::spill(
+    let deposit_and_value = revive_runtime_api::calling_convention::pack_hi_lo_reg(
         context.builder(),
-        argument_pointer.value,
-        argument_type,
-        arguments,
+        context.llvm(),
+        deposit_pointer.to_int(context),
+        value_pointer.to_int(context),
+        "deposit_and_value",
+    )?;
+    let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        input_length,
+        code_hash_pointer.to_int(context),
+        "input_data",
+    )?;
+    let address_and_salt = revive_runtime_api::calling_convention::pack_hi_lo_reg(
+        context.builder(),
+        context.llvm(),
+        address_pointer.to_int(context),
+        salt_pointer.to_int(context),
+        "output_data",
     )?;
 
-    let argument_pointer = context.builder().build_ptr_to_int(
-        argument_pointer.value,
-        context.xlen_type(),
-        "instantiate_argument_pointer",
-    )?;
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::INSTANTIATE,
-        &[argument_pointer.into()],
+        &[
+            context.register_type().const_all_ones().into(),
+            context.register_type().const_all_ones().into(),
+            deposit_and_value.into(),
+            input_data.into(),
+            context.register_type().const_all_ones().into(),
+            address_and_salt.into(),
+        ],
     );
 
     let address = context.build_byte_swap(context.build_load(address_pointer, "address")?)?;

@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
+
+### Added
+- Support for the `coinbase` opcode.
+
+### Changed 
+- Missing the `--overwrite` flag emits an error instead of a warning.
+- The `resolc` executable prints the help by default.
+- Removed support for legacy EVM assembly (EVMLA) translation.
+- integration: identify cached code blobs on source code to fix potential confusions.
+- Setting base, include or allow paths in emscripten is now a hard error.
+- Employ a heuristic to detect `address.transfer` and `address.send` calls.
+  If detected, the re-entrant call flag is not set and 0 deposit limit is endowed.
+
+### Fixed
+- Solidity: Add the solc `--libraries` files to sources.
+- A data race in tests.
+- Fix `broken pipe` errors.
+- llvm-builder: Allow warnings.
+- solidity: Fix the custom compiler warning messages.
+
+## v0.1.0-dev.9
+
+This is a development pre-release.
+
+### Added
+
+### Changed 
+- Syscalls with more than 6 arguments now pack them into registers.
+
+### Fixed
+- Remove reloading of the resolc.js file (fix issue with relative path in web worker)
+
 ## v0.1.0-dev.8
 
 This is a development pre-release.

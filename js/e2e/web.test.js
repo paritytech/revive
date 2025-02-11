@@ -130,7 +130,14 @@ test('should successfully compile a valid Solidity contract that instantiates an
   expect(output.contracts['fixtures/instantiate.sol'].MainContract.evm).toHaveProperty('bytecode');
 });
 
-test('should successfully compile a valid Solidity contract that instantiates the token contracts in the browser', async ({ page }) => {
+test('should successfully compile a valid Solidity contract that instantiates the token contracts in the browser', async ({
+  page,
+  browserName,
+}) => {
+  if (browserName === "firefox") {
+    // Skipping tests with large contracts on Firefox due to out-of-memory issues.
+    test.skip();
+  }
   await loadTestPage(page);
   const standardInput = loadFixture('instantiate_tokens.json')
   const result = await runWorker(page, standardInput);

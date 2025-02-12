@@ -240,7 +240,6 @@ jobs:
 
       - name: pack
         run: |
-          tar -czf llvm-linux-gnu.tar.gz target-llvm/gnu/target-final
           tar -czf llvm-linux-musl.tar.gz target-llvm/musl/target-final
           tar -czf llvm-linux-emscripten.tar.gz target-llvm/emscripten/target-final
 
@@ -272,16 +271,6 @@ jobs:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
           asset_path: ./target/wasm32-unknown-emscripten/release/resolc.wasm
           asset_name: resolc.wasm
-          asset_content_type: application/octet-stream
-
-      - name: upload llvm-linux-gnu.tar.gz
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./llvm-linux-gnu.tar.gz
-          asset_name: llvm-linux-gnu.tar.gz
           asset_content_type: application/octet-stream
 
       - name: upload llvm-linux-musl.tar.gz

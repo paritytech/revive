@@ -29,16 +29,16 @@ revive-stdlib = { version = "0.1.0-dev.10", path = "crates/stdlib" }
 revive-build-utils = { version = "0.1.0-dev.10", path = "crates/build-utils" }
 
 hex = "0.4.3"
-cc = "1.0"
+cc = "1.2"
 libc = "0.2.169"
-tempfile = "3.8"
+tempfile = "3.16"
 anyhow = "1.0"
 semver = { version = "1.0", features = ["serde"] }
 itertools = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 regex = "1.10"
-once_cell = "1.19"
+once_cell = "1.20"
 num = "0.4.3"
 sha1 = "0.10"
 sha3 = "0.10"
@@ -47,12 +47,12 @@ which = "7.0"
 path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.19.0"
-polkavm-linker = "0.19.0"
-polkavm-disassembler = "0.19.0"
-polkavm = "0.19.0"
-alloy-primitives = { version = "0.8.19", features = ["serde"] }
-alloy-sol-types = "0.8.19"
+polkavm-common = "0.20.0"
+polkavm-linker = "0.20.0"
+polkavm-disassembler = "0.20.0"
+polkavm = "0.20.0"
+alloy-primitives = { version = "0.8.21", features = ["serde"] }
+alloy-sol-types = "0.8.21"
 alloy-genesis = "0.11.0"
 alloy-serde = "0.11.0"
 env_logger = { version = "0.11.6", default-features = false }
@@ -64,10 +64,10 @@ downloader = "0.2.8"
 flate2 = "1.0.35"
 fs_extra = "1.3.0"
 num_cpus = "1"
-tar = "0.4.43"
-toml = "0.8.19"
-assert_cmd = "2.0.16"
-assert_fs = "1.1.2"
+tar = "0.4"
+toml = "0.8"
+assert_cmd = "2.0"
+assert_fs = "1.1"
 
 # polkadot-sdk and friends
 codec = { version = "3.6.12", default-features = false, package = "parity-scale-codec" }

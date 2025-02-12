@@ -124,19 +124,13 @@ jobs:
 
       # Restore cache
 
-      - name: llvm-gnu-cache restore
-        id: llvm-gnu-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: target-llvm/gnu/target-final
-          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
 
       - name: llvm-musl-cache restore
         id: llvm-musl-cache
         uses: actions/cache/restore@v4
         with:
           path: target-llvm/musl/target-final
-          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
+          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
 
       - name: llvm-emscripten-cache restore
         id: llvm-emscripten-cache
@@ -149,11 +143,6 @@ jobs:
 
       # Build LLVM
 
-      - name: Build host LLVM
-        if: steps.llvm-gnu-cache.outputs.cache-hit != 'true'
-        run: |
-          revive-llvm clone
-          revive-llvm build --llvm-projects lld --llvm-projects clang
 
       - name: Build musl LLVM
         if: steps.llvm-musl-cache.outputs.cache-hit != 'true'
@@ -170,19 +159,13 @@ jobs:
 
       # Save cache
 
-      - name: llvm-gnu-cache save
-        if: steps.llvm-gnu-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: target-llvm/gnu/target-final
-          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
 
       - name: llvm-musl-cache save
         if: steps.llvm-musl-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: target-llvm/musl/target-final
-          key: llvm-linux-gnu-${{ hashFiles('crates/solidity/**') }}
+          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
 
       - name: llvm-emscripten-cache save
         if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
@@ -192,22 +175,6 @@ jobs:
             target-llvm/emscripten/target-final
             emsdk
           key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
-
-      - name: clean gnu
-        # check
-        run: |
-          cd target-llvm/gnu/target-final/bin/
-          rm diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
-             sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
-             dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
-             llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
-      - name: clean musl
-        run: |
-          cd target-llvm/musl/target-final/bin/
-          rm diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
-             sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
-             dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
-             llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
 
       # Build revive
 
@@ -230,18 +197,13 @@ jobs:
 
       - name: build wasm
         run: |
-          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
+          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
           source emsdk/emsdk_env.sh
           rustup target add wasm32-unknown-emscripten
           make install-wasm
 
       # Upload
-
-      - name: pack
-        run: |
-          tar -czf llvm-linux-musl.tar.gz target-llvm/musl/target-final
-          tar -czf llvm-linux-emscripten.tar.gz target-llvm/emscripten/target-final
 
       - name: upload resolc
         uses: actions/upload-release-asset@v1
@@ -273,22 +235,12 @@ jobs:
           asset_name: resolc.wasm
           asset_content_type: application/octet-stream
 
-      - name: upload llvm-linux-musl.tar.gz
+      - name: upload resolc_web.js
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./llvm-linux-musl.tar.gz
-          asset_name: llvm-linux-musl.tar.gz
-          asset_content_type: application/octet-stream
-
-      - name: upload llvm-linux-emscripten.tar.gz
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./llvm-linux-emscripten.tar.gz
-          asset_name: llvm-linux-emscripten.tar.gz
+          asset_path: ./target/wasm32-unknown-emscripten/release/resolc_web.js
+          asset_name: resolc_web.js
           asset_content_type: application/octet-stream

@@ -1209,17 +1209,17 @@ where
 
     /// Build a call to PolkaVM `msize` for querying the linear memory size.
     pub fn build_msize(&self) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        Ok(self
-            .builder()
-            .build_call(
-                self.runtime_api_method(revive_runtime_api::polkavm_imports::MEMORY_SIZE),
-                &[],
-                "call_msize",
-            )?
-            .try_as_basic_value()
-            .left()
-            .expect("sbrk returns an int")
-            .into_int_value())
+        let memory_size_pointer = self
+            .module()
+            .get_global(revive_runtime_api::polkavm_imports::MEMORY_SIZE)
+            .expect("the memory size symbol should have been declared")
+            .as_pointer_value();
+        let memory_size_value = self.builder().build_load(
+            self.xlen_type(),
+            memory_size_pointer,
+            "memory_size_value",
+        )?;
+        Ok(memory_size_value.into_int_value())
     }
 
     /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
@@ -1265,8 +1265,9 @@ where
         self.build_heap_alloc(offset, length)?;
 
         let heap_start = self
-            .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
-            .value
+            .module()
+            .get_global(revive_runtime_api::polkavm_imports::MEMORY)
+            .expect("the memory symbol should have been declared")
             .as_pointer_value();
         Ok(self.build_gep(
             Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),

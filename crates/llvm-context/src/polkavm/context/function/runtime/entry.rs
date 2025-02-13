@@ -25,33 +25,10 @@ impl Entry {
         D: Dependency + Clone,
     {
         context.set_global(
-            crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER,
-            context.llvm().ptr_type(AddressSpace::Heap.into()),
-            AddressSpace::Stack,
-            context.xlen_type().get_undef(),
-        );
-        context.build_store(
-            context
-                .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY_POINTER)?
-                .into(),
-            context.build_sbrk(
-                context.xlen_type().const_zero(),
-                context.xlen_type().const_zero(),
-            )?,
-        )?;
-
-        context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
             context.xlen_type(),
             AddressSpace::Stack,
             context.xlen_type().get_undef(),
-        );
-
-        context.set_global(
-            crate::polkavm::GLOBAL_CALL_FLAGS,
-            context.word_type(),
-            AddressSpace::Stack,
-            context.word_const(0),
         );
 
         Ok(())
@@ -70,6 +47,11 @@ impl Entry {
             .build_runtime_call(revive_runtime_api::polkavm_imports::CALL_DATA_SIZE, &[])
             .expect("the call_data_size syscall method should return a value")
             .into_int_value();
+        let call_data_size_value = context.builder().build_int_truncate(
+            call_data_size_value,
+            context.xlen_type(),
+            "call_data_size_truncated",
+        )?;
         context
             .builder()
             .build_store(call_data_size_pointer, call_data_size_value)?;
@@ -89,13 +71,6 @@ impl Entry {
             .current_function()
             .borrow()
             .get_nth_param(Self::ARGUMENT_INDEX_CALL_FLAGS);
-
-        context.set_global(
-            crate::polkavm::GLOBAL_CALL_FLAGS,
-            is_deploy.get_type(),
-            AddressSpace::Stack,
-            is_deploy.into_int_value(),
-        );
 
         let deploy_code_call_block = context.append_basic_block("deploy_code_call_block");
         let runtime_code_call_block = context.append_basic_block("runtime_code_call_block");

@@ -1,18 +1,14 @@
-//! This crate vendors the [PolkaVM][0] C API and provides a LLVM module for interacting
-//! with the `pallet-revive` runtime API.
-//! At present, the revive pallet requires blobs to export `call` and `deploy`,
-//! and offers a bunch of [runtime API methods][1]. The provided [module] implements
-//! those exports and imports.
-//! [0]: [https://crates.io/crates/polkavm]
-//! [1]: [https://docs.rs/pallet-contracts/26.0.0/pallet_contracts/api_doc/index.html]
-
 use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module, support::LLVMString};
 
 include!(concat!(env!("OUT_DIR"), "/polkavm_imports.rs"));
 
-pub static SBRK: &str = "__sbrk_internal";
+/// The emulated EVM heap memory global symbol.
+pub static MEMORY: &str = "__memory";
 
-pub static MEMORY_SIZE: &str = "__msize";
+/// The emulated EVM heap memory size global symbol.
+pub static MEMORY_SIZE: &str = "__memory_size";
+
+pub static SBRK: &str = "__sbrk_internal";
 
 pub static ADDRESS: &str = "address";
 
@@ -82,9 +78,8 @@ pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 35] = [
+pub static IMPORTS: [&str; 34] = [
     SBRK,
-    MEMORY_SIZE,
     ADDRESS,
     BALANCE,
     BALANCE_OF,

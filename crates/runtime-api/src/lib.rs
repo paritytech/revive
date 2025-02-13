@@ -1,6 +1,6 @@
 //! This crate vendors the [PolkaVM][0] C API and provides a LLVM module for interacting
 //! with the `pallet-revive` runtime API.
-//! At present, the contracts pallet requires blobs to export `call` and `deploy`,
+//! At present, the revive pallet requires blobs to export `call` and `deploy`,
 //! and offers a bunch of [runtime API methods][1]. The provided [module] implements
 //! those exports and imports.
 //! [0]: [https://crates.io/crates/polkavm]

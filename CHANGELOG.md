@@ -6,6 +6,10 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 
+### Fixed
+- A bug causing incorrect loads from the emulated EVM linear memory.
+- A missing integer truncate after switching to 64bit.
+
 ## v0.1.0-dev.10
 
 This is a development pre-release.

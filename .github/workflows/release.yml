@@ -69,12 +69,25 @@ jobs:
               });
             }
 
+  get-changelog:
+    if: ${{ needs.tag.outputs.TAG == 'new' }}
+    runs-on: ubuntu-latest
+    needs: [tag]
+    outputs:
+      releaseNotes: ${{ steps.get-notes.outputs.releaseNotes }}
+    steps:
+      - id: get-notes
+        run: |
+          notes=$(sed '/^## ${{ needs.tag.outputs.PKG_VER }}/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')
+          echo $notes
+          echo "releaseNotes=$notes" >> $GITHUB_OUTPUT
+
   create-release:
     if: ${{ needs.tag.outputs.TAG == 'new' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    needs: [tag]
+    needs: [tag, get-changelog]
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
@@ -86,6 +99,7 @@ jobs:
         with:
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
           release_name: ${{ needs.tag.outputs.PKG_VER }}
+          body: ${{ needs.get-changelog.outputs.releaseNotes }}
           draft: true
           prerelease: true
 

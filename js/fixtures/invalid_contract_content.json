@@ -1,22 +1,19 @@
 {
-    "language": "Solidity",
-    "sources": {
-      "fixtures/storage.sol": {
-        "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\nimport \"nonexistent/console.sol\";\ncontract MyContract {  function greet() public pure returns (string memory) { return \"Hello\" // Missing semicolon }}"
-      }
+  "language": "Solidity",
+  "sources": {
+    "fixtures/storage.sol": {
+      "content": "// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;\nimport \"nonexistent/console.sol\";\ncontract MyContract {  function greet() public pure returns (string memory) { return \"Hello\" // Missing semicolon }}"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
     },
-    "settings": {
-      "optimizer": {
-        "enabled": true,
-        "runs": 200
-      },
-      "outputSelection": {
-        "*": {
-          "*": [
-            "abi"
-          ]
-        }
+    "outputSelection": {
+      "*": {
+        "*": ["abi"]
       }
     }
   }
-  
+}

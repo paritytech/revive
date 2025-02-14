@@ -8,10 +8,10 @@
 #define EVM_WORD_SIZE 32
 #define ALIGN(size) ((size + EVM_WORD_SIZE - 1) & ~(EVM_WORD_SIZE - 1))
 #define MAX_MEMORY_SIZE (64 * 1024)
-static char __memory[MAX_MEMORY_SIZE];
-static uint32_t __memory_size = 0;
+char __memory[MAX_MEMORY_SIZE];
+uint32_t __memory_size = 0;
 
-void *  __sbrk_internal(uint32_t offset, uint32_t size) {
+void * __sbrk_internal(uint32_t offset, uint32_t size) {
     if (offset >= MAX_MEMORY_SIZE || size > MAX_MEMORY_SIZE) {
         return NULL;
     }
@@ -25,10 +25,6 @@ void *  __sbrk_internal(uint32_t offset, uint32_t size) {
     }
 
     return (void *)&__memory[__memory_size];
-}
-
-uint32_t __msize() {
-    return __memory_size;
 }
 
 void * memset(void *b, int c, size_t len) {

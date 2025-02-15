@@ -3,7 +3,7 @@ run-name: Release ${{ github.ref_name }}
 on:
   push:
     branches:
-      - 'main'
+      - "main"
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
@@ -12,12 +12,9 @@ concurrency:
 env:
   #rust-musl-cross:x86_64-musl
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
+  RUST_LOG: trace
 
 jobs:
-
-  #
-  #
-  #
   tag:
     runs-on: ubuntu-24.04
     permissions:
@@ -29,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-tags: 'true'
+          fetch-tags: "true"
           fetch-depth: 0
 
       - name: Versions
@@ -50,29 +47,59 @@ jobs:
               export TAG=new;
             fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          
+          # Generating release notes early, in order to avoid checkout at the last step
+          RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
+          
+          echo "Release notes:"
+          echo "$RELEASE_NOTES"
+          
+          {
+            echo 'RELEASE_NOTES<<EOF'
+            echo "$RELEASE_NOTES"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
-  #
-  #
-  #
-  build-linux-all:
+  build-macos:
+    strategy:
+      matrix:
+        os: [macos-14, macos-13]
+        include:
+          - os: macos-13
+            arch: x64
+          - os: macos-14
+            arch: arm64
     if: ${{ needs.tag.outputs.TAG == 'new' }}
-    runs-on: parity-large
+    runs-on: ${{ matrix.os }}
+    name: "build-macos-${{ matrix.arch }}"
     needs: [tag]
     steps:
       - uses: actions/checkout@v4
 
-      - name: install linux deps
-        run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build \
-          curl git libssl-dev pkg-config clang lld musl
-
-      - name: Install Rust stable toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Get latest macos ${{ matrix.arch }} LLVM release artifact
+        id: get-llvm-artifact
+        uses: actions/github-script@v7
         with:
-          profile: minimal
+          result-encoding: string
+          script: |
+            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js");
+            return await getReleaseArtifact({ 
+              octokit: github, 
+              context, 
+              releasePrefix: "llvm-",
+              artifactSuffix: "-macos-${{ matrix.arch }}"
+            });
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
           toolchain: stable
           components: rust-src
           target: wasm32-unknown-emscripten
+          rustflags: ""
+
+      - name: install macos deps
+        run: |
+          brew install ninja
 
       - name: versions
         run: |
@@ -83,57 +110,100 @@ jobs:
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
 
-      - name: build revive-llvm
-        run: make install-llvm-builder
-
-      # musl LLVM
-
-      - name: llvm-musl-cache restore
-        id: llvm-musl-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: target-llvm/musl/target-final
-          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
-
-      - name: Build musl LLVM
-        if: steps.llvm-musl-cache.outputs.cache-hit != 'true'
+      - name: download llvm
         run: |
-          revive-llvm --target-env musl clone
-          revive-llvm --target-env musl build --llvm-projects lld --llvm-projects clang
+          curl -L -o llvm.tar.gz "${{ steps.get-llvm-artifact.outputs.result }}"
+          tar -xvf llvm.tar.gz
 
-      - name: llvm-musl-cache save
-        if: steps.llvm-musl-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: target-llvm/musl/target-final
-          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
-
-      # emscripten LLVM
-
-      - name: llvm-emscripten-cache restore
-        id: llvm-emscripten-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            target-llvm/emscripten/target-final
-            emsdk
-          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
-
-      - name: Build emscripten LLVM
-        if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
+      - name: build revive
         run: |
-          revive-llvm --target-env emscripten clone
-          source emsdk/emsdk_env.sh
-          revive-llvm --target-env emscripten build --llvm-projects lld
+          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
+          make install-bin
+          cp ./target/release/resolc ./target/release/resolc-${{ matrix.arch }}
 
-      - name: llvm-emscripten-cache save
-        if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+      - name: check revive
+        run: |
+          mkdir solc
+          curl -sSLo solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-macos
+          chmod +x solc/solc
+          PATH=$PWD/solc:$PATH
+          result=$(./target/release/resolc-${{ matrix.arch }} --bin crates/integration/contracts/flipper.sol)
+          echo $result
+          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
+
+      - uses: actions/upload-artifact@v4
         with:
+          name: "revive-macos-${{ matrix.arch }}"
           path: |
-            target-llvm/emscripten/target-final
-            emsdk
-          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
+            ./target/release/resolc-${{ matrix.arch }}
+          retention-days: 1
+
+  macos-universal-binary:
+    runs-on: macos-14
+    needs: [build-macos]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: revive-macos-*
+          path: revive-macos
+
+      - name: run lipo
+        run: |
+          lipo revive-macos/revive-macos-arm64/resolc-arm64 revive-macos/revive-macos-x64/resolc-x64 -create -output resolc-macos
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revive-macos
+          path: |
+            resolc-macos
+          retention-days: 1
+
+  build-linux-all:
+    if: ${{ needs.tag.outputs.TAG == 'new' }}
+    runs-on: parity-large
+    needs: [tag]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest linux LLVM release artifact
+        id: get-llvm-musl-artifact
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js")
+            return await getReleaseArtifact({
+              octokit: github,
+              context,
+              releasePrefix: "llvm-",
+              artifactSuffix: "-musl-linux"
+            })
+
+      - name: install linux deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build \
+          curl git libssl-dev pkg-config clang lld musl
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rust-src
+          target: wasm32-unknown-emscripten
+          rustflags: ""
+
+      - name: versions
+        run: |
+          rustup show
+          cargo --version
+          cmake --version
+          echo "bash:" && bash --version
+          echo "ninja:" && ninja --version
+          echo "clang:" && clang --version
+
+      - name: download llvm
+        run: |
+          curl -L -o llvm.tar.gz "${{ steps.get-llvm-musl-artifact.outputs.result }}"
+          tar -xvf llvm.tar.gz
 
       # Build revive
 
@@ -145,7 +215,7 @@ jobs:
            apt update && apt upgrade -y && apt install -y pkg-config
            export LLVM_SYS_181_PREFIX=/opt/revive/target-llvm/musl/target-final
            make install-bin
-           cp /root/.cargo/bin/resolc /opt/revive/resolc-out/resolc
+           cp /root/.cargo/bin/resolc /opt/revive/resolc-out/resolc-static-linux
            "
 
       - name: check musl
@@ -154,17 +224,45 @@ jobs:
           curl -sSLo solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
           chmod +x solc/solc
           PATH=$PWD/solc:$PATH
-          result=$(./resolc-out/resolc --bin crates/integration/contracts/flipper.sol)
+          result=$(./resolc-out/resolc-static-linux --bin crates/integration/contracts/flipper.sol)
           echo $result
           if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revive-linux
+          path: |
+            ./resolc-out/resolc-static-linux
+          retention-days: 1
 
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "20"
 
+      - name: Get latest emscripten LLVM release artifact
+        id: get-llvm-emscripten-artifact
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js")
+            return await getReleaseArtifact({
+              octokit: github,
+              context,
+              releasePrefix: "llvm-",
+              artifactSuffix: "-emscripten"
+            })
+
+      - name: download llvm
+        run: |
+          curl -L -o llvm.tar.gz "${{ steps.get-llvm-emscripten-artifact.outputs.result }}"
+          tar -xvf llvm.tar.gz
+
       - name: build wasm
         run: |
+          make install-llvm-builder
+          revive-llvm --target-env emscripten clone
           export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
           source emsdk/emsdk_env.sh
@@ -217,131 +315,43 @@ jobs:
             ./target/wasm32-unknown-emscripten/release/resolc_web.js
           retention-days: 1
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: revive-linux
-          path: |
-            ./resolc-out/resolc
-          retention-days: 1
-
-  #
-  #
-  #
   create-release:
-    needs: [tag, build-linux-all]
+    needs: [tag, build-linux-all, macos-universal-binary]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.result }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Create/update tag
-        id: tag
-        uses: actions/github-script@v7
-        with:
-          result-encoding: string
-          script: |
-            await github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'refs/tags/${{ needs.tag.outputs.PKG_VER }}',
-              sha: context.sha
-            })
-
-      - name: get relese notes
-        id: get-notes
-        run: |
-          {
-            echo 'releaseNotes<<EOF'
-            sed '/^## ${{ needs.tag.outputs.PKG_VER }}/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d'
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
-
-
-      - name: Create release
-        id: create_release
-        env:
-         releaseNotes: ${{ steps.get-notes.outputs.releaseNotes }}
-         version: ${{ needs.tag.outputs.PKG_VER }}
-        uses: actions/github-script@v7
-        with:
-          result-encoding: string
-          script: |
-            let response = await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: process.env.version,
-                name: process.env.version,
-                body: process.env.releaseNotes,
-                draft: true,
-                prerelease: true
-            });
-            console.log(response);
-            return response.data.upload_url;
-
-      - name: Log
-        run: |
-          echo "tag result:   ${{ needs.tag.outputs.TAG }}"
-          echo "pkg version:  ${{ needs.tag.outputs.PKG_VER }}"
-
-  #
-  #
-  #
-  upload-assets:
-    runs-on: ubuntu-24.04
-    needs: [create-release]
-    steps:
-
-      - name: Download Artifact
+      - name: Download revive-wasm
         uses: actions/download-artifact@v4
         with:
           name: revive-wasm
-          path: resolc/
+          path: resolc-wasm/
 
-      - name: Download Artifact
+      - name: Download revive-linux
         uses: actions/download-artifact@v4
         with:
           name: revive-linux
-          path: resolc/
+          path: resolc-linux/
 
-      - name: upload resolc
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download revive-macos
+        uses: actions/download-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./resolc/resolc
-          asset_name: resolc-static-linux
-          asset_content_type: application/octet-stream
+          name: revive-macos
+          path: resolc-macos/
 
-      - name: upload resolc.js
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: create-release
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./resolc/resolc.js
-          asset_name: resolc.js
-          asset_content_type: application/octet-stream
-
-      - name: upload resolc.wasm
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./resolc/resolc.wasm
-          asset_name: resolc.wasm
-          asset_content_type: application/octet-stream
-
-      - name: upload resolc_web.js
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./resolc/resolc_web.js
-          asset_name: resolc_web.js
-          asset_content_type: application/octet-stream
+          body: ${{ needs.tag.outputs.RELEASE_NOTES }}
+          tag_name: ${{ needs.tag.outputs.PKG_VER }}
+          name: ${{ needs.tag.outputs.PKG_VER }}
+          draft: true
+          prerelease: true # doublecheck if we need prerelease here
+          files: |
+            ./resolc-linux/resolc-static-linux
+            ./resolc-macos/resolc-macos
+            ./resolc-wasm/resolc.js
+            ./resolc-wasm/resolc.wasm
+            ./resolc-wasm/resolc_web.js

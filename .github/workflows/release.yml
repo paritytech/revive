@@ -5,14 +5,21 @@ on:
     branches:
       - 'main'
 
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   #rust-musl-cross:x86_64-musl
-  RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross:@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
+  RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
 
 jobs:
 
+  #
+  #
+  #
   tag:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     outputs:
@@ -28,7 +35,7 @@ jobs:
       - name: Versions
         id: versions
         run: |
-          export CURRENT_TAG=$(git describe --tags --abbrev=0)
+          export CURRENT_TAG=$(git describe --tags --abbrev=0 --exclude "llvm-*")
           export PKG_VER=v$(cat Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
           echo "Current tag $CURRENT_TAG"
           echo "Package version $PKG_VER"
@@ -44,82 +51,20 @@ jobs:
             fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Create/update tag
-        id: tag
-        if: ${{ steps.versions.outputs.TAG == 'new' }}
-        uses: actions/github-script@v7
-        with:
-          result-encoding: string
-          script: |
-            try {
-              await github.rest.git.createRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: 'refs/tags/${{ steps.versions.outputs.PKG_VER }}',
-                sha: context.sha
-              })
-            } catch (err) {
-              if (err.status !== 422) throw err;
-              console.log("Tag already exists, updating")
-              await github.rest.git.updateRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: 'refs/tags/${{ steps.versions.outputs.PKG_VER }}',
-                sha: context.sha
-              });
-            }
-
-  get-changelog:
-    if: ${{ needs.tag.outputs.TAG == 'new' }}
-    runs-on: ubuntu-latest
-    needs: [tag]
-    outputs:
-      releaseNotes: ${{ steps.get-notes.outputs.releaseNotes }}
-    steps:
-      - id: get-notes
-        run: |
-          notes=$(sed '/^## ${{ needs.tag.outputs.PKG_VER }}/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')
-          echo $notes
-          echo "releaseNotes=$notes" >> $GITHUB_OUTPUT
-
-  create-release:
-    if: ${{ needs.tag.outputs.TAG == 'new' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    needs: [tag, get-changelog]
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Create release
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ needs.tag.outputs.PKG_VER }}
-          release_name: ${{ needs.tag.outputs.PKG_VER }}
-          body: ${{ needs.get-changelog.outputs.releaseNotes }}
-          draft: true
-          prerelease: true
-
-      - name: Log
-        run: |
-          echo "tag result:   ${{ needs.tag.outputs.TAG }}"
-          echo "pkg version:  ${{ needs.tag.outputs.PKG_VER }}"
-
+  #
+  #
+  #
   build-linux-all:
+    if: ${{ needs.tag.outputs.TAG == 'new' }}
     runs-on: parity-large
-    needs: [create-release, tag]
-    permissions:
-      contents: write
+    needs: [tag]
     steps:
       - uses: actions/checkout@v4
 
       - name: install linux deps
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build \
-          curl git libssl-dev pkg-config clang lld nodejs npm musl
+          curl git libssl-dev pkg-config clang lld musl
 
       - name: Install Rust stable toolchain
         uses: actions-rs/toolchain@v1
@@ -148,7 +93,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target-llvm/musl/target-final
-          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}      
+          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
 
       - name: Build musl LLVM
         if: steps.llvm-musl-cache.outputs.cache-hit != 'true'
@@ -161,7 +106,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: target-llvm/musl/target-final
-          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}          
+          key: llvm-linux-musl-${{ hashFiles('crates/solidity/**') }}
 
       # emscripten LLVM
 
@@ -172,7 +117,7 @@ jobs:
           path: |
             target-llvm/emscripten/target-final
             emsdk
-          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}      
+          key: llvm-linux-emscripten-${{ hashFiles('crates/solidity/**') }}
 
       - name: Build emscripten LLVM
         if: steps.llvm-emscripten-cache.outputs.cache-hit != 'true'
@@ -192,11 +137,6 @@ jobs:
 
       # Build revive
 
-      - name: download solc
-        run: |
-          curl -o solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
-          chmod +x solc
-          echo "$PWD" >> $GITHUB_PATH
       - name: build musl
         run: |
           mkdir resolc-out
@@ -208,6 +148,21 @@ jobs:
            cp /root/.cargo/bin/resolc /opt/revive/resolc-out/resolc
            "
 
+      - name: check musl
+        run: |
+          mkdir solc
+          curl -sSLo solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
+          chmod +x solc/solc
+          PATH=$PWD/solc:$PATH
+          result=$(./resolc-out/resolc --bin crates/integration/contracts/flipper.sol)
+          echo $result
+          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
       - name: build wasm
         run: |
           export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
@@ -216,7 +171,140 @@ jobs:
           rustup target add wasm32-unknown-emscripten
           make install-wasm
 
-      # Upload
+      - name: check wasm
+        run: |
+          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.28/soljson.js
+          node -e "
+          const soljson = require('solc/soljson');
+          const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
+
+          const compiler = createRevive();
+          compiler.soljson = soljson;
+
+          const standardJsonInput =
+          {
+            language: 'Solidity',
+            sources: {
+              'MyContract.sol': {
+                content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
+              },
+            },
+            settings: { optimizer: { enabled: false } }
+          };
+
+          compiler.writeToStdin(JSON.stringify(standardJsonInput));
+          compiler.callMain(['--standard-json']);
+
+          // Collect output
+          const stdout = compiler.readFromStdout();
+          const stderr = compiler.readFromStderr();
+
+          if (stderr) { console.error(stderr); process.exit(1); }
+
+          let out = JSON.parse(stdout);
+          let bytecode = out.contracts['MyContract.sol']['MyContract'].evm.bytecode.object
+          console.log(bytecode);
+
+          if(!bytecode.startsWith('50564d')) { process.exit(1); }
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revive-wasm
+          path: |
+            ./target/wasm32-unknown-emscripten/release/resolc.js
+            ./target/wasm32-unknown-emscripten/release/resolc.wasm
+            ./target/wasm32-unknown-emscripten/release/resolc_web.js
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revive-linux
+          path: |
+            ./resolc-out/resolc
+          retention-days: 1
+
+  #
+  #
+  #
+  create-release:
+    needs: [tag, build-linux-all]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create/update tag
+        id: tag
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ needs.tag.outputs.PKG_VER }}',
+              sha: context.sha
+            })
+
+      - name: get relese notes
+        id: get-notes
+        run: |
+          {
+            echo 'releaseNotes<<EOF'
+            sed '/^## ${{ needs.tag.outputs.PKG_VER }}/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+
+      - name: Create release
+        id: create_release
+        env:
+         releaseNotes: ${{ steps.get-notes.outputs.releaseNotes }}
+         version: ${{ needs.tag.outputs.PKG_VER }}
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            let response = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: process.env.version,
+                name: process.env.version,
+                body: process.env.releaseNotes,
+                draft: true,
+                prerelease: true
+            });
+            console.log(response);
+            return response.data.upload_url;
+
+      - name: Log
+        run: |
+          echo "tag result:   ${{ needs.tag.outputs.TAG }}"
+          echo "pkg version:  ${{ needs.tag.outputs.PKG_VER }}"
+
+  #
+  #
+  #
+  upload-assets:
+    runs-on: ubuntu-22.04
+    needs: [create-release]
+    steps:
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: revive-wasm
+          path: resolc/
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: revive-linux
+          path: resolc/
 
       - name: upload resolc
         uses: actions/upload-release-asset@v1
@@ -224,8 +312,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./resolc-out/resolc
-          asset_name: resolc
+          asset_path: ./resolc/resolc
+          asset_name: resolc-static-linux
           asset_content_type: application/octet-stream
 
       - name: upload resolc.js
@@ -234,7 +322,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/wasm32-unknown-emscripten/release/resolc.js
+          asset_path: ./resolc/resolc.js
           asset_name: resolc.js
           asset_content_type: application/octet-stream
 
@@ -244,7 +332,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/wasm32-unknown-emscripten/release/resolc.wasm
+          asset_path: ./resolc/resolc.wasm
           asset_name: resolc.wasm
           asset_content_type: application/octet-stream
 
@@ -254,6 +342,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/wasm32-unknown-emscripten/release/resolc_web.js
+          asset_path: ./resolc/resolc_web.js
           asset_name: resolc_web.js
           asset_content_type: application/octet-stream

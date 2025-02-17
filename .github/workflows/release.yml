@@ -19,7 +19,7 @@ jobs:
   #
   #
   tag:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
@@ -229,7 +229,7 @@ jobs:
   #
   create-release:
     needs: [tag, build-linux-all]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
@@ -290,7 +290,7 @@ jobs:
   #
   #
   upload-assets:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [create-release]
     steps:
 

@@ -1,0 +1,157 @@
+name: Release LLVM
+
+on:
+  push:
+    tags:
+      - "llvm*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "LLVM binaries release: ${{ github.ref_name }}"
+          body: "This release includes binaries of LLVM, used to compile revive itself"
+          make_latest: "false"
+
+  build-macos:
+    strategy:
+      matrix:
+        os: [macos-14, macos-13]
+        include:
+          - os: macos-13
+            arch: x64
+          - os: macos-14
+            arch: arm64
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    name: "build-macos-${{ matrix.arch }}"
+    env:
+      RUST_LOG: trace
+    permissions:
+      contents: write # for uploading assets to release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install macos deps
+        run: |
+          brew install ninja
+
+      - name: versions
+        run: |
+          rustup show
+          cargo --version
+          cmake --version
+          echo "bash:" && bash --version
+          echo "ninja:" && ninja --version
+          echo "clang:" && clang --version
+
+      - name: Build LLVM
+        run: |
+          make install-llvm
+
+      - name: clean
+        # check removed files
+        run: |
+          cd target-llvm/gnu/target-final/bin/
+          rm diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
+             sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
+             dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
+             llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
+
+      - name: package artifacts
+        run: |
+          tar -cf "${{ github.ref_name }}-macos-${{ matrix.arch }}.tar.gz" target-llvm/gnu/target-final
+
+      - name: upload archive to release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: "false"
+          files: |
+            ${{ github.ref_name }}-macos-${{ matrix.arch }}.tar.gz
+
+
+  build-linux-all:
+    needs: create-release
+    runs-on: parity-large
+    #    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: trace
+    permissions:
+      contents: write # for uploading assets to release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install linux deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
+
+      - name: Install Rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rust-src
+          target: wasm32-unknown-emscripten
+
+      - name: versions
+        run: |
+          rustup show
+          cargo --version
+          cmake --version
+          echo "bash:" && bash --version
+          echo "ninja:" && ninja --version
+          echo "clang:" && clang --version
+
+      - name: Build host LLVM
+        run: |
+          make install-llvm
+
+      - name: Build gnu LLVM
+        run: |
+          revive-llvm clone
+          revive-llvm build --llvm-projects lld --llvm-projects clang
+
+      - name: Build musl LLVM
+        run: |
+          revive-llvm --target-env musl build --llvm-projects lld --llvm-projects clang
+
+      - name: Build emscripten LLVM
+        run: |
+          revive-llvm --target-env emscripten clone
+          source emsdk/emsdk_env.sh
+          revive-llvm --target-env emscripten build --llvm-projects lld
+
+      - name: clean
+        # check removed files
+        run: |
+          for target in gnu emscripten musl; do
+            cd target-llvm/${target}/target-final/bin/
+            rm -rf diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
+               sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
+               dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
+               llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
+            cd -
+          done
+
+      - name: package artifacts
+        run: |
+          tar -cf "${{ github.ref_name }}-gnu-linux.tar.gz" target-llvm/gnu/target-final
+          tar -cf "${{ github.ref_name }}-musl-linux.tar.gz" target-llvm/musl/target-final
+          tar -cf "${{ github.ref_name }}-emscripten.tar.gz" target-llvm/emscripten/target-final
+
+      - name: upload archive to release
+        uses: softprops/action-gh-release@v2
+        with:
+          make_latest: "false"
+          files: |
+            ${{ github.ref_name }}-gnu-linux.tar.gz
+            ${{ github.ref_name }}-musl-linux.tar.gz
+            ${{ github.ref_name }}-emscripten.tar.gz

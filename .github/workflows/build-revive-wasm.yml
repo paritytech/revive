@@ -112,14 +112,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bun on Windows
-        if: runner.os == 'Windows'
-        run: |
-          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-          iex (new-object net.webclient).downloadstring('https://get.scoop.sh')
-          scoop install wget
-          Join-Path (Resolve-Path ~).Path "scoop\shims" >> $Env:GITHUB_PATH
-
       - name: Install packages
         run: npm install
 

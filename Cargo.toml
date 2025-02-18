@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0-dev.10"
+version = "0.1.0-dev.11"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,24 +14,24 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0-dev.10", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0-dev.10", path = "crates/builtins" }
-revive-common = { version = "0.1.0-dev.10", path = "crates/common" }
-revive-differential = { version = "0.1.0-dev.10", path = "crates/differential" }
-revive-integration = { version = "0.1.0-dev.10", path = "crates/integration" }
-revive-linker = { version = "0.1.0-dev.10", path = "crates/linker" }
-lld-sys = { version = "0.1.0-dev.10", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0-dev.10", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0-dev.10", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0-dev.10", path = "crates/runner" }
-revive-solidity = { version = "0.1.0-dev.10", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0-dev.10", path = "crates/stdlib" }
-revive-build-utils = { version = "0.1.0-dev.10", path = "crates/build-utils" }
+revive-benchmarks = { version = "0.1.0-dev.11", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.11", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.11", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.11", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.11", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.11", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.11", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.11", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.11", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.11", path = "crates/runner" }
+revive-solidity = { version = "0.1.0-dev.11", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.11", path = "crates/stdlib" }
+revive-build-utils = { version = "0.1.0-dev.11", path = "crates/build-utils" }
 
 hex = "0.4.3"
 cc = "1.2"
 libc = "0.2.169"
-tempfile = "3.16"
+tempfile = "3.17"
 anyhow = "1.0"
 semver = { version = "1.0", features = ["serde"] }
 itertools = "0.14"
@@ -47,14 +47,14 @@ which = "7.0"
 path-slash = "0.2"
 rayon = "1.8"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.20.0"
-polkavm-linker = "0.20.0"
-polkavm-disassembler = "0.20.0"
-polkavm = "0.20.0"
+polkavm-common = "0.21.0"
+polkavm-linker = "0.21.0"
+polkavm-disassembler = "0.21.0"
+polkavm = "0.21.0"
 alloy-primitives = { version = "0.8.21", features = ["serde"] }
 alloy-sol-types = "0.8.21"
-alloy-genesis = "0.11.0"
-alloy-serde = "0.11.0"
+alloy-genesis = "0.11.1"
+alloy-serde = "0.11.1"
 env_logger = { version = "0.11.6", default-features = false }
 serde_stacker = "0.1.11"
 criterion = { version = "0.5.1", features = ["html_reports"] }

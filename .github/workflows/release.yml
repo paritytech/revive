@@ -195,7 +195,6 @@ jobs:
           compiler.writeToStdin(JSON.stringify(standardJsonInput));
           compiler.callMain(['--standard-json']);
 
-          // Collect output
           const stdout = compiler.readFromStdout();
           const stderr = compiler.readFromStderr();
 
@@ -293,7 +292,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [create-release]
     permissions:
-      contents: write       
+      contents: write
     steps:
 
       - name: Download Artifact

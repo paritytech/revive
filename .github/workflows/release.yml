@@ -292,6 +292,8 @@ jobs:
   upload-assets:
     runs-on: ubuntu-24.04
     needs: [create-release]
+    permissions:
+      contents: write       
     steps:
 
       - name: Download Artifact

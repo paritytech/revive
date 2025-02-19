@@ -59,7 +59,15 @@ jobs:
           dir: ./
 
       - name: clone emsdk
-        run: git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
+          ls -al emsdk
+
+      - name: log
+        run: |
+          ls -al /target-llvm/gnu/target-final
+          echo "----------"
+          ls -al /target-llvm/emscripten/target-final
 
       - name: Setup revive environment variables
         run: |

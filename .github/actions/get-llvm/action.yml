@@ -9,7 +9,7 @@ inputs:
   dir:
     description: ""
     required: false
-    default: "llvm"
+    default: "target-llvm"
 
 
 runs:
@@ -70,6 +70,6 @@ runs:
     - name: unpack
       shell: bash
       run: |
-        tar -xf llvm.tar.gz -C ${{ inputs.dir }}
+        tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=1
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}

@@ -26,7 +26,7 @@ void * __sbrk_internal(uint32_t offset, uint32_t size) {
         __memory_size = new_size;
     }
 
-    return (void *)&__memory[__memory_size];
+    return (void *)&__memory[offset];
 }
 
 void * memset(void *b, int c, size_t len) {

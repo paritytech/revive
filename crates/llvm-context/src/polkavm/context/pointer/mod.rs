@@ -7,6 +7,9 @@ use crate::polkavm::context::global::Global;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
+pub mod heap;
+pub mod storage;
+
 /// The LLVM pointer.
 #[derive(Debug, Clone, Copy)]
 pub struct Pointer<'ctx> {

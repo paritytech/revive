@@ -10,6 +10,7 @@ pub mod function;
 pub mod global;
 pub mod r#loop;
 pub mod pointer;
+pub mod runtime;
 pub mod solidity_data;
 pub mod yul_data;
 
@@ -1222,34 +1223,6 @@ where
         Ok(memory_size_value.into_int_value())
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
-    /// trapping the contract if the call failed.
-    pub fn build_heap_alloc(
-        &self,
-        offset: inkwell::values::IntValue<'ctx>,
-        size: inkwell::values::IntValue<'ctx>,
-    ) -> anyhow::Result<()> {
-        let end_of_memory = self.build_sbrk(offset, size)?;
-        let return_is_nil = self.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
-            end_of_memory,
-            self.llvm().ptr_type(Default::default()).const_null(),
-            "compare_end_of_memory_nil",
-        )?;
-
-        let continue_block = self.append_basic_block("sbrk_not_nil");
-        let trap_block = self.append_basic_block("sbrk_nil");
-        self.build_conditional_branch(return_is_nil, trap_block, continue_block)?;
-
-        self.set_basic_block(trap_block);
-        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
-        self.build_unreachable();
-
-        self.set_basic_block(continue_block);
-
-        Ok(())
-    }
-
     /// Returns a pointer to `offset` into the heap, allocating
     /// enough memory if `offset + length` would be out of bounds.
     /// # Panics
@@ -1262,19 +1235,8 @@ where
         assert_eq!(offset.get_type(), self.xlen_type());
         assert_eq!(length.get_type(), self.xlen_type());
 
-        self.build_sbrk(offset, length)?;
-
-        let heap_start = self
-            .module()
-            .get_global(revive_runtime_api::polkavm_imports::MEMORY)
-            .expect("the memory symbol should have been declared")
-            .as_pointer_value();
-        Ok(self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
-            &[offset],
-            self.byte_type(),
-            "heap_offset_via_gep",
-        ))
+        let pointer = self.build_sbrk(offset, length)?;
+        return Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer));
     }
 
     /// Returns a boolean type constant.

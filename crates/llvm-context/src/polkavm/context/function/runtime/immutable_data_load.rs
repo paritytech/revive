@@ -1,9 +1,9 @@
 //! The immutable data runtime function.
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::function::runtime::RuntimeFunction;
 use crate::polkavm::context::function::Attribute;
 use crate::polkavm::context::pointer::Pointer;
+use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;

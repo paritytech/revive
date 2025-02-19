@@ -3,7 +3,7 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::attribute::Attribute;
-use crate::polkavm::context::function::runtime::RuntimeFunction;
+use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
@@ -16,7 +16,6 @@ const LOG_FUNCTION_ATTRIBUTES: &[Attribute] = &[
 ];
 
 /// A function for emitting EVM event logs from contract code.
-#[derive(Debug)]
 pub struct EventLog<const N: usize>;
 
 impl<D> RuntimeFunction<D> for EventLog<0>

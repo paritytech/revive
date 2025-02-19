@@ -4,8 +4,9 @@ use inkwell::types::BasicType;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::code_type::CodeType;
-use crate::polkavm::context::function::runtime;
+use crate::polkavm::context::function::runtime::immutable_data_load::ImmutableDataLoad;
 use crate::polkavm::context::pointer::Pointer;
+use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -27,7 +28,7 @@ where
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
-            let name = <runtime::immutable_data_load::ImmutableDataLoad as runtime::RuntimeFunction<D>>::FUNCTION_NAME;
+            let name = <ImmutableDataLoad as RuntimeFunction<D>>::FUNCTION_NAME;
             context.build_call(
                 context
                     .get_function(name)

@@ -32,6 +32,16 @@ jobs:
           artifactArch: macos-arm64
           dir: target-llvm/macos
 
+  test-parity-large:
+    runs-on: parity-large
+    steps:
+      - uses: actions/checkout@v4
+      - name: get llvm
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: macos-arm64
+          dir: target-llvm/macos
 
   test-fail-release:
     runs-on: ubuntu-latest

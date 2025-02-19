@@ -6,6 +6,22 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
 
+## v0.1.0-dev.12
+
+This is a development pre-release.
+
+### Added
+
+- sdfsdf
+
+### Changed 
+
+- sdfsdf
+
+### Fixed
+- A bug 
+- Another bug
+
 ## v0.1.0-dev.11
 
 This is a development pre-release.

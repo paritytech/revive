@@ -70,6 +70,6 @@ runs:
     - name: unpack
       shell: bash
       run: |
-        tar -xzf llvm.tar.gz -C ${{ inputs.dir }}
+        tar -xf llvm.tar.gz -C ${{ inputs.dir }}
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}

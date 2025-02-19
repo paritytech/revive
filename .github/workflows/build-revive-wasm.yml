@@ -6,61 +6,65 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
 
 jobs:
   build-revive-wasm:
-    runs-on: parity-large
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache LLVM build
-        id: cache-llvm
-        uses: actions/cache@v3
-        with:
-          path: |
-            target-llvm/emscripten/target-final
-            target-llvm/gnu/target-final
-          # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
-          key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', 'Cargo.toml', 'Cargo.lock', 'crates/llvm-builder/**', '.github/workflows/build-revive-wasm.yml') }}
+      #- name: Cache LLVM build
+      #  id: cache-llvm
+      #  uses: actions/cache@v3
+      #  with:
+      #    path: |
+      #      target-llvm/emscripten/target-final
+      #      target-llvm/gnu/target-final
+      #    # Use a unique key based on LLVM version or configuration files to avoid cache invalidation
+      #    key: llvm-build-${{ runner.os }}-${{ hashFiles('LLVM.lock', 'Cargo.toml', 'Cargo.lock', 'crates/llvm-builder/**', '.github/workflows/build-revive-wasm.yml') }}
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
+      #- name: Install system dependencies
+      #  run: |
+      #    sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld
 
       - name: Install Rust stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           components: rust-src
           target: wasm32-unknown-emscripten
+          rustflags: ""
 
-      - name: Install LLVM build dependencies
-        run: |
-          make install-llvm-builder
-          revive-llvm --target-env emscripten clone
+      - name: get llvm gnu
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: gnu-linux
+          dir: ./
+      - name: get llvm emscripten
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: emscripten
+          dir: ./
+
+      - name: clone emsdk
+        run: git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
 
       - name: Setup revive environment variables
         run: |
           echo "LLVM_SYS_181_PREFIX=$(pwd)/target-llvm/gnu/target-final" >> $GITHUB_ENV
           echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/target-llvm/emscripten/target-final" >> $GITHUB_ENV
-
-      - name: Build host LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          revive-llvm build --llvm-projects lld --llvm-projects clang
-
-      - name: Build target LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          source emsdk/emsdk_env.sh
-          revive-llvm --target-env emscripten build --llvm-projects lld
 
       - run: |
           rustup show
@@ -69,11 +73,6 @@ jobs:
           cargo +nightly --version
           cmake --version
           bash --version
-
-      - name: Use Cached LLVM
-        if: steps.cache-llvm.outputs.cache-hit == 'true'
-        run: |
-          echo "Using cached LLVM"
 
       - name: Build revive
         run: |

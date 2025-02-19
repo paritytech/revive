@@ -89,4 +89,3 @@ runs:
         tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=${{ inputs.stripComponents }}
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}
-        ls -al ${{ inputs.dir }}/*/target-final

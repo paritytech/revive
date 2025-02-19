@@ -1,0 +1,21 @@
+name: Test
+run-name: Test ${{ github.ref_name }}
+on:
+  push:
+    branches:
+      - 'es/actions-test'
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: get llvm
+        uses: ./github/actions/llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: musl-linux
+          dir: target-llvm/musl

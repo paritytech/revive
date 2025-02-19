@@ -1,7 +1,7 @@
 name: Build revive-wasm
 on:
   push:
-    branches: ["main"]
+    branches: ["none"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:

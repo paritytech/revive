@@ -1,0 +1,71 @@
+name: "get llvm"
+inputs:
+  releasePrefix:
+    description: ""
+    required: true
+  artifactArch:
+    description: ""
+    required: true
+  dir:
+    description: ""
+    required: false
+    default: "llvm"
+
+
+runs:
+  using: "composite"
+  steps:
+    - name: find asset
+      id: find
+      uses: actions/github-script@v7
+      env:
+        releasePrefix: ${{ inputs.releasePrefix }}
+        artifactArch: ${{ inputs.artifactArch }}
+      with:
+        result-encoding: string
+        script: |
+          let page = 1;
+          let releases = [];
+
+          let releasePrefix = process.env.releasePrefix
+          let artifactArch = process.env.artifactArch
+
+          do {
+            const res = await octokit.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 50,
+              page,
+            });
+
+            releases = res.data
+            releases.sort((a, b) => {
+              return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
+            });
+
+            let llvmLatestRelease = releases.find(release => {
+              return release.tag_name.startsWith(releasePrefix);
+            });
+            if (llvmLatestRelease){
+                let asset = llvmLatestRelease.assets.find(asset =>{
+                    return asset.name.includes(artifactArch);
+                });
+                return asset.browser_download_url;
+            }
+
+            page++;
+          } while(releases.length > 0);
+
+          throw new Error(
+            `No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`,
+          );
+
+    - name: download
+      id: download
+      needs: [find]
+      shell: bash
+      runs: |
+        mkdir -p ${{ inputs.dir }}
+        curl -sSLo llvm.tar.gz ${{ needs.find.outputs.result }}
+        tar -xzf llvm.tar.gz -C ${{ inputs.dir }}
+        rm llvm.tar.gz

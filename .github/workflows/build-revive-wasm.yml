@@ -65,9 +65,11 @@ jobs:
 
       - name: log
         run: |
-          ls -al /target-llvm/gnu/target-final
+          ls -al target-llvm
           echo "----------"
-          ls -al /target-llvm/emscripten/target-final
+          ls -al target-llvm/gnu/target-final
+          echo "----------"
+          ls -al target-llvm/emscripten/target-final
 
       - name: Setup revive environment variables
         run: |

@@ -1,3 +1,12 @@
+# example:
+#
+#       - name: get llvm
+#         uses: ./.github/actions/get-llvm
+#         with:
+#           releasePrefix: llvm-
+#           artifactArch: macos-arm64
+#           dir: target-llvm/macos
+
 name: "get llvm"
 inputs:
   releasePrefix:
@@ -10,6 +19,10 @@ inputs:
     description: ""
     required: false
     default: "target-llvm"
+  stripComponents:
+    description: ""
+    rewuired: false
+    default: 0
 
 
 runs:
@@ -73,7 +86,7 @@ runs:
     - name: unpack
       shell: bash
       run: |
-        tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=1
+        tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=${{ inputs.stripComponents }}
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}
         ls -al ${{ inputs.dir }}/*/target-final

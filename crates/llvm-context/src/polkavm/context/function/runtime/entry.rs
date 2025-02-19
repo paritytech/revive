@@ -145,7 +145,7 @@ where
         crate::PolkaVMFunction::set_attributes(
             context.llvm(),
             entry,
-            vec![crate::PolkaVMAttribute::NoReturn],
+            &[crate::PolkaVMAttribute::NoReturn],
             true,
         );
 

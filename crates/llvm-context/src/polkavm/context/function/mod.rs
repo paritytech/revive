@@ -110,10 +110,10 @@ impl<'ctx> Function<'ctx> {
     pub fn set_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
-        attributes: Vec<Attribute>,
+        attributes: &[Attribute],
         force: bool,
     ) {
-        for attribute_kind in attributes.into_iter() {
+        for attribute_kind in attributes {
             match attribute_kind {
                 Attribute::Memory => unimplemented!("`memory` attributes are not implemented"),
                 attribute_kind @ Attribute::AlwaysInline if force => {
@@ -131,7 +131,7 @@ impl<'ctx> Function<'ctx> {
                         );
                         declaration.value.add_attribute(
                             inkwell::attributes::AttributeLoc::Function,
-                            llvm.create_enum_attribute(attribute_kind as u32, 0),
+                            llvm.create_enum_attribute(*attribute_kind as u32, 0),
                         );
                     }
                 }
@@ -142,12 +142,12 @@ impl<'ctx> Function<'ctx> {
                     );
                     declaration.value.add_attribute(
                         inkwell::attributes::AttributeLoc::Function,
-                        llvm.create_enum_attribute(attribute_kind as u32, 0),
+                        llvm.create_enum_attribute(*attribute_kind as u32, 0),
                     );
                 }
                 attribute_kind => declaration.value.add_attribute(
                     inkwell::attributes::AttributeLoc::Function,
-                    llvm.create_enum_attribute(attribute_kind as u32, 0),
+                    llvm.create_enum_attribute(*attribute_kind as u32, 0),
                 ),
             }
         }
@@ -186,19 +186,19 @@ impl<'ctx> Function<'ctx> {
             Self::set_attributes(
                 llvm,
                 declaration,
-                vec![Attribute::OptimizeNone, Attribute::NoInline],
+                &[Attribute::OptimizeNone, Attribute::NoInline],
                 false,
             );
         } else if optimizer.settings().level_middle_end_size == SizeLevel::Z {
             Self::set_attributes(
                 llvm,
                 declaration,
-                vec![Attribute::OptimizeForSize, Attribute::MinSize],
+                &[Attribute::OptimizeForSize, Attribute::MinSize],
                 false,
             );
         }
 
-        Self::set_attributes(llvm, declaration, vec![Attribute::NoFree], false);
+        Self::set_attributes(llvm, declaration, &[Attribute::NoFree], false);
     }
 
     /// Sets the front-end runtime attributes.
@@ -208,7 +208,7 @@ impl<'ctx> Function<'ctx> {
         optimizer: &Optimizer,
     ) {
         if optimizer.settings().level_middle_end_size == SizeLevel::Z {
-            Self::set_attributes(llvm, declaration, vec![Attribute::NoInline], false);
+            Self::set_attributes(llvm, declaration, &[Attribute::NoInline], false);
         }
     }
 
@@ -217,7 +217,7 @@ impl<'ctx> Function<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
     ) {
-        Self::set_attributes(llvm, declaration, vec![Attribute::NoInline], false);
+        Self::set_attributes(llvm, declaration, &[Attribute::NoInline], false);
     }
 
     /// Sets the CXA-throw attributes.
@@ -225,7 +225,7 @@ impl<'ctx> Function<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
     ) {
-        Self::set_attributes(llvm, declaration, vec![Attribute::NoProfile], false);
+        Self::set_attributes(llvm, declaration, &[Attribute::NoProfile], false);
     }
 
     /// Sets the pure function attributes.
@@ -236,7 +236,7 @@ impl<'ctx> Function<'ctx> {
         Self::set_attributes(
             llvm,
             declaration,
-            vec![
+            &[
                 Attribute::MustProgress,
                 Attribute::NoUnwind,
                 Attribute::WillReturn,

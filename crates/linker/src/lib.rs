@@ -52,7 +52,6 @@ pub fn link<T: AsRef<[u8]>>(input: T) -> anyhow::Result<Vec<u8>> {
 
     let ld_args = [
         "ld.lld",
-        "--lto=full",
         "--error-limit=0",
         "--relocatable",
         "--emit-relocs",

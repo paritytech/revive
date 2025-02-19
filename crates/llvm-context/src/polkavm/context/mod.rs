@@ -1262,7 +1262,7 @@ where
         assert_eq!(offset.get_type(), self.xlen_type());
         assert_eq!(length.get_type(), self.xlen_type());
 
-        self.build_heap_alloc(offset, length)?;
+        self.build_sbrk(offset, length)?;
 
         let heap_start = self
             .module()
@@ -1579,5 +1579,9 @@ where
         } else {
             anyhow::bail!("The immutable size data is not available");
         }
+    }
+
+    pub fn optimizer_settings(&self) -> &OptimizerSettings {
+        self.optimizer.settings()
     }
 }

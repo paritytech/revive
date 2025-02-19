@@ -2,6 +2,8 @@
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
+use crate::polkavm::context::function::runtime::RuntimeFunction;
+use crate::polkavm::context::function::Attribute;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -18,25 +20,19 @@ use crate::polkavm::WriteLLVM;
 #[derive(Debug)]
 pub struct ImmutableDataLoad;
 
-impl<D> WriteLLVM<D> for ImmutableDataLoad
+impl<D> RuntimeFunction<D> for ImmutableDataLoad
 where
     D: Dependency + Clone,
 {
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.add_function(
-            runtime::FUNCTION_LOAD_IMMUTABLE_DATA,
-            context.void_type().fn_type(Default::default(), false),
-            0,
-            Some(inkwell::module::Linkage::External),
-        )?;
+    const FUNCTION_NAME: &'static str = runtime::FUNCTION_LOAD_IMMUTABLE_DATA;
 
-        Ok(())
+    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[Attribute::NoFree, Attribute::NoInline];
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(Default::default(), false)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA, None)?;
-        context.set_basic_block(context.current_function().borrow().entry_block());
-
+    fn emit_body(&self, context: &Context<D>) -> anyhow::Result<()> {
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
             .value
@@ -111,8 +107,19 @@ where
         context.set_basic_block(return_block);
         context.build_return(None);
 
-        context.pop_debug_scope();
-
         Ok(())
+    }
+}
+
+impl<D> WriteLLVM<D> for ImmutableDataLoad
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
     }
 }

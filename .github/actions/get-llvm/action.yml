@@ -73,4 +73,4 @@ runs:
         tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=1
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}
-        ls -al ${{ inputs.dir }}/musl
+        ls -al ${{ inputs.dir }}/musl/target-final

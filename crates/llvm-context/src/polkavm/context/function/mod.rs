@@ -212,22 +212,6 @@ impl<'ctx> Function<'ctx> {
         }
     }
 
-    /// Sets the exception handler attributes.
-    pub fn set_exception_handler_attributes(
-        llvm: &'ctx inkwell::context::Context,
-        declaration: Declaration<'ctx>,
-    ) {
-        Self::set_attributes(llvm, declaration, vec![Attribute::NoInline], false);
-    }
-
-    /// Sets the CXA-throw attributes.
-    pub fn set_cxa_throw_attributes(
-        llvm: &'ctx inkwell::context::Context,
-        declaration: Declaration<'ctx>,
-    ) {
-        Self::set_attributes(llvm, declaration, vec![Attribute::NoProfile], false);
-    }
-
     /// Sets the pure function attributes.
     pub fn set_pure_function_attributes(
         llvm: &'ctx inkwell::context::Context,

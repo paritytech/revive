@@ -38,7 +38,7 @@ jobs:
           echo "Package version $PKG_VER"
           #
           echo "PKG_VER=$PKG_VER" >> $GITHUB_OUTPUT
-          if [ $CURRENT_TAG == $PKG_VER  ];
+          if [[ $CURRENT_TAG == $PKG_VER  ]];
             then
               echo "Tag is up to date. Nothing to do.";
               export TAG=old;
@@ -49,16 +49,14 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
           
           # Generating release notes early, in order to avoid checkout at the last step
-          RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
+          export RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
           
           echo "Release notes:"
           echo "$RELEASE_NOTES"
           
-          {
-            echo 'RELEASE_NOTES<<EOF'
-            echo "$RELEASE_NOTES"
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
+          echo 'RELEASE_NOTES<<EOF' >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
 
   build-macos:
     strategy:

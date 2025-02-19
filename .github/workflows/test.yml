@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  test-musl:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +20,37 @@ jobs:
           releasePrefix: llvm-
           artifactArch: musl-linux
           dir: target-llvm/musl
+
+  test-macos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: get llvm
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: macos-arm64
+          dir: target-llvm/macos
+
+
+  test-fail-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: get llvm
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: asdfghjkl-
+          artifactArch: macos-arm64
+          dir: target-llvm/macos
+
+  test-fail-asset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: get llvm
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: asdfghjkl
+          dir: target-llvm/macos

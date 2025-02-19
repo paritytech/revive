@@ -50,6 +50,11 @@ runs:
                 let asset = llvmLatestRelease.assets.find(asset =>{
                     return asset.name.includes(artifactArch);
                 });
+                if (!asset){
+                  throw new Error(
+                    `Artifact for '${artifactArch}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`,
+                  );
+                }
                 return asset.browser_download_url;
             }
 

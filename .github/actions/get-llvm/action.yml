@@ -31,7 +31,7 @@ runs:
           let artifactArch = process.env.artifactArch
 
           do {
-            const res = await octokit.rest.repos.listReleases({
+            const res = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
               per_page: 50,

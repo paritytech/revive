@@ -61,7 +61,6 @@ runs:
           );
 
     - name: download
-      id: download
       shell: bash
       run: |
         mkdir -p ${{ inputs.dir }}
@@ -69,7 +68,6 @@ runs:
         ls -al
 
     - name: unpack
-      id: download
       shell: bash
       run: |
         tar -xzf llvm.tar.gz -C ${{ inputs.dir }}

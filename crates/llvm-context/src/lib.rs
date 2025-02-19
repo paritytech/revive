@@ -27,7 +27,6 @@ pub use self::polkavm::context::function::runtime::immutable_data_load::Immutabl
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::FUNCTION_DEPLOY_CODE as PolkaVMFunctionDeployCode;
 pub use self::polkavm::context::function::runtime::FUNCTION_ENTRY as PolkaVMFunctionEntry;
-pub use self::polkavm::context::function::runtime::FUNCTION_LOAD_IMMUTABLE_DATA as PolkaVMFunctionImmutableDataLoad;
 pub use self::polkavm::context::function::runtime::FUNCTION_RUNTIME_CODE as PolkaVMFunctionRuntimeCode;
 pub use self::polkavm::context::function::yul_data::YulData as PolkaVMFunctionYulData;
 pub use self::polkavm::context::function::Function as PolkaVMFunction;

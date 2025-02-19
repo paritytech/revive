@@ -1,7 +1,6 @@
 //! The immutable data runtime function.
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::function::runtime::RuntimeFunction;
 use crate::polkavm::context::function::Attribute;
 use crate::polkavm::context::pointer::Pointer;
@@ -24,9 +23,13 @@ impl<D> RuntimeFunction<D> for ImmutableDataLoad
 where
     D: Dependency + Clone,
 {
-    const FUNCTION_NAME: &'static str = runtime::FUNCTION_LOAD_IMMUTABLE_DATA;
+    const FUNCTION_NAME: &'static str = "__immutable_data_load";
 
-    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[Attribute::NoFree, Attribute::NoInline];
+    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoFree,
+        Attribute::NoInline,
+        Attribute::WillReturn,
+    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(Default::default(), false)

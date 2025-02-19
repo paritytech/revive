@@ -18,9 +18,6 @@ pub const FUNCTION_DEPLOY_CODE: &str = "__deploy";
 /// The runtime code function name.
 pub const FUNCTION_RUNTIME_CODE: &str = "__runtime";
 
-/// The immutable data load function name.
-pub const FUNCTION_LOAD_IMMUTABLE_DATA: &str = "__immutable_data_load";
-
 pub trait RuntimeFunction<D>
 where
     D: Dependency + Clone,
@@ -65,4 +62,20 @@ where
 
     /// Emit the function body.
     fn emit_body(&self, context: &Context<D>) -> anyhow::Result<()>;
+
+    /// Get the nth function paramater.
+    fn paramater<'ctx>(
+        context: &Context<'ctx, D>,
+        nth: u32,
+    ) -> inkwell::values::BasicValueEnum<'ctx> {
+        let name = Self::FUNCTION_NAME;
+        context
+            .get_function(name)
+            .unwrap_or_else(|| panic!("runtime function {name} should have been declared",))
+            .borrow()
+            .declaration()
+            .function_value()
+            .get_nth_param(nth)
+            .unwrap_or_else(|| panic!("runtime function {name} should have parameter {nth}",))
+    }
 }

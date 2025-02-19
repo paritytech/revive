@@ -202,7 +202,6 @@ where
             revive_llvm_context::PolkaVMFunctionDeployCode,
             revive_llvm_context::PolkaVMFunctionRuntimeCode,
             revive_llvm_context::PolkaVMFunctionEntry,
-            revive_llvm_context::PolkaVMFunctionImmutableDataLoad,
         ]
         .into_iter()
         {

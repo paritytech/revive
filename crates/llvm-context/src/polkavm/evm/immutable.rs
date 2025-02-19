@@ -27,14 +27,15 @@ where
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
+            let name = <runtime::immutable_data_load::ImmutableDataLoad as runtime::RuntimeFunction<D>>::FUNCTION_NAME;
             context.build_call(
                 context
-                    .get_function(runtime::FUNCTION_LOAD_IMMUTABLE_DATA)
+                    .get_function(name)
                     .expect("is always declared for runtime code")
                     .borrow()
                     .declaration(),
                 &[],
-                runtime::FUNCTION_LOAD_IMMUTABLE_DATA,
+                name,
             );
             load_from_memory(context, index)
         }

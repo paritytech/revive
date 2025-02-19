@@ -81,8 +81,7 @@ impl<'ctx> Function<'ctx> {
             || (name.starts_with("__")
                 && name != self::runtime::FUNCTION_ENTRY
                 && name != self::runtime::FUNCTION_DEPLOY_CODE
-                && name != self::runtime::FUNCTION_RUNTIME_CODE
-                && name != self::runtime::FUNCTION_LOAD_IMMUTABLE_DATA)
+                && name != self::runtime::FUNCTION_RUNTIME_CODE)
     }
 
     /// Returns the LLVM function declaration.

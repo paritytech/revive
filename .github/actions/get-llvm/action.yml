@@ -62,10 +62,9 @@ runs:
 
     - name: download
       id: download
-      needs: [find]
       shell: bash
       runs: |
         mkdir -p ${{ inputs.dir }}
-        curl -sSLo llvm.tar.gz ${{ needs.find.outputs.result }}
+        curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
         tar -xzf llvm.tar.gz -C ${{ inputs.dir }}
         rm llvm.tar.gz

@@ -51,9 +51,8 @@ runs:
                     return asset.name.includes(artifactArch);
                 });
                 if (!asset){
-                  throw new Error(
-                    `Artifact for '${artifactArch}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`,
-                  );
+                  core.setFailed(`Artifact for '${artifactArch}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
+                  process.exit();
                 }
                 return asset.browser_download_url;
             }
@@ -61,9 +60,8 @@ runs:
             page++;
           } while(releases.length > 0);
 
-          throw new Error(
-            `No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`,
-          );
+          core.setFailed(`No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`);
+          process.exit();
 
     - name: download
       shell: bash
@@ -78,4 +76,4 @@ runs:
         tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=1
         rm llvm.tar.gz
         ls -al ${{ inputs.dir }}
-        ls -al ${{ inputs.dir }}/musl/target-final
+        ls -al ${{ inputs.dir }}/*/target-final

@@ -63,7 +63,7 @@ runs:
     - name: download
       id: download
       shell: bash
-      runs: |
+      run: |
         mkdir -p ${{ inputs.dir }}
         curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
         tar -xzf llvm.tar.gz -C ${{ inputs.dir }}

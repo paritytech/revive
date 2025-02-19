@@ -66,5 +66,12 @@ runs:
       run: |
         mkdir -p ${{ inputs.dir }}
         curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
+        ls -al
+
+    - name: unpack
+      id: download
+      shell: bash
+      run: |
         tar -xzf llvm.tar.gz -C ${{ inputs.dir }}
         rm llvm.tar.gz
+        ls -al ${{ inputs.dir }}

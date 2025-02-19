@@ -19,7 +19,7 @@ jobs:
         with:
           name: "LLVM binaries release: ${{ github.ref_name }}"
           body: "This release includes binaries of LLVM, used to compile revive itself"
-          make_latest: "false"
+          draft: true
 
   build-macos:
     strategy:
@@ -73,7 +73,6 @@ jobs:
       - name: upload archive to release
         uses: softprops/action-gh-release@v2
         with:
-          make_latest: "false"
           files: |
             ${{ github.ref_name }}-macos-${{ matrix.arch }}.tar.gz
 
@@ -93,13 +92,12 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
 
-      - name: Install Rust stable toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           components: rust-src
           target: wasm32-unknown-emscripten
+          rustflags: ""
 
       - name: versions
         run: |
@@ -150,7 +148,6 @@ jobs:
       - name: upload archive to release
         uses: softprops/action-gh-release@v2
         with:
-          make_latest: "false"
           files: |
             ${{ github.ref_name }}-gnu-linux.tar.gz
             ${{ github.ref_name }}-musl-linux.tar.gz

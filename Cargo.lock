@@ -4683,7 +4683,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "cc",
  "libc",
@@ -8364,7 +8364,7 @@ dependencies = [
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "criterion",
@@ -8376,18 +8376,18 @@ dependencies = [
 
 [[package]]
 name = "revive-build-utils"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "revive-build-utils",
 ]
 
 [[package]]
 name = "revive-common"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "serde",
@@ -8397,7 +8397,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives",
@@ -8410,7 +8410,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -8425,7 +8425,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "libc",
@@ -8437,7 +8437,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-builder"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8458,7 +8458,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "hex",
@@ -8478,7 +8478,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "hex",
@@ -8493,7 +8493,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8503,7 +8503,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solidity"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "clap",
@@ -8529,7 +8529,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "inkwell",
  "revive-build-utils",

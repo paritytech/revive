@@ -40,6 +40,12 @@ pub enum Flag {
     /// The assembly code
     #[serde(rename = "evm.assembly")]
     Assembly,
+    /// The Ir
+    #[serde(rename = "ir")]
+    Ir,
+    // Catch all unsupported functions
+    #[serde(other)]
+    Unknown,
 }
 
 impl std::fmt::Display for Flag {
@@ -57,6 +63,8 @@ impl std::fmt::Display for Flag {
             Self::EVMBC => write!(f, "evm.bytecode"),
             Self::EVMDBC => write!(f, "evm.deployedBytecode"),
             Self::Assembly => write!(f, "evm.assembly"),
+            Self::Ir => write!(f, "ir"),
+            Self::Unknown => write!(f, "unknown flag"),
         }
     }
 }

@@ -32,7 +32,8 @@ use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
-use crate::PolkaVMLoadHeapPointerFunction;
+use crate::PolkaVMLoadHeapWordFunction;
+use crate::PolkaVMStoreHeapWordFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
@@ -771,25 +772,18 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMLoadHeapPointerFunction as RuntimeFunction<D>>::FUNCTION_NAME;
+                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::FUNCTION_NAME;
                 let declaration = self
                     .get_function(name)
                     .unwrap_or_else(|| panic!("revive runtime function {name} should be declared"))
                     .borrow()
                     .declaration();
-                let arguments = [
-                    self.builder()
-                        .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
-                        .as_basic_value_enum(),
-                    pointer
-                        .r#type
-                        .size_of()
-                        .expect("should be IntValue")
-                        .const_truncate(self.xlen_type())
-                        .as_basic_value_enum(),
-                ];
+                let arguments = [self
+                    .builder()
+                    .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
+                    .as_basic_value_enum()];
                 Ok(self
-                    .build_call(declaration, &arguments, "heap_value")
+                    .build_call(declaration, &arguments, "heap_load")
                     .unwrap_or_else(|| {
                         panic!("revive runtime function {name} should return a value")
                     }))
@@ -849,31 +843,17 @@ where
     {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let heap_pointer = self.build_heap_gep(
-                    self.builder().build_ptr_to_int(
-                        pointer.value,
-                        self.xlen_type(),
-                        "offset_ptrtoint",
-                    )?,
-                    value
-                        .as_basic_value_enum()
-                        .get_type()
-                        .size_of()
-                        .expect("should be IntValue")
-                        .const_truncate(self.xlen_type()),
-                )?;
-
-                let value = value.as_basic_value_enum();
-                let value = match value.get_type().into_int_type().get_bit_width() as usize {
-                    revive_common::BIT_LENGTH_WORD => self.build_byte_swap(value)?,
-                    revive_common::BIT_LENGTH_BYTE => value,
-                    _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
-                };
-
-                self.builder
-                    .build_store(heap_pointer.value, value)?
-                    .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
-                    .expect("Alignment is valid");
+                let name = <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::FUNCTION_NAME;
+                let declaration = self
+                    .get_function(name)
+                    .unwrap_or_else(|| panic!("revive runtime function {name} should be declared"))
+                    .borrow()
+                    .declaration();
+                let arguments = [
+                    pointer.to_int(self).as_basic_value_enum(),
+                    value.as_basic_value_enum(),
+                ];
+                self.build_call(declaration, &arguments, "heap_store");
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
                 assert_eq!(

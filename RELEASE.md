@@ -11,6 +11,7 @@ To create a new pre-release:
 
 # LLVM release
 
-To create a new LLVM release, create a git tag (not GitHub release) with `llvm-` prefix, e.g. `llvm-0.0.11`.  
-`Release LLVM` action will start automatically. It will create new GitHub release, and upload LLVM binaries.  
-Other actions including Release will use these binaries on the next run.
+To create a new LLVM release, run "Release LLVM" workflow. Use current LLVM version as parameter, e.g. `18.1.8`.
+Version suffix will be resolved automatically.  
+The workflows will create new GitHub release, and upload LLVM binaries.
+Next release of resolc will use newly created binaries.  

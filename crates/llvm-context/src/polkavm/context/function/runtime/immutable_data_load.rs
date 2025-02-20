@@ -35,7 +35,10 @@ where
         context.void_type().fn_type(Default::default(), false)
     }
 
-    fn emit_body(&self, context: &Context<D>) -> anyhow::Result<()> {
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
             .value
@@ -107,10 +110,7 @@ where
         context.build_call(context.intrinsics().trap, &[], "invalid_trap");
         context.build_unreachable();
 
-        context.set_basic_block(return_block);
-        context.build_return(None);
-
-        Ok(())
+        Ok(None)
     }
 }
 

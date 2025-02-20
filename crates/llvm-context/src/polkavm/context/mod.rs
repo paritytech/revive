@@ -32,6 +32,7 @@ use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
+use crate::PolkaVMLoadHeapPointerFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
@@ -46,6 +47,7 @@ use self::function::Function;
 use self::global::Global;
 use self::pointer::Pointer;
 use self::r#loop::Loop;
+use self::runtime::RuntimeFunction;
 use self::solidity_data::SolidityData;
 use self::yul_data::YulData;
 
@@ -769,29 +771,28 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let heap_pointer = self.build_heap_gep(
-                    self.builder().build_ptr_to_int(
-                        pointer.value,
-                        self.xlen_type(),
-                        "offset_ptrtoint",
-                    )?,
+                let name = <PolkaVMLoadHeapPointerFunction as RuntimeFunction<D>>::FUNCTION_NAME;
+                let declaration = self
+                    .get_function(name)
+                    .unwrap_or_else(|| panic!("revive runtime function {name} should be declared"))
+                    .borrow()
+                    .declaration();
+                let arguments = [
+                    self.builder()
+                        .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
+                        .as_basic_value_enum(),
                     pointer
                         .r#type
                         .size_of()
                         .expect("should be IntValue")
-                        .const_truncate(self.xlen_type()),
-                )?;
-
-                let value = self
-                    .builder()
-                    .build_load(pointer.r#type, heap_pointer.value, name)?;
-                self.basic_block()
-                    .get_last_instruction()
-                    .expect("Always exists")
-                    .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
-                    .expect("Alignment is valid");
-
-                self.build_byte_swap(value)
+                        .const_truncate(self.xlen_type())
+                        .as_basic_value_enum(),
+                ];
+                Ok(self
+                    .build_call(declaration, &arguments, "heap_value")
+                    .unwrap_or_else(|| {
+                        panic!("revive runtime function {name} should return a value")
+                    }))
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
                 let storage_value_pointer =
@@ -1236,7 +1237,7 @@ where
         assert_eq!(length.get_type(), self.xlen_type());
 
         let pointer = self.build_sbrk(offset, length)?;
-        return Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer));
+        Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer))
     }
 
     /// Returns a boolean type constant.

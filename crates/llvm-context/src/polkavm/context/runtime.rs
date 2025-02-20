@@ -44,7 +44,8 @@ where
         context.set_current_function(Self::FUNCTION_NAME, None)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        self.emit_body(context)?;
+        let return_value = self.emit_body(context)?;
+        self.emit_epilogue(context, return_value);
 
         context.pop_debug_scope();
 
@@ -52,7 +53,25 @@ where
     }
 
     /// Emit the function body.
-    fn emit_body(&self, context: &Context<D>) -> anyhow::Result<()>;
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>;
+
+    /// Emit the function return instructions.
+    fn emit_epilogue<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+        return_value: Option<inkwell::values::BasicValueEnum<'ctx>>,
+    ) {
+        let return_block = context.current_function().borrow().return_block();
+        context.build_unconditional_branch(return_block);
+        context.set_basic_block(return_block);
+        match return_value {
+            Some(value) => context.build_return(Some(&value)),
+            None => context.build_return(None),
+        }
+    }
 
     /// Get the nth function paramater.
     fn paramater<'ctx>(
@@ -62,11 +81,11 @@ where
         let name = Self::FUNCTION_NAME;
         context
             .get_function(name)
-            .unwrap_or_else(|| panic!("runtime function {name} should have been declared",))
+            .unwrap_or_else(|| panic!("runtime function {name} should have been declared"))
             .borrow()
             .declaration()
             .function_value()
             .get_nth_param(nth)
-            .unwrap_or_else(|| panic!("runtime function {name} should have parameter {nth}",))
+            .unwrap_or_else(|| panic!("runtime function {name} should have parameter {nth}"))
     }
 }

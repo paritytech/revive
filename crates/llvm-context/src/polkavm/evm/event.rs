@@ -33,7 +33,10 @@ where
         )
     }
 
-    fn emit_body(&self, context: &Context<D>) -> anyhow::Result<()> {
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let input_offset = Self::paramater(context, 0).into_int_value();
         let input_length = Self::paramater(context, 1).into_int_value();
         let input_pointer = context.builder().build_ptr_to_int(
@@ -52,9 +55,7 @@ where
             ],
         );
 
-        context.build_return(None);
-
-        Ok(())
+        Ok(None)
     }
 }
 

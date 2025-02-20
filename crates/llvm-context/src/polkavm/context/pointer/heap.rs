@@ -1,4 +1,4 @@
-//! The EVM linear memory pointer functions.
+//! The revive simulated EVM linear memory pointer functions.
 
 use inkwell::values::BasicValueEnum;
 
@@ -15,9 +15,9 @@ impl<D> RuntimeFunction<D> for LoadWord
 where
     D: Dependency + Clone,
 {
-    const FUNCTION_NAME: &'static str = "__revive_load_heap_word";
+    const NAME: &'static str = "__revive_load_heap_word";
 
-    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[
+    const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
         Attribute::NoRecurse,
         Attribute::WillReturn,
@@ -73,9 +73,9 @@ impl<D> RuntimeFunction<D> for StoreWord
 where
     D: Dependency + Clone,
 {
-    const FUNCTION_NAME: &'static str = "__revive_store_heap_word";
+    const NAME: &'static str = "__revive_store_heap_word";
 
-    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[
+    const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
         Attribute::NoRecurse,
         Attribute::WillReturn,

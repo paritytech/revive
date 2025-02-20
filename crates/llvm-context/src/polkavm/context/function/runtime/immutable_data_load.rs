@@ -23,9 +23,9 @@ impl<D> RuntimeFunction<D> for ImmutableDataLoad
 where
     D: Dependency + Clone,
 {
-    const FUNCTION_NAME: &'static str = "__immutable_data_load";
+    const NAME: &'static str = "__immutable_data_load";
 
-    const FUNCTION_ATTRIBUTES: &'static [Attribute] = &[
+    const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
         Attribute::NoInline,
         Attribute::WillReturn,

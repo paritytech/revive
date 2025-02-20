@@ -22,9 +22,9 @@ impl<D> RuntimeFunction<D> for EventLog<0>
 where
     D: Dependency + Clone,
 {
-    const FUNCTION_NAME: &'static str = "__revive_runtime_log_0";
+    const NAME: &'static str = "__revive_runtime_log_0";
 
-    const FUNCTION_ATTRIBUTES: &'static [Attribute] = LOG_FUNCTION_ATTRIBUTES;
+    const ATTRIBUTES: &'static [Attribute] = LOG_FUNCTION_ATTRIBUTES;
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(

@@ -28,7 +28,7 @@ where
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
-            let name = <ImmutableDataLoad as RuntimeFunction<D>>::FUNCTION_NAME;
+            let name = <ImmutableDataLoad as RuntimeFunction<D>>::NAME;
             context.build_call(
                 context
                     .get_function(name)

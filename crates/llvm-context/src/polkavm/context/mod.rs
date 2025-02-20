@@ -725,6 +725,7 @@ where
         name: &str,
     ) -> Pointer<'ctx> {
         let pointer = self.builder.build_alloca(r#type, name).unwrap();
+
         pointer
             .as_instruction()
             .unwrap()
@@ -772,12 +773,9 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::FUNCTION_NAME;
-                let declaration = self
-                    .get_function(name)
-                    .unwrap_or_else(|| panic!("revive runtime function {name} should be declared"))
-                    .borrow()
-                    .declaration();
+                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::NAME;
+                let declaration =
+                    <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::declaration(self);
                 let arguments = [self
                     .builder()
                     .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
@@ -843,12 +841,8 @@ where
     {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::FUNCTION_NAME;
-                let declaration = self
-                    .get_function(name)
-                    .unwrap_or_else(|| panic!("revive runtime function {name} should be declared"))
-                    .borrow()
-                    .declaration();
+                let declaration =
+                    <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::declaration(self);
                 let arguments = [
                     pointer.to_int(self).as_basic_value_enum(),
                     value.as_basic_value_enum(),

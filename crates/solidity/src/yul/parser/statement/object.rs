@@ -188,6 +188,8 @@ where
         revive_llvm_context::PolkaVMImmutableDataLoadFunction.declare(context)?;
         revive_llvm_context::PolkaVMLoadHeapWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMLoadStorageWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreStorageWordFunction.declare(context)?;
 
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
@@ -220,6 +222,8 @@ where
         revive_llvm_context::PolkaVMImmutableDataLoadFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
 
         Ok(())
     }

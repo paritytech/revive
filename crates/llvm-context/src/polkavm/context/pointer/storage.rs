@@ -52,16 +52,14 @@ where
                 .const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
         )?;
 
-        context.build_runtime_call(
-            revive_runtime_api::polkavm_imports::GET_STORAGE,
-            &[
-                is_transient,
-                key_pointer.to_int(context).into(),
-                context.xlen_type().const_all_ones().into(),
-                value_pointer.to_int(context).into(),
-                length_pointer.to_int(context).into(),
-            ],
-        );
+        let arguments = [
+            is_transient,
+            key_pointer.to_int(context).into(),
+            context.xlen_type().const_all_ones().into(),
+            value_pointer.to_int(context).into(),
+            length_pointer.to_int(context).into(),
+        ];
+        context.build_runtime_call(revive_runtime_api::polkavm_imports::GET_STORAGE, &arguments);
 
         // We do not to check the return value: Solidity assumes infallible loads.
         // If a key doesn't exist the "zero" value is returned (ensured by above write).
@@ -124,13 +122,12 @@ where
         context.build_store(value_pointer, value)?;
 
         let arguments = [
-            is_transient.into(),
+            is_transient,
             key_pointer.to_int(context).into(),
             context.xlen_type().const_all_ones().into(),
             value_pointer.to_int(context).into(),
             context.integer_const(crate::polkavm::XLEN, 32).into(),
         ];
-
         context.build_runtime_call(revive_runtime_api::polkavm_imports::SET_STORAGE, &arguments);
 
         Ok(None)

@@ -50,6 +50,7 @@ pub use self::polkavm::evm::create as polkavm_evm_create;
 pub use self::polkavm::evm::crypto as polkavm_evm_crypto;
 pub use self::polkavm::evm::ether_gas as polkavm_evm_ether_gas;
 pub use self::polkavm::evm::event as polkavm_evm_event;
+pub use self::polkavm::evm::event::EventLog as PolkaVMEventLogFunction;
 pub use self::polkavm::evm::ext_code as polkavm_evm_ext_code;
 pub use self::polkavm::evm::immutable as polkavm_evm_immutable;
 pub use self::polkavm::evm::math as polkavm_evm_math;

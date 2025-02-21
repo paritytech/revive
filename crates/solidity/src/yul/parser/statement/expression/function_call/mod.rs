@@ -672,7 +672,7 @@ impl FunctionCall {
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
-                    vec![],
+                    [],
                 )
                 .map(|_| None)
             }
@@ -682,10 +682,7 @@ impl FunctionCall {
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
-                    arguments[2..]
-                        .iter()
-                        .map(|argument| argument.into_int_value())
-                        .collect(),
+                    [arguments[2]],
                 )
                 .map(|_| None)
             }
@@ -695,10 +692,7 @@ impl FunctionCall {
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
-                    arguments[2..]
-                        .iter()
-                        .map(|argument| argument.into_int_value())
-                        .collect(),
+                    [arguments[2], arguments[3]],
                 )
                 .map(|_| None)
             }
@@ -708,10 +702,7 @@ impl FunctionCall {
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
-                    arguments[2..]
-                        .iter()
-                        .map(|argument| argument.into_int_value())
-                        .collect(),
+                    [arguments[2], arguments[3], arguments[4]],
                 )
                 .map(|_| None)
             }
@@ -721,10 +712,7 @@ impl FunctionCall {
                     context,
                     arguments[0].into_int_value(),
                     arguments[1].into_int_value(),
-                    arguments[2..]
-                        .iter()
-                        .map(|argument| argument.into_int_value())
-                        .collect(),
+                    [arguments[2], arguments[3], arguments[4], arguments[5]],
                 )
                 .map(|_| None)
             }

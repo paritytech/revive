@@ -16,11 +16,11 @@ where
     D: Dependency + Clone,
 {
     const NAME: &'static str = match N {
-        0 => "__revive_runtime_log_0",
-        1 => "__revive_runtime_log_1",
-        2 => "__revive_runtime_log_2",
-        3 => "__revive_runtime_log_3",
-        4 => "__revive_runtime_log_4",
+        0 => "__revive_log_0",
+        1 => "__revive_log_1",
+        2 => "__revive_log_2",
+        3 => "__revive_log_3",
+        4 => "__revive_log_4",
         _ => unreachable!(),
     };
 

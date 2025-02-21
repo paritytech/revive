@@ -81,7 +81,7 @@ impl<D> RuntimeFunction<D> for Exit
 where
     D: Dependency + Clone,
 {
-    const NAME: &'static str = "__revive_exit_f";
+    const NAME: &'static str = "__revive_exit";
 
     const ATTRIBUTES: &'static [crate::PolkaVMAttribute] =
         &[Attribute::NoReturn, Attribute::NoFree];

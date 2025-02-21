@@ -19,13 +19,13 @@ use crate::polkavm::WriteLLVM;
 /// The bytes written is asserted to match the expected length.
 /// This should never fail; the length is known.
 /// However, this is a one time assertion, hence worth it.
-pub struct ImmutableDataLoad;
+pub struct Load;
 
-impl<D> RuntimeFunction<D> for ImmutableDataLoad
+impl<D> RuntimeFunction<D> for Load
 where
     D: Dependency + Clone,
 {
-    const NAME: &'static str = "__immutable_data_load";
+    const NAME: &'static str = "__revive_load_immutable_data";
 
     const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
@@ -116,7 +116,96 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for ImmutableDataLoad
+impl<D> WriteLLVM<D> for Load
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
+/// Store the immutable data from the constructor code.
+pub struct Store;
+
+impl<D> RuntimeFunction<D> for Store
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_store_immutable_data";
+
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoFree,
+        Attribute::NoInline,
+        Attribute::WillReturn,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(Default::default(), false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let immutable_data_size_pointer = context
+            .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
+            .value
+            .as_pointer_value();
+        let immutable_data_size = context.build_load(
+            Pointer::new(
+                context.xlen_type(),
+                AddressSpace::Stack,
+                immutable_data_size_pointer,
+            ),
+            "immutable_data_size_load",
+        )?;
+
+        let write_immutable_data_block = context.append_basic_block("write_immutables_block");
+        let join_return_block = context.append_basic_block("join_return_block");
+        let immutable_data_size_is_zero = context.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            context.xlen_type().const_zero(),
+            immutable_data_size.into_int_value(),
+            "immutable_data_size_is_zero",
+        )?;
+        context.build_conditional_branch(
+            immutable_data_size_is_zero,
+            join_return_block,
+            write_immutable_data_block,
+        )?;
+
+        context.set_basic_block(write_immutable_data_block);
+        let immutable_data_pointer = context
+            .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
+            .value
+            .as_pointer_value();
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::SET_IMMUTABLE_DATA,
+            &[
+                context
+                    .builder()
+                    .build_ptr_to_int(
+                        immutable_data_pointer,
+                        context.xlen_type(),
+                        "immutable_data_pointer_to_xlen",
+                    )?
+                    .into(),
+                immutable_data_size,
+            ],
+        );
+        context.build_unconditional_branch(join_return_block);
+
+        context.set_basic_block(join_return_block);
+        Ok(None)
+    }
+}
+
+impl<D> WriteLLVM<D> for Store
 where
     D: Dependency + Clone,
 {
@@ -147,7 +236,7 @@ where
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
-            let name = <ImmutableDataLoad as RuntimeFunction<D>>::NAME;
+            let name = <Load as RuntimeFunction<D>>::NAME;
             context.build_call(
                 context
                     .get_function(name)

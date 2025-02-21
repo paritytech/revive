@@ -54,7 +54,9 @@ pub use self::polkavm::evm::event as polkavm_evm_event;
 pub use self::polkavm::evm::event::EventLog as PolkaVMEventLogFunction;
 pub use self::polkavm::evm::ext_code as polkavm_evm_ext_code;
 pub use self::polkavm::evm::immutable as polkavm_evm_immutable;
-pub use self::polkavm::evm::immutable::ImmutableDataLoad as PolkaVMImmutableDataLoadFunction;
+pub use self::polkavm::evm::immutable::Load as PolkaVMLoadImmutableDataFunction;
+pub use self::polkavm::evm::immutable::Store as PolkaVMStoreImmutableDataFunction;
+
 pub use self::polkavm::evm::math as polkavm_evm_math;
 pub use self::polkavm::evm::memory as polkavm_evm_memory;
 pub use self::polkavm::evm::r#return as polkavm_evm_return;

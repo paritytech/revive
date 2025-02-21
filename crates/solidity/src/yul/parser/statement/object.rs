@@ -185,7 +185,8 @@ where
         &mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        revive_llvm_context::PolkaVMImmutableDataLoadFunction.declare(context)?;
+        revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 
         revive_llvm_context::PolkaVMLoadHeapWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.declare(context)?;
@@ -229,7 +230,8 @@ where
 
         entry.into_llvm(context)?;
 
-        revive_llvm_context::PolkaVMImmutableDataLoadFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;

@@ -44,6 +44,8 @@ use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
 use self::function::llvm_runtime::LLVMRuntime;
 use self::function::r#return::Return as FunctionReturn;
+use self::function::runtime::revive::Exit;
+use self::function::runtime::revive::WordToPointer;
 use self::function::Function;
 use self::global::Global;
 use self::pointer::Pointer;
@@ -1037,22 +1039,11 @@ where
         offset: inkwell::values::IntValue<'ctx>,
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<()> {
-        let offset_truncated = self.safe_truncate_int_to_xlen(offset)?;
-        let length_truncated = self.safe_truncate_int_to_xlen(length)?;
-        let offset_into_heap = self.build_heap_gep(offset_truncated, length_truncated)?;
-
-        let length_pointer = self.safe_truncate_int_to_xlen(length)?;
-        let offset_pointer = self.builder().build_ptr_to_int(
-            offset_into_heap.value,
-            self.xlen_type(),
-            "return_data_ptr_to_int",
-        )?;
-
-        self.build_runtime_call(
-            revive_runtime_api::polkavm_imports::RETURN,
-            &[flags.into(), offset_pointer.into(), length_pointer.into()],
+        self.build_call(
+            <Exit as RuntimeFunction<D>>::declaration(self),
+            &[flags.into(), offset.into(), length.into()],
+            "exit",
         );
-        self.build_unreachable();
 
         Ok(())
     }
@@ -1071,46 +1062,19 @@ where
             "expected XLEN or WORD sized int type for memory offset",
         );
 
-        // TODO / FIXME: Modularizing this hurts code size a lot.
-        // 1. u256 int values should be handled as pointers instead, avoiding overhead.
-        // 2. If it is still a problem: Needs some research why this doesn't inline properly.
-        //
-        // use self::function::runtime::revive::WordToPointer;
-        // let declaration = <WordToPointer as RuntimeFunction<D>>::declaration(self);
-        // let value = self
-        //     .build_call(declaration, &[value.into()], "word_to_pointer")
-        //     .unwrap_or_else(|| {
-        //         panic!(
-        //             "revive runtime function {} should return a value",
-        //             <WordToPointer as RuntimeFunction<D>>::NAME,
-        //         )
-        //     })
-        //     .into_int_value();
-        // return Ok(value);
-
-        let truncated =
-            self.builder()
-                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
-        let extended =
-            self.builder()
-                .build_int_z_extend(truncated, self.word_type(), "offset_extended")?;
-        let is_overflow = self.builder().build_int_compare(
-            inkwell::IntPredicate::NE,
-            value,
-            extended,
-            "compare_truncated_extended",
-        )?;
-
-        let block_continue = self.append_basic_block("offset_pointer_ok");
-        let block_trap = self.append_basic_block("offset_pointer_overflow");
-        self.build_conditional_branch(is_overflow, block_trap, block_continue)?;
-
-        self.set_basic_block(block_trap);
-        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
-        self.build_unreachable();
-
-        self.set_basic_block(block_continue);
-        Ok(truncated)
+        Ok(self
+            .build_call(
+                <WordToPointer as RuntimeFunction<D>>::declaration(self),
+                &[value.into()],
+                "word_to_pointer",
+            )
+            .unwrap_or_else(|| {
+                panic!(
+                    "revive runtime function {} should return a value",
+                    <WordToPointer as RuntimeFunction<D>>::NAME,
+                )
+            })
+            .into_int_value())
     }
 
     /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.

@@ -17,11 +17,7 @@ where
     /// The function name.
     const NAME: &'static str;
 
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoInline,
-        Attribute::WillReturn,
-    ];
+    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoFree, Attribute::WillReturn];
 
     /// The function type.
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx>;

@@ -100,11 +100,7 @@ pub fn stop<D>(context: &mut Context<D>) -> anyhow::Result<()>
 where
     D: Dependency + Clone,
 {
-    r#return(
-        context,
-        context.integer_const(crate::polkavm::XLEN, 0),
-        context.integer_const(crate::polkavm::XLEN, 0),
-    )
+    r#return(context, context.word_const(0), context.word_const(0))
 }
 
 /// Translates the `invalid` instruction.

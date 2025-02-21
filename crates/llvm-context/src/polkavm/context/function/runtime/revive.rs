@@ -2,6 +2,7 @@
 
 use inkwell::values::BasicValue;
 
+use crate::polkavm::context::function::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -61,6 +62,69 @@ where
 }
 
 impl<D> WriteLLVM<D> for WordToPointer
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
+/// The revive runtime exit function.
+pub struct Exit;
+
+impl<D> RuntimeFunction<D> for Exit
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_exit_f";
+
+    const ATTRIBUTES: &'static [crate::PolkaVMAttribute] =
+        &[Attribute::NoReturn, Attribute::NoFree];
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(
+            &[
+                context.xlen_type().into(),
+                context.word_type().into(),
+                context.word_type().into(),
+            ],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let flags = Self::paramater(context, 0).into_int_value();
+        let offset = Self::paramater(context, 1).into_int_value();
+        let length = Self::paramater(context, 2).into_int_value();
+
+        let offset_truncated = context.safe_truncate_int_to_xlen(offset)?;
+        let length_truncated = context.safe_truncate_int_to_xlen(length)?;
+        let heap_pointer = context.build_heap_gep(offset_truncated, length_truncated)?;
+        let offset_pointer = context.builder().build_ptr_to_int(
+            heap_pointer.value,
+            context.xlen_type(),
+            "return_data_ptr_to_int",
+        )?;
+
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::RETURN,
+            &[flags.into(), offset_pointer.into(), length_truncated.into()],
+        );
+        context.build_unreachable();
+
+        Ok(None)
+    }
+}
+
+impl<D> WriteLLVM<D> for Exit
 where
     D: Dependency + Clone,
 {

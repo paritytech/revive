@@ -21,7 +21,7 @@ jobs:
     steps:
       - id: resolve-version
         run: |
-          echo "version=${{ inputs.llvm_version }}-revive.${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "version=llvm-${{ inputs.llvm_version }}-revive.${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: create release
         uses: softprops/action-gh-release@v2

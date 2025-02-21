@@ -787,35 +787,7 @@ where
                     }))
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                let storage_value_pointer =
-                    self.build_alloca(self.word_type(), "storage_value_pointer");
-                self.build_store(storage_value_pointer, self.word_const(0))?;
-
-                let storage_value_length_pointer =
-                    self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
-                self.build_store(
-                    storage_value_length_pointer,
-                    self.word_const(revive_common::BIT_LENGTH_WORD as u64),
-                )?;
-
-                let transient = pointer.address_space == AddressSpace::TransientStorage;
-
-                self.build_runtime_call(
-                    revive_runtime_api::polkavm_imports::GET_STORAGE,
-                    &[
-                        self.xlen_type().const_int(transient as u64, false).into(),
-                        pointer.to_int(self).into(),
-                        self.xlen_type().const_all_ones().into(),
-                        storage_value_pointer.to_int(self).into(),
-                        storage_value_length_pointer.to_int(self).into(),
-                    ],
-                );
-
-                // We do not to check the return value.
-                // Solidity assumes infallible SLOAD.
-                // If a key doesn't exist the "zero" value is returned.
-
-                self.build_load(storage_value_pointer, "storage_value_load")
+                unreachable!("should use the runtime function")
             }
             AddressSpace::Stack => {
                 let value = self
@@ -850,33 +822,7 @@ where
                 self.build_call(declaration, &arguments, "heap_store");
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                assert_eq!(
-                    value.as_basic_value_enum().get_type(),
-                    self.word_type().as_basic_type_enum()
-                );
-
-                let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
-                let storage_value_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_value_pointer.value,
-                    self.xlen_type(),
-                    "storage_value_pointer_casted",
-                )?;
-
-                self.builder()
-                    .build_store(storage_value_pointer.value, value)?;
-
-                let transient = pointer.address_space == AddressSpace::TransientStorage;
-
-                self.build_runtime_call(
-                    revive_runtime_api::polkavm_imports::SET_STORAGE,
-                    &[
-                        self.xlen_type().const_int(transient as u64, false).into(),
-                        pointer.to_int(self).into(),
-                        self.xlen_type().const_all_ones().into(),
-                        storage_value_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
-                    ],
-                );
+                unreachable!("should use the runtime function")
             }
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();

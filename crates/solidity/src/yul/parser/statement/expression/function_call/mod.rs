@@ -931,7 +931,7 @@ impl FunctionCall {
             Name::BlobHash => {
                 let _arguments = self.pop_arguments_llvm::<D, 1>(context)?;
                 anyhow::bail!(
-                    "{} The `BLOBHASH` instruction is not supported until zkVM v1.5.0",
+                    "{} The `BLOBHASH` instruction is not supported in revive",
                     location
                 );
             }
@@ -946,7 +946,7 @@ impl FunctionCall {
             }
             Name::BlobBaseFee => {
                 anyhow::bail!(
-                    "{} The `BLOBBASEFEE` instruction is not supported until zkVM v1.5.0",
+                    "{} The `BLOBBASEFEE` instruction is not supported in revive",
                     location
                 );
             }

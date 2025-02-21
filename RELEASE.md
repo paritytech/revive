@@ -8,3 +8,10 @@ To create a new pre-release:
 2. Wait for the `Release` workflow to finish. If the workflow fails after the `build-linux-all` step, check if a tag has been created and delete it before restarting or pushing updates. Note: It's more convenient to debug the release workflow in a fork (the fork has to be under the `paritytech` org to access `parity-large` runners).
 3. Check draft release on [Releases page](https://github.com/paritytech/revive/releases) and publish (should contain `resolc.js`, `resolc.wasm`, `resolc-web.js`, and `resolc-static-linux` release assets)
 4. Update the [contract-docs](https://github.com/paritytech/contract-docs/) accordingly
+
+# LLVM release
+
+To create a new LLVM release, run "Release LLVM" workflow. Use current LLVM version as parameter, e.g. `18.1.8`.
+Version suffix will be resolved automatically.  
+The workflows will create new GitHub release, and upload LLVM binaries.
+Next release of resolc will use newly created binaries.  

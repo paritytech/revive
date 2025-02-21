@@ -131,7 +131,7 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 
 /// Tests the clone, build, and clean process of the LLVM repository for the emscripten target.
 #[test]
-#[cfg(any(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
     let command = Command::cargo_bin(common::REVIVE_LLVM)?;

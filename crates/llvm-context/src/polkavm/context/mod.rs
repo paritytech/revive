@@ -1117,12 +1117,6 @@ where
     /// However, we still protect against this possibility here. Heap index
     /// offsets are generally untrusted and potentially represent valid
     /// (but wrong) pointers when truncated.
-    ///
-    /// TODO: Splitting up into a dedicated function
-    /// could potentially decrease code sizes (LLVM can still decide to inline).
-    /// However, passing i256 parameters is counter productive and
-    /// I've found that splitting it up actualy increases code size.
-    /// Should be reviewed after 64bit support.
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,

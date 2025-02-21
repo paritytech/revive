@@ -23,7 +23,6 @@ pub use self::polkavm::context::function::llvm_runtime::LLVMRuntime as PolkaVMLL
 pub use self::polkavm::context::function::r#return::Return as PolkaVMFunctionReturn;
 pub use self::polkavm::context::function::runtime::deploy_code::DeployCode as PolkaVMDeployCodeFunction;
 pub use self::polkavm::context::function::runtime::entry::Entry as PolkaVMEntryFunction;
-pub use self::polkavm::context::function::runtime::immutable_data_load::ImmutableDataLoad as PolkaVMImmutableDataLoadFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::FUNCTION_DEPLOY_CODE as PolkaVMFunctionDeployCode;
 pub use self::polkavm::context::function::runtime::FUNCTION_ENTRY as PolkaVMFunctionEntry;
@@ -53,6 +52,7 @@ pub use self::polkavm::evm::event as polkavm_evm_event;
 pub use self::polkavm::evm::event::EventLog as PolkaVMEventLogFunction;
 pub use self::polkavm::evm::ext_code as polkavm_evm_ext_code;
 pub use self::polkavm::evm::immutable as polkavm_evm_immutable;
+pub use self::polkavm::evm::immutable::ImmutableDataLoad as PolkaVMImmutableDataLoadFunction;
 pub use self::polkavm::evm::math as polkavm_evm_math;
 pub use self::polkavm::evm::memory as polkavm_evm_memory;
 pub use self::polkavm::evm::r#return as polkavm_evm_return;

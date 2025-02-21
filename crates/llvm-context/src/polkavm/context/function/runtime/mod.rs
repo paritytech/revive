@@ -2,7 +2,6 @@
 
 pub mod deploy_code;
 pub mod entry;
-pub mod immutable_data_load;
 pub mod runtime_code;
 
 /// The main entry function name.

@@ -29,7 +29,7 @@ jobs:
           name: "LLVM binaries release: ${{ steps.resolve-version.outputs.version }}"
           body: "This release includes binaries of LLVM, used to compile revive itself"
           make_latest: "false"
-          tag_name: ${{ steps.resolve-version.outputs.version }}
+          tag_name: "llvm-${{ steps.resolve-version.outputs.version }}"
 
   build-macos:
     strategy:

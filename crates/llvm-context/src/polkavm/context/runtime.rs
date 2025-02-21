@@ -5,9 +5,9 @@
 
 use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;
+use crate::polkavm::context::Attribute;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-
 /// The revive runtime function interface simplifies declaring runtime functions
 /// and code emitting by providing helpful default implementations.
 pub trait RuntimeFunction<D>
@@ -17,8 +17,11 @@ where
     /// The function name.
     const NAME: &'static str;
 
-    /// The function attributes.
-    const ATTRIBUTES: &'static [crate::polkavm::context::Attribute];
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoFree,
+        Attribute::NoInline,
+        Attribute::WillReturn,
+    ];
 
     /// The function type.
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx>;

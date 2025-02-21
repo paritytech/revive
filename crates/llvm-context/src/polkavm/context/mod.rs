@@ -1112,11 +1112,6 @@ where
     }
 
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
-    /// Pointers are represented as opaque 256 bit integer values in EVM.
-    /// In practice, they should never exceed a register sized bit value.
-    /// However, we still protect against this possibility here. Heap index
-    /// offsets are generally untrusted and potentially represent valid
-    /// (but wrong) pointers when truncated.
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1129,6 +1124,23 @@ where
             self.word_type(),
             "expected XLEN or WORD sized int type for memory offset",
         );
+
+        // TODO / FIXME: Modularizing this hurts code size a lot.
+        // 1. u256 int values should be handled as pointers instead, avoiding overhead.
+        // 2. If it is still a problem: Needs some research why this doesn't inline properly.
+        //
+        // use self::function::runtime::revive::WordToPointer;
+        // let declaration = <WordToPointer as RuntimeFunction<D>>::declaration(self);
+        // let value = self
+        //     .build_call(declaration, &[value.into()], "word_to_pointer")
+        //     .unwrap_or_else(|| {
+        //         panic!(
+        //             "revive runtime function {} should return a value",
+        //             <WordToPointer as RuntimeFunction<D>>::NAME,
+        //         )
+        //     })
+        //     .into_int_value();
+        // return Ok(value);
 
         let truncated =
             self.builder()

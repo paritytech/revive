@@ -2,6 +2,7 @@
 
 pub mod deploy_code;
 pub mod entry;
+pub mod revive;
 pub mod runtime_code;
 
 /// The main entry function name.

@@ -23,6 +23,7 @@ pub use self::polkavm::context::function::llvm_runtime::LLVMRuntime as PolkaVMLL
 pub use self::polkavm::context::function::r#return::Return as PolkaVMFunctionReturn;
 pub use self::polkavm::context::function::runtime::deploy_code::DeployCode as PolkaVMDeployCodeFunction;
 pub use self::polkavm::context::function::runtime::entry::Entry as PolkaVMEntryFunction;
+pub use self::polkavm::context::function::runtime::revive::WordToPointer as PolkaVMWordToPointerFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::FUNCTION_DEPLOY_CODE as PolkaVMFunctionDeployCode;
 pub use self::polkavm::context::function::runtime::FUNCTION_ENTRY as PolkaVMFunctionEntry;

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - "main"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
@@ -16,6 +18,7 @@ env:
 
 jobs:
   tag:
+    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release-test'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -291,6 +294,7 @@ jobs:
           retention-days: 1
 
   create-release:
+    if: github.event_name != 'pull_request'
     needs: [tag, build-linux-all, macos-universal-binary]
     runs-on: ubuntu-24.04
     permissions:

@@ -15,6 +15,6 @@ runs:
       run: |
         git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
         cd emsdk
-        git checkout tags/$EMSDK_VERSION
-        ./emsdk install $EMSDK_VERSION
-        ./emsdk activate $EMSDK_VERSION
+        git checkout tags/${{ inputs.version }}
+        ./emsdk install ${{ inputs.version }}
+        ./emsdk activate ${{ inputs.version }}

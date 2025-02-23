@@ -1,0 +1,20 @@
+name: "get emsdk"
+inputs:
+  version:
+    description: ""
+    required: false
+    default: "3.1.64"
+
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: install emsdk
+      shell: bash
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
+        cd emsdk
+        git checkout tags/$EMSDK_VERSION
+        ./emsdk install $EMSDK_VERSION
+        ./emsdk activate $EMSDK_VERSION

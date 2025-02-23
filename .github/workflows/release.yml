@@ -13,7 +13,6 @@ env:
   #rust-musl-cross:x86_64-musl
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
   RUST_LOG: trace
-  EMSDK_VERSION: 3.1.64
 
 jobs:
   tag:
@@ -182,7 +181,7 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           releasePrefix: llvm-
-          artifactArch: musl-linux
+          artifactArch: x86_64-linux-musl
           dir: ./
 
       # Build revive
@@ -227,22 +226,13 @@ jobs:
       - name: get llvm gnu
         uses: ./.github/actions/get-llvm
         with:
-          releasePrefix: llvm-
           artifactArch: emscripten
-          dir: ./
 
       - name: install emsdk
-        run: |
-          git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
-          cd emsdk
-          git checkout tags/$EMSDK_VERSION
-          ./emsdk install $EMSDK_VERSION
-          ./emsdk activate $EMSDK_VERSION
+        uses: ./.github/actions/get-emsdk
 
       - name: build wasm
         run: |
-          make install-llvm-builder
-          revive-llvm --target-env emscripten clone
           export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
           source emsdk/emsdk_env.sh

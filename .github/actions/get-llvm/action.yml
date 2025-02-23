@@ -9,16 +9,17 @@
 
 name: "get llvm"
 inputs:
-  releasePrefix:
-    description: ""
-    required: true
   artifactArch:
     description: ""
     required: true
+  releasePrefix:
+    description: ""
+    required: false
+    default: "llvm-"
   dir:
     description: ""
     required: false
-    default: "target-llvm"
+    default: "./"
   stripComponents:
     description: ""
     rewuired: false

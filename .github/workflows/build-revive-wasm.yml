@@ -13,7 +13,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
-  EMSDK_VERSION: 3.1.64
 
 jobs:
   build-revive-wasm:
@@ -35,31 +34,14 @@ jobs:
       - name: get llvm gnu
         uses: ./.github/actions/get-llvm
         with:
-          releasePrefix: llvm-
-          artifactArch: gnu-linux
-          dir: ./
+          artifactArch: x86_64-linux-gnu
       - name: get llvm emscripten
         uses: ./.github/actions/get-llvm
         with:
-          releasePrefix: llvm-
           artifactArch: emscripten
-          dir: ./
 
       - name: install emsdk
-        run: |
-          git clone https://github.com/emscripten-core/emsdk.git ./emsdk/
-          cd emsdk
-          git checkout tags/$EMSDK_VERSION
-          ./emsdk install $EMSDK_VERSION
-          ./emsdk activate $EMSDK_VERSION
-
-      - name: log
-        run: |
-          ls -al target-llvm
-          echo "----------"
-          ls -al target-llvm/gnu/target-final
-          echo "----------"
-          ls -al target-llvm/emscripten/target-final
+        uses: ./.github/actions/get-emsdk
 
       - name: Setup revive environment variables
         run: |

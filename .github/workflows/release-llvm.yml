@@ -21,7 +21,7 @@ jobs:
     steps:
       - id: resolve-version
         run: |
-          echo "version=${{ inputs.llvm_version }}-revive.${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+          echo "version=llvm-${{ inputs.llvm_version }}-revive.${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
       - name: create release
         uses: softprops/action-gh-release@v2
@@ -146,7 +146,7 @@ jobs:
             rm -rf diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
                sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
                dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
-               llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2
+               llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2 llvm-otool llvm-readelf
             cd -
           done
 

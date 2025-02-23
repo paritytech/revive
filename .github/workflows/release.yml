@@ -139,11 +139,15 @@ jobs:
         run: |
           lipo revive-macos/revive-macos-arm64/resolc-arm64 revive-macos/revive-macos-x64/resolc-x64 -create -output resolc-macos
 
+      - name: compress macos artifact
+        run: |
+          tar -czf resolc-macos.tar.gz ./resolc-macos
+
       - uses: actions/upload-artifact@v4
         with:
           name: revive-macos
           path: |
-            resolc-macos
+            resolc-macos.tar.gz
           retention-days: 1
 
   build-linux-all:
@@ -204,11 +208,15 @@ jobs:
           echo $result
           if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
 
+      - name: compress musl artifact
+        run: |
+          tar --strip-components 1 -czf resolc-static-linux.tar.gz ./resolc-out/resolc-static-linux
+
       - uses: actions/upload-artifact@v4
         with:
           name: revive-linux
           path: |
-            ./resolc-out/resolc-static-linux
+            ./resolc-static-linux.tar.gz
           retention-days: 1
 
       - name: Set Up Node.js
@@ -278,13 +286,18 @@ jobs:
           if(!bytecode.startsWith('50564d')) { process.exit(1); }
           "
 
+      - name: compress wasm artifact
+        run: |
+          tar --strip-components 3 -czf resolc-wasm.tar.gz \
+            ./target/wasm32-unknown-emscripten/release/resolc.js \
+            ./target/wasm32-unknown-emscripten/release/resolc.wasm \
+            ./target/wasm32-unknown-emscripten/release/resolc_web.js
+
       - uses: actions/upload-artifact@v4
         with:
           name: revive-wasm
           path: |
-            ./target/wasm32-unknown-emscripten/release/resolc.js
-            ./target/wasm32-unknown-emscripten/release/resolc.wasm
-            ./target/wasm32-unknown-emscripten/release/resolc_web.js
+            resolc-wasm.tar.gz
           retention-days: 1
 
   create-release:
@@ -318,10 +331,7 @@ jobs:
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
           name: ${{ needs.tag.outputs.PKG_VER }}
           draft: true
-          prerelease: true # doublecheck if we need prerelease here
           files: |
-            ./resolc-linux/resolc-static-linux
-            ./resolc-macos/resolc-macos
-            ./resolc-wasm/resolc.js
-            ./resolc-wasm/resolc.wasm
-            ./resolc-wasm/resolc_web.js
+            ./resolc-linux/resolc-static-linux.tar.gz
+            ./resolc-macos/resolc-macos.tar.gz
+            ./resolc-wasm/resolc-wasm.tar.gz

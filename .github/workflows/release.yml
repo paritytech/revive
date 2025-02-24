@@ -73,7 +73,7 @@ jobs:
             arch: arm64
     if: ${{ needs.tag.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.os }}
-    name: build-macos-${{ matrix.arch }}
+    name: build-macos
     needs: [tag]
     steps:
       - uses: actions/checkout@v4

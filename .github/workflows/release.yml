@@ -18,7 +18,7 @@ env:
 
 jobs:
   tag:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release-test'))
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
     runs-on: ubuntu-24.04
     permissions:
       contents: write

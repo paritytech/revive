@@ -1,6 +1,7 @@
 use alloy_primitives::{Address, Bytes, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
+use revive_llvm_context::OptimizerSettings;
 use revive_solidity::test_utils::*;
 
 #[derive(Clone)]
@@ -250,7 +251,7 @@ sol!(
 case!("Storage.sol", Storage, transientCall, storage_transient, value: U256);
 
 impl Contract {
-    fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+    pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,
             evm_runtime: compile_evm_bin_runtime(name, code),
@@ -258,11 +259,19 @@ impl Contract {
             calldata,
         }
     }
+
+    pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+        Self {
+            name,
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
+            calldata,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::{Bytes, U256};
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
     use serde::{de::Deserialize, Serialize};
     use std::{collections::BTreeMap, fs::File};
@@ -302,14 +311,47 @@ mod tests {
         };
 
         [
-            Contract::baseline as fn() -> Contract,
-            Contract::flipper as fn() -> Contract,
-            (|| Contract::odd_product(0)) as fn() -> Contract,
-            (|| Contract::fib_iterative(U256::ZERO)) as fn() -> Contract,
-            Contract::erc20 as fn() -> Contract,
-            (|| Contract::sha1(Bytes::new())) as fn() -> Contract,
-            (|| Contract::division_arithmetics_div(U256::ZERO, U256::ZERO)) as fn() -> Contract,
-            (|| Contract::event(U256::ZERO)) as fn() -> Contract,
+            (|| {
+                Contract::build_size_opt(
+                    vec![],
+                    "Baseline",
+                    include_str!("../contracts/Baseline.sol"),
+                )
+            }) as _,
+            (|| {
+                Contract::build_size_opt(
+                    vec![],
+                    "Flipper",
+                    include_str!("../contracts/flipper.sol"),
+                )
+            }) as _,
+            (|| {
+                Contract::build_size_opt(
+                    vec![],
+                    "Computation",
+                    include_str!("../contracts/Computation.sol"),
+                )
+            }) as _,
+            (|| {
+                Contract::build_size_opt(
+                    vec![],
+                    "FibonacciIterative",
+                    include_str!("../contracts/Fibonacci.sol"),
+                )
+            }) as _,
+            (|| Contract::build_size_opt(vec![], "ERC20", include_str!("../contracts/ERC20.sol")))
+                as _,
+            (|| Contract::build_size_opt(vec![], "SHA1", include_str!("../contracts/SHA1.sol")))
+                as _,
+            (|| {
+                Contract::build_size_opt(
+                    vec![],
+                    "DivisionArithmetics",
+                    include_str!("../contracts/DivisionArithmetics.sol"),
+                )
+            }) as _,
+            (|| Contract::build_size_opt(vec![], "Events", include_str!("../contracts/Events.sol")))
+                as _,
         ]
         .into_par_iter()
         .map(extract_code_size)

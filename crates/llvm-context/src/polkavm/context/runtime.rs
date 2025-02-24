@@ -5,6 +5,7 @@
 
 //use inkwell::OptimizationLevel;
 
+use crate::optimizer::settings::size_level::SizeLevel;
 use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;
 use crate::polkavm::context::Attribute;
@@ -21,10 +22,9 @@ where
     const NAME: &'static str;
 
     const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoFree,
         Attribute::NoRecurse,
         Attribute::WillReturn,
-        Attribute::OptimizeForSize,
-        Attribute::MinSize,
     ];
 
     /// The function type.
@@ -41,8 +41,8 @@ where
 
         let mut attributes = Self::ATTRIBUTES.to_vec();
         attributes.extend_from_slice(match context.optimizer_settings().level_middle_end_size {
-            crate::OptimizerSettingsSizeLevel::Z => &[],
-            _ => &[Attribute::NoInline],
+            SizeLevel::Zero => &[],
+            _ => &[Attribute::OptimizeForSize, Attribute::MinSize],
         });
         Function::set_attributes(
             context.llvm(),

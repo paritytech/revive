@@ -21,6 +21,12 @@ where
 {
     const NAME: &'static str = "__revive_int_truncate";
 
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::WillReturn,
+        Attribute::NoFree,
+        Attribute::AlwaysInline,
+    ];
+
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context
             .xlen_type()
@@ -83,7 +89,11 @@ where
 {
     const NAME: &'static str = "__revive_exit";
 
-    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoReturn, Attribute::NoFree];
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoReturn,
+        Attribute::NoFree,
+        Attribute::AlwaysInline,
+    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(

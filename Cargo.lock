@@ -8317,6 +8317,7 @@ dependencies = [
  "alloy-sol-types",
  "hex",
  "rayon",
+ "revive-llvm-context",
  "revive-runner",
  "revive-solidity",
  "serde",

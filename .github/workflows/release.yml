@@ -324,14 +324,9 @@ jobs:
           name: ${{ needs.tag.outputs.PKG_VER }}
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
           body: ${{ needs.tag.outputs.RELEASE_NOTES }}
-          draft: true
-
-      - name: create-release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.tag.outputs.PKG_VER }}
-          draft: true
+          draft: false
           files: |
             ./resolc-linux/resolc-static-linux.tar.gz
             ./resolc-macos/resolc-macos.tar.gz
             ./resolc-wasm/resolc-wasm.tar.gz
+

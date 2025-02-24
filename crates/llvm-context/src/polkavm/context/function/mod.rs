@@ -177,18 +177,7 @@ impl<'ctx> Function<'ctx> {
         declaration: Declaration<'ctx>,
         optimizer: &Optimizer,
     ) {
-        if optimizer.settings().level_middle_end == inkwell::OptimizationLevel::None {
-            Self::remove_attributes(
-                declaration,
-                &[Attribute::OptimizeForSize, Attribute::AlwaysInline],
-            );
-            Self::set_attributes(
-                llvm,
-                declaration,
-                &[Attribute::OptimizeNone, Attribute::NoInline],
-                false,
-            );
-        } else if optimizer.settings().level_middle_end_size == SizeLevel::Z {
+        if optimizer.settings().level_middle_end_size == SizeLevel::Z {
             Self::set_attributes(
                 llvm,
                 declaration,

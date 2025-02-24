@@ -3,7 +3,6 @@
 use inkwell::types::BasicType;
 
 use crate::polkavm::context::address_space::AddressSpace;
-use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
@@ -26,12 +25,6 @@ where
     D: Dependency + Clone,
 {
     const NAME: &'static str = "__revive_load_immutable_data";
-
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoInline,
-        Attribute::WillReturn,
-    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(Default::default(), false)
@@ -137,12 +130,6 @@ where
     D: Dependency + Clone,
 {
     const NAME: &'static str = "__revive_store_immutable_data";
-
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoInline,
-        Attribute::WillReturn,
-    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(Default::default(), false)

@@ -2,7 +2,6 @@
 
 use inkwell::values::BasicValue;
 
-use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -23,12 +22,6 @@ where
         4 => "__revive_log_4",
         _ => unreachable!(),
     };
-
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoRecurse,
-        Attribute::WillReturn,
-    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         let mut parameter_types = vec![context.xlen_type().into(), context.xlen_type().into()];

@@ -83,8 +83,7 @@ where
 {
     const NAME: &'static str = "__revive_exit";
 
-    const ATTRIBUTES: &'static [crate::PolkaVMAttribute] =
-        &[Attribute::NoReturn, Attribute::NoFree];
+    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoReturn, Attribute::NoFree];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(

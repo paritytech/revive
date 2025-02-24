@@ -3,6 +3,8 @@
 //! Common routines are not implicitly inlined but extracted into smaller functions.
 //! This benefits contract code size.
 
+//use inkwell::OptimizationLevel;
+
 use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;
 use crate::polkavm::context::Attribute;
@@ -18,7 +20,12 @@ where
     /// The function name.
     const NAME: &'static str;
 
-    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoFree, Attribute::WillReturn];
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoRecurse,
+        Attribute::WillReturn,
+        Attribute::OptimizeForSize,
+        Attribute::MinSize,
+    ];
 
     /// The function type.
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx>;
@@ -31,12 +38,19 @@ where
             0,
             Some(inkwell::module::Linkage::External),
         )?;
+
+        let mut attributes = Self::ATTRIBUTES.to_vec();
+        attributes.extend_from_slice(match context.optimizer_settings().level_middle_end_size {
+            crate::OptimizerSettingsSizeLevel::Z => &[],
+            _ => &[Attribute::NoInline],
+        });
         Function::set_attributes(
             context.llvm(),
             function.borrow().declaration(),
-            Self::ATTRIBUTES,
+            &attributes,
             true,
         );
+
         Ok(())
     }
 

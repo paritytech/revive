@@ -2,7 +2,6 @@
 
 use inkwell::values::BasicValueEnum;
 
-use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -16,12 +15,6 @@ where
     D: Dependency + Clone,
 {
     const NAME: &'static str = "__revive_load_storage_word";
-
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoRecurse,
-        Attribute::WillReturn,
-    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -89,12 +82,6 @@ where
     D: Dependency + Clone,
 {
     const NAME: &'static str = "__revive_store_storage_word";
-
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoFree,
-        Attribute::NoRecurse,
-        Attribute::WillReturn,
-    ];
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(

@@ -1,0 +1,92 @@
+# example:
+#
+#       - name: get llvm
+#         uses: ./.github/actions/get-llvm
+#         with:
+#           releasePrefix: llvm-
+#           artifactArch: macos-arm64
+#           dir: target-llvm/macos
+
+name: "get llvm"
+inputs:
+  artifactArch:
+    description: ""
+    required: true
+  releasePrefix:
+    description: ""
+    required: false
+    default: "llvm-"
+  dir:
+    description: ""
+    required: false
+    default: "./"
+  stripComponents:
+    description: ""
+    rewuired: false
+    default: 0
+
+
+runs:
+  using: "composite"
+  steps:
+    - name: find asset
+      id: find
+      uses: actions/github-script@v7
+      env:
+        releasePrefix: ${{ inputs.releasePrefix }}
+        artifactArch: ${{ inputs.artifactArch }}
+      with:
+        result-encoding: string
+        script: |
+          let page = 1;
+          let releases = [];
+
+          let releasePrefix = process.env.releasePrefix
+          let artifactArch = process.env.artifactArch
+
+          do {
+            const res = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 50,
+              page,
+            });
+
+            releases = res.data
+            releases.sort((a, b) => {
+              return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
+            });
+
+            let llvmLatestRelease = releases.find(release => {
+              return release.tag_name.startsWith(releasePrefix);
+            });
+            if (llvmLatestRelease){
+                let asset = llvmLatestRelease.assets.find(asset =>{
+                    return asset.name.includes(artifactArch);
+                });
+                if (!asset){
+                  core.setFailed(`Artifact for '${artifactArch}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
+                  process.exit();
+                }
+                return asset.browser_download_url;
+            }
+
+            page++;
+          } while(releases.length > 0);
+
+          core.setFailed(`No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`);
+          process.exit();
+
+    - name: download
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.dir }}
+        curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
+        ls -al
+
+    - name: unpack
+      shell: bash
+      run: |
+        tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=${{ inputs.stripComponents }}
+        rm llvm.tar.gz
+        ls -al ${{ inputs.dir }}

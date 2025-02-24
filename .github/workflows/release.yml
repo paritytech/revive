@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - "main"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
-  group: ${{ github.ref }}-${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -16,6 +18,7 @@ env:
 
 jobs:
   tag:
+    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release-test'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -48,13 +51,13 @@ jobs:
               export TAG=new;
             fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          
+
           # Generating release notes early, in order to avoid checkout at the last step
           export RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
-          
+
           echo "Release notes:"
           echo "$RELEASE_NOTES"
-          
+
           echo 'RELEASE_NOTES<<EOF' >> $GITHUB_OUTPUT
           echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
@@ -75,19 +78,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get latest macos ${{ matrix.arch }} LLVM release artifact
-        id: get-llvm-artifact
-        uses: actions/github-script@v7
+      - name: get llvm
+        uses: ./.github/actions/get-llvm
         with:
-          result-encoding: string
-          script: |
-            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js");
-            return await getReleaseArtifact({ 
-              octokit: github, 
-              context, 
-              releasePrefix: "llvm-",
-              artifactSuffix: "-macos-${{ matrix.arch }}"
-            });
+          releasePrefix: llvm-
+          artifactArch: macos-${{ matrix.arch }}
+          dir: ./
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -108,11 +104,6 @@ jobs:
           echo "bash:" && bash --version
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
-
-      - name: download llvm
-        run: |
-          curl -L -o llvm.tar.gz "${{ steps.get-llvm-artifact.outputs.result }}"
-          tar -xvf llvm.tar.gz
 
       - name: build revive
         run: |
@@ -168,20 +159,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get latest linux LLVM release artifact
-        id: get-llvm-musl-artifact
-        uses: actions/github-script@v7
-        with:
-          result-encoding: string
-          script: |
-            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js")
-            return await getReleaseArtifact({
-              octokit: github,
-              context,
-              releasePrefix: "llvm-",
-              artifactSuffix: "-x86_64-linux-musl"
-            })
-
       - name: install linux deps
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build \
@@ -203,10 +180,12 @@ jobs:
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
 
-      - name: download llvm
-        run: |
-          curl -L -o llvm.tar.gz "${{ steps.get-llvm-musl-artifact.outputs.result }}"
-          tar -xvf llvm.tar.gz
+      - name: get llvm gnu
+        uses: ./.github/actions/get-llvm
+        with:
+          releasePrefix: llvm-
+          artifactArch: x86_64-linux-musl
+          dir: ./
 
       # Build revive
 
@@ -247,29 +226,16 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Get latest emscripten LLVM release artifact
-        id: get-llvm-emscripten-artifact
-        uses: actions/github-script@v7
+      - name: get llvm gnu
+        uses: ./.github/actions/get-llvm
         with:
-          result-encoding: string
-          script: |
-            const getReleaseArtifact = require("./.github/workflows/get-release-artifact.js")
-            return await getReleaseArtifact({
-              octokit: github,
-              context,
-              releasePrefix: "llvm-",
-              artifactSuffix: "-wasm32-unknown-emscripten"
-            })
+          artifactArch: emscripten
 
-      - name: download llvm
-        run: |
-          curl -L -o llvm.tar.gz "${{ steps.get-llvm-emscripten-artifact.outputs.result }}"
-          tar -xvf llvm.tar.gz
+      - name: install emsdk
+        uses: ./.github/actions/get-emsdk
 
       - name: build wasm
         run: |
-          make install-llvm-builder
-          revive-llvm --target-env emscripten clone
           export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
           source emsdk/emsdk_env.sh
@@ -328,12 +294,11 @@ jobs:
           retention-days: 1
 
   create-release:
+    if: github.event_name != 'pull_request'
     needs: [tag, build-linux-all, macos-universal-binary]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.result }}
     steps:
       - name: Download revive-wasm
         uses: actions/download-artifact@v4

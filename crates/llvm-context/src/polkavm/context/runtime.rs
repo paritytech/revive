@@ -8,6 +8,7 @@ use crate::polkavm::context::function::Function;
 use crate::polkavm::context::Attribute;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+
 /// The revive runtime function interface simplifies declaring runtime functions
 /// and code emitting by providing helpful default implementations.
 pub trait RuntimeFunction<D>

@@ -1,5 +1,6 @@
 //! The front-end runtime functions.
 
+pub mod arithmetics;
 pub mod deploy_code;
 pub mod entry;
 pub mod revive;

@@ -9,7 +9,7 @@ on:
         description: llvm version in "x.x.x" format, e.g. "18.1.8"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

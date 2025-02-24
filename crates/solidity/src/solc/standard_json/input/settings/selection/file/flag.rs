@@ -43,7 +43,7 @@ pub enum Flag {
     /// The Ir
     #[serde(rename = "ir")]
     Ir,
-    // Catch all unsupported functions
+    // Catch all unsupported flags
     #[serde(other)]
     Unknown,
 }

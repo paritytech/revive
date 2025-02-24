@@ -321,9 +321,9 @@ jobs:
       - name: create-release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ needs.tag.outputs.PKG_VER }}
-          tag_name: ${{ needs.tag.outputs.PKG_VER }}
           body: ${{ needs.tag.outputs.RELEASE_NOTES }}
+          tag_name: ${{ needs.tag.outputs.PKG_VER }}
+          name: ${{ needs.tag.outputs.PKG_VER }}
           draft: true
           target_commitish: ${{ github.sha }}
           files: |

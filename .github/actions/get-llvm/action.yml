@@ -10,19 +10,18 @@
 name: "get llvm"
 inputs:
   artifactArch:
-    description: ""
     required: true
   releasePrefix:
-    description: ""
+    description: "LLVM release tag prefix to search"
     required: false
     default: "llvm-"
   dir:
-    description: ""
+    description: "Archive extract path (`tar -C`)"
     required: false
     default: "./"
   stripComponents:
-    description: ""
-    rewuired: false
+    description: "Strip UMBER leading components from file names on extraction (`tar --strip-components`)"
+    required: false
     default: 0
 
 

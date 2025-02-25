@@ -40,8 +40,10 @@ jobs:
           sudo apt update
           sudo apt install -y ethereum
 
-      - name: Machete
-        uses: bnjbvr/cargo-machete@main
+      # Disabled for now (always install the latest version despite setting it):
+      # https://github.com/bnjbvr/cargo-machete/issues/156
+      #- name: Machete
+      #  uses: bnjbvr/cargo-machete@v0.7.0
 
       - name: Format
         run: make format

@@ -180,7 +180,7 @@ jobs:
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
 
-      - name: get llvm gnu
+      - name: get llvm musl
         uses: ./.github/actions/get-llvm
         with:
           releasePrefix: llvm-
@@ -226,7 +226,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: get llvm gnu
+      - name: get llvm emscripten
         uses: ./.github/actions/get-llvm
         with:
           artifactArch: emscripten

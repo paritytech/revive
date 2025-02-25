@@ -32,6 +32,7 @@ struct CachedBlob {
     contract_name: String,
     solidity: String,
     solc_optimizer_enabled: bool,
+    opt: String,
 }
 
 /// Checks if the required executables are present in `${PATH}`.
@@ -289,6 +290,7 @@ fn compile_evm(
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
+        opt: String::new(),
     };
 
     let cache = if runtime {
@@ -334,6 +336,7 @@ pub fn compile_blob_with_options(
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
+        opt: optimizer_settings.middle_end_as_string(),
     };
 
     if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {

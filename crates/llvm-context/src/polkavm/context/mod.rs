@@ -10,6 +10,7 @@ pub mod function;
 pub mod global;
 pub mod r#loop;
 pub mod pointer;
+pub mod runtime;
 pub mod solidity_data;
 pub mod yul_data;
 
@@ -31,6 +32,8 @@ use crate::polkavm::DebugConfig;
 use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
+use crate::PolkaVMLoadHeapWordFunction;
+use crate::PolkaVMStoreHeapWordFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
@@ -41,10 +44,13 @@ use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
 use self::function::llvm_runtime::LLVMRuntime;
 use self::function::r#return::Return as FunctionReturn;
+use self::function::runtime::revive::Exit;
+use self::function::runtime::revive::WordToPointer;
 use self::function::Function;
 use self::global::Global;
 use self::pointer::Pointer;
 use self::r#loop::Loop;
+use self::runtime::RuntimeFunction;
 use self::solidity_data::SolidityData;
 use self::yul_data::YulData;
 
@@ -721,6 +727,7 @@ where
         name: &str,
     ) -> Pointer<'ctx> {
         let pointer = self.builder.build_alloca(r#type, name).unwrap();
+
         pointer
             .as_instruction()
             .unwrap()
@@ -768,60 +775,21 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let heap_pointer = self.build_heap_gep(
-                    self.builder().build_ptr_to_int(
-                        pointer.value,
-                        self.xlen_type(),
-                        "offset_ptrtoint",
-                    )?,
-                    pointer
-                        .r#type
-                        .size_of()
-                        .expect("should be IntValue")
-                        .const_truncate(self.xlen_type()),
-                )?;
-
-                let value = self
+                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::NAME;
+                let declaration =
+                    <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                let arguments = [self
                     .builder()
-                    .build_load(pointer.r#type, heap_pointer.value, name)?;
-                self.basic_block()
-                    .get_last_instruction()
-                    .expect("Always exists")
-                    .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
-                    .expect("Alignment is valid");
-
-                self.build_byte_swap(value)
+                    .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
+                    .as_basic_value_enum()];
+                Ok(self
+                    .build_call(declaration, &arguments, "heap_load")
+                    .unwrap_or_else(|| {
+                        panic!("revive runtime function {name} should return a value")
+                    }))
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                let storage_value_pointer =
-                    self.build_alloca(self.word_type(), "storage_value_pointer");
-                self.build_store(storage_value_pointer, self.word_const(0))?;
-
-                let storage_value_length_pointer =
-                    self.build_alloca(self.xlen_type(), "storage_value_length_pointer");
-                self.build_store(
-                    storage_value_length_pointer,
-                    self.word_const(revive_common::BIT_LENGTH_WORD as u64),
-                )?;
-
-                let transient = pointer.address_space == AddressSpace::TransientStorage;
-
-                self.build_runtime_call(
-                    revive_runtime_api::polkavm_imports::GET_STORAGE,
-                    &[
-                        self.xlen_type().const_int(transient as u64, false).into(),
-                        pointer.to_int(self).into(),
-                        self.xlen_type().const_all_ones().into(),
-                        storage_value_pointer.to_int(self).into(),
-                        storage_value_length_pointer.to_int(self).into(),
-                    ],
-                );
-
-                // We do not to check the return value.
-                // Solidity assumes infallible SLOAD.
-                // If a key doesn't exist the "zero" value is returned.
-
-                self.build_load(storage_value_pointer, "storage_value_load")
+                unreachable!("should use the runtime function")
             }
             AddressSpace::Stack => {
                 let value = self
@@ -847,60 +815,16 @@ where
     {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let heap_pointer = self.build_heap_gep(
-                    self.builder().build_ptr_to_int(
-                        pointer.value,
-                        self.xlen_type(),
-                        "offset_ptrtoint",
-                    )?,
-                    value
-                        .as_basic_value_enum()
-                        .get_type()
-                        .size_of()
-                        .expect("should be IntValue")
-                        .const_truncate(self.xlen_type()),
-                )?;
-
-                let value = value.as_basic_value_enum();
-                let value = match value.get_type().into_int_type().get_bit_width() as usize {
-                    revive_common::BIT_LENGTH_WORD => self.build_byte_swap(value)?,
-                    revive_common::BIT_LENGTH_BYTE => value,
-                    _ => unreachable!("Only word and byte sized values can be stored on EVM heap"),
-                };
-
-                self.builder
-                    .build_store(heap_pointer.value, value)?
-                    .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
-                    .expect("Alignment is valid");
+                let declaration =
+                    <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                let arguments = [
+                    pointer.to_int(self).as_basic_value_enum(),
+                    value.as_basic_value_enum(),
+                ];
+                self.build_call(declaration, &arguments, "heap_store");
             }
             AddressSpace::Storage | AddressSpace::TransientStorage => {
-                assert_eq!(
-                    value.as_basic_value_enum().get_type(),
-                    self.word_type().as_basic_type_enum()
-                );
-
-                let storage_value_pointer = self.build_alloca(self.word_type(), "storage_value");
-                let storage_value_pointer_casted = self.builder().build_ptr_to_int(
-                    storage_value_pointer.value,
-                    self.xlen_type(),
-                    "storage_value_pointer_casted",
-                )?;
-
-                self.builder()
-                    .build_store(storage_value_pointer.value, value)?;
-
-                let transient = pointer.address_space == AddressSpace::TransientStorage;
-
-                self.build_runtime_call(
-                    revive_runtime_api::polkavm_imports::SET_STORAGE,
-                    &[
-                        self.xlen_type().const_int(transient as u64, false).into(),
-                        pointer.to_int(self).into(),
-                        self.xlen_type().const_all_ones().into(),
-                        storage_value_pointer_casted.into(),
-                        self.integer_const(crate::polkavm::XLEN, 32).into(),
-                    ],
-                );
+                unreachable!("should use the runtime function")
             }
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
@@ -1115,38 +1039,16 @@ where
         offset: inkwell::values::IntValue<'ctx>,
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<()> {
-        let offset_truncated = self.safe_truncate_int_to_xlen(offset)?;
-        let length_truncated = self.safe_truncate_int_to_xlen(length)?;
-        let offset_into_heap = self.build_heap_gep(offset_truncated, length_truncated)?;
-
-        let length_pointer = self.safe_truncate_int_to_xlen(length)?;
-        let offset_pointer = self.builder().build_ptr_to_int(
-            offset_into_heap.value,
-            self.xlen_type(),
-            "return_data_ptr_to_int",
-        )?;
-
-        self.build_runtime_call(
-            revive_runtime_api::polkavm_imports::RETURN,
-            &[flags.into(), offset_pointer.into(), length_pointer.into()],
+        self.build_call(
+            <Exit as RuntimeFunction<D>>::declaration(self),
+            &[flags.into(), offset.into(), length.into()],
+            "exit",
         );
-        self.build_unreachable();
 
         Ok(())
     }
 
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
-    /// Pointers are represented as opaque 256 bit integer values in EVM.
-    /// In practice, they should never exceed a register sized bit value.
-    /// However, we still protect against this possibility here. Heap index
-    /// offsets are generally untrusted and potentially represent valid
-    /// (but wrong) pointers when truncated.
-    ///
-    /// TODO: Splitting up into a dedicated function
-    /// could potentially decrease code sizes (LLVM can still decide to inline).
-    /// However, passing i256 parameters is counter productive and
-    /// I've found that splitting it up actualy increases code size.
-    /// Should be reviewed after 64bit support.
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1160,29 +1062,19 @@ where
             "expected XLEN or WORD sized int type for memory offset",
         );
 
-        let truncated =
-            self.builder()
-                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
-        let extended =
-            self.builder()
-                .build_int_z_extend(truncated, self.word_type(), "offset_extended")?;
-        let is_overflow = self.builder().build_int_compare(
-            inkwell::IntPredicate::NE,
-            value,
-            extended,
-            "compare_truncated_extended",
-        )?;
-
-        let block_continue = self.append_basic_block("offset_pointer_ok");
-        let block_trap = self.append_basic_block("offset_pointer_overflow");
-        self.build_conditional_branch(is_overflow, block_trap, block_continue)?;
-
-        self.set_basic_block(block_trap);
-        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
-        self.build_unreachable();
-
-        self.set_basic_block(block_continue);
-        Ok(truncated)
+        Ok(self
+            .build_call(
+                <WordToPointer as RuntimeFunction<D>>::declaration(self),
+                &[value.into()],
+                "word_to_pointer",
+            )
+            .unwrap_or_else(|| {
+                panic!(
+                    "revive runtime function {} should return a value",
+                    <WordToPointer as RuntimeFunction<D>>::NAME,
+                )
+            })
+            .into_int_value())
     }
 
     /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.
@@ -1222,34 +1114,6 @@ where
         Ok(memory_size_value.into_int_value())
     }
 
-    /// Call PolkaVM `sbrk` for extending the heap by `offset` + `size`,
-    /// trapping the contract if the call failed.
-    pub fn build_heap_alloc(
-        &self,
-        offset: inkwell::values::IntValue<'ctx>,
-        size: inkwell::values::IntValue<'ctx>,
-    ) -> anyhow::Result<()> {
-        let end_of_memory = self.build_sbrk(offset, size)?;
-        let return_is_nil = self.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
-            end_of_memory,
-            self.llvm().ptr_type(Default::default()).const_null(),
-            "compare_end_of_memory_nil",
-        )?;
-
-        let continue_block = self.append_basic_block("sbrk_not_nil");
-        let trap_block = self.append_basic_block("sbrk_nil");
-        self.build_conditional_branch(return_is_nil, trap_block, continue_block)?;
-
-        self.set_basic_block(trap_block);
-        self.build_call(self.intrinsics().trap, &[], "invalid_trap");
-        self.build_unreachable();
-
-        self.set_basic_block(continue_block);
-
-        Ok(())
-    }
-
     /// Returns a pointer to `offset` into the heap, allocating
     /// enough memory if `offset + length` would be out of bounds.
     /// # Panics
@@ -1262,19 +1126,8 @@ where
         assert_eq!(offset.get_type(), self.xlen_type());
         assert_eq!(length.get_type(), self.xlen_type());
 
-        self.build_heap_alloc(offset, length)?;
-
-        let heap_start = self
-            .module()
-            .get_global(revive_runtime_api::polkavm_imports::MEMORY)
-            .expect("the memory symbol should have been declared")
-            .as_pointer_value();
-        Ok(self.build_gep(
-            Pointer::new(self.byte_type(), AddressSpace::Stack, heap_start),
-            &[offset],
-            self.byte_type(),
-            "heap_offset_via_gep",
-        ))
+        let pointer = self.build_sbrk(offset, length)?;
+        Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer))
     }
 
     /// Returns a boolean type constant.
@@ -1579,5 +1432,9 @@ where
         } else {
             anyhow::bail!("The immutable size data is not available");
         }
+    }
+
+    pub fn optimizer_settings(&self) -> &OptimizerSettings {
+        self.optimizer.settings()
     }
 }

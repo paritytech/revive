@@ -2,9 +2,18 @@
 
 ## Unreleased
 
+## v0.1.0-dev.12
+
 This is a development pre-release.
 
-Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
+Supported `polkadot-sdk` rev: `21f6f0705e53c15aa2b8a5706b208200447774a9`
+
+### Added
+
+### Changed
+- Improved code size: Large contracts compile to smaller code blobs using with size optimization.
+
+### Fixed
 
 ## v0.1.0-dev.11
 

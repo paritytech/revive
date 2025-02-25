@@ -216,7 +216,7 @@ where
         revive_llvm_context::PolkaVMFunction::set_attributes(
             context.llvm(),
             function.borrow().declaration(),
-            self.attributes.clone().into_iter().collect(),
+            &self.attributes.clone().into_iter().collect::<Vec<_>>(),
             true,
         );
         function

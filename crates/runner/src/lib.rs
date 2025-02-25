@@ -274,7 +274,7 @@ impl From<Code> for pallet_revive::Code {
                     &contract,
                     &source_code,
                     solc_optimizer.unwrap_or(true),
-                    Default::default(),
+                    revive_llvm_context::OptimizerSettings::cycles(),
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),

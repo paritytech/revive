@@ -3,8 +3,6 @@
 //! Common routines are not implicitly inlined but extracted into smaller functions.
 //! This benefits contract code size.
 
-//use inkwell::OptimizationLevel;
-
 use crate::optimizer::settings::size_level::SizeLevel;
 use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;

@@ -8387,6 +8387,7 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-sdk 0.1.0",
  "revive-differential",
+ "revive-llvm-context",
  "revive-solidity",
  "scale-info",
  "serde",

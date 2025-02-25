@@ -28,12 +28,6 @@ pub struct Settings {
     pub is_debug_logging_enabled: bool,
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self::cycles()
-    }
-}
-
 impl Settings {
     /// A shortcut constructor.
     pub fn new(

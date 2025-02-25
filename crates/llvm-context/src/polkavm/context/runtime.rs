@@ -1,6 +1,6 @@
 //! The revive compiler runtime function interface definition.
 //!
-//! Common routines are not implicitly inlined but extracted into smaller functions.
+//! Common routines should not be inlined but extracted into smaller functions.
 //! This benefits contract code size.
 
 use crate::optimizer::settings::size_level::SizeLevel;
@@ -52,10 +52,11 @@ where
         Ok(())
     }
 
+    /// Get the function declaration.
     fn declaration<'ctx>(context: &Context<'ctx, D>) -> Declaration<'ctx> {
         context
             .get_function(Self::NAME)
-            .unwrap_or_else(|| panic!("runtime function {} should have been declared", Self::NAME))
+            .unwrap_or_else(|| panic!("runtime function {} should be declared", Self::NAME))
             .borrow()
             .declaration()
     }
@@ -97,16 +98,16 @@ where
     /// Get the nth function paramater.
     fn paramater<'ctx>(
         context: &Context<'ctx, D>,
-        nth: u32,
+        index: usize,
     ) -> inkwell::values::BasicValueEnum<'ctx> {
         let name = Self::NAME;
         context
             .get_function(name)
-            .unwrap_or_else(|| panic!("runtime function {name} should have been declared"))
+            .unwrap_or_else(|| panic!("runtime function {name} should be declared"))
             .borrow()
             .declaration()
             .function_value()
-            .get_nth_param(nth)
-            .unwrap_or_else(|| panic!("runtime function {name} should have parameter {nth}"))
+            .get_nth_param(index as u32)
+            .unwrap_or_else(|| panic!("runtime function {name} should have parameter #{index}"))
     }
 }

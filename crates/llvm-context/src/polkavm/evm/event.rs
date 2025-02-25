@@ -56,7 +56,7 @@ where
             );
 
             for n in 0..N {
-                let topic = Self::paramater(context, n as u32 + 2);
+                let topic = Self::paramater(context, n + 2);
                 let topic_buffer_offset = context
                     .xlen_type()
                     .const_int((n * revive_common::BYTE_LENGTH_WORD) as u64, false);

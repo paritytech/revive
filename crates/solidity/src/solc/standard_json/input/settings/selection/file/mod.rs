@@ -10,7 +10,7 @@ use serde::Serialize;
 use self::flag::Flag as SelectionFlag;
 
 /// The `solc --standard-json` output file selection.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct File {
     /// The per-file output selections.
     #[serde(rename = "", skip_serializing_if = "Option::is_none")]
@@ -45,6 +45,7 @@ impl File {
         self.per_contract
             .get_or_insert_with(HashSet::default)
             .extend(required.per_contract.unwrap_or_default());
+
         self
     }
 }

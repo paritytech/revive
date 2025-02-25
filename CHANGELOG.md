@@ -11,7 +11,7 @@ Supported `polkadot-sdk` rev: `21f6f0705e53c15aa2b8a5706b208200447774a9`
 ### Added
 
 ### Changed 
-- Improved code size: Large contracts compile to smaller code blobs (with both size and cycle optimization modes).
+- Improved code size: Large contracts compile to smaller code blobs using with size optimization.
 
 ### Fixed
 

@@ -41,7 +41,7 @@ where
 
         let mut attributes = Self::ATTRIBUTES.to_vec();
         attributes.extend_from_slice(match context.optimizer_settings().level_middle_end_size {
-            SizeLevel::Zero => &[Attribute::NoInline],
+            SizeLevel::Zero => &[],
             _ => &[Attribute::OptimizeForSize, Attribute::MinSize],
         });
         Function::set_attributes(

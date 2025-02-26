@@ -242,6 +242,7 @@ jobs:
           source emsdk/emsdk_env.sh
           rustup target add wasm32-unknown-emscripten
           make install-wasm
+          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
 
       - name: check wasm
         run: |

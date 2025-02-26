@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "version=llvm-${{ inputs.llvm_version }}-revive.${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
 
-      - name: create release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: "LLVM binaries release: ${{ steps.resolve-version.outputs.version }}"
@@ -93,7 +93,17 @@ jobs:
             ${{ needs.create-release.outputs.version }}-macos-${{ matrix.arch }}.tar.gz
 
 
-  build-linux-all:
+  build:
+    strategy:
+      matrix:
+        target: [gnu, musl, emscripten]
+        include:
+          - target: gnu
+            os: x86_64-linux
+          - target: musl
+            os: x86_64-linux
+          - target: emscripten
+            os: wasm32-unknown
     needs: create-release
     runs-on: parity-large
     env:
@@ -102,19 +112,13 @@ jobs:
       contents: write # for uploading assets to release
     steps:
       - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: install linux deps
+      - name: Install Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: rust-src
-          target: wasm32-unknown-emscripten
-          rustflags: ""
-
-      - name: versions
+      - name: Print Versions
         run: |
           rustup show
           cargo --version
@@ -123,49 +127,41 @@ jobs:
           echo "ninja:" && ninja --version
           echo "clang:" && clang --version
 
-      - name: Build host LLVM
+      - name: Install LLVM Builder
         run: |
-          make install-llvm
+          cargo install --path crates/llvm-builder
 
-      - name: Build gnu LLVM
+      - name: Clone LLVM
         run: |
-          revive-llvm clone
-          revive-llvm build --llvm-projects lld --llvm-projects clang
+          revive-llvm --target-env ${{ matrix.target }} clone
 
-      - name: Build musl LLVM
+      - name: Build LLVM
+        if: ${{ matrix.target != 'emscripten' }}
         run: |
-          revive-llvm --target-env musl build --llvm-projects lld --llvm-projects clang
+          revive-llvm --target-env ${{ matrix.target }} build --llvm-projects lld --llvm-projects clang
 
-      - name: Build emscripten LLVM
+      - name: Build LLVM
+        if: ${{ matrix.target == 'emscripten' }}
         run: |
-          revive-llvm --target-env emscripten clone
           source emsdk/emsdk_env.sh
-          revive-llvm --target-env emscripten build --llvm-projects lld
+          revive-llvm --target-env ${{ matrix.target }} build --llvm-projects lld
 
-      - name: clean
-        # check removed files
+      - name: Remove Unnecessary Binaries
         run: |
-          for target in gnu emscripten musl; do
-            cd target-llvm/${target}/target-final/bin/
-            rm -rf diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
-               sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
-               dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
-               llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2 llvm-otool llvm-readelf
-            cd -
-          done
+          cd target-llvm/${{ matrix.target }}/target-final/bin/
+          rm -rf diagtool llvm-libtool-darwin llvm-lipo llvm-pdbutil llvm-dwarfdump llvm-nm llvm-readobj llvm-cfi-verify \
+              sancov llvm-debuginfo-analyzer llvm-objdump llvm-profgen llvm-extract llvm-jitlink llvm-c-test llvm-gsymutil llvm-dwp \
+              dsymutil llvm-dwarfutil llvm-exegesis lli clang-rename bugpoint clang-extdef-mapping clang-refactor c-index-test \
+              llvm-reduce llvm-lto clang-linker-wrapper llc llvm-lto2 llvm-otool llvm-readelf
+          cd -
 
-      - name: package artifacts
+      - name: Package Artifact
         run: |
-          tar -czf "${{ needs.create-release.outputs.version }}-x86_64-linux-gnu-linux.tar.gz" target-llvm/gnu/target-final
-          tar -czf "${{ needs.create-release.outputs.version }}-x86_64-linux-musl.tar.gz" target-llvm/musl/target-final
-          tar -czf "${{ needs.create-release.outputs.version }}-wasm32-unknown-emscripten.tar.gz" target-llvm/emscripten/target-final
+          tar -czf "${{ needs.create-release.outputs.version }}-${{ matrix.os }}-${{ matrix.target }}.tar.gz" target-llvm/${{ matrix.target }}/target-final
 
-      - name: upload archive to release
+      - name: Add Artifact to Release
         uses: softprops/action-gh-release@v2
         with:
-          make_latest: "false"
           tag_name: ${{ needs.create-release.outputs.version }}
           files: |
-            ${{ needs.create-release.outputs.version }}-x86_64-linux-gnu-linux.tar.gz
-            ${{ needs.create-release.outputs.version }}-x86_64-linux-musl.tar.gz
-            ${{ needs.create-release.outputs.version }}-wasm32-unknown-emscripten.tar.gz
+            ${{ needs.create-release.outputs.version }}-${{ matrix.os }}-${{ matrix.target }}.tar.gz

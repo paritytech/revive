@@ -140,6 +140,7 @@ jobs:
       - name: run lipo
         run: |
           lipo revive-macos/revive-macos-arm64/resolc-arm64 revive-macos/revive-macos-x64/resolc-x64 -create -output resolc-macos
+          chmod +x resolc-macos
 
       - name: compress macos artifact
         run: |
@@ -147,7 +148,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-macos
+          name: resolc-macos.tar.gz
           path: |
             resolc-macos.tar.gz
           retention-days: 1
@@ -212,13 +213,13 @@ jobs:
 
       - name: compress musl artifact
         run: |
-          tar --strip-components 1 -czf resolc-static-linux.tar.gz ./resolc-out/resolc-static-linux
+          tar -czf $(pwd)/resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-linux
+          name: resolc-static-linux.tar.gz
           path: |
-            ./resolc-static-linux.tar.gz
+            resolc-static-linux.tar.gz
           retention-days: 1
 
       - name: Set Up Node.js
@@ -241,6 +242,7 @@ jobs:
           source emsdk/emsdk_env.sh
           rustup target add wasm32-unknown-emscripten
           make install-wasm
+          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
 
       - name: check wasm
         run: |
@@ -281,14 +283,14 @@ jobs:
 
       - name: compress wasm artifact
         run: |
-          tar --strip-components 3 -czf resolc-wasm.tar.gz \
-            ./target/wasm32-unknown-emscripten/release/resolc.js \
-            ./target/wasm32-unknown-emscripten/release/resolc.wasm \
-            ./target/wasm32-unknown-emscripten/release/resolc_web.js
+          tar -czf $(pwd)/resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
+            resolc.js \
+            resolc.wasm \
+            resolc_web.js
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-wasm
+          name: resolc-wasm.tar.gz
           path: |
             resolc-wasm.tar.gz
           retention-days: 1
@@ -303,25 +305,29 @@ jobs:
       - name: Download revive-wasm
         uses: actions/download-artifact@v4
         with:
-          name: revive-wasm
+          name: resolc-wasm.tar.gz
           path: resolc-wasm/
 
       - name: Download revive-linux
         uses: actions/download-artifact@v4
         with:
-          name: revive-linux
+          name: resolc-static-linux.tar.gz
           path: resolc-linux/
 
       - name: Download revive-macos
         uses: actions/download-artifact@v4
         with:
-          name: revive-macos
+          name: resolc-macos.tar.gz
           path: resolc-macos/
 
       - name: create-release
         uses: softprops/action-gh-release@v2
         with:
-          body: ${{ needs.tag.outputs.RELEASE_NOTES }}
+          body: |
+            ${{ needs.tag.outputs.RELEASE_NOTES }}
+
+            # Note for macOS Users
+            The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-macos`.
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
           name: ${{ needs.tag.outputs.PKG_VER }}
           draft: true

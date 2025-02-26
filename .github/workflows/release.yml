@@ -140,10 +140,11 @@ jobs:
       - name: run lipo
         run: |
           lipo revive-macos/revive-macos-arm64/resolc-arm64 revive-macos/revive-macos-x64/resolc-x64 -create -output resolc-macos
+          chmod +x resolc-macos
 
       - name: compress macos artifact
         run: |
-          tar -czf resolc-macos.tar.gz ./resolc-macos
+          tar -czfp resolc-macos.tar.gz ./resolc-macos
 
       - uses: actions/upload-artifact@v4
         with:
@@ -212,7 +213,7 @@ jobs:
 
       - name: compress musl artifact
         run: |
-          tar --strip-components 1 -czf resolc-static-linux.tar.gz ./resolc-out/resolc-static-linux
+          tar -czfp resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
 
       - uses: actions/upload-artifact@v4
         with:
@@ -281,10 +282,10 @@ jobs:
 
       - name: compress wasm artifact
         run: |
-          tar --strip-components 3 -czf resolc-wasm.tar.gz \
-            ./target/wasm32-unknown-emscripten/release/resolc.js \
-            ./target/wasm32-unknown-emscripten/release/resolc.wasm \
-            ./target/wasm32-unknown-emscripten/release/resolc_web.js
+          tar -czf resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
+            resolc.js \
+            resolc.wasm \
+            resolc_web.js
 
       - uses: actions/upload-artifact@v4
         with:

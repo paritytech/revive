@@ -326,7 +326,8 @@ jobs:
           body: |
             ${{ needs.tag.outputs.RELEASE_NOTES }}
 
-            _Note: the MacOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-macos`_
+            # Note for macOS Users
+            The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-macos`.
           tag_name: ${{ needs.tag.outputs.PKG_VER }}
           name: ${{ needs.tag.outputs.PKG_VER }}
           draft: true

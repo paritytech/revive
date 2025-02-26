@@ -282,7 +282,7 @@ jobs:
 
       - name: compress wasm artifact
         run: |
-          tar -czf resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
+          tar -czfp resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
             resolc.js \
             resolc.wasm \
             resolc_web.js

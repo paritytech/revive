@@ -144,7 +144,7 @@ jobs:
 
       - name: compress macos artifact
         run: |
-          tar -czpf resolc-macos.tar.gz ./resolc-macos
+          tar -czf resolc-macos.tar.gz ./resolc-macos
 
       - uses: actions/upload-artifact@v4
         with:
@@ -213,7 +213,7 @@ jobs:
 
       - name: compress musl artifact
         run: |
-          tar -czpf $(pwd)/resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
+          tar -czf $(pwd)/resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
 
       - uses: actions/upload-artifact@v4
         with:
@@ -283,7 +283,7 @@ jobs:
 
       - name: compress wasm artifact
         run: |
-          tar -czpf $(pwd)/resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
+          tar -czf $(pwd)/resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
             resolc.js \
             resolc.wasm \
             resolc_web.js

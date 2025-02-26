@@ -185,7 +185,28 @@ where
         &mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        revive_llvm_context::PolkaVMImmutableDataLoadFunction.declare(context)?;
+        revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
+
+        revive_llvm_context::PolkaVMLoadHeapWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreHeapWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMLoadStorageWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreStorageWordFunction.declare(context)?;
+
+        revive_llvm_context::PolkaVMWordToPointerFunction.declare(context)?;
+        revive_llvm_context::PolkaVMExitFunction.declare(context)?;
+
+        revive_llvm_context::PolkaVMEventLogFunction::<0>.declare(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<1>.declare(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<2>.declare(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<3>.declare(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<4>.declare(context)?;
+
+        revive_llvm_context::PolkaVMDivisionFunction.declare(context)?;
+        revive_llvm_context::PolkaVMSignedDivisionFunction.declare(context)?;
+        revive_llvm_context::PolkaVMRemainderFunction.declare(context)?;
+        revive_llvm_context::PolkaVMSignedRemainderFunction.declare(context)?;
+
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
 
@@ -202,7 +223,6 @@ where
             revive_llvm_context::PolkaVMFunctionDeployCode,
             revive_llvm_context::PolkaVMFunctionRuntimeCode,
             revive_llvm_context::PolkaVMFunctionEntry,
-            revive_llvm_context::PolkaVMFunctionImmutableDataLoad,
         ]
         .into_iter()
         {
@@ -214,6 +234,28 @@ where
         }
 
         entry.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMEventLogFunction::<0>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<1>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<2>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
 
         Ok(())
     }
@@ -230,7 +272,6 @@ where
         }
 
         if self.identifier.ends_with("_deployed") {
-            revive_llvm_context::PolkaVMImmutableDataLoadFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code).into_llvm(context)?;
         } else {
             revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;

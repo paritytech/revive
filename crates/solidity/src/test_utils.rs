@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
+use revive_llvm_context::OptimizerSettings;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
@@ -31,6 +32,7 @@ struct CachedBlob {
     contract_name: String,
     solidity: String,
     solc_optimizer_enabled: bool,
+    opt: String,
 }
 
 /// Checks if the required executables are present in `${PATH}`.
@@ -254,7 +256,12 @@ pub fn check_solidity_warning(
 /// Compile the blob of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_blob_with_options(contract_name, source_code, true)
+    compile_blob_with_options(
+        contract_name,
+        source_code,
+        true,
+        OptimizerSettings::cycles(),
+    )
 }
 
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
@@ -283,6 +290,7 @@ fn compile_evm(
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
+        opt: String::new(),
     };
 
     let cache = if runtime {
@@ -322,11 +330,13 @@ pub fn compile_blob_with_options(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
+        opt: optimizer_settings.middle_end_as_string(),
     };
 
     if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
@@ -338,7 +348,7 @@ pub fn compile_blob_with_options(
         [(file_name.into(), source_code.into())].into(),
         Default::default(),
         None,
-        revive_llvm_context::OptimizerSettings::cycles(),
+        optimizer_settings,
         solc_optimizer_enabled,
     )
     .expect("source should compile")

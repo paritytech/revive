@@ -34,3 +34,4 @@ polkadot-sdk.features = [
 
 revive-solidity = { workspace = true, optional = true }
 revive-differential = { workspace = true, optional = true }
+revive-llvm-context = { workspace = true }

@@ -91,7 +91,7 @@ impl<'ctx> LLVMRuntime<'ctx> {
             llvm,
             sha3,
             //vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
-            vec![],
+            &[],
             false,
         );
 

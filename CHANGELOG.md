@@ -2,9 +2,20 @@
 
 ## Unreleased
 
+## v0.1.0-dev.12
+
 This is a development pre-release.
 
-Supported `polkadot-sdk` rev: `274a781e8ca1a9432c7ec87593bd93214abbff50`
+Supported `polkadot-sdk` rev: `21f6f0705e53c15aa2b8a5706b208200447774a9`
+
+### Added
+- Per file output selection for `--standard-json` mode.
+- The `ir` output selection option for `--standard-json` mode.
+
+### Changed
+- Improved code size: Large contracts compile to smaller code blobs when enabling aggressive size optimizations (`-Oz`).
+
+### Fixed
 
 ## v0.1.0-dev.11
 

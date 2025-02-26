@@ -85,5 +85,14 @@ where
         offset,
         "mstore8_destination",
     );
-    context.build_store(pointer, value)
+    let pointer = context.build_sbrk(
+        pointer.to_int(context),
+        context.xlen_type().const_int(1, false),
+    )?;
+    context
+        .builder()
+        .build_store(pointer, value)?
+        .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+        .expect("Alignment is valid");
+    Ok(())
 }

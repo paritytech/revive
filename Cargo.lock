@@ -1646,9 +1646,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.30"
+version = "4.5.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92b7b18d71fad5313a1e320fa9897994228ce274b60faa4d694fe0ea89cd9e6d"
+checksum = "027bb0d98429ae334a8698531da7077bdf906419543a35a55c2cb1b66437d767"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1656,9 +1656,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.30"
+version = "4.5.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a35db2071778a7344791a4fb4f95308b5673d219dee3ae348b86642574ecc90c"
+checksum = "5589e0cba072e0f3d23791efac0fd8627b49c829c196a492e88168e6a669d863"
 dependencies = [
  "anstream",
  "anstyle",
@@ -4553,7 +4553,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "cc",
  "libc",
@@ -8265,7 +8265,7 @@ dependencies = [
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "criterion",
@@ -8277,18 +8277,18 @@ dependencies = [
 
 [[package]]
 name = "revive-build-utils"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "revive-build-utils",
 ]
 
 [[package]]
 name = "revive-common"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "serde",
@@ -8298,7 +8298,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives",
@@ -8311,12 +8311,13 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "hex",
  "rayon",
+ "revive-llvm-context",
  "revive-runner",
  "revive-solidity",
  "serde",
@@ -8326,7 +8327,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "libc",
@@ -8338,7 +8339,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-builder"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8359,7 +8360,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "hex",
@@ -8379,13 +8380,14 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "alloy-primitives",
  "hex",
  "parity-scale-codec",
  "polkadot-sdk 0.1.0",
  "revive-differential",
+ "revive-llvm-context",
  "revive-solidity",
  "scale-info",
  "serde",
@@ -8394,7 +8396,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8404,7 +8406,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solidity"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "anyhow",
  "clap",
@@ -8430,7 +8432,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0-dev.11"
+version = "0.1.0-dev.12"
 dependencies = [
  "inkwell",
  "revive-build-utils",
@@ -9927,7 +9929,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-377-ext",
@@ -9994,7 +9996,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10014,7 +10016,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.25.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -10223,7 +10225,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "24.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -10255,7 +10257,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "Inflector",
  "expander",
@@ -10344,7 +10346,7 @@ source = "git+https://github.com/paritytech/polkadot-sdk?rev=21f6f0705e53c15aa2b
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 
 [[package]]
 name = "sp-storage"
@@ -10361,7 +10363,7 @@ dependencies = [
 [[package]]
 name = "sp-storage"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -10396,7 +10398,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "parity-scale-codec",
  "tracing",
@@ -10493,7 +10495,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#16ed0296f7bf63e22b34e0e4b6c0bb2fc3c200f4"
+source = "git+https://github.com/paritytech/polkadot-sdk#3dc3a11cd68762c2e5feb0beba0b61f448c4fc92"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",

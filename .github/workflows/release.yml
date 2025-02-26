@@ -148,7 +148,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-macos
+          name: resolc-macos.tar.gz
           path: |
             resolc-macos.tar.gz
           retention-days: 1
@@ -217,7 +217,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-linux
+          name: resolc-static-linux.tar.gz
           path: |
             resolc-static-linux.tar.gz
           retention-days: 1
@@ -289,7 +289,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: revive-wasm
+          name: resolc-wasm.tar.gz
           path: |
             resolc-wasm.tar.gz
           retention-days: 1
@@ -304,19 +304,19 @@ jobs:
       - name: Download revive-wasm
         uses: actions/download-artifact@v4
         with:
-          name: revive-wasm
+          name: resolc-wasm.tar.gz
           path: resolc-wasm/
 
       - name: Download revive-linux
         uses: actions/download-artifact@v4
         with:
-          name: revive-linux
+          name: resolc-static-linux.tar.gz
           path: resolc-linux/
 
       - name: Download revive-macos
         uses: actions/download-artifact@v4
         with:
-          name: revive-macos
+          name: resolc-macos.tar.gz
           path: resolc-macos/
 
       - name: create-release

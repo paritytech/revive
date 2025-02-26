@@ -291,7 +291,7 @@ jobs:
         with:
           name: revive-wasm
           path: |
-            ./target/wasm32-unknown-emscripten/release/resolc-wasm.tar.gz
+            resolc-wasm.tar.gz
           retention-days: 1
 
   create-release:

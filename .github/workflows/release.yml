@@ -213,13 +213,13 @@ jobs:
 
       - name: compress musl artifact
         run: |
-          tar -czfp resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
+          tar -czfp ./resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
 
       - uses: actions/upload-artifact@v4
         with:
           name: revive-linux
           path: |
-            ./resolc-static-linux.tar.gz
+            resolc-static-linux.tar.gz
           retention-days: 1
 
       - name: Set Up Node.js
@@ -291,7 +291,7 @@ jobs:
         with:
           name: revive-wasm
           path: |
-            resolc-wasm.tar.gz
+            ./target/wasm32-unknown-emscripten/release/resolc-wasm.tar.gz
           retention-days: 1
 
   create-release:

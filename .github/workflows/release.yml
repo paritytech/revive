@@ -143,6 +143,7 @@ jobs:
 
       - name: compress macos artifact
         run: |
+          chmod +x resolc-macos
           tar -czf resolc-macos.tar.gz ./resolc-macos
 
       - uses: actions/upload-artifact@v4
@@ -212,7 +213,7 @@ jobs:
 
       - name: compress musl artifact
         run: |
-          tar --strip-components 1 -czf resolc-static-linux.tar.gz ./resolc-out/resolc-static-linux
+          tar --strip-components 2 -czf resolc-static-linux.tar.gz ./resolc-out/resolc-static-linux
 
       - uses: actions/upload-artifact@v4
         with:

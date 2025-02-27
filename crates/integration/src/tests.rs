@@ -57,6 +57,7 @@ test_spec!(transfer, "Transfer", "Transfer.sol");
 test_spec!(send, "Send", "Send.sol");
 test_spec!(function_pointer, "FunctionPointer", "FunctionPointer.sol");
 test_spec!(mload, "MLoad", "MLoad.sol");
+test_spec!(function_type, "FunctionType", "FunctionType.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

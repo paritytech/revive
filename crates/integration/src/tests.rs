@@ -33,6 +33,7 @@ test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
+test_spec!(mcopy_overlap, "MCopyOverlap", "MCopyOverlap.sol");
 test_spec!(events, "Events", "Events.sol");
 test_spec!(storage, "Storage", "Storage.sol");
 test_spec!(mstore8, "MStore8", "MStore8.sol");

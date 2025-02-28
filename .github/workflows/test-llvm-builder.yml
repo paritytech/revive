@@ -19,7 +19,7 @@ jobs:
   test:
     strategy:
       matrix:
-        runner: [parity-large, macos-14]
+        runner: [parity-large, macos-14, windows-2022]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

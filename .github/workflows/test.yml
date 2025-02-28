@@ -1,10 +1,10 @@
-name: Build
-
+name: Test
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+    types: [opened, synchronize]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -14,27 +14,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-ubuntu-x86:
+  test:
     runs-on: ubuntu-24.04
-
     steps:
       - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # without this it will override our rust flags
+          rustflags: ""
 
-      - name: Install solc
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM Environment Variables
         run: |
-          mkdir -p solc
-          curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
-          chmod +x solc/solc
-          echo "$(pwd)/solc/" >> $GITHUB_PATH
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
 
-      - name: Install LLVM
-        run: |
-          curl -sSL --output llvm.tar.xz https://github.com/paritytech/revive/releases/download/v0.1.0-dev.7/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
-          mkdir llvm18
-          tar Jxf llvm.tar.xz -C llvm18/
-          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm18" >> $GITHUB_ENV
-
-      - name: Install geth
+      - name: Install Geth
         run: |
           sudo add-apt-repository -y ppa:ethereum/ethereum
           sudo apt update
@@ -56,9 +57,3 @@ jobs:
 
       - name: Test CLI
         run: make test-cli
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-resolc
-          path: ./target/release/resolc
-          retention-days: 1

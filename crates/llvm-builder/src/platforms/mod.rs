@@ -8,7 +8,7 @@ pub mod wasm32_emscripten;
 pub mod x86_64_linux_gnu;
 pub mod x86_64_linux_musl;
 pub mod x86_64_macos;
-pub mod x86_64_windows_gnu;
+pub mod x86_64_windows_msvc;
 
 use std::str::FromStr;
 

@@ -7,6 +7,7 @@ use std::process::Command;
 use std::process::Stdio;
 use std::time::Duration;
 
+use anyhow::Context;
 use path_slash::PathBufExt;
 
 /// The LLVM host repository URL.
@@ -131,11 +132,8 @@ pub fn path_windows_to_unix<P: AsRef<Path> + PathBufExt>(path: P) -> anyhow::Res
 
 /// Checks if the tool exists in the system.
 pub fn check_presence(name: &str) -> anyhow::Result<()> {
-    let description = &format!("checking the `{name}` executable");
-    log::info!("{description}");
-
-    command(Command::new("which").arg(name), description)
-        .map_err(|_| anyhow::anyhow!("Tool `{}` is missing. Please install", name))
+    which::which(name).with_context(|| format!("Tool `{name}` is missing. Please install"))?;
+    Ok(())
 }
 
 /// Identify XCode version using `pkgutil`.

@@ -1,7 +1,6 @@
 //! The revive LLVM amd64 `windows-gnu` builder.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::process::Command;
 
 use crate::build_type::BuildType;
@@ -28,10 +27,6 @@ pub fn build(
     sanitizer: Option<Sanitizer>,
 ) -> anyhow::Result<()> {
     crate::utils::check_presence("cmake")?;
-    crate::utils::check_presence("clang")?;
-    crate::utils::check_presence("clang++")?;
-    crate::utils::check_presence("lld")?;
-    crate::utils::check_presence("ninja")?;
 
     let llvm_module_llvm =
         LLVMPath::llvm_module_llvm().and_then(crate::utils::path_windows_to_unix)?;
@@ -48,15 +43,12 @@ pub fn build(
                 "-B",
                 llvm_build_final.to_string_lossy().as_ref(),
                 "-G",
-                "Ninja",
+                "Visual Studio 17 2022",
                 format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     llvm_target_final.to_string_lossy().as_ref(),
                 )
                 .as_str(),
-                format!("-DCMAKE_BUILD_TYPE='{build_type}'").as_str(),
-                "-DCMAKE_C_COMPILER='clang'",
-                "-DCMAKE_CXX_COMPILER='clang++'",
                 format!(
                     "-DLLVM_TARGETS_TO_BUILD='{}'",
                     targets
@@ -75,7 +67,7 @@ pub fn build(
                         .join(";")
                 )
                 .as_str(),
-                "-DLLVM_USE_LINKER='lld'",
+                "-DLLVM_BUILD_LLVM_C_DYLIB=Off",
             ])
             .args(crate::platforms::shared::shared_build_opts_default_target(
                 default_target,
@@ -107,20 +99,16 @@ pub fn build(
         "LLVM building cmake",
     )?;
 
-    crate::utils::ninja(llvm_build_final.as_ref())?;
-
-    let libstdcpp_source_path = match std::env::var("LIBSTDCPP_SOURCE_PATH") {
-        Ok(libstdcpp_source_path) => PathBuf::from(libstdcpp_source_path),
-        Err(error) => anyhow::bail!(
-            "The `LIBSTDCPP_SOURCE_PATH` must be set to the path to the libstdc++.a static library: {}", error
-        ),
-    };
-    let mut libstdcpp_destination_path = llvm_target_final;
-    libstdcpp_destination_path.push("./lib/libstdc++.a");
-    fs_extra::file::copy(
-        crate::utils::path_windows_to_unix(libstdcpp_source_path)?,
-        crate::utils::path_windows_to_unix(libstdcpp_destination_path)?,
-        &fs_extra::file::CopyOptions::default(),
+    crate::utils::command(
+        Command::new("cmake").args([
+            "--build",
+            llvm_build_final.to_string_lossy().as_ref(),
+            "--target",
+            "install",
+            "--config",
+            build_type.to_string().as_str(),
+        ]),
+        "Building with msbuild",
     )?;
 
     Ok(())

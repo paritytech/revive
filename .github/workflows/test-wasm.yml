@@ -1,10 +1,10 @@
-name: Build revive-wasm
+name: Test Wasm Version
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-  workflow_dispatch:
+    types: [opened, synchronize]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -15,48 +15,38 @@ env:
   REVIVE_WASM_INSTALL_DIR: ${{ github.workspace }}/target/wasm32-unknown-emscripten/release
 
 jobs:
-  build-revive-wasm:
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust stable toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: stable
-          components: rust-src
           target: wasm32-unknown-emscripten
+          # without this it will override our rust flags
           rustflags: ""
 
-      - name: get llvm gnu
+      - name: Download Host LLVM
         uses: ./.github/actions/get-llvm
         with:
-          artifactArch: x86_64-linux-gnu
-      - name: get llvm emscripten
-        uses: ./.github/actions/get-llvm
-        with:
-          artifactArch: emscripten
+          target: x86_64-unknown-linux-gnu
 
-      - name: install emsdk
+      - name: Download Wasm LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: wasm32-unknown-emscripten
+
+      - name: Install emsdk
         uses: ./.github/actions/get-emsdk
 
-      - name: Setup revive environment variables
+      - name: Set LLVM Environment Variables
         run: |
-          echo "LLVM_SYS_181_PREFIX=$(pwd)/target-llvm/gnu/target-final" >> $GITHUB_ENV
-          echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/target-llvm/emscripten/target-final" >> $GITHUB_ENV
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/llvm-wasm32-unknown-emscripten" >> $GITHUB_ENV
 
-      - run: |
-          rustup show
-          cargo --version
-          rustup +nightly show
-          cargo +nightly --version
-          cmake --version
-          bash --version
-
-      - name: Build revive
+      - name: Build Revive
         run: |
           source emsdk/emsdk_env.sh
           make install-wasm
@@ -70,11 +60,11 @@ jobs:
             ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc_web.js
           retention-days: 1
 
-  test-revive-wasm:
-    needs: build-revive-wasm
+  test:
+    needs: build
     strategy:
       matrix:
-        os: ["ubuntu-24.04", "macos-14", "windows-2022"]
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +83,7 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install packages
+      - name: Install Node Packages
         run: npm install
 
       - name: Run Playwright tests

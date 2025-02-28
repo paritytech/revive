@@ -62,7 +62,7 @@ jobs:
   build:
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin]
+        target: [x86_64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin, x86_64-pc-windows-msvc]
         include:
           - target: x86_64-unknown-linux-musl
             type: musl
@@ -73,6 +73,9 @@ jobs:
           - target: x86_64-apple-darwin
             type: native
             runner: macos-13
+          - target: x86_64-pc-windows-msvc
+            type: native
+            runner: windows-2022
     if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
@@ -91,10 +94,11 @@ jobs:
 
       - name: Build
         if: ${{ matrix.type == 'native' }}
+        shell: bash
         run: |
           export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
           make install-bin
-          mv target/release/resolc resolc-${{ matrix.target }}
+          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}
 
       - name: Build
         if: ${{ matrix.type == 'musl' }}
@@ -113,6 +117,7 @@ jobs:
         uses: ./.github/actions/get-solc
 
       - name: Basic Sanity Check
+        shell: bash
         run: |
           result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
           echo $result
@@ -233,8 +238,10 @@ jobs:
         run: |
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin
+          mv resolc-x86_64-pc-windows-msvc resolc-x86_64-pc-windows-msvc.exe
           tar -czf resolc-x86_64-unknown-linux-musl.tar.gz resolc-x86_64-unknown-linux-musl
           tar -czf resolc-universal-apple-darwin.tar.gz resolc-universal-apple-darwin
+          zip -j resolc-x86_64-pc-windows-msvc.zip resolc-x86_64-pc-windows-msvc.exe
 
       - name: create-release
         uses: softprops/action-gh-release@v2
@@ -252,3 +259,4 @@ jobs:
             resolc-x86_64-unknown-linux-musl.tar.gz
             resolc-universal-apple-darwin.tar.gz
             resolc-wasm32-unknown-emscripten.tar.gz
+            resolc-x86_64-pc-windows-msvc.zip

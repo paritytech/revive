@@ -8,10 +8,6 @@ pub enum AddressSpace {
     Stack,
     /// The heap memory.
     Heap,
-    /// The generic memory page.
-    Storage,
-    /// The transient storage.
-    TransientStorage,
 }
 
 impl From<AddressSpace> for inkwell::AddressSpace {
@@ -19,8 +15,6 @@ impl From<AddressSpace> for inkwell::AddressSpace {
         match value {
             AddressSpace::Stack => Self::from(0),
             AddressSpace::Heap => Self::from(1),
-            AddressSpace::Storage => Self::from(5),
-            AddressSpace::TransientStorage => Self::from(6),
         }
     }
 }

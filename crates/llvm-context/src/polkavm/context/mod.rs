@@ -788,9 +788,6 @@ where
                         panic!("revive runtime function {name} should return a value")
                     }))
             }
-            AddressSpace::Storage | AddressSpace::TransientStorage => {
-                unreachable!("should use the runtime function")
-            }
             AddressSpace::Stack => {
                 let value = self
                     .builder()
@@ -822,9 +819,6 @@ where
                     value.as_basic_value_enum(),
                 ];
                 self.build_call(declaration, &arguments, "heap_store");
-            }
-            AddressSpace::Storage | AddressSpace::TransientStorage => {
-                unreachable!("should use the runtime function")
             }
             AddressSpace::Stack => {
                 let instruction = self.builder.build_store(pointer.value, value).unwrap();
@@ -870,9 +864,6 @@ where
     where
         T: BasicType<'ctx>,
     {
-        assert_ne!(pointer.address_space, AddressSpace::Storage);
-        assert_ne!(pointer.address_space, AddressSpace::TransientStorage);
-
         let value = unsafe {
             self.builder
                 .build_gep(pointer.r#type, pointer.value, indexes, name)

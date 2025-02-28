@@ -1,9 +1,6 @@
 //! The LLVM runtime functions.
 
-use inkwell::types::BasicType;
-
 use crate::optimizer::Optimizer;
-use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::declaration::Declaration as FunctionDeclaration;
 use crate::polkavm::context::function::Function;
 
@@ -19,9 +16,6 @@ pub struct LLVMRuntime<'ctx> {
     pub exp: FunctionDeclaration<'ctx>,
     /// The corresponding LLVM runtime function.
     pub sign_extend: FunctionDeclaration<'ctx>,
-
-    /// The corresponding LLVM runtime function.
-    pub sha3: FunctionDeclaration<'ctx>,
 }
 
 impl<'ctx> LLVMRuntime<'ctx> {
@@ -36,9 +30,6 @@ impl<'ctx> LLVMRuntime<'ctx> {
 
     /// The corresponding runtime function name.
     pub const FUNCTION_SIGNEXTEND: &'static str = "__signextend";
-
-    /// The corresponding runtime function name.
-    pub const FUNCTION_SHA3: &'static str = "__sha3";
 
     /// A shortcut constructor.
     pub fn new(
@@ -65,43 +56,11 @@ impl<'ctx> LLVMRuntime<'ctx> {
         Function::set_default_attributes(llvm, sign_extend, optimizer);
         Function::set_pure_function_attributes(llvm, sign_extend);
 
-        let sha3 = Self::declare(
-            module,
-            Self::FUNCTION_SHA3,
-            llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                .fn_type(
-                    vec![
-                        llvm.ptr_type(AddressSpace::Heap.into())
-                            .as_basic_type_enum()
-                            .into(),
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
-                            .as_basic_type_enum()
-                            .into(),
-                        llvm.custom_width_int_type(revive_common::BIT_LENGTH_BOOLEAN as u32)
-                            .as_basic_type_enum()
-                            .into(),
-                    ]
-                    .as_slice(),
-                    false,
-                ),
-            Some(inkwell::module::Linkage::External),
-        );
-        Function::set_default_attributes(llvm, sha3, optimizer);
-        Function::set_attributes(
-            llvm,
-            sha3,
-            //vec![Attribute::ArgMemOnly, Attribute::ReadOnly],
-            &[],
-            false,
-        );
-
         Self {
             add_mod,
             mul_mod,
             exp,
             sign_extend,
-
-            sha3,
         }
     }
 

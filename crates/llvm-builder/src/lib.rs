@@ -214,7 +214,7 @@ pub fn build(
                 sanitizer,
             )?;
         } else if cfg!(target_os = "windows") {
-            platforms::x86_64_windows_gnu::build(
+            platforms::x86_64_windows_msvc::build(
                 build_type,
                 targets,
                 llvm_projects,

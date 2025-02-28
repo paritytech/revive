@@ -1,4 +1,4 @@
-name: "get emsdk"
+name: "Get Emscripten SDK"
 inputs:
   version:
     description: ""
@@ -9,7 +9,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-
     - name: install emsdk
       shell: bash
       run: |

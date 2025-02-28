@@ -1,29 +1,12 @@
 # example:
-#
-#       - name: get llvm
-#         uses: ./.github/actions/get-llvm
+#       - uses: ./.github/actions/get-llvm
 #         with:
-#           releasePrefix: llvm-
-#           artifactArch: macos-arm64
-#           dir: target-llvm/macos
+#           target: x86_64-unknown-linux-gnu
 
-name: "get llvm"
+name: "Download LLVM"
 inputs:
-  artifactArch:
+  target:
     required: true
-  releasePrefix:
-    description: "LLVM release tag prefix to search"
-    required: false
-    default: "llvm-"
-  dir:
-    description: "Archive extract path (`tar -C`)"
-    required: false
-    default: "./"
-  stripComponents:
-    description: "Strip UMBER leading components from file names on extraction (`tar --strip-components`)"
-    required: false
-    default: 0
-
 
 runs:
   using: "composite"
@@ -32,16 +15,15 @@ runs:
       id: find
       uses: actions/github-script@v7
       env:
-        releasePrefix: ${{ inputs.releasePrefix }}
-        artifactArch: ${{ inputs.artifactArch }}
+        target: ${{ inputs.target }}
       with:
         result-encoding: string
         script: |
           let page = 1;
           let releases = [];
 
-          let releasePrefix = process.env.releasePrefix
-          let artifactArch = process.env.artifactArch
+          let releasePrefix = "llvm-"
+          let target = process.env.target
 
           do {
             const res = await github.rest.repos.listReleases({
@@ -61,10 +43,10 @@ runs:
             });
             if (llvmLatestRelease){
                 let asset = llvmLatestRelease.assets.find(asset =>{
-                    return asset.name.includes(artifactArch);
+                    return asset.name.includes(target);
                 });
                 if (!asset){
-                  core.setFailed(`Artifact for '${artifactArch}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
+                  core.setFailed(`Artifact for '${target}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
                   process.exit();
                 }
                 return asset.browser_download_url;
@@ -79,13 +61,10 @@ runs:
     - name: download
       shell: bash
       run: |
-        mkdir -p ${{ inputs.dir }}
         curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
-        ls -al
 
     - name: unpack
       shell: bash
       run: |
-        tar -xf llvm.tar.gz -C ${{ inputs.dir }} --strip-components=${{ inputs.stripComponents }}
+        tar -xf llvm.tar.gz
         rm llvm.tar.gz
-        ls -al ${{ inputs.dir }}

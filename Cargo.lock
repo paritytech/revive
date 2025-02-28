@@ -8357,6 +8357,7 @@ dependencies = [
  "serde",
  "tar",
  "toml 0.8.20",
+ "which",
 ]
 
 [[package]]

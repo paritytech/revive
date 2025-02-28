@@ -1,5 +1,8 @@
 //! Utilities for compiling the LLVM compiler-rt builtins.
 
+use crate::utils::path_windows_to_unix as to_unix;
+use std::{env::consts::EXE_EXTENSION, process::Command};
+
 /// Static CFLAGS variable passed to the compiler building the compiler-rt builtins.
 const C_FLAGS: [&str; 6] = [
     "--target=riscv64",
@@ -44,24 +47,31 @@ fn cmake_dynamic_args(
 
     let mut clang_path = llvm_target_host.to_path_buf();
     clang_path.push("bin/clang");
+    clang_path.set_extension(EXE_EXTENSION);
 
     let mut clangxx_path = llvm_target_host.to_path_buf();
     clangxx_path.push("bin/clang++");
+    clangxx_path.set_extension(EXE_EXTENSION);
 
     let mut llvm_config_path = llvm_target_host.to_path_buf();
     llvm_config_path.push("bin/llvm-config");
+    llvm_config_path.set_extension(EXE_EXTENSION);
 
     let mut ar_path = llvm_target_host.to_path_buf();
     ar_path.push("bin/llvm-ar");
+    ar_path.set_extension(EXE_EXTENSION);
 
     let mut nm_path = llvm_target_host.to_path_buf();
     nm_path.push("bin/llvm-nm");
+    nm_path.set_extension(EXE_EXTENSION);
 
     let mut ranlib_path = llvm_target_host.to_path_buf();
     ranlib_path.push("bin/llvm-ranlib");
+    ranlib_path.set_extension(EXE_EXTENSION);
 
     let mut linker_path = llvm_target_host.to_path_buf();
     linker_path.push("bin/ld.lld");
+    linker_path.set_extension(EXE_EXTENSION);
 
     Ok([
         format!(
@@ -76,12 +86,18 @@ fn cmake_dynamic_args(
         format!("-DCMAKE_C_FLAGS='{}'", C_FLAGS.join(" ")),
         format!("-DCMAKE_ASM_FLAGS='{}'", C_FLAGS.join(" ")),
         format!("-DCMAKE_CXX_FLAGS='{}'", C_FLAGS.join(" ")),
-        format!("-DCMAKE_C_COMPILER='{}'", clang_path.to_string_lossy()),
-        format!("-DCMAKE_ASM_COMPILER='{}'", clang_path.to_string_lossy()),
-        format!("-DCMAKE_CXX_COMPILER='{}'", clangxx_path.to_string_lossy()),
-        format!("-DCMAKE_AR='{}'", ar_path.to_string_lossy()),
-        format!("-DCMAKE_NM='{}'", nm_path.to_string_lossy()),
-        format!("-DCMAKE_RANLIB='{}'", ranlib_path.to_string_lossy()),
+        format!(
+            "-DCMAKE_C_COMPILER='{}'",
+            to_unix(clang_path.clone())?.display()
+        ),
+        format!("-DCMAKE_ASM_COMPILER='{}'", to_unix(clang_path)?.display()),
+        format!(
+            "-DCMAKE_CXX_COMPILER='{}'",
+            to_unix(clangxx_path)?.display()
+        ),
+        format!("-DCMAKE_AR='{}'", to_unix(ar_path)?.display()),
+        format!("-DCMAKE_NM='{}'", to_unix(nm_path)?.display()),
+        format!("-DCMAKE_RANLIB='{}'", to_unix(ranlib_path)?.display()),
         format!(
             "-DLLVM_CONFIG_PATH='{}'",
             llvm_config_path.to_string_lossy()
@@ -101,7 +117,13 @@ pub fn build(
     log::info!("building compiler-rt for rv64emac");
 
     crate::utils::check_presence("cmake")?;
-    crate::utils::check_presence("ninja")?;
+
+    let generator = if cfg!(target_os = "windows") {
+        "Visual Studio 17 2022"
+    } else {
+        crate::utils::check_presence("ninja")?;
+        "Ninja"
+    };
 
     let llvm_module_compiler_rt = crate::LLVMPath::llvm_module_compiler_rt()?;
     let llvm_compiler_rt_build = crate::LLVMPath::llvm_build_compiler_rt()?;
@@ -114,7 +136,7 @@ pub fn build(
                 "-B",
                 llvm_compiler_rt_build.to_string_lossy().as_ref(),
                 "-G",
-                "Ninja",
+                generator,
             ])
             .args(CMAKE_STATIC_ARGS)
             .args(cmake_dynamic_args(build_type, target_env)?)
@@ -131,7 +153,17 @@ pub fn build(
         "LLVM compiler-rt building cmake",
     )?;
 
-    crate::utils::ninja(&llvm_compiler_rt_build)?;
+    crate::utils::command(
+        Command::new("cmake").args([
+            "--build",
+            llvm_compiler_rt_build.to_string_lossy().as_ref(),
+            "--target",
+            "install",
+            "--config",
+            build_type.to_string().as_str(),
+        ]),
+        "Building",
+    )?;
 
     Ok(())
 }

@@ -1,23 +1,22 @@
 name: Release
-run-name: Release ${{ github.ref_name }}
 on:
   push:
-    branches:
-      - "main"
+    branches: ["main"]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    branches: ["main"]
+    types: [opened, synchronize, labled, unlabled]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
-  #rust-musl-cross:x86_64-musl
+  CARGO_TERM_COLOR: always
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
-  RUST_LOG: trace
 
 jobs:
-  tag:
+  check-version-changed:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
     runs-on: ubuntu-24.04
     permissions:
@@ -27,13 +26,11 @@ jobs:
       PKG_VER: ${{ steps.versions.outputs.PKG_VER }}
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-tags: "true"
-          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Versions
+      - name: Check Versions
         id: versions
         run: |
           export CURRENT_TAG=$(git describe --tags --abbrev=0 --exclude "llvm-*")
@@ -62,190 +59,112 @@ jobs:
           echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
 
-  build-macos:
+  build:
     strategy:
       matrix:
-        os: [macos-14, macos-13]
+        target: [x86_64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin]
         include:
-          - os: macos-13
-            arch: x64
-          - os: macos-14
-            arch: arm64
-    if: ${{ needs.tag.outputs.TAG == 'new' }}
-    runs-on: ${{ matrix.os }}
-    name: build-macos
-    needs: [tag]
+          - target: x86_64-unknown-linux-musl
+            type: musl
+            runner: ubuntu-24.04
+          - target: aarch64-apple-darwin
+            type: native
+            runner: macos-14
+          - target: x86_64-apple-darwin
+            type: native
+            runner: macos-13
+    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
+    runs-on: ${{ matrix.runner }}
+    needs: [check-version-changed]
     steps:
       - uses: actions/checkout@v4
-
-      - name: get llvm
-        uses: ./.github/actions/get-llvm
-        with:
-          releasePrefix: llvm-
-          artifactArch: macos-${{ matrix.arch }}
-          dir: ./
-
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: stable
-          components: rust-src
-          target: wasm32-unknown-emscripten
+        # without this it will override our rust flags
           rustflags: ""
+          cache-key: ${{ matrix.target }}
 
-      - name: install macos deps
-        run: |
-          brew install ninja
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: ${{ matrix.target }}
 
-      - name: versions
+      - name: Build
+        if: ${{ matrix.type == 'native' }}
         run: |
-          rustup show
-          cargo --version
-          cmake --version
-          echo "bash:" && bash --version
-          echo "ninja:" && ninja --version
-          echo "clang:" && clang --version
-
-      - name: build revive
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/gnu/target-final
+          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
           make install-bin
-          cp ./target/release/resolc ./target/release/resolc-${{ matrix.arch }}
+          mv target/release/resolc resolc-${{ matrix.target }}
 
-      - name: check revive
+      - name: Build
+        if: ${{ matrix.type == 'musl' }}
         run: |
-          mkdir solc
-          curl -sSLo solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-macos
-          chmod +x solc/solc
-          PATH=$PWD/solc:$PATH
-          result=$(./target/release/resolc-${{ matrix.arch }} --bin crates/integration/contracts/flipper.sol)
-          echo $result
-          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: "revive-macos-${{ matrix.arch }}"
-          path: |
-            ./target/release/resolc-${{ matrix.arch }}
-          retention-days: 1
-
-  macos-universal-binary:
-    runs-on: macos-14
-    needs: [build-macos]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: revive-macos-*
-          path: revive-macos
-
-      - name: run lipo
-        run: |
-          lipo revive-macos/revive-macos-arm64/resolc-arm64 revive-macos/revive-macos-x64/resolc-x64 -create -output resolc-macos
-          chmod +x resolc-macos
-
-      - name: compress macos artifact
-        run: |
-          tar -czf resolc-macos.tar.gz ./resolc-macos
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: resolc-macos.tar.gz
-          path: |
-            resolc-macos.tar.gz
-          retention-days: 1
-
-  build-linux-all:
-    if: ${{ needs.tag.outputs.TAG == 'new' }}
-    runs-on: parity-large
-    needs: [tag]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: install linux deps
-        run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build \
-          curl git libssl-dev pkg-config clang lld musl
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: rust-src
-          target: wasm32-unknown-emscripten
-          rustflags: ""
-
-      - name: versions
-        run: |
-          rustup show
-          cargo --version
-          cmake --version
-          echo "bash:" && bash --version
-          echo "ninja:" && ninja --version
-          echo "clang:" && clang --version
-
-      - name: get llvm musl
-        uses: ./.github/actions/get-llvm
-        with:
-          releasePrefix: llvm-
-          artifactArch: x86_64-linux-musl
-          dir: ./
-
-      # Build revive
-
-      - name: build musl
-        run: |
-          mkdir resolc-out
           docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
            cd /opt/revive
+           chown -R root:root .
            apt update && apt upgrade -y && apt install -y pkg-config
-           export LLVM_SYS_181_PREFIX=/opt/revive/target-llvm/musl/target-final
+           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
            make install-bin
-           cp /root/.cargo/bin/resolc /opt/revive/resolc-out/resolc-static-linux
+           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
            "
+          sudo chown -R $(id -u):$(id -g) .
 
-      - name: check musl
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
+
+      - name: Basic Sanity Check
         run: |
-          mkdir solc
-          curl -sSLo solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-static-linux
-          chmod +x solc/solc
-          PATH=$PWD/solc:$PATH
-          result=$(./resolc-out/resolc-static-linux --bin crates/integration/contracts/flipper.sol)
+          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
           echo $result
           if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
 
-      - name: compress musl artifact
-        run: |
-          tar -czf $(pwd)/resolc-static-linux.tar.gz -C ./resolc-out resolc-static-linux
-
       - uses: actions/upload-artifact@v4
         with:
-          name: resolc-static-linux.tar.gz
-          path: |
-            resolc-static-linux.tar.gz
+          name: resolc-${{ matrix.target }}
+          path: resolc-${{ matrix.target }}
           retention-days: 1
+
+  build-wasm:
+    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
+    runs-on: ubuntu-24.04
+    needs: [check-version-changed]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-emscripten
+          # without this it will override our rust flags
+          rustflags: ""
+
+      - name: Download Host LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Download Wasm LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: wasm32-unknown-emscripten
+
+      - name: Download EMSDK
+        uses: ./.github/actions/get-emsdk
+
+      - name: Build
+        run: |
+          export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
+          export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
+          source emsdk/emsdk_env.sh
+          make install-wasm
+          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
 
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "20"
+         node-version: "20"
 
-      - name: get llvm emscripten
-        uses: ./.github/actions/get-llvm
-        with:
-          artifactArch: emscripten
-
-      - name: install emsdk
-        uses: ./.github/actions/get-emsdk
-
-      - name: build wasm
+      - name: Basic Sanity Check
         run: |
-          export LLVM_SYS_181_PREFIX=$PWD/target-llvm/musl/target-final
-          export REVIVE_LLVM_TARGET_PREFIX=$PWD/target-llvm/emscripten/target-final
-          source emsdk/emsdk_env.sh
-          rustup target add wasm32-unknown-emscripten
-          make install-wasm
-          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
-
-      - name: check wasm
-        run: |
+          mkdir -p solc
           curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.28/soljson.js
           node -e "
           const soljson = require('solc/soljson');
@@ -281,44 +200,41 @@ jobs:
           if(!bytecode.startsWith('50564d')) { process.exit(1); }
           "
 
-      - name: compress wasm artifact
+      - name: Compress Artifact
         run: |
-          tar -czf $(pwd)/resolc-wasm.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
+          tar -czf $(pwd)/resolc-wasm32-unknown-emscripten.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
             resolc.js \
             resolc.wasm \
             resolc_web.js
 
       - uses: actions/upload-artifact@v4
         with:
-          name: resolc-wasm.tar.gz
-          path: |
-            resolc-wasm.tar.gz
+          name: resolc-wasm32-unknown-emscripten.tar.gz
+          path: resolc-wasm32-unknown-emscripten.tar.gz
           retention-days: 1
 
   create-release:
     if: github.event_name != 'pull_request'
-    needs: [tag, build-linux-all, macos-universal-binary]
-    runs-on: ubuntu-24.04
+    needs: [check-version-changed, build-wasm]
+    runs-on: macos-14
     permissions:
       contents: write
     steps:
-      - name: Download revive-wasm
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: resolc-wasm.tar.gz
-          path: resolc-wasm/
+          merge-multiple: true
 
-      - name: Download revive-linux
-        uses: actions/download-artifact@v4
-        with:
-          name: resolc-static-linux.tar.gz
-          path: resolc-linux/
+      - name: Create macOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
 
-      - name: Download revive-macos
-        uses: actions/download-artifact@v4
-        with:
-          name: resolc-macos.tar.gz
-          path: resolc-macos/
+      - name: Compress Artifacts
+        run: |
+          chmod +x resolc-x86_64-unknown-linux-musl
+          chmod +x resolc-universal-apple-darwin
+          tar -czf resolc-x86_64-unknown-linux-musl.tar.gz resolc-x86_64-unknown-linux-musl
+          tar -czf resolc-universal-apple-darwin.tar.gz resolc-universal-apple-darwin
 
       - name: create-release
         uses: softprops/action-gh-release@v2
@@ -328,12 +244,11 @@ jobs:
 
             # Note for macOS Users
             The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-macos`.
-          tag_name: ${{ needs.tag.outputs.PKG_VER }}
-          name: ${{ needs.tag.outputs.PKG_VER }}
+          tag_name: ${{ needs.check-version-changed.outputs.PKG_VER }}
+          name: ${{ needs.check-version-changed.outputs.PKG_VER }}
           draft: true
           target_commitish: ${{ github.sha }}
           files: |
-            ./resolc-linux/resolc-static-linux.tar.gz
-            ./resolc-macos/resolc-macos.tar.gz
-            ./resolc-wasm/resolc-wasm.tar.gz
-
+            resolc-x86_64-unknown-linux-musl.tar.gz
+            resolc-universal-apple-darwin.tar.gz
+            resolc-wasm32-unknown-emscripten.tar.gz

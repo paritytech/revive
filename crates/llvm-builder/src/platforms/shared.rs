@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 /// The build options shared by all platforms.
-pub const SHARED_BUILD_OPTS: [&str; 19] = [
+pub const SHARED_BUILD_OPTS: [&str; 21] = [
     "-DPACKAGE_VENDOR='Parity Technologies'",
     "-DCMAKE_BUILD_WITH_INSTALL_RPATH=1",
     "-DLLVM_BUILD_DOCS='Off'",
@@ -28,6 +28,8 @@ pub const SHARED_BUILD_OPTS: [&str; 19] = [
     "-DCMAKE_EXPORT_COMPILE_COMMANDS='On'",
     "-DPython3_FIND_REGISTRY='LAST'", // Use Python version from $PATH, not from registry
     "-DBUG_REPORT_URL='https://github.com/paritytech/contract-issues/issues/'",
+    "-DCLANG_ENABLE_ARCMT='Off'",
+    "-DCLANG_ENABLE_STATIC_ANALYZER='Off'",
 ];
 
 /// The build options shared by all platforms except MUSL.

@@ -16,7 +16,7 @@ env:
 
 jobs:
   create-release-draft:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
@@ -62,7 +62,7 @@ jobs:
           - target: x86_64-pc-windows-msvc
             builder-arg: gnu
             host: windows
-            runner: windows-latest
+            runner: windows-2022
     needs: create-release-draft
     runs-on: ${{ matrix.runner }}
     env:

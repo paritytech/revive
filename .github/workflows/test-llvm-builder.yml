@@ -19,7 +19,7 @@ jobs:
   test:
     strategy:
       matrix:
-        runner: [parity-large, macos-latest]
+        runner: [parity-large, macos-14]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
           sudo apt update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
 
       - name: Install Dependencies
-        if: matrix.runner == 'macos-latest'
+        if: matrix.runner == 'macos-14'
         run: |
           brew install ninja
 

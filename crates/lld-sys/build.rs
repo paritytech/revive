@@ -96,7 +96,7 @@ fn main() {
     revive_build_utils::llvm_cxx_flags()
         .split_whitespace()
         .fold(&mut cc::Build::new(), |builder, flag| builder.flag(flag))
-        .flag("-Wno-unused-parameter")
+        .warnings(false)
         .cpp(true)
         .file("src/linker.cpp")
         .compile("liblinker.a");

@@ -62,7 +62,7 @@ jobs:
   build:
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin]
+        target: [x86_64-unknown-linux-musl, aarch64-apple-darwin, x86_64-apple-darwin, x86_64-pc-windows-msvc]
         include:
           - target: x86_64-unknown-linux-musl
             type: musl
@@ -73,6 +73,9 @@ jobs:
           - target: x86_64-apple-darwin
             type: native
             runner: macos-13
+          - target: x86_64-pc-windows-msvc
+            type: native
+            runner: windows-2022
     if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
@@ -91,10 +94,11 @@ jobs:
 
       - name: Build
         if: ${{ matrix.type == 'native' }}
+        shell: bash
         run: |
           export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
           make install-bin
-          mv target/release/resolc resolc-${{ matrix.target }}
+          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
 
       - name: Build
         if: ${{ matrix.type == 'musl' }}
@@ -113,6 +117,7 @@ jobs:
         uses: ./.github/actions/get-solc
 
       - name: Basic Sanity Check
+        shell: bash
         run: |
           result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
           echo $result
@@ -121,7 +126,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: resolc-${{ matrix.target }}
-          path: resolc-${{ matrix.target }}
+          path: resolc-${{ matrix.target }}*
           retention-days: 1
 
   build-wasm:
@@ -209,7 +214,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: resolc-wasm32-unknown-emscripten.tar.gz
+          name: resolc-wasm32-unknown-emscripten
           path: resolc-wasm32-unknown-emscripten.tar.gz
           retention-days: 1
 
@@ -235,15 +240,17 @@ jobs:
           chmod +x resolc-universal-apple-darwin
           tar -czf resolc-x86_64-unknown-linux-musl.tar.gz resolc-x86_64-unknown-linux-musl
           tar -czf resolc-universal-apple-darwin.tar.gz resolc-universal-apple-darwin
+          zip -j resolc-x86_64-pc-windows-msvc.zip resolc-x86_64-pc-windows-msvc.exe
 
       - name: create-release
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            ${{ needs.tag.outputs.RELEASE_NOTES }}
+            ## Changelog
+            ${{ needs.check-version-changed.outputs.RELEASE_NOTES }}
 
-            # Note for macOS Users
-            The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-macos`.
+            ## Note for macOS Users
+            The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
           tag_name: ${{ needs.check-version-changed.outputs.PKG_VER }}
           name: ${{ needs.check-version-changed.outputs.PKG_VER }}
           draft: true
@@ -252,3 +259,4 @@ jobs:
             resolc-x86_64-unknown-linux-musl.tar.gz
             resolc-universal-apple-darwin.tar.gz
             resolc-wasm32-unknown-emscripten.tar.gz
+            resolc-x86_64-pc-windows-msvc.zip

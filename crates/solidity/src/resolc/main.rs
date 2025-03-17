@@ -41,6 +41,16 @@ fn main_inner() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if arguments.supported_solc_versions {
+        writeln!(
+            std::io::stdout(),
+            ">={},<={}",
+            revive_solidity::FIRST_SUPPORTED_VERSION,
+            revive_solidity::LAST_SUPPORTED_VERSION,
+        )?;
+        return Ok(());
+    }
+
     if arguments.license {
         let license_mit = include_str!("../../../../LICENSE-MIT");
         let license_apache = include_str!("../../../../LICENSE-APACHE");

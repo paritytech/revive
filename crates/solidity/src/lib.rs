@@ -46,6 +46,9 @@ pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler;
 pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
+
+pub use solc::{FIRST_SUPPORTED_VERSION, LAST_SUPPORTED_VERSION};
+
 #[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;
 pub mod tests;

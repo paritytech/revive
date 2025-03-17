@@ -44,10 +44,10 @@ pub use self::solc::standard_json::output::contract::Contract as SolcStandardJso
 pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
 pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler;
+pub use self::solc::FIRST_SUPPORTED_VERSION as SolcFirstSupportedVersion;
+pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
 pub use self::warning::Warning;
-
-pub use solc::{FIRST_SUPPORTED_VERSION, LAST_SUPPORTED_VERSION};
 
 #[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;

@@ -45,8 +45,8 @@ fn main_inner() -> anyhow::Result<()> {
         writeln!(
             std::io::stdout(),
             ">={},<={}",
-            revive_solidity::FIRST_SUPPORTED_VERSION,
-            revive_solidity::LAST_SUPPORTED_VERSION,
+            revive_solidity::SolcFirstSupportedVersion,
+            revive_solidity::SolcLastSupportedVersion,
         )?;
         return Ok(());
     }

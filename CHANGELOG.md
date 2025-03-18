@@ -6,6 +6,13 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
+### Added
+- Support for solc v0.8.29
+
+### Changed
+
+### Fixed
+
 ## v0.1.0-dev.12
 
 This is a development pre-release.

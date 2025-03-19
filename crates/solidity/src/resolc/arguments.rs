@@ -19,6 +19,10 @@ pub struct Arguments {
     #[arg(long = "version")]
     pub version: bool,
 
+    /// Print supported `solc` versions and exit.
+    #[arg(long = "supported-solc-versions")]
+    pub supported_solc_versions: bool,
+
     /// Print the licence and exit.
     #[arg(long = "license")]
     pub license: bool,
@@ -169,6 +173,12 @@ impl Arguments {
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.version && std::env::args().count() > 2 {
             anyhow::bail!("No other options are allowed while getting the compiler version.");
+        }
+
+        if self.supported_solc_versions && std::env::args().count() > 2 {
+            anyhow::bail!(
+                "No other options are allowed while getting the supported `solc` versions."
+            );
         }
 
         #[cfg(debug_assertions)]

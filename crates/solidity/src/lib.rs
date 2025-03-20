@@ -28,6 +28,8 @@ pub use self::solc::solc_compiler::SolcCompiler;
 pub use self::solc::soljson_compiler::SoljsonCompiler;
 pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler;
+pub use self::solc::FIRST_SUPPORTED_VERSION as SolcFirstSupportedVersion;
+pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
 #[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;

@@ -11,7 +11,7 @@ description = "Rust bindings for the solc standard JSON and combined JSON interf
 [features]
 default = ["parallel"]
 parallel = ["rayon"]
-resolc = []
+resolc = [] # The resolc binary adds a bunch of custom fields to the format
 
 [dependencies]
 revive-common = { workspace = true }

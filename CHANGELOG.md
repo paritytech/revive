@@ -8,6 +8,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Added
 - Support for solc v0.8.29
+- Decouples the solc JSON-input-output type definitions from the Solidity fronted and expose them via a dedicated crate.
 
 ### Changed
 - Runner `resolc` using webkit is no longer supported.

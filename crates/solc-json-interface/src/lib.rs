@@ -1,5 +1,7 @@
-//! This crates provides a typed and serializable Rust interface for
-//! interacting with the `solc` standard JSON and combined JSON modes.
+//! This crates provides (de)serializable Rust types for interacting
+//! `solc` via the [JSON-input-output][0] interface.
+//!
+//! [0]: https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description
 
 pub use self::combined_json::contract::Contract as CombinedJsonContract;
 pub use self::standard_json::input::language::Language as SolcStandardJsonInputLanguage;

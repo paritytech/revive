@@ -1,19 +1,18 @@
 //! The Solidity compiler.
 
-pub mod combined_json;
 #[cfg(not(target_os = "emscripten"))]
 pub mod solc_compiler;
 #[cfg(target_os = "emscripten")]
 pub mod soljson_compiler;
-pub mod standard_json;
 pub mod version;
 
 use std::path::Path;
 use std::path::PathBuf;
 
-use self::combined_json::CombinedJson;
-use self::standard_json::input::Input as StandardJsonInput;
-use self::standard_json::output::Output as StandardJsonOutput;
+use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use self::version::Version;
 
 /// The first version of `solc` with the support of standard JSON interface.
@@ -30,11 +29,11 @@ pub trait Compiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
-        input: StandardJsonInput,
+        input: SolcStandardJsonInput,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
-    ) -> anyhow::Result<StandardJsonOutput>;
+    ) -> anyhow::Result<SolcStandardJsonOutput>;
 
     /// The `solc --combined-json abi,hashes...` mirror.
     fn combined_json(

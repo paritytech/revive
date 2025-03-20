@@ -8374,6 +8374,7 @@ dependencies = [
  "revive-common",
  "revive-linker",
  "revive-runtime-api",
+ "revive-solc-json-interface",
  "revive-stdlib",
  "semver 1.0.25",
  "serde",
@@ -8407,6 +8408,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "revive-solc-json-interface"
+version = "0.1.0-dev.12"
+dependencies = [
+ "anyhow",
+ "rayon",
+ "revive-common",
+ "semver 1.0.25",
+ "serde",
+ "serde_json",
+ "serde_stacker",
+]
+
+[[package]]
 name = "revive-solidity"
 version = "0.1.0-dev.12"
 dependencies = [
@@ -8424,6 +8438,7 @@ dependencies = [
  "regex",
  "revive-common",
  "revive-llvm-context",
+ "revive-solc-json-interface",
  "semver 1.0.25",
  "serde",
  "serde_json",

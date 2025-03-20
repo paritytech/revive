@@ -3,7 +3,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::standard_json::output::error::Error as SolcStandardJsonOutputError;
+use crate::standard_json::output::error::Error as SolcStandardJsonOutputError;
+#[cfg(feature = "resolc")]
 use crate::warning::Warning;
 
 /// The `solc --standard-json` output source.
@@ -131,6 +132,7 @@ impl Source {
     }
 
     /// Returns the list of messages for some specific parts of the AST.
+    #[cfg(feature = "resolc")]
     pub fn get_messages(
         ast: &serde_json::Value,
         suppressed_warnings: &[Warning],

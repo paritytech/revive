@@ -7,17 +7,17 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 use revive_llvm_context::OptimizerSettings;
+use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::Bytecode;
+use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
+use revive_solc_json_interface::warning::Warning;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
+use revive_solc_json_interface::SolcStandardJsonOutput;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
-use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-use crate::solc::standard_json::input::Input as SolcStandardJsonInput;
-use crate::solc::standard_json::output::contract::evm::bytecode::Bytecode;
-use crate::solc::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use crate::solc::standard_json::output::Output as SolcStandardJsonOutput;
 use crate::solc::Compiler;
-use crate::warning::Warning;
 
 static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
 static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
@@ -98,7 +98,13 @@ pub fn build_solidity_with_options(
 
     let mut output = solc.standard_json(input, None, vec![], None)?;
 
-    let project = output.try_to_project(sources, libraries, &solc_version, &DEBUG_CONFIG)?;
+    let project = Project::try_from_standard_json_output(
+        &output,
+        sources,
+        libraries,
+        &solc_version,
+        &DEBUG_CONFIG,
+    )?;
 
     let build: crate::Build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
     build.write_to_standard_json(&mut output, &solc_version)?;
@@ -188,7 +194,13 @@ pub fn build_solidity_and_detect_missing_libraries(
 
     let mut output = solc.standard_json(input, None, vec![], None)?;
 
-    let project = output.try_to_project(sources, libraries, &solc_version, &DEBUG_CONFIG)?;
+    let project = Project::try_from_standard_json_output(
+        &output,
+        sources,
+        libraries,
+        &solc_version,
+        &DEBUG_CONFIG,
+    )?;
 
     let missing_libraries = project.get_missing_libraries();
     missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;

@@ -8,14 +8,15 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", feature = "resolc"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-use crate::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-use crate::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+use crate::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+#[cfg(feature = "resolc")]
 use crate::warning::Warning;
 
 use self::language::Language;
@@ -33,6 +34,7 @@ pub struct Input {
     /// The compiler settings.
     pub settings: Settings,
     /// The suppressed warnings.
+    #[cfg(feature = "resolc")]
     #[serde(skip_serializing)]
     pub suppressed_warnings: Option<Vec<Warning>>,
 }
@@ -60,7 +62,7 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: Option<SolcStandardJsonInputSettingsMetadata>,
-        suppressed_warnings: Option<Vec<Warning>>,
+        #[cfg(feature = "resolc")] suppressed_warnings: Option<Vec<Warning>>,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
         let libraries = Settings::parse_libraries(library_map)?;
@@ -89,12 +91,14 @@ impl Input {
                 optimizer,
                 metadata,
             ),
+            #[cfg(feature = "resolc")]
             suppressed_warnings,
         })
     }
 
     /// A shortcut constructor from source code.
     /// Only for the integration test purposes.
+    #[cfg(feature = "resolc")]
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_sources(
         evm_version: Option<revive_common::EVMVersion>,

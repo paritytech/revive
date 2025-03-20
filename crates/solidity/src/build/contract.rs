@@ -5,11 +5,10 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+use revive_solc_json_interface::CombinedJsonContract;
+use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use serde::Deserialize;
 use serde::Serialize;
-
-use crate::solc::combined_json::contract::Contract as CombinedJsonContract;
-use crate::solc::standard_json::output::contract::Contract as StandardJsonOutputContract;
 
 /// The Solidity contract build.
 #[derive(Debug, Serialize, Deserialize)]
@@ -131,7 +130,7 @@ impl Contract {
     /// Writes the contract text assembly and bytecode to the standard JSON.
     pub fn write_to_standard_json(
         self,
-        standard_json_contract: &mut StandardJsonOutputContract,
+        standard_json_contract: &mut SolcStandardJsonOutputContract,
     ) -> anyhow::Result<()> {
         standard_json_contract.metadata = Some(self.metadata_json);
 

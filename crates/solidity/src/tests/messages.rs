@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::warning::Warning;
+use revive_solc_json_interface::warning::Warning;
 
 pub const ECRECOVER_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT

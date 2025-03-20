@@ -3,7 +3,8 @@
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::solc::version::Version as SolcVersion;
 use crate::ResolcVersion;
 
@@ -22,7 +23,7 @@ impl MissingLibraries {
     /// Writes the missing libraries to the standard JSON.
     pub fn write_to_standard_json(
         mut self,
-        standard_json: &mut StandardJsonOutput,
+        standard_json: &mut SolcStandardJsonOutput,
         solc_version: &SolcVersion,
     ) -> anyhow::Result<()> {
         let contracts = match standard_json.contracts.as_mut() {

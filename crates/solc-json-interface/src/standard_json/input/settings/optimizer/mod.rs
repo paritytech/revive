@@ -49,18 +49,3 @@ impl Optimizer {
         };
     }
 }
-
-impl TryFrom<&Optimizer> for revive_llvm_context::OptimizerSettings {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Optimizer) -> Result<Self, Self::Error> {
-        let mut result = match value.mode {
-            Some(mode) => Self::try_from_cli(mode)?,
-            None => Self::cycles(),
-        };
-        if value.fallback_to_optimizing_for_size.unwrap_or_default() {
-            result.enable_fallback_to_size();
-        }
-        Ok(result)
-    }
-}

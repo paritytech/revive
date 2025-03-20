@@ -5,8 +5,9 @@ pub mod contract;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::solc::combined_json::CombinedJson;
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
+use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::solc::version::Version as SolcVersion;
 use crate::ResolcVersion;
 
@@ -66,7 +67,7 @@ impl Build {
     /// Writes all contracts assembly and bytecode to the standard JSON.
     pub fn write_to_standard_json(
         mut self,
-        standard_json: &mut StandardJsonOutput,
+        standard_json: &mut SolcStandardJsonOutput,
         solc_version: &SolcVersion,
     ) -> anyhow::Result<()> {
         let contracts = match standard_json.contracts.as_mut() {

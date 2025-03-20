@@ -1,6 +1,7 @@
 //! The `solc --standard-json` input settings.
 
 pub mod metadata;
+pub mod metadata_hash;
 pub mod optimizer;
 pub mod selection;
 

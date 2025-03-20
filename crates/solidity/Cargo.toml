@@ -37,6 +37,7 @@ inkwell = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
+revive-solc-json-interface = { workspace = true, features = ["resolc"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "*", default-features = false }

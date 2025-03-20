@@ -3,9 +3,10 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::solc::combined_json::CombinedJson;
-use crate::solc::standard_json::input::Input as StandardJsonInput;
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
+use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::solc::version::Version;
 use anyhow::Context;
 use std::ffi::{c_char, c_void, CStr, CString};
@@ -24,11 +25,11 @@ impl Compiler for SoljsonCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
-        mut input: StandardJsonInput,
+        mut input: SolcStandardJsonInput,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
-    ) -> anyhow::Result<StandardJsonOutput> {
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
         if !include_paths.is_empty() {
             anyhow::bail!("configuring include paths is not supported with solJson")
         }
@@ -46,8 +47,8 @@ impl Compiler for SoljsonCompiler {
 
         let input_json = serde_json::to_string(&input).expect("Always valid");
         let out = Self::compile_standard_json(input_json)?;
-        let mut output: StandardJsonOutput = revive_common::deserialize_from_slice(out.as_bytes())
-            .map_err(|error| {
+        let mut output: SolcStandardJsonOutput =
+            revive_common::deserialize_from_slice(out.as_bytes()).map_err(|error| {
                 anyhow::anyhow!(
                     "Soljson output parsing error: {}\n{}",
                     error,

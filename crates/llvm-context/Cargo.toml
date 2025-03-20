@@ -29,3 +29,4 @@ revive-common = { workspace = true }
 revive-runtime-api = { workspace = true }
 revive-linker = { workspace = true }
 revive-stdlib = { workspace = true }
+revive-solc-json-interface = { workspace = true }

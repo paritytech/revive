@@ -3,7 +3,6 @@
 pub mod r#const;
 pub mod context;
 pub mod evm;
-pub mod metadata_hash;
 
 pub use self::r#const::*;
 

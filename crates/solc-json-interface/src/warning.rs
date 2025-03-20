@@ -1,26 +1,22 @@
-//! The compiler warning.
+//! `resolc` custom compiler warnings.
+//!
+//! The revive compiler adds warnings only applicable when compilng
+//! to the revive stack on Polkadot to the output.
 
 use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-/// The compiler warning.
+// The `resolc` custom compiler warning.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Warning {
-    /// The warning for eponymous feature.
     EcRecover,
-    /// The warning for eponymous feature.
     SendTransfer,
-    /// The warning for eponymous feature.
     ExtCodeSize,
-    /// The warning for eponymous feature.
     TxOrigin,
-    /// The warning for eponymous feature.
     BlockTimestamp,
-    /// The warning for eponymous feature.
     BlockNumber,
-    /// The warning for eponymous feature.
     BlockHash,
 }
 

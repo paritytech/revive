@@ -2,6 +2,7 @@
 
 pub mod size_level;
 
+use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -224,5 +225,20 @@ impl std::fmt::Display for Settings {
             self.middle_end_as_string(),
             self.level_back_end as u8,
         )
+    }
+}
+
+impl TryFrom<&SolcStandardJsonInputSettingsOptimizer> for Settings {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &SolcStandardJsonInputSettingsOptimizer) -> Result<Self, Self::Error> {
+        let mut result = match value.mode {
+            Some(mode) => Self::try_from_cli(mode)?,
+            None => Self::cycles(),
+        };
+        if value.fallback_to_optimizing_for_size.unwrap_or_default() {
+            result.enable_fallback_to_size();
+        }
+        Ok(result)
     }
 }

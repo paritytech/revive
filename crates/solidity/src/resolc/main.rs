@@ -104,7 +104,7 @@ fn main_inner() -> anyhow::Result<()> {
     let (input_files, remappings) = arguments.split_input_files_and_remappings()?;
 
     let suppressed_warnings = match arguments.suppress_warnings {
-        Some(warnings) => Some(revive_solidity::Warning::try_from_strings(
+        Some(warnings) => Some(revive_solc_json_interface::ResolcWarning::try_from_strings(
             warnings.as_slice(),
         )?),
         None => None,
@@ -142,8 +142,10 @@ fn main_inner() -> anyhow::Result<()> {
     let include_metadata_hash = match arguments.metadata_hash {
         Some(metadata_hash) => {
             let metadata =
-                revive_llvm_context::PolkaVMMetadataHash::from_str(metadata_hash.as_str())?;
-            metadata != revive_llvm_context::PolkaVMMetadataHash::None
+                revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash::from_str(
+                    metadata_hash.as_str(),
+                )?;
+            metadata != revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash::None
         }
         None => true,
     };

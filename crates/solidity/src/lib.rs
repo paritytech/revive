@@ -7,7 +7,6 @@ pub(crate) mod process;
 pub(crate) mod project;
 pub(crate) mod solc;
 pub(crate) mod version;
-pub(crate) mod warning;
 pub(crate) mod yul;
 
 pub use self::build::contract::Contract as ContractBuild;
@@ -23,31 +22,15 @@ pub use self::process::Process;
 pub use self::project::contract::Contract as ProjectContract;
 pub use self::project::Project;
 pub use self::r#const::*;
-pub use self::solc::combined_json::contract::Contract as SolcCombinedJsonContract;
-pub use self::solc::combined_json::CombinedJson as SolcCombinedJson;
 #[cfg(not(target_os = "emscripten"))]
 pub use self::solc::solc_compiler::SolcCompiler;
 #[cfg(target_os = "emscripten")]
 pub use self::solc::soljson_compiler::SoljsonCompiler;
-pub use self::solc::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
-pub use self::solc::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
-pub use self::solc::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
-pub use self::solc::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
-pub use self::solc::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
-pub use self::solc::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
-pub use self::solc::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
-pub use self::solc::standard_json::input::source::Source as SolcStandardJsonInputSource;
-pub use self::solc::standard_json::input::Input as SolcStandardJsonInput;
-pub use self::solc::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
-pub use self::solc::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
-pub use self::solc::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
-pub use self::solc::standard_json::output::Output as SolcStandardJsonOutput;
 pub use self::solc::version::Version as SolcVersion;
 pub use self::solc::Compiler;
 pub use self::solc::FIRST_SUPPORTED_VERSION as SolcFirstSupportedVersion;
 pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
-pub use self::warning::Warning;
 
 #[cfg(not(target_os = "emscripten"))]
 pub mod test_utils;
@@ -56,6 +39,13 @@ pub mod tests;
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
+
+use revive_solc_json_interface::standard_json::input::settings::metadata_hash::MetadataHash;
+use revive_solc_json_interface::ResolcWarning;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputLanguage;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 
 /// Runs the Yul mode.
 pub fn yul<T: Compiler>(
@@ -126,7 +116,7 @@ pub fn standard_output<T: Compiler>(
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
-    suppressed_warnings: Option<Vec<Warning>>,
+    suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
@@ -155,7 +145,7 @@ pub fn standard_output<T: Compiler>(
         .collect();
 
     let libraries = solc_input.settings.libraries.clone().unwrap_or_default();
-    let mut solc_output = solc.standard_json(solc_input, base_path, include_paths, allow_paths)?;
+    let solc_output = solc.standard_json(solc_input, base_path, include_paths, allow_paths)?;
 
     if let Some(errors) = solc_output.errors.as_deref() {
         let mut has_errors = false;
@@ -173,8 +163,13 @@ pub fn standard_output<T: Compiler>(
         }
     }
 
-    let project =
-        solc_output.try_to_project(source_code_files, libraries, &solc_version, &debug_config)?;
+    let project = Project::try_from_standard_json_output(
+        &solc_output,
+        source_code_files,
+        libraries,
+        &solc_version,
+        &debug_config,
+    )?;
 
     let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
 
@@ -203,9 +198,7 @@ pub fn standard_json<T: Compiler>(
         revive_llvm_context::OptimizerSettings::try_from(&solc_input.settings.optimizer)?;
 
     let include_metadata_hash = match solc_input.settings.metadata {
-        Some(ref metadata) => {
-            metadata.bytecode_hash != Some(revive_llvm_context::PolkaVMMetadataHash::None)
-        }
+        Some(ref metadata) => metadata.bytecode_hash != Some(MetadataHash::None),
         None => true,
     };
 
@@ -221,8 +214,13 @@ pub fn standard_json<T: Compiler>(
         }
     }
 
-    let project =
-        solc_output.try_to_project(source_code_files, libraries, &solc_version, &debug_config)?;
+    let project = Project::try_from_standard_json_output(
+        &solc_output,
+        source_code_files,
+        libraries,
+        &solc_version,
+        &debug_config,
+    )?;
 
     if detect_missing_libraries {
         let missing_libraries = project.get_missing_libraries();
@@ -250,7 +248,7 @@ pub fn combined_json<T: Compiler>(
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     remappings: Option<BTreeSet<String>>,
-    suppressed_warnings: Option<Vec<Warning>>,
+    suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,

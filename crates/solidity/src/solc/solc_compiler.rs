@@ -4,9 +4,10 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::solc::combined_json::CombinedJson;
-use crate::solc::standard_json::input::Input as StandardJsonInput;
-use crate::solc::standard_json::output::Output as StandardJsonOutput;
+use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::solc::version::Version;
 
 use super::Compiler;
@@ -39,11 +40,11 @@ impl Compiler for SolcCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
-        mut input: StandardJsonInput,
+        mut input: SolcStandardJsonInput,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
-    ) -> anyhow::Result<StandardJsonOutput> {
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
         let version = self.version()?.validate(&include_paths)?.default;
 
         let mut command = std::process::Command::new(self.executable.as_str());
@@ -93,7 +94,7 @@ impl Compiler for SolcCompiler {
             );
         }
 
-        let mut output: StandardJsonOutput =
+        let mut output: SolcStandardJsonOutput =
             revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
                 anyhow::anyhow!(
                     "{} subprocess output parsing error: {}\n{}",

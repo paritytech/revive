@@ -11,57 +11,57 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: find asset
-      id: find
-      uses: actions/github-script@v7
-      env:
-        target: ${{ inputs.target }}
-      with:
-        result-encoding: string
-        script: |
-          let page = 1;
-          let releases = [];
+    # - name: find asset
+    #   id: find
+    #   uses: actions/github-script@v7
+    #   env:
+    #     target: ${{ inputs.target }}
+    #   with:
+    #     result-encoding: string
+    #     script: |
+    #       let page = 1;
+    #       let releases = [];
 
-          let releasePrefix = "llvm-"
-          let target = process.env.target
+    #       let releasePrefix = "llvm-"
+    #       let target = process.env.target
 
-          do {
-            const res = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 50,
-              page,
-            });
+    #       do {
+    #         const res = await github.rest.repos.listReleases({
+    #           owner: context.repo.owner,
+    #           repo: context.repo.repo,
+    #           per_page: 50,
+    #           page,
+    #         });
 
-            releases = res.data
-            releases.sort((a, b) => {
-              return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
-            });
+    #         releases = res.data
+    #         releases.sort((a, b) => {
+    #           return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
+    #         });
 
-            let llvmLatestRelease = releases.find(release => {
-              return release.tag_name.startsWith(releasePrefix);
-            });
-            if (llvmLatestRelease){
-                let asset = llvmLatestRelease.assets.find(asset =>{
-                    return asset.name.includes(target);
-                });
-                if (!asset){
-                  core.setFailed(`Artifact for '${target}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
-                  process.exit();
-                }
-                return asset.browser_download_url;
-            }
+    #         let llvmLatestRelease = releases.find(release => {
+    #           return release.tag_name.startsWith(releasePrefix);
+    #         });
+    #         if (llvmLatestRelease){
+    #             let asset = llvmLatestRelease.assets.find(asset =>{
+    #                 return asset.name.includes(target);
+    #             });
+    #             if (!asset){
+    #               core.setFailed(`Artifact for '${target}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
+    #               process.exit();
+    #             }
+    #             return asset.browser_download_url;
+    #         }
 
-            page++;
-          } while(releases.length > 0);
+    #         page++;
+    #       } while(releases.length > 0);
 
-          core.setFailed(`No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`);
-          process.exit();
+    #       core.setFailed(`No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`);
+    #       process.exit();
 
     - name: download
       shell: bash
       run: |
-        curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
+        curl -sSLo llvm.tar.gz ${{ inputs.target }}
 
     - name: unpack
       shell: bash

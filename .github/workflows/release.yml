@@ -241,7 +241,7 @@ jobs:
         run: |
           lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
 
-      - name: Compress Artifacts
+      - name: Make Executable
         run: |
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin

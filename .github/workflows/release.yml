@@ -214,15 +214,15 @@ jobs:
 
       - name: Compress Artifact
         run: |
-          tar -czf $(pwd)/resolc-wasm32-unknown-emscripten.tar.gz -C ./target/wasm32-unknown-emscripten/release/ \
-            resolc.js \
-            resolc.wasm \
-            resolc_web.js
+          mkdir -p resolc-wasm32-unknown-emscripten
+          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
       - uses: actions/upload-artifact@v4
         with:
           name: resolc-wasm32-unknown-emscripten
-          path: resolc-wasm32-unknown-emscripten.tar.gz
+          path: resolc-wasm32-unknown-emscripten/*
           retention-days: 1
 
   create-release:
@@ -245,9 +245,6 @@ jobs:
         run: |
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin
-          tar -czf resolc-x86_64-unknown-linux-musl.tar.gz resolc-x86_64-unknown-linux-musl
-          tar -czf resolc-universal-apple-darwin.tar.gz resolc-universal-apple-darwin
-          zip -j resolc-x86_64-pc-windows-msvc.zip resolc-x86_64-pc-windows-msvc.exe
 
       - name: create-release
         uses: softprops/action-gh-release@v2
@@ -263,7 +260,9 @@ jobs:
           draft: true
           target_commitish: ${{ github.sha }}
           files: |
-            resolc-x86_64-unknown-linux-musl.tar.gz
-            resolc-universal-apple-darwin.tar.gz
-            resolc-wasm32-unknown-emscripten.tar.gz
-            resolc-x86_64-pc-windows-msvc.zip
+            resolc-x86_64-unknown-linux-musl
+            resolc-universal-apple-darwin
+            resolc-x86_64-pc-windows-msvc.exe
+            resolc.js
+            resolc.wasm
+            resolc_web.js

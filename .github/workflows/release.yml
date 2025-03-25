@@ -97,7 +97,7 @@ jobs:
       - name: Download LLVM
         uses: ./.github/actions/get-llvm
         with:
-          target: ${{ matrix.target }}
+          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-musl.tar.gz
 
       - name: Build
         if: ${{ matrix.type == 'native' }}
@@ -151,12 +151,12 @@ jobs:
       - name: Download Host LLVM
         uses: ./.github/actions/get-llvm
         with:
-          target: x86_64-unknown-linux-gnu
+          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-gnu.tar.gz
 
       - name: Download Wasm LLVM
         uses: ./.github/actions/get-llvm
         with:
-          target: wasm32-unknown-emscripten
+          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-wasm32-unknown-emscripten.tar.gz
 
       - name: Download EMSDK
         uses: ./.github/actions/get-emsdk

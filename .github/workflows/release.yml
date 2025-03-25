@@ -74,15 +74,19 @@ jobs:
           - target: x86_64-unknown-linux-musl
             type: musl
             runner: ubuntu-24.04
+            llvm_url: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-musl.tar.gz
           - target: aarch64-apple-darwin
             type: native
             runner: macos-14
+            llvm_url: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-aarch64-apple-darwin.tar.gz
           - target: x86_64-apple-darwin
             type: native
             runner: macos-13
+            llvm_url: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-apple-darwin.tar.gz
           - target: x86_64-pc-windows-msvc
             type: native
             runner: windows-2022
+            llvm_url: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-pc-windows-msvc.tar.gz
     if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
@@ -97,7 +101,7 @@ jobs:
       - name: Download LLVM
         uses: ./.github/actions/get-llvm
         with:
-          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-musl.tar.gz
+          target: ${{ matrix.llvm_url }}
 
       - name: Build
         if: ${{ matrix.type == 'native' }}

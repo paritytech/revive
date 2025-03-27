@@ -31,9 +31,18 @@ jobs:
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
           APP_NAME: "paritytech-revive-json"
+          Green: "\e[32m"
+          NC: "\e[0m"
         run: |
           cd resolc-bin
           python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
+
+          echo "${Green}Add new remote with gh app token${NC}"
+          git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")
+
+          echo "${Green}Remove http section that causes issues with gh app auth token${NC}"
+          sed -i.bak '/\[http/d' ./.git/config
+          sed -i.bak '/extraheader/d' ./.git/config
 
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"

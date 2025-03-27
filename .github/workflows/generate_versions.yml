@@ -18,6 +18,7 @@ jobs:
         with:
           repository: paritytech/resolc-bin
           path: resolc-bin
+          ref: alex-test
 
       - uses: actions/create-github-app-token@v1
         id: app-token
@@ -47,7 +48,7 @@ jobs:
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"
 
-          git checkout -b alex-test
+          # git checkout -b alex-test
           git add .
           git commit -m "Update json"
           git push origin alex-test

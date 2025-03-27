@@ -1,0 +1,25 @@
+on:
+  release:
+    types: [published]
+
+jobs:
+  generate_json:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: tmp
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-bin
+          path: resolc-bin
+
+      - run: |
+          cd resolc-bin
+          python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
+          ls -la

@@ -19,7 +19,20 @@ jobs:
           repository: paritytech/resolc-bin
           path: resolc-bin
 
-      - run: |
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+          private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+
+      - name: Generate json and push
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_NAME: "paritytech-revive-json"
+        run: |
           cd resolc-bin
           python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
-          ls -la
+          git checkout -b alex-test
+          git add .
+          git commit -m "Update json"
+          git push origin alex-test

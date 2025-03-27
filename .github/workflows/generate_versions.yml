@@ -24,6 +24,8 @@ jobs:
         with:
           app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
           private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+          owner: paritytech
+          repositories: resolc-bin
 
       - name: Generate json and push
         env:

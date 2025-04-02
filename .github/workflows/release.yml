@@ -22,9 +22,10 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      CURRENT_TAG: ${{ github.ref_name }}
     outputs:
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
-      CURRENT_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:

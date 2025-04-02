@@ -271,6 +271,7 @@ jobs:
             The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          prerelease: true
           # draft: true
           target_commitish: ${{ github.sha }}
           files: |

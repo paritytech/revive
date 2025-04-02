@@ -1,10 +1,12 @@
+name: Generate JSON for resolc-bin
 on:
   release:
-    types: [published]
+    types: [released, prereleased]
 
 jobs:
   generateJson:
     runs-on: ubuntu-latest
+    if: contains(github.event.release.tag_name, 'llvm') == false
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:

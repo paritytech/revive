@@ -40,7 +40,7 @@ jobs:
           #
           if [[ $CURRENT_TAG != $PKG_VER  ]];
             then
-              echo "::error::Tag doesn't match package version in Cargo.toml, please fix";
+              echo "::error::Tag $CURRENT_TAG doesn't match package version $PKG_VER in Cargo.toml, please fix";
               exit 1
             fi
 

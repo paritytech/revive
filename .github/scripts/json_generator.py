@@ -110,7 +110,7 @@ def main():
     for asset in release_data['assets']:
         platform_name = platform_mapping.get(asset['name'])
         if platform_name:
-            platform_folder = os.path.join("release",platform_name)
+            platform_folder = os.path.join(platform_name)
             asset_json = generate_asset_json(release_data, asset)
             save_platform_json(platform_folder, asset_json, tag)
             print(f"Processed {asset['name']} for {platform_name}")

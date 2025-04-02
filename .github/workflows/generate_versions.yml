@@ -60,3 +60,5 @@ jobs:
           git add .
           git commit -m "Update json"
           git push origin alex-test
+
+          echo "::notice::info.list files were successfully published to https://github.com/paritytech/resolc-bin"

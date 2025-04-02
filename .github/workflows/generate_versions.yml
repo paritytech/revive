@@ -35,6 +35,12 @@ jobs:
           Green: "\e[32m"
           NC: "\e[0m"
         run: |
+          sudo apt-get update && sudo apt-get install -y wget
+          wget https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/resolc-x86_64-unknown-linux-musl
+          chmod +x resolc-x86_64-unknown-linux-musl
+          export FIRST_SOLC_VERSION=$(./resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
+          export LAST_SOLC_VERSION=$(./resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
+
           cd resolc-bin
           python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
 

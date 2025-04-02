@@ -44,7 +44,9 @@ def generate_asset_json(release_data, asset):
         "version": version,
         "build": build,
         "longVersion": long_version,
-        "url": asset['browser_download_url']
+        "url": asset['browser_download_url'],
+        "firstSolcVersion": os.environ["FIRST_SOLC_VERSION"],
+        "lastSolcVersion": os.environ["LAST_SOLC_VERSION"]
     }
 
 def save_platform_json(platform_folder, asset_json, tag):
@@ -101,16 +103,14 @@ def main():
         'resolc-x86_64-unknown-linux-musl': 'linux',
         'resolc-universal-apple-darwin': 'macos',
         'resolc-x86_64-pc-windows-msvc.exe': 'windows',
-        'resolc.wasm': 'wasm',
-        'resolc.js': 'js',
-        'resolc_web.js': 'js_web'
+        'resolc_web.js': 'wasm'
     }
 
     # Process each asset
     for asset in release_data['assets']:
         platform_name = platform_mapping.get(asset['name'])
         if platform_name:
-            platform_folder = os.path.join(platform_name)
+            platform_folder = os.path.join("release",platform_name)
             asset_json = generate_asset_json(release_data, asset)
             save_platform_json(platform_folder, asset_json, tag)
             print(f"Processed {asset['name']} for {platform_name}")

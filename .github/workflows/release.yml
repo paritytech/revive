@@ -1,14 +1,16 @@
 name: Release
 on:
   push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-    types: [opened, synchronize, labeled, unlabeled]
-  workflow_dispatch:
+    # branches: ["main"]
+    tags:
+      - "v*"
+  # pull_request:
+  #   branches: ["main"]
+  #   types: [opened, synchronize, labeled, unlabeled]
+  # workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -17,7 +19,7 @@ env:
 
 jobs:
   check-version-changed:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
+    # if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -91,149 +93,145 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
     steps:
-      # - uses: actions/checkout@v4
-      # - uses: actions-rust-lang/setup-rust-toolchain@v1
-      #   with:
-      #     # without this it will override our rust flags
-      #     rustflags: ""
-      #     cache-key: ${{ matrix.target }}
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # without this it will override our rust flags
+          rustflags: ""
+          cache-key: ${{ matrix.target }}
 
-      # - name: Download LLVM
-      #   uses: ./.github/actions/get-llvm
-      #   with:
-      #     target: ${{ matrix.llvm_url }}
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: ${{ matrix.llvm_url }}
 
-      # - name: Build
-      #   if: ${{ matrix.type == 'native' }}
-      #   shell: bash
-      #   run: |
-      #     export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
-      #     make install-bin
-      #     mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
+      - name: Build
+        if: ${{ matrix.type == 'native' }}
+        shell: bash
+        run: |
+          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
+          make install-bin
+          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
 
-      # - name: Build
-      #   if: ${{ matrix.type == 'musl' }}
-      #   run: |
-      #     docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
-      #      cd /opt/revive
-      #      chown -R root:root .
-      #      apt update && apt upgrade -y && apt install -y pkg-config
-      #      export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
-      #      make install-bin
-      #      mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
-      #      "
-      #     sudo chown -R $(id -u):$(id -g) .
+      - name: Build
+        if: ${{ matrix.type == 'musl' }}
+        run: |
+          docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
+           cd /opt/revive
+           chown -R root:root .
+           apt update && apt upgrade -y && apt install -y pkg-config
+           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
+           make install-bin
+           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
+           "
+          sudo chown -R $(id -u):$(id -g) .
 
-      # - name: Install Solc
-      #   uses: ./.github/actions/get-solc
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
 
-      # - name: Basic Sanity Check
-      #   shell: bash
-      #   run: |
-      #     result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
-      #     echo $result
-      #     if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
+      - name: Basic Sanity Check
+        shell: bash
+        run: |
+          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
+          echo $result
+          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
 
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: resolc-${{ matrix.target }}
-      #     path: resolc-${{ matrix.target }}*
-      #     retention-days: 1
-
-      - name: fake release
-        run: exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolc-${{ matrix.target }}
+          path: resolc-${{ matrix.target }}*
+          retention-days: 1
 
   build-wasm:
     if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
+    env:
+      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive-workflow-test/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
-      # - uses: actions/checkout@v4
-      # - uses: actions-rust-lang/setup-rust-toolchain@v1
-      #   with:
-      #     target: wasm32-unknown-emscripten
-      #     # without this it will override our rust flags
-      #     rustflags: ""
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-emscripten
+          # without this it will override our rust flags
+          rustflags: ""
 
-      # - name: Download Host LLVM
-      #   uses: ./.github/actions/get-llvm
-      #   with:
-      #     target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-gnu.tar.gz
+      - name: Download Host LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-unknown-linux-gnu.tar.gz
 
-      # - name: Download Wasm LLVM
-      #   uses: ./.github/actions/get-llvm
-      #   with:
-      #     target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-wasm32-unknown-emscripten.tar.gz
+      - name: Download Wasm LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-wasm32-unknown-emscripten.tar.gz
 
-      # - name: Download EMSDK
-      #   uses: ./.github/actions/get-emsdk
+      - name: Download EMSDK
+        uses: ./.github/actions/get-emsdk
 
-      # - name: Build
-      #   run: |
-      #     export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
-      #     export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
-      #     source emsdk/emsdk_env.sh
-      #     make install-wasm
-      #     chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
+      - name: Build
+        run: |
+          export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
+          export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
+          source emsdk/emsdk_env.sh
+          make install-wasm
+          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
 
-      # - name: Set Up Node.js
-      #   uses: actions/setup-node@v3
-      #   with:
-      #     node-version: "20"
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
 
-      # - name: Basic Sanity Check
-      #   run: |
-      #     mkdir -p solc
-      #     curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.29/soljson.js
-      #     node -e "
-      #     const soljson = require('solc/soljson');
-      #     const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
+      - name: Basic Sanity Check
+        run: |
+          mkdir -p solc
+          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.29/soljson.js
+          node -e "
+          const soljson = require('solc/soljson');
+          const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
 
-      #     const compiler = createRevive();
-      #     compiler.soljson = soljson;
+          const compiler = createRevive();
+          compiler.soljson = soljson;
 
-      #     const standardJsonInput =
-      #     {
-      #       language: 'Solidity',
-      #       sources: {
-      #         'MyContract.sol': {
-      #           content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
-      #         },
-      #       },
-      #       settings: { optimizer: { enabled: false } }
-      #     };
+          const standardJsonInput =
+          {
+            language: 'Solidity',
+            sources: {
+              'MyContract.sol': {
+                content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
+              },
+            },
+            settings: { optimizer: { enabled: false } }
+          };
 
-      #     compiler.writeToStdin(JSON.stringify(standardJsonInput));
-      #     compiler.callMain(['--standard-json']);
+          compiler.writeToStdin(JSON.stringify(standardJsonInput));
+          compiler.callMain(['--standard-json']);
 
-      #     // Collect output
-      #     const stdout = compiler.readFromStdout();
-      #     const stderr = compiler.readFromStderr();
+          // Collect output
+          const stdout = compiler.readFromStdout();
+          const stderr = compiler.readFromStderr();
 
-      #     if (stderr) { console.error(stderr); process.exit(1); }
+          if (stderr) { console.error(stderr); process.exit(1); }
 
-      #     let out = JSON.parse(stdout);
-      #     let bytecode = out.contracts['MyContract.sol']['MyContract'].evm.bytecode.object
-      #     console.log(bytecode);
+          let out = JSON.parse(stdout);
+          let bytecode = out.contracts['MyContract.sol']['MyContract'].evm.bytecode.object
+          console.log(bytecode);
 
-      #     if(!bytecode.startsWith('50564d')) { process.exit(1); }
-      #     "
+          if(!bytecode.startsWith('50564d')) { process.exit(1); }
+          "
 
-      # - name: Pack Artifact
-      #   run: |
-      #     mkdir -p resolc-wasm32-unknown-emscripten
-      #     mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
-      #     mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
-      #     mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
+      - name: Pack Artifact
+        run: |
+          mkdir -p resolc-wasm32-unknown-emscripten
+          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: resolc-wasm32-unknown-emscripten
-      #     path: resolc-wasm32-unknown-emscripten/*
-      #     retention-days: 1
-
-      - name: fake release
-        run: exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolc-wasm32-unknown-emscripten
+          path: resolc-wasm32-unknown-emscripten/*
+          retention-days: 1
 
   create-release:
     if: github.event_name != 'pull_request'
@@ -242,28 +240,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      # - name: Download Artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     merge-multiple: true
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
 
-      # - name: Create macOS Fat Binary
-      #   run: |
-      #     lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
-
-      # - name: Make Executable
-      #   run: |
-      #     chmod +x resolc-x86_64-unknown-linux-musl
-      #     chmod +x resolc-universal-apple-darwin
-
-      - name: fake release
+      - name: Create macOS Fat Binary
         run: |
-          echo ok > resolc-x86_64-unknown-linux-musl
-          echo ok > resolc-universal-apple-darwin
-          echo ok > resolc-x86_64-pc-windows-msvc.exe
-          echo ok > resolc.js
-          echo ok > resolc.wasm
-          echo ok > resolc_web.js
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Make Executable
+        run: |
+          chmod +x resolc-x86_64-unknown-linux-musl
+          chmod +x resolc-universal-apple-darwin
+
+      # - name: fake release
+      #   run: |
+      #     echo ok > resolc-x86_64-unknown-linux-musl
+      #     echo ok > resolc-universal-apple-darwin
+      #     echo ok > resolc-x86_64-pc-windows-msvc.exe
+      #     echo ok > resolc.js
+      #     echo ok > resolc.wasm
+      #     echo ok > resolc_web.js
 
       - name: create-release
         uses: softprops/action-gh-release@v2
@@ -276,7 +274,7 @@ jobs:
             The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
           tag_name: ${{ needs.check-version-changed.outputs.PKG_VER }}
           name: ${{ needs.check-version-changed.outputs.PKG_VER }}
-          draft: true
+          # draft: true
           target_commitish: ${{ github.sha }}
           files: |
             resolc-x86_64-unknown-linux-musl

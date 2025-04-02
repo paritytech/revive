@@ -1,7 +1,7 @@
 name: Release
 on:
   push:
-    # branches: ["main"]
+    branches: ["main"]
     tags:
       - "v*"
   # pull_request:
@@ -19,41 +19,33 @@ env:
 
 jobs:
   check-version-changed:
-    # if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:
-      TAG: ${{ steps.versions.outputs.TAG }}
-      PKG_VER: ${{ steps.versions.outputs.PKG_VER }}
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
+      CURRENT_TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-tags: true
           fetch-depth: 0
 
-      - name: Check Versions
+      - name: Check that tag and version in Cargo.toml match
         id: versions
         run: |
-          export CURRENT_TAG=$(git describe --tags --abbrev=0 --exclude "llvm-*")
           export PKG_VER=v$(cat Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
           echo "Current tag $CURRENT_TAG"
           echo "Package version $PKG_VER"
           #
-          echo "PKG_VER=$PKG_VER" >> $GITHUB_OUTPUT
-          if [[ $CURRENT_TAG == $PKG_VER  ]];
+          if [[ $CURRENT_TAG != $PKG_VER  ]];
             then
-              echo "Tag is up to date. Nothing to do.";
-              export TAG=old;
-            else
-              echo "Tag was updated.";
-              export TAG=new;
+              echo "::error::Tag doesn't match package version in Cargo.toml, please fix";
+              exit 1
             fi
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
           # Generating release notes early, in order to avoid checkout at the last step
-          export RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
+          export RELEASE_NOTES="$(sed '/^## '${CURRENT_TAG}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
 
           echo "Release notes:"
           echo "$RELEASE_NOTES"
@@ -89,7 +81,6 @@ jobs:
             type: native
             runner: windows-2022
             llvm_url: https://github.com/paritytech/revive/releases/download/llvm-18.1.8-revive.22f3ceb/llvm-18.1.8-revive.22f3ceb-x86_64-pc-windows-msvc.tar.gz
-    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
     steps:
@@ -143,7 +134,6 @@ jobs:
           retention-days: 1
 
   build-wasm:
-    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
     env:
@@ -234,7 +224,7 @@ jobs:
           retention-days: 1
 
   create-release:
-    if: github.event_name != 'pull_request'
+    if: github.ref_name != 'main'
     needs: [check-version-changed, build-wasm]
     runs-on: macos-14
     permissions:
@@ -272,8 +262,8 @@ jobs:
 
             ## Note for macOS Users
             The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
-          tag_name: ${{ needs.check-version-changed.outputs.PKG_VER }}
-          name: ${{ needs.check-version-changed.outputs.PKG_VER }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           # draft: true
           target_commitish: ${{ github.sha }}
           files: |

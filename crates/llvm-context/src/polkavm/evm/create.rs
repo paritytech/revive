@@ -32,6 +32,7 @@ where
     let salt_pointer = match salt {
         Some(salt) => {
             let salt_pointer = context.build_alloca_at_entry(context.word_type(), "salt_pointer");
+            let salt = context.build_byte_swap(salt.into())?;
             context.build_store(salt_pointer, salt)?;
             salt_pointer
         }

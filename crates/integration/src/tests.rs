@@ -60,6 +60,7 @@ test_spec!(mload, "MLoad", "MLoad.sol");
 test_spec!(delegate_no_contract, "DelegateCaller", "DelegateCaller.sol");
 test_spec!(function_type, "FunctionType", "FunctionType.sol");
 test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
+//test_spec!(create2_salt, "AddressPredictor", "AddressPredictor.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -479,6 +480,34 @@ fn transfer_denies_reentrancy() {
                 gas_limit: None,
                 storage_deposit_limit: None,
                 data: Contract::transfer_self(U256::from(value)).calldata,
+            },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn create2_salt() {
+    let salt = U256::from(777);
+    let predicted = Contract::predicted_constructor(salt).pvm_runtime;
+    let predictor = Contract::address_predictor_constructor(salt, predicted.clone().into());
+    Specs {
+        actions: vec![
+            Upload {
+                origin: TestAddress::Alice,
+                code: Code::Bytes(predicted),
+                storage_deposit_limit: None,
+            },
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(predictor.pvm_runtime),
+                data: predictor.calldata,
+                salt: OptionalHex::default(),
             },
         ],
         differential: false,

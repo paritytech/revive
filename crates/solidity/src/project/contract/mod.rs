@@ -77,6 +77,7 @@ impl Contract {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
+        llvm_arguments: &[String],
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
@@ -89,6 +90,7 @@ impl Contract {
             version.long.clone(),
             version.l2_revision.clone(),
             optimizer.settings().to_owned(),
+            llvm_arguments.to_vec(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
         let metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]> = if include_metadata_hash
@@ -120,6 +122,7 @@ impl Contract {
             Some(project),
             include_metadata_hash,
             debug_config,
+            llvm_arguments,
         );
         context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
         match self.ir {

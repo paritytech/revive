@@ -17,11 +17,6 @@ use sha3::Digest;
 use self::context::build::Build;
 use self::context::Context;
 
-/// Initializes the PolkaVM target machine.
-pub fn initialize_target() {
-    inkwell::targets::Target::initialize_riscv(&Default::default());
-}
-
 /// Builds PolkaVM assembly text.
 pub fn build_assembly_text(
     contract_path: &str,
@@ -94,6 +89,7 @@ pub trait Dependency {
         optimizer_settings: OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: DebugConfig,
+        llvm_arguments: &[String],
     ) -> anyhow::Result<String>;
 
     /// Resolves a full contract path.
@@ -114,6 +110,7 @@ impl Dependency for DummyDependency {
         _optimizer_settings: OptimizerSettings,
         _include_metadata_hash: bool,
         _debug_config: DebugConfig,
+        _llvm_arguments: &[String],
     ) -> anyhow::Result<String> {
         Ok(String::new())
     }

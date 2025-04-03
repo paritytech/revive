@@ -54,6 +54,7 @@ pub fn yul<T: Compiler>(
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -74,7 +75,12 @@ pub fn yul<T: Compiler>(
     let solc_validator = Some(&*solc);
     let project = Project::try_from_yul_path(path, solc_validator)?;
 
-    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
+    let build = project.compile(
+        optimizer_settings,
+        include_metadata_hash,
+        debug_config,
+        llvm_arguments,
+    )?;
 
     Ok(build)
 }
@@ -85,6 +91,7 @@ pub fn llvm_ir(
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -97,7 +104,12 @@ pub fn llvm_ir(
 
     let project = Project::try_from_llvm_ir_path(path)?;
 
-    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
+    let build = project.compile(
+        optimizer_settings,
+        include_metadata_hash,
+        debug_config,
+        llvm_arguments,
+    )?;
 
     Ok(build)
 }
@@ -118,6 +130,7 @@ pub fn standard_output<T: Compiler>(
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
 
@@ -171,7 +184,12 @@ pub fn standard_output<T: Compiler>(
         &debug_config,
     )?;
 
-    let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
+    let build = project.compile(
+        optimizer_settings,
+        include_metadata_hash,
+        debug_config,
+        llvm_arguments,
+    )?;
 
     Ok(build)
 }
@@ -184,6 +202,7 @@ pub fn standard_json<T: Compiler>(
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     debug_config: revive_llvm_context::DebugConfig,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
 
@@ -226,7 +245,12 @@ pub fn standard_json<T: Compiler>(
         let missing_libraries = project.get_missing_libraries();
         missing_libraries.write_to_standard_json(&mut solc_output, &solc_version)?;
     } else {
-        let build = project.compile(optimizer_settings, include_metadata_hash, debug_config)?;
+        let build = project.compile(
+            optimizer_settings,
+            include_metadata_hash,
+            debug_config,
+            llvm_arguments,
+        )?;
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }
     serde_json::to_writer(std::io::stdout(), &solc_output)?;
@@ -252,6 +276,7 @@ pub fn combined_json<T: Compiler>(
     debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<()> {
     let build = standard_output(
         input_files,
@@ -267,6 +292,7 @@ pub fn combined_json<T: Compiler>(
         remappings,
         suppressed_warnings,
         debug_config,
+        llvm_arguments,
     )?;
 
     let mut combined_json = solc.combined_json(input_files, format.as_str())?;

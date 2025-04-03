@@ -10,6 +10,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 - Support for solc v0.8.29
 - Decouples the solc JSON-input-output type definitions from the Solidity fronted and expose them via a dedicated crate.
 - `--supported-solc-versions` for `resolc` binary to return a `semver` range of supported `solc` versions.
+- Support for passing LLVM command line options via the prcoess input or providing one or more `--llvm-arg='..'` resolc CLI flag. This allows more fine-grained control over the LLVM backend configuration.
 
 ### Changed
 - Runner `resolc` using webkit is no longer supported.

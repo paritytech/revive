@@ -20,6 +20,8 @@ pub struct Input {
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
     pub debug_config: revive_llvm_context::DebugConfig,
+    /// The extra LLVM arguments give used for manual control.
+    pub llvm_arguments: Vec<String>,
 }
 
 impl Input {
@@ -30,6 +32,7 @@ impl Input {
         include_metadata_hash: bool,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: revive_llvm_context::DebugConfig,
+        llvm_arguments: Vec<String>,
     ) -> Self {
         Self {
             contract,
@@ -37,6 +40,7 @@ impl Input {
             include_metadata_hash,
             optimizer_settings,
             debug_config,
+            llvm_arguments,
         }
     }
 }

@@ -10,12 +10,20 @@ pub fn create_context(
     llvm: &inkwell::context::Context,
     optimizer_settings: OptimizerSettings,
 ) -> Context<DummyDependency> {
-    crate::polkavm::initialize_target();
+    crate::initialize_llvm(crate::Target::PVM, "resolc", Default::default());
 
     let module = llvm.create_module("test");
     let optimizer = Optimizer::new(optimizer_settings);
 
-    Context::<DummyDependency>::new(llvm, module, optimizer, None, true, Default::default())
+    Context::<DummyDependency>::new(
+        llvm,
+        module,
+        optimizer,
+        None,
+        true,
+        Default::default(),
+        Default::default(),
+    )
 }
 
 #[test]

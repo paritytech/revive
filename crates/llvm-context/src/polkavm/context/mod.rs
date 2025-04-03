@@ -83,6 +83,8 @@ where
     current_function: Option<Rc<RefCell<Function<'ctx>>>>,
     /// The loop context stack.
     loop_stack: Vec<Loop<'ctx>>,
+    /// The extra LLVM arguments that were used during target initialization.
+    llvm_arguments: &'ctx [String],
 
     /// The project dependency manager. It can be any entity implementing the trait.
     /// The manager is used to get information about contracts and their dependencies during
@@ -223,6 +225,7 @@ where
         dependency_manager: Option<D>,
         include_metadata_hash: bool,
         debug_config: DebugConfig,
+        llvm_arguments: &'ctx [String],
     ) -> Self {
         Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);
@@ -250,6 +253,7 @@ where
             functions: HashMap::with_capacity(Self::FUNCTIONS_HASHMAP_INITIAL_CAPACITY),
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
+            llvm_arguments,
 
             dependency_manager,
             include_metadata_hash,
@@ -639,6 +643,7 @@ where
                     self.optimizer.settings().to_owned(),
                     self.include_metadata_hash,
                     self.debug_config.clone(),
+                    self.llvm_arguments,
                 )
             })
     }

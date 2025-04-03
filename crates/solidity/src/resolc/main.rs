@@ -64,8 +64,6 @@ fn main_inner() -> anyhow::Result<()> {
         .stack_size(RAYON_WORKER_STACK_SIZE)
         .build_global()
         .expect("Thread pool configuration failure");
-    inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM); // TODO: pass from CLI
 
     if arguments.recursive_process {
         #[cfg(debug_assertions)]
@@ -157,6 +155,7 @@ fn main_inner() -> anyhow::Result<()> {
             optimizer_settings,
             include_metadata_hash,
             debug_config,
+            &arguments.llvm_arguments,
         )
     } else if arguments.llvm_ir {
         revive_solidity::llvm_ir(
@@ -164,6 +163,7 @@ fn main_inner() -> anyhow::Result<()> {
             optimizer_settings,
             include_metadata_hash,
             debug_config,
+            &arguments.llvm_arguments,
         )
     } else if arguments.standard_json {
         revive_solidity::standard_json(
@@ -173,6 +173,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.include_paths,
             arguments.allow_paths,
             debug_config,
+            &arguments.llvm_arguments,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
@@ -193,6 +194,7 @@ fn main_inner() -> anyhow::Result<()> {
             debug_config,
             arguments.output_directory,
             arguments.overwrite,
+            &arguments.llvm_arguments,
         )?;
         return Ok(());
     } else {
@@ -210,6 +212,7 @@ fn main_inner() -> anyhow::Result<()> {
             remappings,
             suppressed_warnings,
             debug_config,
+            &arguments.llvm_arguments,
         )
     }?;
 

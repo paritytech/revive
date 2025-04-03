@@ -1,9 +1,7 @@
 //! The LLVM context library.
 
-pub(crate) mod debug_config;
-pub(crate) mod optimizer;
-pub(crate) mod polkavm;
-pub(crate) mod target_machine;
+use std::ffi::CString;
+use std::sync::OnceLock;
 
 pub use self::debug_config::ir_type::IRType as DebugConfigIR;
 pub use self::debug_config::DebugConfig;
@@ -74,9 +72,41 @@ pub use self::polkavm::WriteLLVM as PolkaVMWriteLLVM;
 pub use self::target_machine::target::Target;
 pub use self::target_machine::TargetMachine;
 
-/// Initializes the target machine.
-pub fn initialize_target(target: Target) {
+pub(crate) mod debug_config;
+pub(crate) mod optimizer;
+pub(crate) mod polkavm;
+pub(crate) mod target_machine;
+
+static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
+
+/// Initializes the LLVM compiler backend.
+///
+/// This is a no-op if called subsequentially.
+///
+/// `llvm_arguments` are passed as-is to the LLVM CL options parser.
+pub fn initialize_llvm(target: Target, name: &str, llvm_arguments: &[String]) {
+    let Ok(_) = DID_INITIALIZE.set(()) else {
+        return; // Tests don't go through a recursive process
+    };
+
+    let argv = [name.to_string()]
+        .iter()
+        .chain(llvm_arguments)
+        .map(|arg| CString::new(arg.as_bytes()).unwrap())
+        .collect::<Vec<_>>();
+    let argv: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+    let overview = CString::new("").unwrap();
+    unsafe {
+        inkwell::llvm_sys::support::LLVMParseCommandLineOptions(
+            argv.len() as i32,
+            argv.as_ptr(),
+            overview.as_ptr(),
+        );
+    }
+
+    inkwell::support::enable_llvm_pretty_stack_trace();
+
     match target {
-        Target::PVM => self::polkavm::initialize_target(),
+        Target::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
     }
 }

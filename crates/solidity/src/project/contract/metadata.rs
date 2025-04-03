@@ -18,6 +18,8 @@ pub struct Metadata {
     pub revive_version: String,
     /// The PolkaVM compiler optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
+    /// The extra LLVM arguments give used for manual control.
+    pub llvm_arguments: Vec<String>,
 }
 
 impl Metadata {
@@ -27,6 +29,7 @@ impl Metadata {
         solc_version: String,
         revive_pallet_version: Option<semver::Version>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
+        llvm_arguments: Vec<String>,
     ) -> Self {
         Self {
             solc_metadata,
@@ -34,6 +37,7 @@ impl Metadata {
             revive_pallet_version,
             revive_version: ResolcVersion::default().long,
             optimizer_settings,
+            llvm_arguments,
         }
     }
 }

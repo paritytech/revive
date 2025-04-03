@@ -73,7 +73,11 @@ pub fn build_solidity_with_options(
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        &[],
+    );
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
@@ -106,7 +110,8 @@ pub fn build_solidity_with_options(
         &DEBUG_CONFIG,
     )?;
 
-    let build: crate::Build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
+    let build: crate::Build =
+        project.compile(optimizer_settings, false, DEBUG_CONFIG, Default::default())?;
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
@@ -122,7 +127,11 @@ pub fn build_solidity_with_options_evm(
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        &[],
+    );
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
@@ -174,7 +183,11 @@ pub fn build_solidity_and_detect_missing_libraries(
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        &[],
+    );
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
@@ -213,7 +226,11 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_target(revive_llvm_context::Target::PVM);
+    revive_llvm_context::initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        &[],
+    );
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
     let project = Project::try_from_yul_string::<SolcCompiler>(
@@ -221,7 +238,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
         source_code,
         None,
     )?;
-    let _build = project.compile(optimizer_settings, false, DEBUG_CONFIG)?;
+    let _build = project.compile(optimizer_settings, false, DEBUG_CONFIG, Default::default())?;
 
     Ok(())
 }

@@ -37,11 +37,19 @@ pub trait Process {
         }
 
         let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
+
+        revive_llvm_context::initialize_llvm(
+            revive_llvm_context::Target::PVM,
+            crate::DEFAULT_EXECUTABLE_NAME,
+            &input.llvm_arguments,
+        );
+
         let result = input.contract.compile(
             input.project,
             input.optimizer_settings,
             input.include_metadata_hash,
             input.debug_config,
+            input.llvm_arguments,
         );
 
         match result {

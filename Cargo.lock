@@ -8368,6 +8368,7 @@ dependencies = [
  "hex",
  "inkwell",
  "itertools 0.14.0",
+ "libc",
  "num",
  "polkavm-common 0.21.0",
  "polkavm-disassembler",

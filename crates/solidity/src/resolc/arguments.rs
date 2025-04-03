@@ -166,6 +166,10 @@ pub struct Arguments {
     #[cfg(debug_assertions)]
     #[arg(long = "recursive-process-input")]
     pub recursive_process_input: Option<String>,
+
+    #[arg(long = "llvm-arg")]
+    /// These are passed to LLVM as the command line to allow manual control.
+    pub llvm_arguments: Vec<String>,
 }
 
 impl Arguments {

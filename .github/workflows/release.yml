@@ -2,10 +2,11 @@ name: Release
 on:
   push:
     branches: ["main"]
+    tags:
+      - "v*"
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, labeled, unlabeled]
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -17,41 +18,37 @@ env:
 
 jobs:
   check-version-changed:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release-test')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      CURRENT_TAG: ${{ github.ref_name }}
     outputs:
-      TAG: ${{ steps.versions.outputs.TAG }}
-      PKG_VER: ${{ steps.versions.outputs.PKG_VER }}
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-tags: true
-          fetch-depth: 0
 
-      - name: Check Versions
+      - name: Check that tag and version in Cargo.toml match
         id: versions
         run: |
-          export CURRENT_TAG=$(git describe --tags --abbrev=0 --exclude "llvm-*")
+          if [[ $CURRENT_TAG == 'main' ]];
+            then
+              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check";
+              exit 0
+            fi
+
           export PKG_VER=v$(cat Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
           echo "Current tag $CURRENT_TAG"
           echo "Package version $PKG_VER"
           #
-          echo "PKG_VER=$PKG_VER" >> $GITHUB_OUTPUT
-          if [[ $CURRENT_TAG == $PKG_VER  ]];
+          if [[ $CURRENT_TAG != $PKG_VER  ]];
             then
-              echo "Tag is up to date. Nothing to do.";
-              export TAG=old;
-            else
-              echo "Tag was updated.";
-              export TAG=new;
+              echo "::error::Tag $CURRENT_TAG doesn't match package version $PKG_VER in Cargo.toml, please fix";
+              exit 1
             fi
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
           # Generating release notes early, in order to avoid checkout at the last step
-          export RELEASE_NOTES="$(sed '/^## '${PKG_VER}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
+          export RELEASE_NOTES="$(sed '/^## '${CURRENT_TAG}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
 
           echo "Release notes:"
           echo "$RELEASE_NOTES"
@@ -83,7 +80,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             type: native
             runner: windows-2022
-    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
     steps:
@@ -137,9 +133,10 @@ jobs:
           retention-days: 1
 
   build-wasm:
-    if: ${{ needs.check-version-changed.outputs.TAG == 'new' }}
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
+    env:
+      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive-workflow-test/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -226,11 +223,10 @@ jobs:
           retention-days: 1
 
   create-release:
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref_name, 'v')
     needs: [check-version-changed, build-wasm]
     runs-on: macos-14
-    permissions:
-      contents: write
+    environment: tags
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
@@ -246,6 +242,12 @@ jobs:
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin
 
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_RELEASE_APP_ID }}
+          private-key: ${{ secrets.REVIVE_RELEASE_APP_KEY }}
+
       - name: create-release
         uses: softprops/action-gh-release@v2
         with:
@@ -255,9 +257,11 @@ jobs:
 
             ## Note for macOS Users
             The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
-          tag_name: ${{ needs.check-version-changed.outputs.PKG_VER }}
-          name: ${{ needs.check-version-changed.outputs.PKG_VER }}
-          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: true
+          token: ${{ steps.app-token.outputs.token }}
+          # draft: true
           target_commitish: ${{ github.sha }}
           files: |
             resolc-x86_64-unknown-linux-musl

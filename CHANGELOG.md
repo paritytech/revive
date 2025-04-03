@@ -16,6 +16,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 - Runner `resolc` using webkit is no longer supported.
 
 ### Fixed
+- A missing byte swap for the create2 salt value.
 
 ## v0.1.0-dev.12
 

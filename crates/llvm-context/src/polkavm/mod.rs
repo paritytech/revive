@@ -89,7 +89,7 @@ pub trait Dependency {
         optimizer_settings: OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: DebugConfig,
-        llvm_arguments: Vec<String>,
+        llvm_arguments: &[String],
     ) -> anyhow::Result<String>;
 
     /// Resolves a full contract path.
@@ -110,7 +110,7 @@ impl Dependency for DummyDependency {
         _optimizer_settings: OptimizerSettings,
         _include_metadata_hash: bool,
         _debug_config: DebugConfig,
-        _llvm_arguments: Vec<String>,
+        _llvm_arguments: &[String],
     ) -> anyhow::Result<String> {
         Ok(String::new())
     }

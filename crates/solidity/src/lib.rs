@@ -54,7 +54,7 @@ pub fn yul<T: Compiler>(
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: Vec<String>,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -91,7 +91,7 @@ pub fn llvm_ir(
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: Vec<String>,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -130,7 +130,7 @@ pub fn standard_output<T: Compiler>(
     remappings: Option<BTreeSet<String>>,
     suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: Vec<String>,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
 
@@ -202,7 +202,7 @@ pub fn standard_json<T: Compiler>(
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: Vec<String>,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
 
@@ -276,7 +276,7 @@ pub fn combined_json<T: Compiler>(
     debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,
-    llvm_arguments: Vec<String>,
+    llvm_arguments: &[String],
 ) -> anyhow::Result<()> {
     let build = standard_output(
         input_files,

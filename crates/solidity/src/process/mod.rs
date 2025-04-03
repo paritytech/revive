@@ -49,7 +49,7 @@ pub trait Process {
             input.optimizer_settings,
             input.include_metadata_hash,
             input.debug_config,
-            input.llvm_arguments,
+            &input.llvm_arguments,
         );
 
         match result {

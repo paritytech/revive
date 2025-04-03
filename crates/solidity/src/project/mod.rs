@@ -66,7 +66,7 @@ impl Project {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
-        llvm_arguments: Vec<String>,
+        llvm_arguments: &[String],
     ) -> anyhow::Result<Build> {
         let project = self.clone();
         #[cfg(feature = "parallel")]
@@ -82,7 +82,7 @@ impl Project {
                     include_metadata_hash,
                     optimizer_settings.clone(),
                     debug_config.clone(),
-                    llvm_arguments.clone(),
+                    llvm_arguments.to_vec(),
                 );
                 let process_output = {
                     #[cfg(target_os = "emscripten")]
@@ -318,7 +318,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
-        llvm_arguments: Vec<String>,
+        llvm_arguments: &[String],
     ) -> anyhow::Result<String> {
         let contract_path = project.resolve_path(identifier)?;
         let contract = project

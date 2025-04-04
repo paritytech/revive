@@ -39,7 +39,7 @@ jobs:
 
           if [[ $CURRENT_TAG != "v"* ]];
             then
-              echo "::error::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR";
+              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR";
               exit 0
             fi
 

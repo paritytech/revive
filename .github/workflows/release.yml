@@ -1,4 +1,4 @@
-name: Release
+name: Build and Release
 on:
   push:
     branches: ["main"]
@@ -27,9 +27,6 @@ jobs:
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-tags: true
-          fetch-depth: 0
 
       - name: Check that tag and version in Cargo.toml match
         id: versions
@@ -248,15 +245,6 @@ jobs:
         run: |
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin
-
-      # - name: fake release
-      #   run: |
-      #     echo ok > resolc-x86_64-unknown-linux-musl
-      #     echo ok > resolc-universal-apple-darwin
-      #     echo ok > resolc-x86_64-pc-windows-msvc.exe
-      #     echo ok > resolc.js
-      #     echo ok > resolc.wasm
-      #     echo ok > resolc_web.js
 
       - uses: actions/create-github-app-token@v1
         id: app-token

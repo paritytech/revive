@@ -7,6 +7,8 @@ jobs:
   generateJson:
     runs-on: ubuntu-latest
     if: contains(github.event.release.tag_name, 'llvm') == false
+    environment: tags
+    # the token is needed for json_generator.py
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:

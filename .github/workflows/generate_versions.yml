@@ -7,7 +7,9 @@ jobs:
   generateJson:
     runs-on: ubuntu-latest
     if: contains(github.event.release.tag_name, 'llvm') == false
+    environment: tags
     env:
+      # the token is needed for json_generator.py
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
@@ -56,9 +58,8 @@ jobs:
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"
 
-          # git checkout -b alex-test
           git add .
           git commit -m "Update json"
-          git push origin alex-test
+          git push origin main
 
           echo "::notice::info.list files were successfully published to https://github.com/paritytech/resolc-bin"

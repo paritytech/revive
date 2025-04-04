@@ -33,7 +33,13 @@ jobs:
         run: |
           if [[ $CURRENT_TAG == 'main' ]];
             then
-              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check";
+              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in the main branch";
+              exit 0
+            fi
+
+          if [[ $CURRENT_TAG != "v"* ]];
+            then
+              echo "::error::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR";
               exit 0
             fi
 

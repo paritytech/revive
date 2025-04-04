@@ -22,7 +22,6 @@ jobs:
         with:
           repository: paritytech/resolc-bin
           path: resolc-bin
-          ref: alex-test
 
       - uses: actions/create-github-app-token@v1
         id: app-token

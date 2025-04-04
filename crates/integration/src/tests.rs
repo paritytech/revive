@@ -486,3 +486,31 @@ fn transfer_denies_reentrancy() {
     }
     .run();
 }
+
+#[test]
+fn create2_salt() {
+    let salt = U256::from(777);
+    let predicted = Contract::predicted_constructor(salt).pvm_runtime;
+    let predictor = Contract::address_predictor_constructor(salt, predicted.clone().into());
+    Specs {
+        actions: vec![
+            Upload {
+                origin: TestAddress::Alice,
+                code: Code::Bytes(predicted),
+                storage_deposit_limit: None,
+            },
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(predictor.pvm_runtime),
+                data: predictor.calldata,
+                salt: OptionalHex::default(),
+            },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}

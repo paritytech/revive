@@ -250,6 +250,17 @@ sol!(
 );
 case!("Storage.sol", Storage, transientCall, storage_transient, value: U256);
 
+sol!(
+    contract Predicted {
+        constructor(uint _foo);
+    }
+    contract AddressPredictor {
+        constructor(uint _foo, bytes memory _bytecode) payable;
+    }
+);
+case!("AddressPredictor.sol", Predicted, constructorCall, predicted_constructor, salt: U256);
+case!("AddressPredictor.sol", AddressPredictor, constructorCall, address_predictor_constructor, salt: U256, bytecode: Bytes);
+
 impl Contract {
     pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {

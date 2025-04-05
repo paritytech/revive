@@ -1,0 +1,64 @@
+name: Generate JSON for resolc-bin
+on:
+  release:
+    types: [published]
+
+jobs:
+  generateJson:
+    runs-on: ubuntu-latest
+    if: contains(github.event.release.tag_name, 'llvm') == false
+    environment: tags
+    env:
+      # the token is needed for json_generator.py
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: tmp
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-bin
+          path: resolc-bin
+
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+          private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+          owner: paritytech
+          repositories: resolc-bin
+
+      - name: Generate json and push
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_NAME: "paritytech-revive-json"
+          Green: "\e[32m"
+          NC: "\e[0m"
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget
+          wget https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/resolc-x86_64-unknown-linux-musl
+          chmod +x resolc-x86_64-unknown-linux-musl
+          export FIRST_SOLC_VERSION=$(./resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
+          export LAST_SOLC_VERSION=$(./resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
+
+          cd resolc-bin
+          python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
+
+          echo "${Green}Add new remote with gh app token${NC}"
+          git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")
+
+          echo "${Green}Remove http section that causes issues with gh app auth token${NC}"
+          sed -i.bak '/\[http/d' ./.git/config
+          sed -i.bak '/extraheader/d' ./.git/config
+
+          git config user.email "ci@parity.io"
+          git config user.name "${APP_NAME}"
+
+          git add .
+          git commit -m "Update json"
+          git push origin main
+
+          echo "::notice::info.list files were successfully published to https://github.com/paritytech/resolc-bin"

@@ -4,6 +4,10 @@
 
 This is a development pre-release.
 
+## v0.1.0-dev.13
+
+This is a development pre-release.
+
 Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Added
@@ -14,7 +18,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Changed
 - Storage keys and values are big endian. This was a pre-mature optimization because for the contract itself it this is a no-op and thus not observable. However we should consider the storage layout as part of the contract ABI. The endianness of transient storage values are still kept as-is.
-- Runner `resolc` using webkit is no longer supported.
+- Running `resolc` using webkit is no longer supported.
 
 ### Fixed
 - A missing byte swap for the create2 salt value.

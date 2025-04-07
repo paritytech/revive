@@ -13,6 +13,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 - Support for passing LLVM command line options via the prcoess input or providing one or more `--llvm-arg='..'` resolc CLI flag. This allows more fine-grained control over the LLVM backend configuration.
 
 ### Changed
+- Storage keys and values are big endian. This was a pre-mature optimization because for the contract itself it this is a no-op and thus not observable. However we should consider the storage layout as part of the contract ABI. The endianness of transient storage values are still kept as-is.
 - Runner `resolc` using webkit is no longer supported.
 
 ### Fixed

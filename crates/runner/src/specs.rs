@@ -106,14 +106,10 @@ impl SpecsAction {
         };
 
         for (key, expected) in storage {
-            let mut key = **key;
-            let mut expected = **expected;
-            key.reverse();
-            expected.reverse();
             actions.push(Self::VerifyStorage {
                 contract: account_pvm.clone(),
-                key,
-                expected,
+                key: **key,
+                expected: **expected,
             });
         }
 

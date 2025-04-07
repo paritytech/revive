@@ -4,7 +4,9 @@ use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::PolkaVMLoadStorageWordFunction;
+use crate::PolkaVMLoadTransientStorageWordFunction;
 use crate::PolkaVMStoreStorageWordFunction;
+use crate::PolkaVMStoreTransientStorageWordFunction;
 
 /// Translates the storage load.
 pub fn load<'ctx, D>(
@@ -16,7 +18,7 @@ where
 {
     let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
     let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [context.xlen_type().const_zero().into(), position.into()];
+    let arguments = [position.into()];
     Ok(context
         .build_call(declaration, &arguments, "storage_load")
         .unwrap_or_else(|| panic!("runtime function {name} should return a value")))
@@ -32,11 +34,7 @@ where
     D: Dependency + Clone,
 {
     let declaration = <PolkaVMStoreStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [
-        context.xlen_type().const_zero().into(),
-        position.into(),
-        value.into(),
-    ];
+    let arguments = [position.into(), value.into()];
     context.build_call(declaration, &arguments, "storage_store");
     Ok(())
 }
@@ -49,14 +47,12 @@ pub fn transient_load<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [
-        context.xlen_type().const_int(1, false).into(),
-        position.into(),
-    ];
+    let name = <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::NAME;
+    let arguments = [position.into()];
+    let declaration =
+        <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
     Ok(context
-        .build_call(declaration, &arguments, "storage_load")
+        .build_call(declaration, &arguments, "transient_storage_load")
         .unwrap_or_else(|| panic!("runtime function {name} should return a value")))
 }
 
@@ -69,12 +65,9 @@ pub fn transient_store<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let declaration = <PolkaVMStoreStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [
-        context.xlen_type().const_int(1, false).into(),
-        position.into(),
-        value.into(),
-    ];
-    context.build_call(declaration, &arguments, "storage_store");
+    let declaration =
+        <PolkaVMStoreTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
+    let arguments = [position.into(), value.into()];
+    context.build_call(declaration, &arguments, "transient_storage_store");
     Ok(())
 }

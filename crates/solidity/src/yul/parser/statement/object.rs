@@ -192,6 +192,8 @@ where
         revive_llvm_context::PolkaVMStoreHeapWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMLoadStorageWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreStorageWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.declare(context)?;
 
         revive_llvm_context::PolkaVMWordToPointerFunction.declare(context)?;
         revive_llvm_context::PolkaVMExitFunction.declare(context)?;
@@ -242,6 +244,8 @@ where
         revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;

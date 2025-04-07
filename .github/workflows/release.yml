@@ -267,7 +267,6 @@ jobs:
           name: ${{ github.ref_name }}
           prerelease: true
           token: ${{ steps.app-token.outputs.token }}
-          # draft: true
           target_commitish: ${{ github.sha }}
           files: |
             resolc-x86_64-unknown-linux-musl

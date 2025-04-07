@@ -139,13 +139,13 @@ where
                         identifier.inner,
                     )
                 })?;
-            context.build_store(pointer, value.to_llvm())?;
+            context.build_store(pointer, value.to_llvm_value())?;
             return Ok(());
         }
 
-        let llvm_type = value.to_llvm().into_struct_value().get_type();
+        let llvm_type = value.to_llvm_value().into_struct_value().get_type();
         let tuple_pointer = context.build_alloca(llvm_type, "assignment_pointer");
-        context.build_store(tuple_pointer, value.to_llvm())?;
+        context.build_store(tuple_pointer, value.to_llvm_value())?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {
             context.set_debug_location(self.location.line, 0, None)?;

@@ -121,7 +121,7 @@ where
                                 .insert_constant(identifier.inner.clone(), constant);
                         }
 
-                        value.to_llvm()
+                        value.to_llvm_value()
                     }
                     None => r#type.const_zero().as_basic_value_enum(),
                 }
@@ -175,7 +175,7 @@ where
                 .collect::<Vec<inkwell::types::BasicTypeEnum<'ctx>>>()
                 .as_slice(),
         );
-        if expression.value.get_type() != llvm_type.as_basic_type_enum() {
+        if expression.to_llvm_value().get_type() != llvm_type.as_basic_type_enum() {
             anyhow::bail!(
                 "{} Assignment to {:?} received an invalid number of arguments",
                 location,
@@ -183,7 +183,7 @@ where
             );
         }
         let pointer = context.build_alloca(llvm_type, "bindings_pointer");
-        context.build_store(pointer, expression.to_llvm())?;
+        context.build_store(pointer, expression.to_llvm_value())?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {
             let pointer = context.build_gep(

@@ -57,7 +57,7 @@ where
             .condition
             .into_llvm(context)?
             .expect("Always exists")
-            .to_llvm()
+            .to_llvm_value()
             .into_int_value();
         let condition = context.builder().build_int_z_extend_or_bit_cast(
             condition,

@@ -148,7 +148,7 @@ impl Expression {
             }
             Self::FunctionCall(call) => Ok(call
                 .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::new)),
+                .map(revive_llvm_context::PolkaVMArgument::new_value)),
         }
     }
 }

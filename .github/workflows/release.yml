@@ -28,7 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check that tag and version in Cargo.toml match
+      # Check that tag and version in Cargo.toml match
+      - name: Check versions
         id: versions
         run: |
           if [[ $CURRENT_TAG == 'main' ]];

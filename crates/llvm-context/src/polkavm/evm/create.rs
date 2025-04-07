@@ -119,10 +119,10 @@ where
                 _ => error,
             })?;
     if contract_path.as_str() == parent {
-        return Ok(Argument::new_with_constant(
-            context.word_const(0).as_basic_value_enum(),
-            num::BigUint::zero(),
-        ));
+        return Ok(
+            Argument::new_value(context.word_const(0).as_basic_value_enum())
+                .with_constant(num::BigUint::zero()),
+        );
     } else if identifier.ends_with("_deployed") && code_type == CodeType::Runtime {
         anyhow::bail!("type({}).runtimeCode is not supported", identifier);
     }
@@ -131,7 +131,7 @@ where
     let hash_value = context
         .word_const_str_hex(hash_string.as_str())
         .as_basic_value_enum();
-    Ok(Argument::new_with_original(hash_value, hash_string))
+    Ok(Argument::new_value(hash_value).with_original(hash_string))
 }
 
 /// Translates the deploy call header size instruction. the header consists of
@@ -160,10 +160,10 @@ where
                 _ => error,
             })?;
     if contract_path.as_str() == parent {
-        return Ok(Argument::new_with_constant(
-            context.word_const(0).as_basic_value_enum(),
-            num::BigUint::zero(),
-        ));
+        return Ok(
+            Argument::new_value(context.word_const(0).as_basic_value_enum())
+                .with_constant(num::BigUint::zero()),
+        );
     } else if identifier.ends_with("_deployed") && code_type == CodeType::Runtime {
         anyhow::bail!("type({}).runtimeCode is not supported", identifier);
     }
@@ -172,5 +172,5 @@ where
     let size_value = context
         .word_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64)
         .as_basic_value_enum();
-    Ok(Argument::new_with_constant(size_value, size_bigint))
+    Ok(Argument::new_value(size_value).with_constant(size_bigint))
 }

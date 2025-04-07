@@ -141,7 +141,8 @@ impl Expression {
 
                 match constant {
                     Some(constant) => Ok(Some(
-                        revive_llvm_context::PolkaVMArgument::new_with_constant(value, constant),
+                        revive_llvm_context::PolkaVMArgument::new_value(value)
+                            .with_constant(constant),
                     )),
                     None => Ok(Some(value.into())),
                 }

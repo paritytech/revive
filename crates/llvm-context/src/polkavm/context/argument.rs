@@ -11,10 +11,12 @@ pub struct Argument<'ctx> {
     pub constant: Option<num::BigUint>,
 }
 
+/// The function argument can be either a pointer or a integer value.
+/// This disambiguation allows for lazy loading of variables.
 #[derive(Clone, Debug)]
 pub enum Value<'ctx> {
     Register(inkwell::values::BasicValueEnum<'ctx>),
-    Pointer(inkwell::values::PointerValue<'ctx>),
+    Pointer(crate::polkavm::context::Pointer<'ctx>),
 }
 
 impl<'ctx> Argument<'ctx> {
@@ -34,27 +36,15 @@ impl<'ctx> Argument<'ctx> {
     }
 
     /// A shortcut constructor.
-    pub fn new_with_original(
-        value: inkwell::values::BasicValueEnum<'ctx>,
-        original: String,
-    ) -> Self {
-        Self {
-            value: Value::Register(value),
-            original: Some(original),
-            constant: None,
-        }
+    pub fn with_original(mut self, original: String) -> Self {
+        self.original = Some(original);
+        self
     }
 
     /// A shortcut constructor.
-    pub fn new_with_constant(
-        value: inkwell::values::BasicValueEnum<'ctx>,
-        constant: num::BigUint,
-    ) -> Self {
-        Self {
-            value: Value::Register(value),
-            original: None,
-            constant: Some(constant),
-        }
+    pub fn with_constant(mut self, constant: num::BigUint) -> Self {
+        self.constant = Some(constant);
+        self
     }
 
     /// Returns the inner LLVM value.

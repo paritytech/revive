@@ -23,7 +23,7 @@
 install: install-bin install-npm
 
 install-bin:
-	cargo install --path crates/solidity
+	cargo install --locked --path crates/solidity
 
 install-npm:
 	npm install && npm fund

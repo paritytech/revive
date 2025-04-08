@@ -137,7 +137,7 @@ where
 
         let mut branches = Vec::with_capacity(self.cases.len());
         for (index, case) in self.cases.into_iter().enumerate() {
-            let constant = case.literal.into_llvm(context)?.to_llvm_value();
+            let constant = case.literal.into_llvm(context)?.access(context)?;
 
             let expression_block = context
                 .append_basic_block(format!("switch_case_branch_{}_block", index + 1).as_str());
@@ -163,7 +163,7 @@ where
         context.builder().build_switch(
             scrutinee
                 .expect("Always exists")
-                .to_llvm_value()
+                .access(context)?
                 .into_int_value(),
             default_block,
             branches.as_slice(),

@@ -16,7 +16,10 @@ pub struct Argument<'ctx> {
 #[derive(Clone, Debug)]
 pub enum Value<'ctx> {
     Register(inkwell::values::BasicValueEnum<'ctx>),
-    Pointer(crate::polkavm::context::Pointer<'ctx>),
+    Pointer {
+        pointer: crate::polkavm::context::Pointer<'ctx>,
+        id: String,
+    },
 }
 
 impl<'ctx> Argument<'ctx> {
@@ -30,9 +33,9 @@ impl<'ctx> Argument<'ctx> {
     }
 
     /// A shortcut constructor for stack arguments.
-    pub fn pointer(pointer: crate::polkavm::context::Pointer<'ctx>) -> Self {
+    pub fn pointer(pointer: crate::polkavm::context::Pointer<'ctx>, id: String) -> Self {
         Self {
-            value: Value::Pointer(pointer),
+            value: Value::Pointer { pointer, id },
             original: None,
             constant: None,
         }
@@ -52,11 +55,24 @@ impl<'ctx> Argument<'ctx> {
 
     /// Returns the inner LLVM value.
     ///
-    /// Will emit a stack load if the value is a pointer.
-    pub fn to_llvm_value(&self) -> inkwell::values::BasicValueEnum<'ctx> {
-        match self.value {
-            Value::Register(value) => value,
-            Value::Pointer(_ptr) => todo!(),
+    /// Panics if `self` is a pointer argument.
+    pub fn _to_llvm_value(&self) -> inkwell::values::BasicValueEnum<'ctx> {
+        match &self.value {
+            Value::Register(value) => *value,
+            Value::Pointer { .. } => unreachable!("invalid register value access"),
+        }
+    }
+
+    /// Access the underlying value.
+    ///
+    /// Will emit a stack load if `self` is a pointer argument.
+    pub fn access<D: crate::polkavm::Dependency + Clone>(
+        &self,
+        context: &crate::polkavm::context::Context<'ctx, D>,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        match &self.value {
+            Value::Register(value) => Ok(*value),
+            Value::Pointer { pointer, id } => context.build_load(*pointer, id),
         }
     }
 }

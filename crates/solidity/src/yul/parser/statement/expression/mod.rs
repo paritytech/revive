@@ -141,15 +141,14 @@ impl Expression {
 
                 match constant {
                     Some(constant) => Ok(Some(
-                        revive_llvm_context::PolkaVMArgument::new_value(value)
-                            .with_constant(constant),
+                        revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant),
                     )),
                     None => Ok(Some(value.into())),
                 }
             }
             Self::FunctionCall(call) => Ok(call
                 .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::new_value)),
+                .map(revive_llvm_context::PolkaVMArgument::value)),
         }
     }
 }

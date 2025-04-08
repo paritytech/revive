@@ -20,14 +20,8 @@ pub enum Value<'ctx> {
 }
 
 impl<'ctx> Argument<'ctx> {
-    /// The calldata offset argument index.
-    pub const ARGUMENT_INDEX_CALLDATA_OFFSET: usize = 0;
-
-    /// The calldata length argument index.
-    pub const ARGUMENT_INDEX_CALLDATA_LENGTH: usize = 1;
-
-    /// A shortcut constructor.
-    pub fn new_value(value: inkwell::values::BasicValueEnum<'ctx>) -> Self {
+    /// A shortcut constructor for register arguments.
+    pub fn value(value: inkwell::values::BasicValueEnum<'ctx>) -> Self {
         Self {
             value: Value::Register(value),
             original: None,
@@ -35,19 +29,30 @@ impl<'ctx> Argument<'ctx> {
         }
     }
 
-    /// A shortcut constructor.
+    /// A shortcut constructor for stack arguments.
+    pub fn pointer(pointer: crate::polkavm::context::Pointer<'ctx>) -> Self {
+        Self {
+            value: Value::Pointer(pointer),
+            original: None,
+            constant: None,
+        }
+    }
+
+    /// Set the original decleratation value.
     pub fn with_original(mut self, original: String) -> Self {
         self.original = Some(original);
         self
     }
 
-    /// A shortcut constructor.
+    /// Set the constant value.
     pub fn with_constant(mut self, constant: num::BigUint) -> Self {
         self.constant = Some(constant);
         self
     }
 
     /// Returns the inner LLVM value.
+    ///
+    /// Will emit a stack load if the value is a pointer.
     pub fn to_llvm_value(&self) -> inkwell::values::BasicValueEnum<'ctx> {
         match self.value {
             Value::Register(value) => value,
@@ -58,6 +63,6 @@ impl<'ctx> Argument<'ctx> {
 
 impl<'ctx> From<inkwell::values::BasicValueEnum<'ctx>> for Argument<'ctx> {
     fn from(value: inkwell::values::BasicValueEnum<'ctx>) -> Self {
-        Self::new_value(value)
+        Self::value(value)
     }
 }

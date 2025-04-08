@@ -249,6 +249,15 @@ jobs:
           chmod +x resolc-x86_64-unknown-linux-musl
           chmod +x resolc-universal-apple-darwin
 
+      - name: Create sha-256 checksum
+        run: |
+          shasum -a 256 resolc-x86_64-unknown-linux-musl > checksums.txt
+          shasum -a 256 resolc-universal-apple-darwin >> checksums.txt
+          shasum -a 256 resolc-x86_64-pc-windows-msvc.exe >> checksums.txt
+          shasum -a 256 resolc.js >> checksums.txt
+          shasum -a 256 resolc.wasm >> checksums.txt
+          shasum -a 256 resolc_web.js >> checksums.txt
+
       - uses: actions/create-github-app-token@v1
         id: app-token
         with:
@@ -276,3 +285,4 @@ jobs:
             resolc.js
             resolc.wasm
             resolc_web.js
+            checksums.txt

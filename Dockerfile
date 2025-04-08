@@ -11,7 +11,7 @@ RUN make install-llvm-builder
 RUN revive-llvm --target-env musl clone
 RUN revive-llvm --target-env musl build  --llvm-projects lld --llvm-projects clang
 
-FROM messense/rust-musl-cross:x86_64-musl AS resolc-builder
+FROM messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561 AS resolc-builder
 WORKDIR /opt/revive
 
 RUN apt update && \ 

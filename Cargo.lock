@@ -4553,7 +4553,7 @@ checksum = "4ee93343901ab17bd981295f2cf0026d4ad018c7c31ba84549a4ddbb47a45104"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "cc",
  "libc",
@@ -8266,7 +8266,7 @@ dependencies = [
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "alloy-primitives",
  "criterion",
@@ -8278,18 +8278,18 @@ dependencies = [
 
 [[package]]
 name = "revive-build-utils"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "revive-build-utils",
 ]
 
 [[package]]
 name = "revive-common"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "serde",
@@ -8299,7 +8299,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives",
@@ -8312,7 +8312,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -8328,7 +8328,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "libc",
@@ -8340,7 +8340,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-builder"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8362,7 +8362,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "hex",
@@ -8384,7 +8384,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "alloy-primitives",
  "hex",
@@ -8400,7 +8400,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8410,7 +8410,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solc-json-interface"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "rayon",
@@ -8422,7 +8422,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solidity"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "anyhow",
  "clap",
@@ -8449,7 +8449,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0-dev.12"
+version = "0.1.0-dev.13"
 dependencies = [
  "inkwell",
  "revive-build-utils",
@@ -11117,9 +11117,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "bytes",

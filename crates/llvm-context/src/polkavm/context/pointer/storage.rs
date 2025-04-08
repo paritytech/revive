@@ -19,7 +19,7 @@ where
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
-            .fn_type(&[context.word_type().into()], false)
+            .fn_type(&[context.llvm().ptr_type(Default::default()).into()], false)
     }
 
     fn emit_body<'ctx>(
@@ -59,7 +59,7 @@ where
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
-            .fn_type(&[context.word_type().into()], false)
+            .fn_type(&[context.llvm().ptr_type(Default::default()).into()], false)
     }
 
     fn emit_body<'ctx>(
@@ -94,7 +94,10 @@ where
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
-            &[context.word_type().into(), context.word_type().into()],
+            &[
+                context.llvm().ptr_type(Default::default()).into(),
+                context.llvm().ptr_type(Default::default()).into(),
+            ],
             false,
         )
     }
@@ -138,7 +141,10 @@ where
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
-            &[context.word_type().into(), context.word_type().into()],
+            &[
+                context.llvm().ptr_type(Default::default()).into(),
+                context.llvm().ptr_type(Default::default()).into(),
+            ],
             false,
         )
     }
@@ -173,9 +179,17 @@ where
 
 fn emit_load<'ctx, D: Dependency + Clone>(
     context: &mut Context<'ctx, D>,
-    mut key: BasicValueEnum<'ctx>,
+    key: BasicValueEnum<'ctx>,
     transient: bool,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    let mut key = context.build_load(
+        super::Pointer::new(
+            context.word_type(),
+            Default::default(),
+            key.into_pointer_value(),
+        ),
+        "key",
+    )?;
     if !transient {
         key = context.build_byte_swap(key)?;
     }
@@ -217,10 +231,26 @@ fn emit_load<'ctx, D: Dependency + Clone>(
 
 fn emit_store<'ctx, D: Dependency + Clone>(
     context: &mut Context<'ctx, D>,
-    mut key: BasicValueEnum<'ctx>,
-    mut value: BasicValueEnum<'ctx>,
+    key: BasicValueEnum<'ctx>,
+    value: BasicValueEnum<'ctx>,
     transient: bool,
 ) -> anyhow::Result<()> {
+    let mut key = context.build_load(
+        super::Pointer::new(
+            context.word_type(),
+            Default::default(),
+            key.into_pointer_value(),
+        ),
+        "key",
+    )?;
+    let mut value = context.build_load(
+        super::Pointer::new(
+            context.word_type(),
+            Default::default(),
+            value.into_pointer_value(),
+        ),
+        "key",
+    )?;
     if !transient {
         key = context.build_byte_swap(key)?;
         value = context.build_byte_swap(value)?;

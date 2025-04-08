@@ -464,36 +464,29 @@ impl FunctionCall {
             }
 
             Name::SLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::polkavm_evm_storage::load(
-                    context,
-                    arguments[0].into_int_value(),
-                )
-                .map(Some)
+                let arguments = self.pop_arguments::<D, 1>(context)?;
+                revive_llvm_context::polkavm_evm_storage::load(context, &arguments[0]).map(Some)
             }
             Name::SStore => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<D, 2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::store(
                     context,
-                    arguments[0].into_int_value(),
-                    arguments[1].into_int_value(),
+                    &arguments[0],
+                    &arguments[1],
                 )
                 .map(|_| None)
             }
             Name::TLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::polkavm_evm_storage::transient_load(
-                    context,
-                    arguments[0].into_int_value(),
-                )
-                .map(Some)
+                let arguments = self.pop_arguments::<D, 1>(context)?;
+                revive_llvm_context::polkavm_evm_storage::transient_load(context, &arguments[0])
+                    .map(Some)
             }
             Name::TStore => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<D, 2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_store(
                     context,
-                    arguments[0].into_int_value(),
-                    arguments[1].into_int_value(),
+                    &arguments[0],
+                    &arguments[1],
                 )
                 .map(|_| None)
             }

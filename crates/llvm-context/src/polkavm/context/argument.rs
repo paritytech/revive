@@ -75,6 +75,23 @@ impl<'ctx> Argument<'ctx> {
             Value::Pointer { pointer, id } => context.build_load(*pointer, id),
         }
     }
+
+    /// Access the underlying value.
+    ///
+    /// Will emit a stack load if `self` is a pointer argument.
+    pub fn as_pointer<D: crate::polkavm::Dependency + Clone>(
+        &self,
+        context: &crate::polkavm::context::Context<'ctx, D>,
+    ) -> anyhow::Result<crate::polkavm::context::Pointer<'ctx>> {
+        match &self.value {
+            Value::Register(value) => {
+                let pointer = context.build_alloca_at_entry(context.word_type(), "pvm_arg");
+                context.build_store(pointer, *value)?;
+                Ok(pointer)
+            }
+            Value::Pointer { pointer, .. } => Ok(*pointer),
+        }
+    }
 }
 
 impl<'ctx> From<inkwell::values::BasicValueEnum<'ctx>> for Argument<'ctx> {

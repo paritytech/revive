@@ -4,6 +4,15 @@
 
 This is a development pre-release.
 
+Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
+
+### Added
+
+### Changed
+
+### Fixed
+- Constructors avoid storing zero sized immutable data on exit.
+
 ## v0.1.0-dev.13
 
 This is a development pre-release.

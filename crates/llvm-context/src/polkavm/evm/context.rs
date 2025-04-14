@@ -2,6 +2,7 @@
 
 use inkwell::values::BasicValue;
 
+use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -49,7 +50,9 @@ where
     D: Dependency + Clone,
 {
     let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
-    let address_pointer = context.build_alloca_at_entry(address_type, "origin_address");
+    let address_pointer: Pointer<'_> = context
+        .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+        .into();
     context.build_store(address_pointer, address_type.const_zero())?;
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::ORIGIN,
@@ -127,10 +130,9 @@ pub fn coinbase<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let pointer = context.build_alloca_at_entry(
-        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
-        "coinbase_output",
-    );
+    let pointer: Pointer<'_> = context
+        .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+        .into();
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::BLOCK_AUTHOR,
         &[pointer.to_int(context).into()],
@@ -155,10 +157,9 @@ pub fn address<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let pointer = context.build_alloca_at_entry(
-        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
-        "address_output",
-    );
+    let pointer: Pointer<'_> = context
+        .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+        .into();
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::ADDRESS,
         &[pointer.to_int(context).into()],
@@ -173,10 +174,9 @@ pub fn caller<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let pointer = context.build_alloca_at_entry(
-        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
-        "address_output",
-    );
+    let pointer: Pointer<'_> = context
+        .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+        .into();
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::CALLER,
         &[pointer.to_int(context).into()],

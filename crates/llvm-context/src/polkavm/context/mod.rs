@@ -755,7 +755,9 @@ where
         address: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<Pointer<'ctx>> {
         let address_type = self.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
-        let address_pointer = self.build_alloca_at_entry(address_type, "address_pointer");
+        let address_pointer = self
+            .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+            .into();
         let address_truncated =
             self.builder()
                 .build_int_truncate(address, address_type, "address_truncated")?;
@@ -1440,5 +1442,28 @@ where
     /// Returns if the contract stores or loads immutables.
     pub fn has_immutables(&self) -> bool {
         self.immutables
+    }
+
+    /// Returns the specified spill buffer `slot` index pointer.
+    pub fn spill_buffer(&self, slot: u32) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
+        assert!(slot <= crate::polkavm::GLOBAL_SPILL_BUFFER_SIZE);
+
+        let pointer = self.get_global(crate::polkavm::GLOBAL_SPILL_BUFFER)?;
+        let pointer = Pointer::new(
+            pointer.r#type,
+            AddressSpace::Stack,
+            pointer.value.as_pointer_value(),
+        );
+        let pointer = self.build_gep(
+            pointer,
+            &[
+                self.xlen_type().const_zero(),
+                self.xlen_type().const_int(slot as u64, false),
+            ],
+            self.word_type(),
+            "stack_slot",
+        );
+
+        Ok(pointer.value)
     }
 }

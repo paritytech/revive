@@ -18,11 +18,13 @@ where
     match context.code_type() {
         None => anyhow::bail!("Return is not available if the contract part is undefined"),
         Some(CodeType::Deploy) => {
-            context.build_call(
-                <Store as RuntimeFunction<D>>::declaration(context),
-                Default::default(),
-                "store_immutable_data",
-            );
+            if context.has_immutables() {
+                context.build_call(
+                    <Store as RuntimeFunction<D>>::declaration(context),
+                    Default::default(),
+                    "store_immutable_data",
+                );
+            }
         }
         Some(CodeType::Runtime) => {}
     }

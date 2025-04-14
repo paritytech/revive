@@ -119,36 +119,28 @@ impl Expression {
                 })
                 .map(Some),
             Self::Identifier(identifier) => {
+                let id = identifier.inner;
+
                 let pointer = context
                     .current_function()
                     .borrow()
-                    .get_stack_pointer(identifier.inner.as_str())
+                    .get_stack_pointer(&id)
                     .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "{} Undeclared variable `{}`",
-                            identifier.location,
-                            identifier.inner,
-                        )
+                        anyhow::anyhow!("{} Undeclared variable `{}`", identifier.location, id)
                     })?;
 
-                let constant = context
-                    .current_function()
-                    .borrow()
-                    .yul()
-                    .get_constant(identifier.inner.as_str());
+                let constant = context.current_function().borrow().yul().get_constant(&id);
 
-                let value = context.build_load(pointer, identifier.inner.as_str())?;
+                let argument = revive_llvm_context::PolkaVMArgument::pointer(pointer, id);
 
-                match constant {
-                    Some(constant) => Ok(Some(
-                        revive_llvm_context::PolkaVMArgument::new_with_constant(value, constant),
-                    )),
-                    None => Ok(Some(value.into())),
-                }
+                Ok(Some(match constant {
+                    Some(constant) => argument.with_constant(constant),
+                    _ => argument,
+                }))
             }
             Self::FunctionCall(call) => Ok(call
                 .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::new)),
+                .map(revive_llvm_context::PolkaVMArgument::value)),
         }
     }
 }

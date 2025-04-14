@@ -128,7 +128,10 @@ impl FunctionCall {
             Name::UserDefined(name) => {
                 let mut values = Vec::with_capacity(self.arguments.len());
                 for argument in self.arguments.into_iter().rev() {
-                    let value = argument.into_llvm(context)?.expect("Always exists").value;
+                    let value = argument
+                        .into_llvm(context)?
+                        .expect("Always exists")
+                        .access(context)?;
                     values.push(value);
                 }
                 values.reverse();
@@ -461,36 +464,29 @@ impl FunctionCall {
             }
 
             Name::SLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::polkavm_evm_storage::load(
-                    context,
-                    arguments[0].into_int_value(),
-                )
-                .map(Some)
+                let arguments = self.pop_arguments::<D, 1>(context)?;
+                revive_llvm_context::polkavm_evm_storage::load(context, &arguments[0]).map(Some)
             }
             Name::SStore => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<D, 2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::store(
                     context,
-                    arguments[0].into_int_value(),
-                    arguments[1].into_int_value(),
+                    &arguments[0],
+                    &arguments[1],
                 )
                 .map(|_| None)
             }
             Name::TLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
-                revive_llvm_context::polkavm_evm_storage::transient_load(
-                    context,
-                    arguments[0].into_int_value(),
-                )
-                .map(Some)
+                let arguments = self.pop_arguments::<D, 1>(context)?;
+                revive_llvm_context::polkavm_evm_storage::transient_load(context, &arguments[0])
+                    .map(Some)
             }
             Name::TStore => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<D, 2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_store(
                     context,
-                    arguments[0].into_int_value(),
-                    arguments[1].into_int_value(),
+                    &arguments[0],
+                    &arguments[1],
                 )
                 .map(|_| None)
             }
@@ -514,7 +510,7 @@ impl FunctionCall {
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
                 let index = context.xlen_type().const_int(offset as u64, false);
-                let value = arguments[2].value.into_int_value();
+                let value = arguments[2].access(context)?.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
@@ -720,13 +716,13 @@ impl FunctionCall {
             Name::Call => {
                 let arguments = self.pop_arguments::<D, 7>(context)?;
 
-                let gas = arguments[0].value.into_int_value();
-                let address = arguments[1].value.into_int_value();
-                let value = arguments[2].value.into_int_value();
-                let input_offset = arguments[3].value.into_int_value();
-                let input_size = arguments[4].value.into_int_value();
-                let output_offset = arguments[5].value.into_int_value();
-                let output_size = arguments[6].value.into_int_value();
+                let gas = arguments[0].access(context)?.into_int_value();
+                let address = arguments[1].access(context)?.into_int_value();
+                let value = arguments[2].access(context)?.into_int_value();
+                let input_offset = arguments[3].access(context)?.into_int_value();
+                let input_size = arguments[4].access(context)?.into_int_value();
+                let output_offset = arguments[5].access(context)?.into_int_value();
+                let output_size = arguments[6].access(context)?.into_int_value();
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
                     .into_iter()
@@ -750,12 +746,12 @@ impl FunctionCall {
             Name::StaticCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
 
-                let gas = arguments[0].value.into_int_value();
-                let address = arguments[1].value.into_int_value();
-                let input_offset = arguments[2].value.into_int_value();
-                let input_size = arguments[3].value.into_int_value();
-                let output_offset = arguments[4].value.into_int_value();
-                let output_size = arguments[5].value.into_int_value();
+                let gas = arguments[0].access(context)?.into_int_value();
+                let address = arguments[1].access(context)?.into_int_value();
+                let input_offset = arguments[2].access(context)?.into_int_value();
+                let input_size = arguments[3].access(context)?.into_int_value();
+                let output_offset = arguments[4].access(context)?.into_int_value();
+                let output_size = arguments[5].access(context)?.into_int_value();
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
                     .into_iter()
@@ -779,12 +775,12 @@ impl FunctionCall {
             Name::DelegateCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
 
-                let gas = arguments[0].value.into_int_value();
-                let address = arguments[1].value.into_int_value();
-                let input_offset = arguments[2].value.into_int_value();
-                let input_size = arguments[3].value.into_int_value();
-                let output_offset = arguments[4].value.into_int_value();
-                let output_size = arguments[5].value.into_int_value();
+                let gas = arguments[0].access(context)?.into_int_value();
+                let address = arguments[1].access(context)?.into_int_value();
+                let input_offset = arguments[2].access(context)?.into_int_value();
+                let input_size = arguments[3].access(context)?.into_int_value();
+                let output_offset = arguments[4].access(context)?.into_int_value();
+                let output_size = arguments[5].access(context)?.into_int_value();
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
                     .into_iter()
@@ -845,7 +841,8 @@ impl FunctionCall {
                 })?;
 
                 revive_llvm_context::polkavm_evm_create::contract_hash(context, identifier)
-                    .map(|argument| Some(argument.value))
+                    .and_then(|argument| argument.access(context))
+                    .map(Some)
             }
             Name::DataSize => {
                 let mut arguments = self.pop_arguments::<D, 1>(context)?;
@@ -855,7 +852,8 @@ impl FunctionCall {
                 })?;
 
                 revive_llvm_context::polkavm_evm_create::header_size(context, identifier)
-                    .map(|argument| Some(argument.value))
+                    .and_then(|argument| argument.access(context))
+                    .map(Some)
             }
             Name::DataCopy => {
                 let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
@@ -989,7 +987,12 @@ impl FunctionCall {
     {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {
-            arguments.push(expression.into_llvm(context)?.expect("Always exists").value);
+            arguments.push(
+                expression
+                    .into_llvm(context)?
+                    .expect("Always exists")
+                    .access(context)?,
+            );
         }
         arguments.reverse();
 

@@ -101,6 +101,9 @@ where
     solidity_data: Option<SolidityData>,
     /// The Yul data.
     yul_data: Option<YulData>,
+
+    /// Hints whether the contracts deploy function stores immutables.
+    immutables: bool,
 }
 
 impl<'ctx, D> Context<'ctx, D>
@@ -263,6 +266,8 @@ where
 
             solidity_data: None,
             yul_data: None,
+
+            immutables: false,
         }
     }
 
@@ -1425,5 +1430,15 @@ where
 
     pub fn optimizer_settings(&self) -> &OptimizerSettings {
         self.optimizer.settings()
+    }
+
+    /// Hint the deploy code exit routine to emit storing the immutables.
+    pub fn enable_immutables(&mut self) {
+        self.immutables = true;
+    }
+
+    /// Returns if the contract stores or loads immutables.
+    pub fn has_immutables(&self) -> bool {
+        self.immutables
     }
 }

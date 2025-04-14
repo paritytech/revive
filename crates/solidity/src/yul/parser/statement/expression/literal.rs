@@ -97,9 +97,7 @@ impl Literal {
                     BooleanLiteral::True => num::BigUint::one(),
                 };
 
-                Ok(revive_llvm_context::PolkaVMArgument::new_with_constant(
-                    value, constant,
-                ))
+                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
             }
             LexicalLiteral::Integer(inner) => {
                 let r#type = self.yul_type.unwrap_or_default().into_llvm(context);
@@ -127,9 +125,7 @@ impl Literal {
                 }
                 .expect("Always valid");
 
-                Ok(revive_llvm_context::PolkaVMArgument::new_with_constant(
-                    value, constant,
-                ))
+                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
             }
             LexicalLiteral::String(inner) => {
                 let string = inner.inner;
@@ -200,10 +196,10 @@ impl Literal {
                 };
 
                 if hex_string.len() > revive_common::BYTE_LENGTH_WORD * 2 {
-                    return Ok(revive_llvm_context::PolkaVMArgument::new_with_original(
+                    return Ok(revive_llvm_context::PolkaVMArgument::value(
                         r#type.const_zero().as_basic_value_enum(),
-                        string,
-                    ));
+                    )
+                    .with_original(string));
                 }
 
                 if hex_string.len() < revive_common::BYTE_LENGTH_WORD * 2 {
@@ -220,9 +216,7 @@ impl Literal {
                     )
                     .expect("The value is valid")
                     .as_basic_value_enum();
-                Ok(revive_llvm_context::PolkaVMArgument::new_with_original(
-                    value, string,
-                ))
+                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_original(string))
             }
         }
     }

@@ -31,6 +31,14 @@ impl Entry {
             context.xlen_type().get_undef(),
         );
 
+        let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+        context.set_global(
+            crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER,
+            address_type,
+            AddressSpace::Stack,
+            address_type.const_zero(),
+        );
+
         Ok(())
     }
 

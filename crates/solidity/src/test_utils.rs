@@ -92,7 +92,7 @@ pub fn build_solidity_with_options(
         SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
-            None,
+            optimizer_settings.middle_end_as_string().chars().last(),
             &solc_version.default,
             false,
         ),
@@ -102,16 +102,21 @@ pub fn build_solidity_with_options(
 
     let mut output = solc.standard_json(input, None, vec![], None)?;
 
+    let debug_config = revive_llvm_context::DebugConfig::new(
+        None,
+        optimizer_settings.middle_end_as_string() != "z",
+    );
+
     let project = Project::try_from_standard_json_output(
         &output,
         sources,
         libraries,
         &solc_version,
-        &DEBUG_CONFIG,
+        &debug_config,
     )?;
 
     let build: crate::Build =
-        project.compile(optimizer_settings, false, DEBUG_CONFIG, Default::default())?;
+        project.compile(optimizer_settings, false, debug_config, Default::default())?;
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)

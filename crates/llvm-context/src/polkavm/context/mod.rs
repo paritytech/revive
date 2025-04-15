@@ -101,9 +101,6 @@ where
     solidity_data: Option<SolidityData>,
     /// The Yul data.
     yul_data: Option<YulData>,
-
-    /// Hints whether the contracts deploy function stores immutables.
-    immutables: bool,
 }
 
 impl<'ctx, D> Context<'ctx, D>
@@ -266,8 +263,6 @@ where
 
             solidity_data: None,
             yul_data: None,
-
-            immutables: false,
         }
     }
 
@@ -755,7 +750,9 @@ where
         address: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<Pointer<'ctx>> {
         let address_type = self.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
-        let address_pointer = self.build_alloca_at_entry(address_type, "address_pointer");
+        let address_pointer = self
+            .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+            .into();
         let address_truncated =
             self.builder()
                 .build_int_truncate(address, address_type, "address_truncated")?;
@@ -1430,15 +1427,5 @@ where
 
     pub fn optimizer_settings(&self) -> &OptimizerSettings {
         self.optimizer.settings()
-    }
-
-    /// Hint the deploy code exit routine to emit storing the immutables.
-    pub fn enable_immutables(&mut self) {
-        self.immutables = true;
-    }
-
-    /// Returns if the contract stores or loads immutables.
-    pub fn has_immutables(&self) -> bool {
-        self.immutables
     }
 }

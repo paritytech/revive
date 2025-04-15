@@ -28,7 +28,7 @@ pub fn value<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let output_pointer = context.build_alloca(context.value_type(), "value_transferred");
+    let output_pointer = context.build_alloca_at_entry(context.value_type(), "value_transferred");
     context.build_store(output_pointer, context.word_const(0))?;
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::VALUE_TRANSFERRED,
@@ -46,8 +46,7 @@ where
     D: Dependency + Clone,
 {
     let address_pointer = context.build_address_argument_store(address)?;
-
-    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
+    let balance_pointer = context.build_alloca_at_entry(context.word_type(), "balance_pointer");
     let balance = context.builder().build_ptr_to_int(
         balance_pointer.value,
         context.xlen_type(),
@@ -69,7 +68,7 @@ pub fn self_balance<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let balance_pointer = context.build_alloca(context.word_type(), "balance_pointer");
+    let balance_pointer = context.build_alloca_at_entry(context.word_type(), "balance_pointer");
     let balance = context.builder().build_ptr_to_int(
         balance_pointer.value,
         context.xlen_type(),

@@ -63,7 +63,6 @@ where
     let non_overflow_block = context.append_basic_block("shift_left_non_overflow");
     let join_block = context.append_basic_block("shift_left_join");
 
-    let result_pointer = context.build_alloca(context.word_type(), "shift_left_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
@@ -73,7 +72,6 @@ where
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
 
     context.set_basic_block(overflow_block);
-    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);
@@ -81,11 +79,17 @@ where
         context
             .builder()
             .build_left_shift(value, shift, "shift_left_non_overflow_result")?;
-    context.build_store(result_pointer, value)?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(join_block);
-    context.build_load(result_pointer, "shift_left_result")
+    let result = context
+        .builder()
+        .build_phi(context.word_type(), "shift_left_value")?;
+    result.add_incoming(&[
+        (&value, non_overflow_block),
+        (&context.word_const(0), overflow_block),
+    ]);
+    Ok(result.as_basic_value())
 }
 
 /// Translates the bitwise shift right.
@@ -101,7 +105,6 @@ where
     let non_overflow_block = context.append_basic_block("shift_right_non_overflow");
     let join_block = context.append_basic_block("shift_right_join");
 
-    let result_pointer = context.build_alloca(context.word_type(), "shift_right_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
@@ -111,7 +114,6 @@ where
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
 
     context.set_basic_block(overflow_block);
-    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);
@@ -121,11 +123,17 @@ where
         false,
         "shift_right_non_overflow_result",
     )?;
-    context.build_store(result_pointer, value)?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(join_block);
-    context.build_load(result_pointer, "shift_right_result")
+    let result = context
+        .builder()
+        .build_phi(context.word_type(), "shift_right_value")?;
+    result.add_incoming(&[
+        (&value, non_overflow_block),
+        (&context.word_const(0), overflow_block),
+    ]);
+    Ok(result.as_basic_value())
 }
 
 /// Translates the arithmetic bitwise shift right.
@@ -145,8 +153,6 @@ where
     let non_overflow_block = context.append_basic_block("shift_right_arithmetic_non_overflow");
     let join_block = context.append_basic_block("shift_right_arithmetic_join");
 
-    let result_pointer =
-        context.build_alloca(context.word_type(), "shift_right_arithmetic_result_pointer");
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
@@ -174,11 +180,9 @@ where
     )?;
 
     context.set_basic_block(overflow_positive_block);
-    context.build_store(result_pointer, context.word_const(0))?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(overflow_negative_block);
-    context.build_store(result_pointer, context.word_type().const_all_ones())?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(non_overflow_block);
@@ -188,11 +192,21 @@ where
         true,
         "shift_right_arithmetic_non_overflow_result",
     )?;
-    context.build_store(result_pointer, value)?;
     context.build_unconditional_branch(join_block);
 
     context.set_basic_block(join_block);
-    context.build_load(result_pointer, "shift_right_arithmetic_result")
+    let result = context
+        .builder()
+        .build_phi(context.word_type(), "shift_arithmetic_right_value")?;
+    result.add_incoming(&[
+        (&value, non_overflow_block),
+        (
+            &context.word_type().const_all_ones(),
+            overflow_negative_block,
+        ),
+        (&context.word_const(0), overflow_block),
+    ]);
+    Ok(result.as_basic_value())
 }
 
 /// Translates the `byte` instruction, extracting the byte of `operand_2`

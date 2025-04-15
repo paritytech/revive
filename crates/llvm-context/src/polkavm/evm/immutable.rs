@@ -257,7 +257,6 @@ where
             anyhow::bail!("Immutables are not available if the contract part is undefined");
         }
         Some(CodeType::Deploy) => {
-            context.enable_immutables();
             let immutable_data_pointer = context
                 .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
                 .value

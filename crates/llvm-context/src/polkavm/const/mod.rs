@@ -10,12 +10,6 @@ pub static XLEN: usize = revive_common::BIT_LENGTH_X32;
 pub static GLOBAL_CALLDATA_SIZE: &str = "calldatasize";
 
 /// The spill buffer global variable name.
-pub static GLOBAL_SPILL_BUFFER: &str = "spill_buffer";
-
-/// The spill buffer global variable name.
-pub static GLOBAL_SPILL_BUFFER_SIZE: u32 = 4;
-
-/// The spill buffer global variable name.
 pub static GLOBAL_ADDRESS_SPILL_BUFFER: &str = "address_spill_buffer";
 
 /// The deployer call header size that consists of:

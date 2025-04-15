@@ -100,13 +100,13 @@ where
     D: Dependency + Clone,
 {
     let output_pointer = context.build_alloca_at_entry(context.word_type(), "blockhash_out_ptr");
-    let index_ptr = context.build_alloca_at_entry(context.word_type(), "blockhash_index_ptr");
-    context.build_store(index_ptr, index)?;
+    let index_pointer = context.build_alloca_at_entry(context.word_type(), "blockhash_index_ptr");
+    context.build_store(index_pointer, index)?;
 
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::BLOCK_HASH,
         &[
-            index_ptr.to_int(context).into(),
+            index_pointer.to_int(context).into(),
             output_pointer.to_int(context).into(),
         ],
     );

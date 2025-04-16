@@ -139,11 +139,11 @@ where
                         identifier.inner,
                     )
                 })?;
-            context.build_store(pointer, value.access(context)?)?;
+            context.build_store(pointer, value.to_value(context)?)?;
             return Ok(());
         }
 
-        let value = value.access(context)?;
+        let value = value.to_value(context)?;
         let llvm_type = value.into_struct_value().get_type();
         let tuple_pointer = context.build_alloca(llvm_type, "assignment_pointer");
         context.build_store(tuple_pointer, value)?;

@@ -19,7 +19,7 @@ where
 {
     let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
     let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [position.as_pointer(context)?.value.into()];
+    let arguments = [position.to_pointer(context)?.value.into()];
     Ok(context
         .build_call(declaration, &arguments, "storage_load")
         .unwrap_or_else(|| panic!("runtime function {name} should return a value")))
@@ -36,8 +36,8 @@ where
 {
     let declaration = <PolkaVMStoreStorageWordFunction as RuntimeFunction<D>>::declaration(context);
     let arguments = [
-        position.as_pointer(context)?.value.into(),
-        value.as_pointer(context)?.value.into(),
+        position.to_pointer(context)?.value.into(),
+        value.to_pointer(context)?.value.into(),
     ];
     context.build_call(declaration, &arguments, "storage_store");
     Ok(())
@@ -52,7 +52,7 @@ where
     D: Dependency + Clone,
 {
     let name = <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::NAME;
-    let arguments = [position.as_pointer(context)?.value.into()];
+    let arguments = [position.to_pointer(context)?.value.into()];
     let declaration =
         <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
     Ok(context
@@ -72,8 +72,8 @@ where
     let declaration =
         <PolkaVMStoreTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
     let arguments = [
-        position.as_pointer(context)?.value.into(),
-        value.as_pointer(context)?.value.into(),
+        position.to_pointer(context)?.value.into(),
+        value.to_pointer(context)?.value.into(),
     ];
     context.build_call(declaration, &arguments, "transient_storage_store");
     Ok(())

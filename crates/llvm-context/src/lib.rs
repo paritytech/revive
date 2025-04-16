@@ -48,6 +48,8 @@ pub use self::polkavm::context::Context as PolkaVMContext;
 pub use self::polkavm::evm::arithmetic as polkavm_evm_arithmetic;
 pub use self::polkavm::evm::bitwise as polkavm_evm_bitwise;
 pub use self::polkavm::evm::call as polkavm_evm_call;
+pub use self::polkavm::evm::call::Call as PolkaVMCallFunction;
+pub use self::polkavm::evm::call::CallReentrancyHeuristic as PolkaVMCallReentrancyHeuristicFunction;
 pub use self::polkavm::evm::calldata as polkavm_evm_calldata;
 pub use self::polkavm::evm::comparison as polkavm_evm_comparison;
 pub use self::polkavm::evm::context as polkavm_evm_contract_context;

@@ -188,6 +188,9 @@ where
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 
+        revive_llvm_context::PolkaVMCallFunction.declare(context)?;
+        revive_llvm_context::PolkaVMCallReentrancyHeuristicFunction.declare(context)?;
+
         revive_llvm_context::PolkaVMLoadHeapWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.declare(context)?;
         revive_llvm_context::PolkaVMLoadStorageWordFunction.declare(context)?;
@@ -239,6 +242,9 @@ where
 
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMCallFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMCallReentrancyHeuristicFunction.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;

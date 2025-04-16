@@ -131,7 +131,7 @@ impl FunctionCall {
                     let value = argument
                         .into_llvm(context)?
                         .expect("Always exists")
-                        .access(context)?;
+                        .to_value(context)?;
                     values.push(value);
                 }
                 values.reverse();
@@ -510,7 +510,7 @@ impl FunctionCall {
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
                 let index = context.xlen_type().const_int(offset as u64, false);
-                let value = arguments[2].access(context)?.into_int_value();
+                let value = arguments[2].to_value(context)?.into_int_value();
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, value)
                     .map(|_| None)
             }
@@ -716,15 +716,16 @@ impl FunctionCall {
             Name::Call => {
                 let arguments = self.pop_arguments::<D, 7>(context)?;
 
-                let gas = arguments[0].access(context)?.into_int_value();
-                let address = arguments[1].access(context)?.into_int_value();
-                let value = arguments[2].access(context)?.into_int_value();
-                let input_offset = arguments[3].access(context)?.into_int_value();
-                let input_size = arguments[4].access(context)?.into_int_value();
-                let output_offset = arguments[5].access(context)?.into_int_value();
-                let output_size = arguments[6].access(context)?.into_int_value();
+                let gas = &arguments[0];
+                let address = &arguments[1];
+                let value = &arguments[2];
+                let input_offset = &arguments[3];
+                let input_size = &arguments[4];
+                let output_offset = &arguments[5];
+                let output_size = &arguments[6];
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
+                    .clone()
                     .into_iter()
                     .map(|mut argument| argument.constant.take())
                     .collect();
@@ -746,14 +747,15 @@ impl FunctionCall {
             Name::StaticCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
 
-                let gas = arguments[0].access(context)?.into_int_value();
-                let address = arguments[1].access(context)?.into_int_value();
-                let input_offset = arguments[2].access(context)?.into_int_value();
-                let input_size = arguments[3].access(context)?.into_int_value();
-                let output_offset = arguments[4].access(context)?.into_int_value();
-                let output_size = arguments[5].access(context)?.into_int_value();
+                let gas = &arguments[0];
+                let address = &arguments[1];
+                let input_offset = &arguments[2];
+                let input_size = &arguments[3];
+                let output_offset = &arguments[4];
+                let output_size = &arguments[5];
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
+                    .clone()
                     .into_iter()
                     .map(|mut argument| argument.constant.take())
                     .collect();
@@ -775,12 +777,12 @@ impl FunctionCall {
             Name::DelegateCall => {
                 let arguments = self.pop_arguments::<D, 6>(context)?;
 
-                let gas = arguments[0].access(context)?.into_int_value();
-                let address = arguments[1].access(context)?.into_int_value();
-                let input_offset = arguments[2].access(context)?.into_int_value();
-                let input_size = arguments[3].access(context)?.into_int_value();
-                let output_offset = arguments[4].access(context)?.into_int_value();
-                let output_size = arguments[5].access(context)?.into_int_value();
+                let gas = arguments[0].to_value(context)?.into_int_value();
+                let address = arguments[1].to_value(context)?.into_int_value();
+                let input_offset = arguments[2].to_value(context)?.into_int_value();
+                let input_size = arguments[3].to_value(context)?.into_int_value();
+                let output_offset = arguments[4].to_value(context)?.into_int_value();
+                let output_size = arguments[5].to_value(context)?.into_int_value();
 
                 let simulation_address: Vec<Option<num::BigUint>> = arguments
                     .into_iter()
@@ -841,7 +843,7 @@ impl FunctionCall {
                 })?;
 
                 revive_llvm_context::polkavm_evm_create::contract_hash(context, identifier)
-                    .and_then(|argument| argument.access(context))
+                    .and_then(|argument| argument.to_value(context))
                     .map(Some)
             }
             Name::DataSize => {
@@ -852,7 +854,7 @@ impl FunctionCall {
                 })?;
 
                 revive_llvm_context::polkavm_evm_create::header_size(context, identifier)
-                    .and_then(|argument| argument.access(context))
+                    .and_then(|argument| argument.to_value(context))
                     .map(Some)
             }
             Name::DataCopy => {
@@ -991,7 +993,7 @@ impl FunctionCall {
                 expression
                     .into_llvm(context)?
                     .expect("Always exists")
-                    .access(context)?,
+                    .to_value(context)?,
             );
         }
         arguments.reverse();

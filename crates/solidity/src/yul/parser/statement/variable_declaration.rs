@@ -121,7 +121,7 @@ where
                                 .insert_constant(identifier.inner.clone(), constant);
                         }
 
-                        value.access(context)?
+                        value.to_value(context)?
                     }
                     None => r#type.const_zero().as_basic_value_enum(),
                 }
@@ -175,7 +175,7 @@ where
                 .collect::<Vec<inkwell::types::BasicTypeEnum<'ctx>>>()
                 .as_slice(),
         );
-        let value = expression.access(context)?;
+        let value = expression.to_value(context)?;
         if value.get_type() != llvm_type.as_basic_type_enum() {
             anyhow::bail!(
                 "{} Assignment to {:?} received an invalid number of arguments",

@@ -2,6 +2,8 @@
 
 use inkwell::values::BasicValueEnum;
 
+use crate::polkavm::context::address_space::AddressSpace;
+use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -17,9 +19,13 @@ where
     const NAME: &'static str = "__revive_load_heap_word";
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
-        context
-            .word_type()
-            .fn_type(&[context.xlen_type().into()], false)
+        context.void_type().fn_type(
+            &[
+                context.xlen_type().into(),
+                context.llvm().ptr_type(Default::default()).into(),
+            ],
+            false,
+        )
     }
 
     fn emit_body<'ctx>(
@@ -27,6 +33,7 @@ where
         context: &mut Context<'ctx, D>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let offset = Self::paramater(context, 0).into_int_value();
+        let assignment_pointer = Self::paramater(context, 1).into_pointer_value();
         let length = context
             .xlen_type()
             .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
@@ -42,7 +49,11 @@ where
             .expect("Alignment is valid");
 
         let swapped_value = context.build_byte_swap(value)?;
-        Ok(Some(swapped_value))
+        context.build_store(
+            Pointer::new(context.word_type(), AddressSpace::Stack, assignment_pointer),
+            swapped_value,
+        )?;
+        Ok(None)
     }
 }
 

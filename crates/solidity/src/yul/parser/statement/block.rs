@@ -184,7 +184,7 @@ where
                     block.into_llvm(context)?;
                 }
                 Statement::Expression(expression) => {
-                    expression.into_llvm(context, None)?;
+                    expression.into_llvm(context, &mut None)?;
                 }
                 Statement::VariableDeclaration(statement) => statement.into_llvm(context)?,
                 Statement::Assignment(statement) => statement.into_llvm(context)?,

@@ -121,11 +121,6 @@ where
     ) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, 0, None)?;
 
-        let value = match self.initializer.into_llvm(context, None)? {
-            Some(value) => value,
-            None => return Ok(()),
-        };
-
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
             let pointer = context
@@ -139,9 +134,27 @@ where
                         identifier.inner,
                     )
                 })?;
-            context.build_store(pointer, value.access(context)?)?;
+
+            let mut assignment_pointer = Some(pointer.value);
+            let value = match self
+                .initializer
+                .into_llvm(context, &mut assignment_pointer)?
+            {
+                Some(value) => value,
+                None => return Ok(()),
+            };
+
+            if assignment_pointer.is_some() {
+                context.build_store(pointer, value.access(context)?)?;
+            }
+
             return Ok(());
         }
+
+        let value = match self.initializer.into_llvm(context, &mut None)? {
+            Some(value) => value,
+            None => return Ok(()),
+        };
         let value = value.access(context)?;
         let llvm_type = value.into_struct_value().get_type();
         let tuple_pointer = context.build_alloca(llvm_type, "assignment_pointer");

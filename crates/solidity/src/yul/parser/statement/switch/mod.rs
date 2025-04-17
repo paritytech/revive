@@ -123,7 +123,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
-        let scrutinee = self.expression.into_llvm(context, None)?;
+        let scrutinee = self.expression.into_llvm(context, &mut None)?;
 
         if self.cases.is_empty() {
             if let Some(block) = self.default {

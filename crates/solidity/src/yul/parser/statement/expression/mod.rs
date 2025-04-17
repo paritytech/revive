@@ -101,7 +101,7 @@ impl Expression {
     pub fn into_llvm<'ctx, D>(
         self,
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-        assignment_pointer: Option<inkwell::values::PointerValue<'ctx>>,
+        assignment_pointer: &mut Option<inkwell::values::PointerValue<'ctx>>,
     ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>>
     where
         D: revive_llvm_context::PolkaVMDependency + Clone,

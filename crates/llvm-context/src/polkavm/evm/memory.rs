@@ -29,7 +29,8 @@ where
 pub fn load<'ctx, D>(
     context: &mut Context<'ctx, D>,
     offset: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+    assignment_pointer: &mut Option<inkwell::values::PointerValue<'ctx>>,
+) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
 where
     D: Dependency + Clone,
 {
@@ -40,7 +41,7 @@ where
         offset,
         "memory_load_pointer",
     );
-    context.build_load(pointer, "memory_load_result")
+    context.build_load_assign(pointer, "memory_load_result", assignment_pointer)
 }
 
 /// Translates the `mstore` instruction.

@@ -773,27 +773,49 @@ where
             .into())
     }
 
-    /// Builds a stack load instruction.
+    /// Builds a stack load instruction with a direct assignment.
     /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
-    pub fn build_load(
+    pub fn build_load_assign(
         &self,
         pointer: Pointer<'ctx>,
         name: &str,
-    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        assignment_pointer: &mut Option<inkwell::values::PointerValue<'ctx>>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::NAME;
                 let declaration =
                     <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::declaration(self);
-                let arguments = [self
-                    .builder()
-                    .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
-                    .as_basic_value_enum()];
-                Ok(self
-                    .build_call(declaration, &arguments, "heap_load")
-                    .unwrap_or_else(|| {
-                        panic!("revive runtime function {name} should return a value")
-                    }))
+                match assignment_pointer.take() {
+                    Some(assignment_pointer) => {
+                        let arguments = [
+                            self.builder()
+                                .build_ptr_to_int(
+                                    pointer.value,
+                                    self.xlen_type(),
+                                    "offset_ptrtoint",
+                                )?
+                                .as_basic_value_enum(),
+                            assignment_pointer.into(),
+                        ];
+                        self.build_call(declaration, &arguments, "heap_load");
+                        Ok(None)
+                    }
+                    None => {
+                        let pointer = self.build_alloca_at_entry(self.word_type(), "pointer");
+                        let arguments = [
+                            self.builder()
+                                .build_ptr_to_int(
+                                    pointer.value,
+                                    self.xlen_type(),
+                                    "offset_ptrtoint",
+                                )?
+                                .as_basic_value_enum(),
+                            pointer.value.into(),
+                        ];
+                        self.build_call(declaration, &arguments, "heap_load");
+                        Ok(Some(self.build_load(pointer, "storage_value")?))
+                    }
+                }
             }
             AddressSpace::Stack => {
                 let value = self
@@ -806,9 +828,21 @@ where
                     .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
                     .expect("Alignment is valid");
 
-                Ok(value)
+                Ok(Some(value))
             }
         }
+    }
+
+    /// Builds a stack load instruction.
+    /// Sets the alignment to 256 bits for the stack and 1 bit for the heap, parent, and child.
+    pub fn build_load(
+        &self,
+        pointer: Pointer<'ctx>,
+        name: &str,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        Ok(self
+            .build_load_assign(pointer, name, &mut None)?
+            .expect("without an assignment pointer loads return a value"))
     }
 
     /// Builds a stack store instruction.

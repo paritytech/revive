@@ -13,14 +13,14 @@ use crate::PolkaVMStoreTransientStorageWordFunction;
 pub fn load<'ctx, D>(
     context: &mut Context<'ctx, D>,
     position: &PolkaVMArgument<'ctx>,
-    assignment_pointer: Option<inkwell::values::PointerValue<'ctx>>,
+    assignment_pointer: &mut Option<inkwell::values::PointerValue<'ctx>>,
 ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
 where
     D: Dependency + Clone,
 {
     let _name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
     let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    match assignment_pointer {
+    match assignment_pointer.take() {
         Some(assignment_pointer) => {
             let arguments = [
                 position.as_pointer(context)?.value.into(),

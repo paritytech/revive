@@ -110,8 +110,9 @@ where
                 .borrow_mut()
                 .insert_stack_pointer(identifier.inner.clone(), pointer);
 
+            let mut assignment_pointer = Some(pointer.value);
             let value = if let Some(expression) = self.expression {
-                match expression.into_llvm(context, None)? {
+                match expression.into_llvm(context, &mut assignment_pointer)? {
                     Some(mut value) => {
                         if let Some(constant) = value.constant.take() {
                             context
@@ -128,7 +129,9 @@ where
             } else {
                 r#type.const_zero().as_basic_value_enum()
             };
-            context.build_store(pointer, value)?;
+            if assignment_pointer.is_some() {
+                context.build_store(pointer, value)?;
+            }
             return Ok(());
         }
 
@@ -156,7 +159,7 @@ where
             None => return Ok(()),
         };
         let location = expression.location();
-        let expression = match expression.into_llvm(context, None)? {
+        let expression = match expression.into_llvm(context, &mut None)? {
             Some(expression) => expression,
             None => return Ok(()),
         };

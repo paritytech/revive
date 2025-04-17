@@ -2,6 +2,8 @@
 
 use inkwell::values::BasicValueEnum;
 
+use crate::polkavm::context::address_space::AddressSpace;
+use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
@@ -17,20 +19,27 @@ where
     const NAME: &'static str = "__revive_load_storage_word";
 
     fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
-        context
-            .word_type()
-            .fn_type(&[context.llvm().ptr_type(Default::default()).into()], false)
+        context.void_type().fn_type(
+            &[
+                context.llvm().ptr_type(Default::default()).into(),
+                context.llvm().ptr_type(Default::default()).into(),
+            ],
+            false,
+        )
     }
 
     fn emit_body<'ctx>(
         &self,
         context: &mut Context<'ctx, D>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
-        Ok(Some(emit_load(
-            context,
-            Self::paramater(context, 0),
-            false,
-        )?))
+        let key = Self::paramater(context, 0);
+        let assignment_pointer = Self::paramater(context, 1).into_pointer_value();
+        let value = emit_load(context, key, false)?;
+        context.build_store(
+            Pointer::new(context.word_type(), AddressSpace::Stack, assignment_pointer),
+            value,
+        )?;
+        Ok(None)
     }
 }
 

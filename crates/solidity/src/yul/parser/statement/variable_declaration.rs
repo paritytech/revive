@@ -111,7 +111,7 @@ where
                 .insert_stack_pointer(identifier.inner.clone(), pointer);
 
             let value = if let Some(expression) = self.expression {
-                match expression.into_llvm(context)? {
+                match expression.into_llvm(context, None)? {
                     Some(mut value) => {
                         if let Some(constant) = value.constant.take() {
                             context
@@ -156,7 +156,7 @@ where
             None => return Ok(()),
         };
         let location = expression.location();
-        let expression = match expression.into_llvm(context)? {
+        let expression = match expression.into_llvm(context, None)? {
             Some(expression) => expression,
             None => return Ok(()),
         };

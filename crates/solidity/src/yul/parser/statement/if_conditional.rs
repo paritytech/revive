@@ -55,7 +55,7 @@ where
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         let condition = self
             .condition
-            .into_llvm(context)?
+            .into_llvm(context, None)?
             .expect("Always exists")
             .access(context)?
             .into_int_value();

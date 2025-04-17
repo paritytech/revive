@@ -13,16 +13,32 @@ use crate::PolkaVMStoreTransientStorageWordFunction;
 pub fn load<'ctx, D>(
     context: &mut Context<'ctx, D>,
     position: &PolkaVMArgument<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+    assignment_pointer: Option<inkwell::values::PointerValue<'ctx>>,
+) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
+    let _name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
     let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
-    let arguments = [position.as_pointer(context)?.value.into()];
-    Ok(context
-        .build_call(declaration, &arguments, "storage_load")
-        .unwrap_or_else(|| panic!("runtime function {name} should return a value")))
+    match assignment_pointer {
+        Some(assignment_pointer) => {
+            let arguments = [
+                position.as_pointer(context)?.value.into(),
+                assignment_pointer.into(),
+            ];
+            context.build_call(declaration, &arguments, "storage_load");
+            Ok(None)
+        }
+        None => {
+            let pointer = context.build_alloca_at_entry(context.word_type(), "pointer");
+            let arguments = [
+                position.as_pointer(context)?.value.into(),
+                pointer.value.into(),
+            ];
+            context.build_call(declaration, &arguments, "storage_load");
+            Ok(Some(context.build_load(pointer, "storage_value")?))
+        }
+    }
 }
 
 /// Translates the storage store.

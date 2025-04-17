@@ -118,6 +118,7 @@ impl FunctionCall {
     pub fn into_llvm<'ctx, D>(
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
+        assignment_pointer: Option<inkwell::values::PointerValue<'ctx>>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
     where
         D: revive_llvm_context::PolkaVMDependency + Clone,
@@ -129,7 +130,7 @@ impl FunctionCall {
                 let mut values = Vec::with_capacity(self.arguments.len());
                 for argument in self.arguments.into_iter().rev() {
                     let value = argument
-                        .into_llvm(context)?
+                        .into_llvm(context, None)?
                         .expect("Always exists")
                         .access(context)?;
                     values.push(value);
@@ -465,7 +466,11 @@ impl FunctionCall {
 
             Name::SLoad => {
                 let arguments = self.pop_arguments::<D, 1>(context)?;
-                revive_llvm_context::polkavm_evm_storage::load(context, &arguments[0]).map(Some)
+                revive_llvm_context::polkavm_evm_storage::load(
+                    context,
+                    &arguments[0],
+                    assignment_pointer,
+                )
             }
             Name::SStore => {
                 let arguments = self.pop_arguments::<D, 2>(context)?;
@@ -989,7 +994,7 @@ impl FunctionCall {
         for expression in self.arguments.drain(0..N).rev() {
             arguments.push(
                 expression
-                    .into_llvm(context)?
+                    .into_llvm(context, None)?
                     .expect("Always exists")
                     .access(context)?,
             );
@@ -1009,7 +1014,7 @@ impl FunctionCall {
     {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {
-            arguments.push(expression.into_llvm(context)?.expect("Always exists"));
+            arguments.push(expression.into_llvm(context, None)?.expect("Always exists"));
         }
         arguments.reverse();
 

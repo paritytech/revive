@@ -76,7 +76,7 @@ where
         context.set_basic_block(condition_block);
         let condition = self
             .condition
-            .into_llvm(context)?
+            .into_llvm(context, None)?
             .expect("Always exists")
             .access(context)?
             .into_int_value();

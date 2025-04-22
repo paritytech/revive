@@ -5,6 +5,7 @@
 	install-wasm \
 	install-llvm-builder \
 	install-llvm \
+	install-revive-runner \
 	format \
 	clippy \
 	machete \
@@ -38,6 +39,9 @@ install-llvm-builder:
 install-llvm: install-llvm-builder
 	revive-llvm clone
 	revive-llvm build --llvm-projects lld --llvm-projects clang
+
+install-revive-runner:
+	cargo install --path crates/runner --no-default-features
 
 format:
 	cargo fmt --all --check

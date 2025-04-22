@@ -8387,6 +8387,9 @@ name = "revive-runner"
 version = "0.1.0-dev.13"
 dependencies = [
  "alloy-primitives",
+ "anyhow",
+ "clap",
+ "env_logger 0.11.6",
  "hex",
  "parity-scale-codec",
  "polkadot-sdk 0.1.0",

@@ -10,12 +10,19 @@ description = "Execute revive contracts in a simulated blockchain runtime"
 [package.metadata.cargo-machete]
 ignored = ["codec", "scale-info"]
 
+[[bin]]
+name = "revive-runner"
+path = "src/main.rs"
+
 [features]
 std = ["polkadot-sdk/std"]
 default = ["solidity"]
 solidity = ["revive-solidity", "revive-differential"]
 
 [dependencies]
+env_logger = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hex = { workspace = true, features = ["serde"] }

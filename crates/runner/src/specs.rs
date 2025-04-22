@@ -1,9 +1,11 @@
-use std::time::Instant;
+use std::{str::FromStr, time::Instant};
 
 use serde::{Deserialize, Serialize};
 
 use crate::*;
-use alloy_primitives::{keccak256, Address};
+use alloy_primitives::keccak256;
+#[cfg(feature = "revive-solidity")]
+use alloy_primitives::Address;
 #[cfg(feature = "revive-solidity")]
 use revive_differential::{Evm, EvmLog};
 #[cfg(feature = "revive-solidity")]
@@ -156,6 +158,39 @@ impl TestAddress {
     }
 }
 
+impl FromStr for TestAddress {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value.try_into()
+    }
+}
+
+impl TryFrom<&str> for TestAddress {
+    type Error = &'static str;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "alice" => Ok(Self::Alice),
+            "bob" => Ok(Self::Bob),
+            "charlie" => Ok(Self::Charlie),
+            value => {
+                if let Ok(value) = value.parse() {
+                    return Ok(Self::Instantiated(value));
+                }
+
+                if let Ok(value) = hex::decode(value) {
+                    if value.len() == 20 {
+                        return Ok(Self::AccountId(H160(value.try_into().unwrap())));
+                    }
+                }
+
+                Err("can not parse into test address")
+            }
+        }
+    }
+}
+
 /// Specs for a contract test
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -212,6 +247,7 @@ impl Specs {
     /// Helper to allow not specifying the code bytes or path directly in the runner.json
     /// - Replace `Code::Bytes(bytes)` if `bytes` are empty: read `contract_file`
     /// - Replace `Code::Solidity{ path, ..}` if `path` is not provided: replace `path` with `contract_file`
+    #[allow(unused_variables)]
     pub fn replace_empty_code(&mut self, contract_name: &str, contract_path: &str) {
         for action in self.actions.iter_mut() {
             let code = match action {

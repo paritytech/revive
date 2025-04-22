@@ -17,11 +17,11 @@ path = "src/main.rs"
 [features]
 std = ["polkadot-sdk/std"]
 default = ["solidity"]
-solidity = ["revive-solidity", "revive-differential"]
+solidity = ["revive-solidity", "revive-differential", "revive-llvm-context"]
 
 [dependencies]
 env_logger = { workspace = true }
-clap = { workspace = true }
+clap = { workspace = true, features = ["help", "std", "derive"] }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -41,4 +41,4 @@ polkadot-sdk.features = [
 
 revive-solidity = { workspace = true, optional = true }
 revive-differential = { workspace = true, optional = true }
-revive-llvm-context = { workspace = true }
+revive-llvm-context = { workspace = true, optional = true }

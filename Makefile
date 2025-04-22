@@ -41,7 +41,7 @@ install-llvm: install-llvm-builder
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
 install-revive-runner:
-	cargo install --path crates/runner --no-default-features
+	cargo install --path crates/runner --no-default-features --locked
 
 format:
 	cargo fmt --all --check
@@ -53,7 +53,7 @@ machete:
 	cargo install cargo-machete
 	cargo machete
 
-test: format clippy machete test-cli test-workspace
+test: format clippy machete test-cli test-workspace install-revive-runner
 
 test-integration: install-bin
 	cargo test --package revive-integration

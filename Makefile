@@ -40,7 +40,7 @@ install-llvm: install-llvm-builder
 	revive-llvm clone
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
-install-revive-runner: install-revive-runner
+install-revive-runner:
 	cargo install --path crates/runner --no-default-features
 
 format:

@@ -9,6 +9,12 @@ pub static XLEN: usize = revive_common::BIT_LENGTH_X32;
 /// The calldata size global variable name.
 pub static GLOBAL_CALLDATA_SIZE: &str = "calldatasize";
 
+/// The heap size global variable name.
+pub static GLOBAL_HEAP_SIZE: &str = "__heap_size";
+
+/// The heap memory global variable name.
+pub static GLOBAL_HEAP_MEMORY: &str = "__heap_memory";
+
 /// The spill buffer global variable name.
 pub static GLOBAL_ADDRESS_SPILL_BUFFER: &str = "address_spill_buffer";
 

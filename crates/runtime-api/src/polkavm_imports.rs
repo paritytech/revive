@@ -2,14 +2,6 @@ use inkwell::{context::Context, memory_buffer::MemoryBuffer, module::Module, sup
 
 include!(concat!(env!("OUT_DIR"), "/polkavm_imports.rs"));
 
-/// The emulated EVM heap memory global symbol.
-pub static MEMORY: &str = "__memory";
-
-/// The emulated EVM heap memory size global symbol.
-pub static MEMORY_SIZE: &str = "__memory_size";
-
-pub static SBRK: &str = "__sbrk_internal";
-
 pub static ADDRESS: &str = "address";
 
 pub static BALANCE: &str = "balance";
@@ -78,8 +70,7 @@ pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 34] = [
-    SBRK,
+pub static IMPORTS: [&str; 33] = [
     ADDRESS,
     BALANCE,
     BALANCE_OF,

@@ -209,6 +209,8 @@ where
         revive_llvm_context::PolkaVMRemainderFunction.declare(context)?;
         revive_llvm_context::PolkaVMSignedRemainderFunction.declare(context)?;
 
+        revive_llvm_context::PolkaVMSbrkFunction.declare(context)?;
+
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
         entry.declare(context)?;
 
@@ -260,6 +262,8 @@ where
         revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
 
         Ok(())
     }

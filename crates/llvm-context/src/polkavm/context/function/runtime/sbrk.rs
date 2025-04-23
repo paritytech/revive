@@ -8,16 +8,20 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
-/// Implements the simulated `sbrk` system call, reproducing the EVM heap memory semantics.
+/// Simulates the `sbrk` system call, reproducing the semantics of the EVM heap memory.
 ///
-/// The function accepts two parameters:
+/// Parameters:
 /// - The `offset` into the emulated EVM heap memory.
 /// - The `size` of the allocation emulated EVM heap memory.
 ///
-/// Returns a pointer to the EVM heap memory at given `offset`.
-/// Aligns the size with the EVM word size size.
-/// Traps if the aligned size is greater than the configured EVM heap memory.
-/// Store the new memory size the heap size global value.
+/// Returns:
+/// - A pointer to the EVM heap memory at given `offset`.
+///
+/// Semantics:
+/// - Traps if the offset is out of bounds.
+/// - Aligns the total heap memory size to the EVM word size.
+/// - Traps if the memory size would be greater than the configured EVM heap memory size.
+/// - Maintains the total memory size (`msize`) in global heap size value.
 pub struct Sbrk;
 
 impl<D> RuntimeFunction<D> for Sbrk

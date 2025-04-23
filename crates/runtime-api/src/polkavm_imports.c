@@ -5,12 +5,6 @@
 
 // Missing builtins
 
-void * memset(void *b, int c, size_t len) {
-    uint8_t *dest = b;
-    while (len-- > 0) *dest++ = c;
-    return b;
-}
-
 void * memcpy(void *dst, const void *_src, size_t len) {
     uint8_t *dest = dst;
     const uint8_t *src = _src;

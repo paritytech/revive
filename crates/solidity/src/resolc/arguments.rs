@@ -167,9 +167,13 @@ pub struct Arguments {
     #[arg(long = "recursive-process-input")]
     pub recursive_process_input: Option<String>,
 
-    #[arg(long = "llvm-arg")]
     /// These are passed to LLVM as the command line to allow manual control.
+    #[arg(long = "llvm-arg")]
     pub llvm_arguments: Vec<String>,
+
+    /// The emulated EVM linear heap memory size in Kb.
+    #[arg(long = "heap-size", default_value = "65536")]
+    pub heap_size: u32,
 }
 
 impl Arguments {

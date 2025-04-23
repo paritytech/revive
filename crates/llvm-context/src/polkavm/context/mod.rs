@@ -33,6 +33,7 @@ use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 use crate::PolkaVMLoadHeapWordFunction;
+use crate::PolkaVMSbrkFunction;
 use crate::PolkaVMStoreHeapWordFunction;
 
 use self::address_space::AddressSpace;
@@ -85,6 +86,8 @@ where
     loop_stack: Vec<Loop<'ctx>>,
     /// The extra LLVM arguments that were used during target initialization.
     llvm_arguments: &'ctx [String],
+    /// The emulated EVM linear heap memory size.
+    heap_size: u32,
 
     /// The project dependency manager. It can be any entity implementing the trait.
     /// The manager is used to get information about contracts and their dependencies during
@@ -254,6 +257,7 @@ where
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
             llvm_arguments,
+            heap_size: 0,
 
             dependency_manager,
             include_metadata_hash,
@@ -1085,31 +1089,25 @@ where
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
         Ok(self
-            .builder()
             .build_call(
-                self.runtime_api_method(revive_runtime_api::polkavm_imports::SBRK),
+                <PolkaVMSbrkFunction as RuntimeFunction<D>>::declaration(self),
                 &[offset.into(), size.into()],
-                "call_sbrk",
-            )?
-            .try_as_basic_value()
-            .left()
-            .expect("sbrk returns a pointer")
+                "alloc_start",
+            )
+            .unwrap_or_else(|| {
+                panic!(
+                    "revive runtime function {} should return a value",
+                    <PolkaVMSbrkFunction as RuntimeFunction<D>>::NAME,
+                )
+            })
             .into_pointer_value())
     }
 
     /// Build a call to PolkaVM `msize` for querying the linear memory size.
     pub fn build_msize(&self) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        let memory_size_pointer = self
-            .module()
-            .get_global(revive_runtime_api::polkavm_imports::MEMORY_SIZE)
-            .expect("the memory size symbol should have been declared")
-            .as_pointer_value();
-        let memory_size_value = self.builder().build_load(
-            self.xlen_type(),
-            memory_size_pointer,
-            "memory_size_value",
-        )?;
-        Ok(memory_size_value.into_int_value())
+        Ok(self
+            .get_global_value(crate::polkavm::GLOBAL_HEAP_SIZE)?
+            .into_int_value())
     }
 
     /// Returns a pointer to `offset` into the heap, allocating
@@ -1427,5 +1425,9 @@ where
 
     pub fn optimizer_settings(&self) -> &OptimizerSettings {
         self.optimizer.settings()
+    }
+
+    pub fn heap_size(&self) -> inkwell::values::IntValue<'ctx> {
+        self.xlen_type().const_int(self.heap_size as u64, false)
     }
 }

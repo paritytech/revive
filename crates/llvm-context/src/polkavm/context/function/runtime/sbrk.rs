@@ -1,0 +1,132 @@
+//! Emulates the linear EVM heap memory via a simulated `sbrk` system call.
+
+use inkwell::values::BasicValue;
+
+use crate::polkavm::context::attribute::Attribute;
+use crate::polkavm::context::runtime::RuntimeFunction;
+use crate::polkavm::context::Context;
+use crate::polkavm::Dependency;
+use crate::polkavm::WriteLLVM;
+
+/// Implements the simulated `sbrk` system call.
+pub struct Sbrk;
+
+impl<D> RuntimeFunction<D> for Sbrk
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__sbrk_internal";
+
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoFree,
+        Attribute::NoRecurse,
+        Attribute::WillReturn,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.llvm().ptr_type(Default::default()).fn_type(
+            &[context.xlen_type().into(), context.xlen_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let offset = Self::paramater(context, 0).into_int_value();
+        let size = Self::paramater(context, 1).into_int_value();
+
+        let trap_block = context.append_basic_block("trap");
+        let offset_in_bounds_block = context.append_basic_block("offset_in_bounds");
+        let is_offset_out_of_bounds = context.builder().build_int_compare(
+            inkwell::IntPredicate::UGE,
+            offset,
+            context.heap_size(),
+            "offset_out_of_bounds",
+        )?;
+        context.build_conditional_branch(
+            is_offset_out_of_bounds,
+            trap_block,
+            offset_in_bounds_block,
+        )?;
+
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "invalid_trap");
+        context.build_unreachable();
+
+        context.set_basic_block(offset_in_bounds_block);
+        let size_mask = context
+            .xlen_type()
+            .const_int(revive_common::BYTE_LENGTH_WORD as u64 - 1, false);
+        let size = context.builder().build_and(
+            context
+                .builder()
+                .build_int_add(size, size_mask, "size_plus_mask")?,
+            context
+                .builder()
+                .build_int_neg(size_mask, "size_mask_negate")?,
+            "size_aligned",
+        )?;
+        let size_in_bounds_block = context.append_basic_block("size_in_bounds");
+        let is_size_out_of_bounds = context.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            size,
+            context.heap_size(),
+            "size_out_of_bounds",
+        )?;
+        context.build_conditional_branch(
+            is_size_out_of_bounds,
+            trap_block,
+            size_in_bounds_block,
+        )?;
+
+        context.set_basic_block(size_in_bounds_block);
+        let return_block = context.append_basic_block("return");
+        let new_size_block = context.append_basic_block("new_size");
+        let is_new_size = context.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            size,
+            context
+                .get_global_value(crate::polkavm::GLOBAL_HEAP_SIZE)?
+                .into_int_value(),
+            "is_new_size",
+        )?;
+        context.build_conditional_branch(is_new_size, new_size_block, return_block)?;
+
+        context.set_basic_block(new_size_block);
+        context.build_store(
+            context.get_global(crate::polkavm::GLOBAL_HEAP_SIZE)?.into(),
+            size,
+        )?;
+        context.build_unconditional_branch(return_block);
+
+        context.set_basic_block(return_block);
+        Ok(Some(
+            context
+                .build_gep(
+                    context
+                        .get_global(crate::polkavm::GLOBAL_HEAP_MEMORY)?
+                        .into(),
+                    &[context.xlen_type().const_zero(), offset],
+                    context.byte_type(),
+                    "allocation_start_pointer",
+                )
+                .value
+                .as_basic_value_enum(),
+        ))
+    }
+}
+
+impl<D> WriteLLVM<D> for Sbrk
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}

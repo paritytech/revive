@@ -5,28 +5,6 @@
 
 // Missing builtins
 
-#define EVM_WORD_SIZE 32
-#define ALIGN(size) ((size + EVM_WORD_SIZE - 1) & ~(EVM_WORD_SIZE - 1))
-#define MAX_MEMORY_SIZE (64 * 1024)
-char __memory[MAX_MEMORY_SIZE];
-uint32_t __memory_size = 0;
-
-void * __sbrk_internal(uint32_t offset, uint32_t size) {
-    if (offset >= MAX_MEMORY_SIZE || size > MAX_MEMORY_SIZE) {
-        POLKAVM_TRAP();
-    }
-
-    uint32_t new_size = ALIGN(offset + size);
-    if (new_size > MAX_MEMORY_SIZE) {
-        POLKAVM_TRAP();
-    }
-    if (new_size > __memory_size) {
-        __memory_size = new_size;
-    }
-
-    return (void *)&__memory[offset];
-}
-
 void * memset(void *b, int c, size_t len) {
     uint8_t *dest = b;
     while (len-- > 0) *dest++ = c;

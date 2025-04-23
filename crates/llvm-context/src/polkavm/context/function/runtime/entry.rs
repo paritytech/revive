@@ -31,6 +31,21 @@ impl Entry {
             context.xlen_type().get_undef(),
         );
 
+        context.set_global(
+            crate::polkavm::GLOBAL_HEAP_SIZE,
+            context.xlen_type(),
+            AddressSpace::Stack,
+            context.xlen_type().const_zero(),
+        );
+
+        let heap_memory_type = context.byte_type().array_type(context.heap_size);
+        context.set_global(
+            crate::polkavm::GLOBAL_HEAP_MEMORY,
+            heap_memory_type,
+            AddressSpace::Stack,
+            heap_memory_type.const_zero(),
+        );
+
         let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
         context.set_global(
             crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER,

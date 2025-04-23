@@ -8,7 +8,16 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
-/// Implements the simulated `sbrk` system call.
+/// Implements the simulated `sbrk` system call, reproducing the EVM heap memory semantics.
+///
+/// The function accepts two parameters:
+/// - The `offset` into the emulated EVM heap memory.
+/// - The `size` of the allocation emulated EVM heap memory.
+///
+/// Returns a pointer to the EVM heap memory at given `offset`.
+/// Aligns the size with the EVM word size size.
+/// Traps if the aligned size is greater than the configured EVM heap memory.
+/// Store the new memory size the heap size global value.
 pub struct Sbrk;
 
 impl<D> RuntimeFunction<D> for Sbrk
@@ -56,22 +65,21 @@ where
         context.build_unreachable();
 
         context.set_basic_block(offset_in_bounds_block);
-        let size_mask = context
+        let mask = context
             .xlen_type()
             .const_int(revive_common::BYTE_LENGTH_WORD as u64 - 1, false);
-        let size = context.builder().build_and(
-            context
-                .builder()
-                .build_int_add(size, size_mask, "size_plus_mask")?,
-            context
-                .builder()
-                .build_int_neg(size_mask, "size_mask_negate")?,
-            "size_aligned",
+        let total_size = context
+            .builder()
+            .build_int_add(offset, size, "total_size")?;
+        let memory_size = context.builder().build_and(
+            context.builder().build_int_add(total_size, mask, "mask")?,
+            context.builder().build_not(mask, "mask_not")?,
+            "memory_size",
         )?;
         let size_in_bounds_block = context.append_basic_block("size_in_bounds");
         let is_size_out_of_bounds = context.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
-            size,
+            memory_size,
             context.heap_size(),
             "size_out_of_bounds",
         )?;
@@ -82,11 +90,11 @@ where
         )?;
 
         context.set_basic_block(size_in_bounds_block);
-        let return_block = context.append_basic_block("return");
+        let return_block = context.append_basic_block("return_pointer");
         let new_size_block = context.append_basic_block("new_size");
         let is_new_size = context.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
-            size,
+            memory_size,
             context
                 .get_global_value(crate::polkavm::GLOBAL_HEAP_SIZE)?
                 .into_int_value(),
@@ -97,7 +105,7 @@ where
         context.set_basic_block(new_size_block);
         context.build_store(
             context.get_global(crate::polkavm::GLOBAL_HEAP_SIZE)?.into(),
-            size,
+            memory_size,
         )?;
         context.build_unconditional_branch(return_block);
 

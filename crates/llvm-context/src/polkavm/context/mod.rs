@@ -257,7 +257,7 @@ where
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
             llvm_arguments,
-            heap_size: 0,
+            heap_size: 65536,
 
             dependency_manager,
             include_metadata_hash,
@@ -1088,12 +1088,26 @@ where
         offset: inkwell::values::IntValue<'ctx>,
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
-        Ok(self
-            .build_call(
-                <PolkaVMSbrkFunction as RuntimeFunction<D>>::declaration(self),
-                &[offset.into(), size.into()],
-                "alloc_start",
-            )
+        let call_site_value = self.builder().build_call(
+            <PolkaVMSbrkFunction as RuntimeFunction<D>>::declaration(self).function_value(),
+            &[offset.into(), size.into()],
+            "alloc_start",
+        )?;
+
+        call_site_value.add_attribute(
+            inkwell::attributes::AttributeLoc::Return,
+            self.llvm
+                .create_enum_attribute(Attribute::NonNull as u32, 0),
+        );
+        call_site_value.add_attribute(
+            inkwell::attributes::AttributeLoc::Return,
+            self.llvm
+                .create_enum_attribute(Attribute::NoUndef as u32, 0),
+        );
+
+        Ok(call_site_value
+            .try_as_basic_value()
+            .left()
             .unwrap_or_else(|| {
                 panic!(
                     "revive runtime function {} should return a value",

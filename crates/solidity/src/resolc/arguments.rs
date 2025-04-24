@@ -185,7 +185,7 @@ pub struct Arguments {
     /// 1.Increasing the heap size will increase startup costs.
     /// 2.The heap size contributes to the total memory size a contract can use,
     ///   which includes the contracts code size
-    #[arg(long = "heap-size", default_value = "32768")]
+    #[arg(long = "heap-size", default_value = "65536")]
     pub heap_size: u32,
 
     /// The contracts total stack size in bytes.

@@ -14,7 +14,7 @@ pub struct MemoryConfig {
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
-            heap_size: 32 * 1024,
+            heap_size: 64 * 1024,
             stack_size: 32 * 1024,
         }
     }

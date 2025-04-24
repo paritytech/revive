@@ -11,7 +11,6 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 - Allow configuration of the EVM heap memory size and stack size via CLI flags and JSON input settings.
 
 ### Changed
-- The default EVM linear heap memory size was decreased from 64kb to 32kb.
 - The default PVM stack memory size was increased from 16kb to 32kb.
 
 ### Fixed

@@ -78,6 +78,7 @@ impl Contract {
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
+        memory_config: revive_llvm_context::MemoryConfig,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
@@ -123,6 +124,7 @@ impl Contract {
             include_metadata_hash,
             debug_config,
             llvm_arguments,
+            memory_config,
         );
         context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
         match self.ir {

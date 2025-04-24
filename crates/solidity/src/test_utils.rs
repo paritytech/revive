@@ -115,8 +115,13 @@ pub fn build_solidity_with_options(
         &debug_config,
     )?;
 
-    let build: crate::Build =
-        project.compile(optimizer_settings, false, debug_config, Default::default())?;
+    let build: crate::Build = project.compile(
+        optimizer_settings,
+        false,
+        debug_config,
+        Default::default(),
+        Default::default(),
+    )?;
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
@@ -243,7 +248,13 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
         source_code,
         None,
     )?;
-    let _build = project.compile(optimizer_settings, false, DEBUG_CONFIG, Default::default())?;
+    let _build = project.compile(
+        optimizer_settings,
+        false,
+        DEBUG_CONFIG,
+        Default::default(),
+        Default::default(),
+    )?;
 
     Ok(())
 }

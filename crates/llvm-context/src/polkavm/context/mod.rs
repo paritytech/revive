@@ -26,6 +26,7 @@ use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 
+use crate::memory::MemoryConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
 use crate::polkavm::DebugConfig;
@@ -86,8 +87,8 @@ where
     loop_stack: Vec<Loop<'ctx>>,
     /// The extra LLVM arguments that were used during target initialization.
     llvm_arguments: &'ctx [String],
-    /// The emulated EVM linear heap memory size.
-    heap_size: u32,
+    /// The PVM memory configuration.
+    memory_config: MemoryConfig,
 
     /// The project dependency manager. It can be any entity implementing the trait.
     /// The manager is used to get information about contracts and their dependencies during
@@ -118,9 +119,6 @@ where
 
     /// The loop stack default capacity.
     const LOOP_STACK_INITIAL_CAPACITY: usize = 16;
-
-    /// The PolkaVM minimum stack size.
-    const POLKAVM_STACK_SIZE: u32 = 0x4000;
 
     /// Link in the stdlib module.
     fn link_stdlib_module(
@@ -221,6 +219,7 @@ where
     }
 
     /// Initializes a new LLVM context.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
@@ -229,11 +228,12 @@ where
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &'ctx [String],
+        memory_config: MemoryConfig,
     ) -> Self {
         Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
-        Self::set_polkavm_stack_size(llvm, &module, Self::POLKAVM_STACK_SIZE);
+        Self::set_polkavm_stack_size(llvm, &module, memory_config.stack_size);
         Self::set_module_flags(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);
@@ -257,7 +257,7 @@ where
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
             llvm_arguments,
-            heap_size: 65536,
+            memory_config,
 
             dependency_manager,
             include_metadata_hash,
@@ -648,6 +648,7 @@ where
                     self.include_metadata_hash,
                     self.debug_config.clone(),
                     self.llvm_arguments,
+                    self.memory_config,
                 )
             })
     }
@@ -1442,6 +1443,7 @@ where
     }
 
     pub fn heap_size(&self) -> inkwell::values::IntValue<'ctx> {
-        self.xlen_type().const_int(self.heap_size as u64, false)
+        self.xlen_type()
+            .const_int(self.memory_config.heap_size as u64, false)
     }
 }

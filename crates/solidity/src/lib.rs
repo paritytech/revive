@@ -55,6 +55,7 @@ pub fn yul<T: Compiler>(
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
+    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -80,6 +81,7 @@ pub fn yul<T: Compiler>(
         include_metadata_hash,
         debug_config,
         llvm_arguments,
+        memory_config,
     )?;
 
     Ok(build)
@@ -92,6 +94,7 @@ pub fn llvm_ir(
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
+    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -109,6 +112,7 @@ pub fn llvm_ir(
         include_metadata_hash,
         debug_config,
         llvm_arguments,
+        memory_config,
     )?;
 
     Ok(build)
@@ -131,6 +135,7 @@ pub fn standard_output<T: Compiler>(
     suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
+    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
 
@@ -189,12 +194,14 @@ pub fn standard_output<T: Compiler>(
         include_metadata_hash,
         debug_config,
         llvm_arguments,
+        memory_config,
     )?;
 
     Ok(build)
 }
 
 /// Runs the standard JSON mode.
+#[allow(clippy::too_many_arguments)]
 pub fn standard_json<T: Compiler>(
     solc: &mut T,
     detect_missing_libraries: bool,
@@ -203,6 +210,7 @@ pub fn standard_json<T: Compiler>(
     allow_paths: Option<String>,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
+    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
 
@@ -250,6 +258,7 @@ pub fn standard_json<T: Compiler>(
             include_metadata_hash,
             debug_config,
             llvm_arguments,
+            memory_config,
         )?;
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }
@@ -277,6 +286,7 @@ pub fn combined_json<T: Compiler>(
     output_directory: Option<PathBuf>,
     overwrite: bool,
     llvm_arguments: &[String],
+    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<()> {
     let build = standard_output(
         input_files,
@@ -293,6 +303,7 @@ pub fn combined_json<T: Compiler>(
         suppressed_warnings,
         debug_config,
         llvm_arguments,
+        memory_config,
     )?;
 
     let mut combined_json = solc.combined_json(input_files, format.as_str())?;

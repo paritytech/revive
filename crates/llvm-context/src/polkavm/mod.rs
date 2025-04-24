@@ -7,6 +7,7 @@ pub mod evm;
 pub use self::r#const::*;
 
 use crate::debug_config::DebugConfig;
+use crate::memory::MemoryConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
 use anyhow::Context as AnyhowContext;
@@ -90,6 +91,7 @@ pub trait Dependency {
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &[String],
+        memory_config: MemoryConfig,
     ) -> anyhow::Result<String>;
 
     /// Resolves a full contract path.
@@ -111,6 +113,7 @@ impl Dependency for DummyDependency {
         _include_metadata_hash: bool,
         _debug_config: DebugConfig,
         _llvm_arguments: &[String],
+        _memory_config: MemoryConfig,
     ) -> anyhow::Result<String> {
         Ok(String::new())
     }

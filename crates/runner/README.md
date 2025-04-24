@@ -16,7 +16,7 @@ Inside the root `revive` repository directory, execute:
 make install-revive-runner
 ```
 
-Which will install the `revive-runner` using `cargo`. 
+Which will install the `revive-runner` using `cargo`.
 
 ## Usage
 
@@ -24,3 +24,4 @@ Set the `RUST_LOG` environment varibale to the `trace` level to see the full Pol
 
 ```bash
 RUST_LOG=trace revive-runner -f mycontract.pvm -c a9059cbb000000000000000000000000f24ff3a9cf04c71dbc94d0b566f7a27b94566cac0000000000000000000000000000000000000000000000000000000000000000
+```

@@ -1,0 +1,42 @@
+{
+    "name": "@parity/resolc",
+    "license": "Apache-2.0",
+    "version": "0.0.0-updated-via-gh-releases",
+    "author": "Parity <admin@parity.io> (https://parity.io)",
+    "module": "index.ts",
+    "types": "./dist/index.d.ts",
+    "main": "./dist/index.js",
+    "bin": {
+        "resolc": "./dist/bin.js"
+    },
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "require": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc && cp src/resolc/** dist/resolc",
+        "test": "npm run build && node ./dist/index.test.js"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.14.0",
+        "@openzeppelin/contracts": "5.1.0",
+        "eslint": "^9.14.0",
+        "globals": "^15.12.0",
+        "tar": "^7.4.3",
+        "typescript": "^5.6.3",
+        "typescript-eslint": "^8.13.0"
+    },
+    "dependencies": {
+        "@types/node": "^22.9.0",
+        "commander": "^13.1.0",
+        "package-json": "^10.0.1",
+        "solc": "^0.8.29"
+    },
+    "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

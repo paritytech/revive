@@ -37,7 +37,15 @@ jobs:
   build:
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, wasm32-unknown-emscripten, aarch64-apple-darwin, x86_64-apple-darwin, x86_64-pc-windows-msvc]
+        target:
+          [
+            x86_64-unknown-linux-gnu,
+            x86_64-unknown-linux-musl,
+            wasm32-unknown-emscripten,
+            aarch64-apple-darwin,
+            x86_64-apple-darwin,
+            x86_64-pc-windows-msvc,
+          ]
         include:
           - target: x86_64-unknown-linux-gnu
             builder-arg: gnu

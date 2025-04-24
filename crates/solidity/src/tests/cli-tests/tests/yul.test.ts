@@ -1,12 +1,11 @@
-import {executeCommand} from "../src/helper";
-import { paths } from '../src/entities';
-
+import { executeCommand } from "../src/helper";
+import { paths } from "../src/entities";
 
 //id1743
 describe("Run with --yul by default", () => {
   const command = `resolc ${paths.pathToBasicYulContract} --yul`;
   const result = executeCommand(command);
-  const commandInvalid = 'resolc --yul';
+  const commandInvalid = "resolc --yul";
   const resultInvalid = executeCommand(commandInvalid);
 
   it("Valid command exit code = 0", () => {
@@ -18,11 +17,11 @@ describe("Run with --yul by default", () => {
     expect(result.output).toMatch(/(No output requested)/i);
   });
 
-
-  xit("solc exit code == resolc exit code", () => { // unknown solc issue for datatype of the contract
-      const command = `solc ${paths.pathToBasicSolContract} --yul`;
-      const solcResult = executeCommand(command);
-      expect(solcResult.exitCode).toBe(result.exitCode);
+  xit("solc exit code == resolc exit code", () => {
+    // unknown solc issue for datatype of the contract
+    const command = `solc ${paths.pathToBasicSolContract} --yul`;
+    const solcResult = executeCommand(command);
+    expect(solcResult.exitCode).toBe(result.exitCode);
   });
 
   it("run invalid: resolc --yul", () => {
@@ -33,7 +32,7 @@ describe("Run with --yul by default", () => {
   });
 
   it("Invalid solc exit code == Invalid resolc exit code", () => {
-    const command = 'solc --yul';
+    const command = "solc --yul";
     const solcResult = executeCommand(command);
     expect(solcResult.exitCode).toBe(resultInvalid.exitCode);
   });

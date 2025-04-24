@@ -14,6 +14,7 @@ This is experimental software in active development and not ready just yet for p
 Discussion around the development is hosted on the [Polkadot Forum](https://forum.polkadot.network/t/contracts-update-solidity-on-polkavm/6949#a-new-solidity-compiler-1).
 
 ## Installation
+
 Please consult [the documentation](https://contracts.polkadot.io/revive_compiler/installation) for installation instructions.
 
 ## Building from source
@@ -30,11 +31,13 @@ Building revive requires a [stable Rust installation](https://rustup.rs/) and a 
 Download the [latest LLVM build](https://github.com/paritytech/revive/releases?q=LLVM+binaries+release&expanded=true) from our releases.
 
 > **MacOS** users need to clear the `downloaded` attribute from all binaries after extracting the archive:
+>
 > ```sh
 > xattr -rc </path/to/the/extracted/archive>/target-llvm/gnu/target-final/bin/*
 > ```
 
 After extracting the archive, point `$LLVM_SYS_181_PREFIX` to it:
+
 ```sh
 export LLVM_SYS_181_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/target-final
 ```
@@ -44,7 +47,7 @@ export LLVM_SYS_181_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/targ
 <details>
   <summary>Building from source</summary>
 
- Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation afterwards.
+Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation afterwards.
 
 The `Makefile` provides a shortcut target to obtain a compatible LLVM build:
 
@@ -93,11 +96,12 @@ make test-wasm
 
 ## Development
 
-Please consult the [Makefile](Makefile) targets to learn how to run tests and benchmarks. 
+Please consult the [Makefile](Makefile) targets to learn how to run tests and benchmarks.
 Ensure that your branch passes `make test` locally when submitting a pull request.
 
 ### Design overview
-See the [relevant section in our documentation](https://contracts.polkadot.io/revive_compiler/architecture) to learn more about how the compiler works. 
+
+See the [relevant section in our documentation](https://contracts.polkadot.io/revive_compiler/architecture) to learn more about how the compiler works.
 
 [Frontend](https://github.com/matter-labs/era-compiler-solidity) and [code generator](https://github.com/matter-labs/era-compiler-llvm-context) are based of ZKSync `zksolc` (the project started as a fork of the era compiler).
 

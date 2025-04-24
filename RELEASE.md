@@ -18,4 +18,4 @@ To create a new pre-release:
 To create a new LLVM release, run "Release LLVM" workflow. Use current LLVM version as parameter, e.g. `18.1.8`.
 Version suffix will be resolved automatically.  
 The workflows will create new GitHub release, and upload LLVM binaries.
-Next release of resolc will use newly created binaries.  
+Next release of resolc will use newly created binaries.

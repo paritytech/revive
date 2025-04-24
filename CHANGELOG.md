@@ -7,6 +7,18 @@ This is a development pre-release.
 Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## v0.1.0-dev.14
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
+
+### Added
 - The `revive-runner` helper utility binary which helps to run contracts locally without a blockchain node. 
 - Allow configuration of the EVM heap memory size and stack size via CLI flags and JSON input settings.
 

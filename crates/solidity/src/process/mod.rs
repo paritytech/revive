@@ -50,6 +50,7 @@ pub trait Process {
             input.include_metadata_hash,
             input.debug_config,
             &input.llvm_arguments,
+            input.memory_config,
         );
 
         match result {

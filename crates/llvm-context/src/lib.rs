@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 
 pub use self::debug_config::ir_type::IRType as DebugConfigIR;
 pub use self::debug_config::DebugConfig;
+pub use self::memory::MemoryConfig;
 pub use self::optimizer::settings::size_level::SizeLevel as OptimizerSettingsSizeLevel;
 pub use self::optimizer::settings::Settings as OptimizerSettings;
 pub use self::optimizer::Optimizer;
@@ -61,7 +62,6 @@ pub use self::polkavm::evm::ext_code as polkavm_evm_ext_code;
 pub use self::polkavm::evm::immutable as polkavm_evm_immutable;
 pub use self::polkavm::evm::immutable::Load as PolkaVMLoadImmutableDataFunction;
 pub use self::polkavm::evm::immutable::Store as PolkaVMStoreImmutableDataFunction;
-
 pub use self::polkavm::evm::math as polkavm_evm_math;
 pub use self::polkavm::evm::memory as polkavm_evm_memory;
 pub use self::polkavm::evm::r#return as polkavm_evm_return;
@@ -76,6 +76,7 @@ pub use self::target_machine::target::Target;
 pub use self::target_machine::TargetMachine;
 
 pub(crate) mod debug_config;
+pub(crate) mod memory;
 pub(crate) mod optimizer;
 pub(crate) mod polkavm;
 pub(crate) mod target_machine;

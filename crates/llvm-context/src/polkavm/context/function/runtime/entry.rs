@@ -38,7 +38,9 @@ impl Entry {
             context.xlen_type().const_zero(),
         );
 
-        let heap_memory_type = context.byte_type().array_type(context.heap_size);
+        let heap_memory_type = context
+            .byte_type()
+            .array_type(context.memory_config.heap_size);
         context.set_global(
             crate::polkavm::GLOBAL_HEAP_MEMORY,
             heap_memory_type,

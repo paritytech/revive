@@ -148,6 +148,11 @@ fn main_inner() -> anyhow::Result<()> {
         None => true,
     };
 
+    let memory_config = revive_llvm_context::MemoryConfig {
+        heap_size: arguments.heap_size,
+        stack_size: arguments.stack_size,
+    };
+
     let build = if arguments.yul {
         revive_solidity::yul(
             input_files.as_slice(),
@@ -156,6 +161,7 @@ fn main_inner() -> anyhow::Result<()> {
             include_metadata_hash,
             debug_config,
             &arguments.llvm_arguments,
+            memory_config,
         )
     } else if arguments.llvm_ir {
         revive_solidity::llvm_ir(
@@ -164,6 +170,7 @@ fn main_inner() -> anyhow::Result<()> {
             include_metadata_hash,
             debug_config,
             &arguments.llvm_arguments,
+            memory_config,
         )
     } else if arguments.standard_json {
         revive_solidity::standard_json(
@@ -174,6 +181,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.allow_paths,
             debug_config,
             &arguments.llvm_arguments,
+            memory_config,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
@@ -195,6 +203,7 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.output_directory,
             arguments.overwrite,
             &arguments.llvm_arguments,
+            memory_config,
         )?;
         return Ok(());
     } else {
@@ -213,6 +222,7 @@ fn main_inner() -> anyhow::Result<()> {
             suppressed_warnings,
             debug_config,
             &arguments.llvm_arguments,
+            memory_config,
         )
     }?;
 

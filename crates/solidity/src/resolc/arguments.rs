@@ -170,6 +170,38 @@ pub struct Arguments {
     /// These are passed to LLVM as the command line to allow manual control.
     #[arg(long = "llvm-arg")]
     pub llvm_arguments: Vec<String>,
+
+    /// The emulated EVM linear heap memory static buffer size in bytes.
+    ///
+    /// Unlike the EVM, due to the lack of dynamic memory metering, PVM contracts emulate
+    /// the EVM heap memory with a static buffer. Consequentially, instead of infinite
+    /// memory with exponentially growing gas costs, PVM contracts have a finite amount
+    /// of memory with constant gas costs available.
+    ///
+    /// If the contract uses more heap memory than configured, it will compile fine but
+    /// eventually revert execution at runtime!
+    ///
+    /// You are incentiviced to keep this value as small as possible:
+    /// 1.Increasing the heap size will increase startup costs.
+    /// 2.The heap size contributes to the total memory size a contract can use,
+    ///   which includes the contracts code size
+    #[arg(long = "heap-size", default_value = "32768")]
+    pub heap_size: u32,
+
+    /// The contracts total stack size in bytes.
+    ///
+    /// PVM is a register machine with a traditional stack memory space for local
+    /// variables. This controls the total amount of stack space the contract can use.
+    ///
+    /// If the contract uses more stack memory than configured, it will compile fine but
+    /// eventually revert execution at runtime!
+    ///
+    /// You are incentiviced to keep this value as small as possible:
+    /// 1.Increasing the heap size will increase startup costs.
+    /// 2.The stack size contributes to the total memory size a contract can use,
+    ///   which includes the contracts code size
+    #[arg(long = "stack-size", default_value = "32768")]
+    pub stack_size: u32,
 }
 
 impl Arguments {

@@ -10,8 +10,8 @@ rustflags = [
     "-Clink-arg=-sWASM_ASYNC_COMPILATION=0",
     "-Clink-arg=-sDYNAMIC_EXECUTION=0",
     "-Clink-arg=-sALLOW_TABLE_GROWTH=1",
-    "-Clink-arg=--js-library=js/embed/soljson_interface.js",
-    "-Clink-arg=--pre-js=js/embed/pre.js",
+    "-Clink-arg=--js-library=js/emscripten/embed/soljson_interface.js",
+    "-Clink-arg=--pre-js=js/emscripten/embed/pre.js",
     "-Clink-arg=-sSTACK_SIZE=128kb",
     "-Clink-arg=-sNODEJS_CATCH_EXIT=0"
 ]

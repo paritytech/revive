@@ -1,22 +1,13 @@
 import { test } from 'node:test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import assert from 'node:assert'
 import { compile, tryResolveImport } from '.'
 import { resolve } from 'node:path'
-import { execSync } from 'node:child_process'
 
-function isResolcInPath() {
-    try {
-        execSync('resolc --version', { stdio: 'ignore' })
-        return true
-    } catch {
-        return false
-    }
-}
 
 const compileOptions = [{}]
-if (isResolcInPath()) {
-    compileOptions.push({ bin: 'resolc' })
+if (existsSync('../../target/release/resolc')) {
+    compileOptions.push({ bin: '../../target/release/resolc' })
 }
 
 for (const options of compileOptions) {
@@ -83,16 +74,12 @@ test('resolve import', () => {
         // scopped module with version
         {
             file: '@openzeppelin/contracts@5.1.0/token/ERC20/ERC20.sol',
-            expected: resolve(
-                'node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol'
-            ),
+            expected: require.resolve('@openzeppelin/contracts/token/ERC20/ERC20.sol'),
         },
         // scopped module without version
         {
             file: '@openzeppelin/contracts/token/ERC20/ERC20.sol',
-            expected: resolve(
-                'node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol'
-            ),
+            expected: require.resolve('@openzeppelin/contracts/token/ERC20/ERC20.sol'),
         },
         // scopped module with wrong version
         {
@@ -101,17 +88,13 @@ test('resolve import', () => {
         },
         // module without version
         {
-            file: 'acorn/package.json',
-            expected: resolve('node_modules/acorn/package.json'),
+            file: '@openzeppelin/contracts/package.json',
+            expected: require.resolve('@openzeppelin/contracts/package.json'),
         },
         // scopped module with version
         {
-            file: 'acorn@8.14.0/package.json',
-            expected: resolve('node_modules/acorn/package.json'),
-        },
-        {
-            file: 'acorn@8.14.1/package.json',
-            expected: `Error: Version mismatch: Specified acorn@8.14.1, but installed version is 8.14.0`,
+            file: '@openzeppelin/contracts@5.1.0/package.json',
+            expected: require.resolve('@openzeppelin/contracts/package.json'),
         },
     ]
 

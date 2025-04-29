@@ -1,1 +1,1 @@
-../../../target/wasm32-unknown-emscripten/release/resolc.wasm
+../../../../target/wasm32-unknown-emscripten/release/resolc.wasm

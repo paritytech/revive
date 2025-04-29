@@ -92,7 +92,12 @@ jobs:
           npx playwright install --with-deps
           npx playwright test
 
-      - name: Test revive
+      - name: Test emscripten
         run: |
           echo "Running tests for ${{ matrix.os }}"
           npm run test:wasm
+
+      - name: Test @parity/resolc
+        run: |
+          echo "Running tests for ${{ matrix.os }}"
+          npm run -w js/resolc test

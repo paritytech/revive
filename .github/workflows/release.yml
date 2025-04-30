@@ -288,7 +288,7 @@ jobs:
             checksums.txt
 
   npm-release:
-    needs: [build-wasm]
+    needs: [create-release]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4

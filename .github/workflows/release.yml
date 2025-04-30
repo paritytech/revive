@@ -167,8 +167,22 @@ jobs:
     needs: [build-wasm]
     runs-on: macos-14
     steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
       - name: Build
-        run: npm -w js/resolc run build
+        run: |
+          cp -f resolc.{wasm,js} js/resolc/src/resolc
+          npm -w js/resolc run build
 
       - name: Set version
         run: npm -w js/resolc version --no-git-tag-version 0.0.1

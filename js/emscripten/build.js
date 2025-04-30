@@ -8,7 +8,7 @@ const RESOLC_WASM_URI =
   process.env.RELEASE_RESOLC_WASM_URI || "http://127.0.0.1:8080/resolc.wasm";
 const RESOLC_WASM_TARGET_DIR = path.join(
   __dirname,
-  "../target/wasm32-unknown-emscripten/release",
+  "../../target/wasm32-unknown-emscripten/release",
 );
 const RESOLC_JS = path.join(RESOLC_WASM_TARGET_DIR, "resolc.js");
 const RESOLC_WEB_JS = path.join(RESOLC_WASM_TARGET_DIR, "resolc_web.js");

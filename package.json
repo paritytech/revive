@@ -1,13 +1,21 @@
 {
-    "name": "root",
-    "private": true,
-    "scripts": {
-        "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests",
-        "test:wasm": "npm run test:node -w js",
-        "build:package": "npm run build:package -w js"
-    },
-    "workspaces": [
-        "crates/solidity/src/tests/cli-tests",
-        "js"
-    ]
+  "name": "root",
+  "private": true,
+  "scripts": {
+    "test:cli": "npm run test -w crates/solidity/src/tests/cli-tests",
+    "test:wasm": "npm run test:node -w js/emscripten",
+    "build:package": "npm run build:package -w js/emscripten",
+    "lint": "npx eslint 'js/**/*.{cjs,mjs,ts}' && npx prettier --check '**/*.{mjs,cjs,ts}'",
+    "lint:fix": "npx prettier --write '**/*.{mjs,cjs,ts}'"
+  },
+  "workspaces": [
+    "crates/solidity/src/tests/cli-tests",
+    "js/emscripten",
+    "js/resolc"
+  ],
+  "dependencies": {
+    "@eslint/js": "^9.14.0",
+    "eslint": "^9.14.0",
+    "typescript-eslint": "^8.13.0"
+  }
 }

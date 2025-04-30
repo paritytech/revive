@@ -86,13 +86,18 @@ jobs:
       - name: Install Node Packages
         run: npm install
 
-      - name: Run Playwright tests
-        run: |
-          cd js
-          npx playwright install --with-deps
-          npx playwright test
-
-      - name: Test revive
+      - name: Test emscripten
         run: |
           echo "Running tests for ${{ matrix.os }}"
           npm run test:wasm
+
+      - name: Test @parity/resolc
+        run: |
+          echo "Running tests for ${{ matrix.os }}"
+          npm run -w js/resolc test
+
+      - name: Run Playwright tests
+        run: |
+          cd js/emscripten
+          npx playwright install --with-deps
+          npx playwright test

@@ -1,4 +1,5 @@
 /target
+/js/resolc/dist
 target-llvm
 *.dot
 .vscode/

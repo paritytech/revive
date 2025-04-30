@@ -92,7 +92,4 @@ clean:
 	rm -rf node_modules ; \
 	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
 	cargo uninstall revive-solidity ; \
-	cargo uninstall revive-llvm-builder ; \
-	rm -f package-lock.json ; \
-	rm -rf js/dist ; \
-	rm -f js/src/resolc.{wasm,js}
+	cargo uninstall revive-llvm-builder ;

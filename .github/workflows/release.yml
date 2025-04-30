@@ -167,6 +167,7 @@ jobs:
     needs: [build-wasm]
     runs-on: macos-14
     steps:
+      - uses: actions/checkout@v4
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:

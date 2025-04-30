@@ -288,8 +288,7 @@ jobs:
             checksums.txt
 
   npm-release:
-    if: startsWith(github.ref_name, 'v')
-    needs: [check-version-changed, build-wasm]
+    needs: [create-release]
     runs-on: macos-14
     environment: tags
     steps:

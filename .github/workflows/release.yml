@@ -177,7 +177,7 @@ jobs:
         with:
           node-version: "20"
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build
         run: |

@@ -1,7 +1,9 @@
 name: Build & Release
 on:
   push:
-    branches: ["pg/test-npm-release"]
+    branches: ["main"]
+    tags:
+      - "v*"
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, labeled, unlabeled]
@@ -15,8 +17,131 @@ env:
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
 
 jobs:
+  check-version-changed:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      CURRENT_TAG: ${{ github.ref_name }}
+    outputs:
+      RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Check that tag and version in Cargo.toml match
+      - name: Check versions
+        id: versions
+        run: |
+          if [[ $CURRENT_TAG == 'main' ]];
+            then
+              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in the main branch";
+              exit 0
+            fi
+
+          if [[ $CURRENT_TAG != "v"* ]];
+            then
+              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR";
+              exit 0
+            fi
+
+          export PKG_VER=v$(cat Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
+          echo "Current tag $CURRENT_TAG"
+          echo "Package version $PKG_VER"
+          #
+          if [[ $CURRENT_TAG != $PKG_VER  ]];
+            then
+              echo "::error::Tag $CURRENT_TAG doesn't match package version $PKG_VER in Cargo.toml, please fix";
+              exit 1
+            fi
+
+          # Generating release notes early, in order to avoid checkout at the last step
+          export RELEASE_NOTES="$(sed '/^## '${CURRENT_TAG}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
+
+          echo "Release notes:"
+          echo "$RELEASE_NOTES"
+
+          echo 'RELEASE_NOTES<<EOF' >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+  build:
+    strategy:
+      matrix:
+        target:
+          [
+            x86_64-unknown-linux-musl,
+            aarch64-apple-darwin,
+            x86_64-apple-darwin,
+            x86_64-pc-windows-msvc,
+          ]
+        include:
+          - target: x86_64-unknown-linux-musl
+            type: musl
+            runner: ubuntu-24.04
+          - target: aarch64-apple-darwin
+            type: native
+            runner: macos-14
+          - target: x86_64-apple-darwin
+            type: native
+            runner: macos-13
+          - target: x86_64-pc-windows-msvc
+            type: native
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    needs: [check-version-changed]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # without this it will override our rust flags
+          rustflags: ""
+          cache-key: ${{ matrix.target }}
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build
+        if: ${{ matrix.type == 'native' }}
+        shell: bash
+        run: |
+          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
+          make install-bin
+          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
+
+      - name: Build
+        if: ${{ matrix.type == 'musl' }}
+        run: |
+          docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
+           cd /opt/revive
+           chown -R root:root .
+           apt update && apt upgrade -y && apt install -y pkg-config
+           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
+           make install-bin
+           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
+           "
+          sudo chown -R $(id -u):$(id -g) .
+
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
+
+      - name: Basic Sanity Check
+        shell: bash
+        run: |
+          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
+          echo $result
+          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resolc-${{ matrix.target }}
+          path: resolc-${{ matrix.target }}*
+          retention-days: 1
+
   build-wasm:
     runs-on: ubuntu-24.04
+    needs: [check-version-changed]
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive-workflow-test/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
@@ -104,6 +229,64 @@ jobs:
           path: resolc-wasm32-unknown-emscripten/*
           retention-days: 1
 
+  create-release:
+    if: startsWith(github.ref_name, 'v')
+    needs: [check-version-changed, build-wasm]
+    runs-on: macos-14
+    environment: tags
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create macOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Make Executable
+        run: |
+          chmod +x resolc-x86_64-unknown-linux-musl
+          chmod +x resolc-universal-apple-darwin
+
+      - name: Create sha-256 checksum
+        run: |
+          shasum -a 256 resolc-x86_64-unknown-linux-musl > checksums.txt
+          shasum -a 256 resolc-universal-apple-darwin >> checksums.txt
+          shasum -a 256 resolc-x86_64-pc-windows-msvc.exe >> checksums.txt
+          shasum -a 256 resolc.js >> checksums.txt
+          shasum -a 256 resolc.wasm >> checksums.txt
+          shasum -a 256 resolc_web.js >> checksums.txt
+
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_RELEASE_APP_ID }}
+          private-key: ${{ secrets.REVIVE_RELEASE_APP_KEY }}
+
+      - name: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## Changelog
+            ${{ needs.check-version-changed.outputs.RELEASE_NOTES }}
+
+            ## Note for macOS Users
+            The macOS binary is unsigned and it needs to be made runnable using `xattr -c resolc-universal-apple-darwin`.
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          prerelease: true
+          token: ${{ steps.app-token.outputs.token }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            resolc-x86_64-unknown-linux-musl
+            resolc-universal-apple-darwin
+            resolc-x86_64-pc-windows-msvc.exe
+            resolc.js
+            resolc.wasm
+            resolc_web.js
+            checksums.txt
+
   npm-release:
     needs: [build-wasm]
     runs-on: macos-14
@@ -128,7 +311,7 @@ jobs:
           npm -w js/resolc run build
 
       - name: Set version
-        run: npm -w js/resolc version --no-git-tag-version 0.0.1
+        run: npm -w js/resolc version --no-git-tag-version ${{github.event.release.tag_name}}
 
       - name: npm pack
         run: npm -w js/resolc pack

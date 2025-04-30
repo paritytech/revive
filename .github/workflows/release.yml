@@ -15,65 +15,6 @@ env:
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        target: [x86_64-apple-darwin]
-        include:
-          - target: aarch64-apple-darwin
-            type: native
-            runner: macos-14
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          # without this it will override our rust flags
-          rustflags: ""
-          cache-key: ${{ matrix.target }}
-
-      - name: Download LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: ${{ matrix.target }}
-
-      - name: Build
-        if: ${{ matrix.type == 'native' }}
-        shell: bash
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
-          make install-bin
-          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
-
-      - name: Build
-        if: ${{ matrix.type == 'musl' }}
-        run: |
-          docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
-           cd /opt/revive
-           chown -R root:root .
-           apt update && apt upgrade -y && apt install -y pkg-config
-           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
-           make install-bin
-           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
-           "
-          sudo chown -R $(id -u):$(id -g) .
-
-      - name: Install Solc
-        uses: ./.github/actions/get-solc
-
-      - name: Basic Sanity Check
-        shell: bash
-        run: |
-          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
-          echo $result
-          if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: resolc-${{ matrix.target }}
-          path: resolc-${{ matrix.target }}*
-          retention-days: 1
-
   build-wasm:
     runs-on: ubuntu-24.04
     env:
@@ -168,6 +109,7 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -178,7 +120,7 @@ jobs:
         with:
           node-version: "20"
 
-      - run: npm install
+      - run: npm ci
 
       - name: Build
         run: |

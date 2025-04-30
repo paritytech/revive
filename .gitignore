@@ -12,7 +12,6 @@ target-llvm
 node_modules
 artifacts
 tmp
-package-lock.json
 /*.html
 /build
 soljson.js

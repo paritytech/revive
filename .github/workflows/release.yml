@@ -292,8 +292,24 @@ jobs:
     runs-on: macos-14
     environment: tags
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - run: npm ci -w js/resolc
+
       - name: Build
-        run: npm -w js/resolc run build
+        run: |
+          cp -f resolc.{wasm,js} js/resolc/src/resolc
+          npm -w js/resolc run build
 
       - name: Set version
         run: npm -w js/resolc version --no-git-tag-version ${{github.event.release.tag_name}}
@@ -303,13 +319,13 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: package
+          name: npm_package
           path: "parity-resolc-*.tgz"
 
       - uses: octokit/request-action@bbedc70b1981e610d89f1f8de88311a1fc02fb83
         with:
           route: POST /repos/paritytech/npm_publish_automation/actions/workflows/publish.yml/dispatches
           ref: main
-          inputs: '${{ format(''{{ "repo": "{0}", "run_id": "{1}" }}'', github.repository, github.run_id) }}'
+          inputs: '${{ format(''{{ "artifact_name": "npm_package", "repo": "{0}", "run_id": "{1}" }}'', github.repository, github.run_id) }}'
         env:
           GITHUB_TOKEN: ${{ secrets.NPM_PUBLISH_AUTOMATION_TOKEN }}

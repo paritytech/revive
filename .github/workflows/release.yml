@@ -290,6 +290,7 @@ jobs:
   npm-release:
     needs: [create-release]
     runs-on: macos-14
+    environment: tags
     steps:
       - uses: actions/checkout@v4
 

@@ -6,9 +6,16 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
+## v0.1.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
+
 ### Added
 
 ### Changed
+- By default, heavy size optimizations are applied.
 
 ### Fixed
 

@@ -129,7 +129,7 @@ fn main_inner() -> anyhow::Result<()> {
 
     let mut optimizer_settings = match arguments.optimization {
         Some(mode) => revive_llvm_context::OptimizerSettings::try_from_cli(mode)?,
-        None => revive_llvm_context::OptimizerSettings::cycles(),
+        None => revive_llvm_context::OptimizerSettings::size(),
     };
     if arguments.fallback_to_optimizing_for_size {
         optimizer_settings.enable_fallback_to_size();

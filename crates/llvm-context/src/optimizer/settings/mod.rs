@@ -234,7 +234,7 @@ impl TryFrom<&SolcStandardJsonInputSettingsOptimizer> for Settings {
     fn try_from(value: &SolcStandardJsonInputSettingsOptimizer) -> Result<Self, Self::Error> {
         let mut result = match value.mode {
             Some(mode) => Self::try_from_cli(mode)?,
-            None => Self::cycles(),
+            None => Self::size(),
         };
         if value.fallback_to_optimizing_for_size.unwrap_or_default() {
             result.enable_fallback_to_size();

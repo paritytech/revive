@@ -87,6 +87,11 @@ jobs:
         run: |
           brew install ninja
 
+      - name: Install Dependencies
+        if: ${{ matrix.host == 'windows' }}
+        run: |
+          choco install ninja
+
       - name: Install LLVM Builder
         run: |
           cargo install --path crates/llvm-builder

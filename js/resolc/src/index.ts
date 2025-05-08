@@ -93,13 +93,26 @@ export function version(): string {
 
 export async function compile(
   sources: SolcInput,
-  option: { bin?: string } = {}
+  option: {
+    optimizer?: Record<string, unknown>
+    bin?: string
+  } = {}
 ): Promise<SolcOutput> {
+  const {
+    optimizer = {
+      mode: 'z',
+      fallback_to_optimizing_for_size: true,
+      enabled: true,
+      runs: 200,
+    },
+    bin,
+  } = option
+
   const input = JSON.stringify({
     language: 'Solidity',
     sources: resolveInputs(sources),
     settings: {
-      optimizer: { enabled: true, runs: 200 },
+      optimizer,
       outputSelection: {
         '*': {
           '*': ['abi'],
@@ -108,8 +121,8 @@ export async function compile(
     },
   })
 
-  if (option.bin) {
-    return compileWithBin(input, option.bin)
+  if (bin) {
+    return compileWithBin(input, bin)
   }
 
   return resolc(input)

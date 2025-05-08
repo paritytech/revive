@@ -19,7 +19,7 @@ use self::version::Version;
 pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
 /// The last supported version of `solc`.
-pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 29);
+pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 30);
 
 /// `--include-path` was introduced in solc `0.8.8` <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
 pub const FIRST_INCLUDE_PATH_VERSION: semver::Version = semver::Version::new(0, 8, 8);

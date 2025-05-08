@@ -19,7 +19,7 @@ runs:
       shell: bash
       run: |
         mkdir -p solc
-        curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.29/${SOLC_NAME}
+        curl -sSL --output solc/solc https://github.com/ethereum/solidity/releases/download/v0.8.30/${SOLC_NAME}
 
     - name: Make Solc Executable
       if: ${{ runner.os == 'Windows' }}

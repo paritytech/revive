@@ -16,8 +16,6 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Changed
 
-- By default, heavy size optimizations are applied.
-
 ### Fixed
 
 ## v0.1.0-dev.15
@@ -29,6 +27,10 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 ### Added
 
 - Move the npm package from paritytech/js-revive, into this repo. The package `@parity/resolc` will be deployed to npm for each release.
+
+### Changed
+
+- By default, heavy size optimizations are applied.
 
 ## v0.1.0-dev.14
 

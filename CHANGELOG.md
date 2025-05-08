@@ -13,7 +13,6 @@ This is a development pre-release.
 Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Added
-- Support for solc v0.8.30
 
 ### Changed
 
@@ -28,6 +27,7 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 ### Added
 
 - Move the npm package from paritytech/js-revive, into this repo. The package `@parity/resolc` will be deployed to npm for each release.
+- Support for solc v0.8.30
 
 ### Changed
 

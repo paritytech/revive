@@ -312,7 +312,10 @@ jobs:
           npm -w js/resolc run build
 
       - name: Set version
-        run: npm -w js/resolc version --no-git-tag-version ${{github.event.release.tag_name}}
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          STRIPPED_VERSION="${VERSION#v}"
+          npm -w js/resolc version --no-git-tag-version "$STRIPPED_VERSION"
 
       - name: npm pack
         run: npm -w js/resolc pack

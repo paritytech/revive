@@ -2,7 +2,7 @@
   "name": "revive",
   "private": true,
   "dependencies": {
-    "solc": "<=0.8.30"
+    "solc": ">=0.8.0 <=0.8.30"
   },
   "scripts": {
     "example:web": "http-server ./examples/web/",

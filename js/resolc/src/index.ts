@@ -5,114 +5,114 @@ import path from 'path'
 import { existsSync, readFileSync } from 'fs'
 
 export type SolcInput = {
-    [contractName: string]: {
-        content: string
-    }
+  [contractName: string]: {
+    content: string
+  }
 }
 
 export type SolcError = {
-    component: string
-    errorCode: string
-    formattedMessage: string
-    message: string
-    severity: string
-    sourceLocation?: {
-        file: string
-        start: number
-        end: number
-    }
-    type: string
+  component: string
+  errorCode: string
+  formattedMessage: string
+  message: string
+  severity: string
+  sourceLocation?: {
+    file: string
+    start: number
+    end: number
+  }
+  type: string
 }
 
 export type SolcOutput = {
-    contracts: {
-        [contractPath: string]: {
-            [contractName: string]: {
-                abi: Array<{
-                    name: string
-                    inputs: Array<{ name: string; type: string }>
-                    outputs: Array<{ name: string; type: string }>
-                    stateMutability: string
-                    type: string
-                }>
-                evm: {
-                    bytecode: { object: string }
-                }
-            }
+  contracts: {
+    [contractPath: string]: {
+      [contractName: string]: {
+        abi: Array<{
+          name: string
+          inputs: Array<{ name: string; type: string }>
+          outputs: Array<{ name: string; type: string }>
+          stateMutability: string
+          type: string
+        }>
+        evm: {
+          bytecode: { object: string }
         }
+      }
     }
-    errors?: Array<SolcError>
+  }
+  errors?: Array<SolcError>
 }
 
 export function resolveInputs(sources: SolcInput): SolcInput {
-    const input = {
-        language: 'Solidity',
-        sources,
-        settings: {
-            outputSelection: {
-                '*': {
-                    '*': ['evm.bytecode.object'],
-                },
-            },
+  const input = {
+    language: 'Solidity',
+    sources,
+    settings: {
+      outputSelection: {
+        '*': {
+          '*': ['evm.bytecode.object'],
         },
-    }
+      },
+    },
+  }
 
-    const out = solc.compile(JSON.stringify(input), {
-        import: (path: string) => {
-            return {
-                contents: readFileSync(tryResolveImport(path), 'utf8'),
-            }
+  const out = solc.compile(JSON.stringify(input), {
+    import: (path: string) => {
+      return {
+        contents: readFileSync(tryResolveImport(path), 'utf8'),
+      }
+    },
+  })
+
+  const output = JSON.parse(out) as {
+    sources: { [fileName: string]: { id: number } }
+    errors: Array<SolcError>
+  }
+
+  if (output.errors && Object.keys(output.sources).length === 0) {
+    throw new Error(output.errors[0].formattedMessage)
+  }
+
+  return Object.fromEntries(
+    Object.keys(output.sources).map((fileName) => {
+      return [
+        fileName,
+        sources[fileName] ?? {
+          content: readFileSync(tryResolveImport(fileName), 'utf8'),
         },
+      ]
     })
-
-    const output = JSON.parse(out) as {
-        sources: { [fileName: string]: { id: number } }
-        errors: Array<SolcError>
-    }
-
-    if (output.errors && Object.keys(output.sources).length === 0) {
-        throw new Error(output.errors[0].formattedMessage)
-    }
-
-    return Object.fromEntries(
-        Object.keys(output.sources).map((fileName) => {
-            return [
-                fileName,
-                sources[fileName] ?? {
-                    content: readFileSync(tryResolveImport(fileName), 'utf8'),
-                },
-            ]
-        })
-    )
+  )
 }
 
 export function version(): string {
-    const v = resolcVersion()
-    return v.split(' ').pop() ?? v
+  const v = resolcVersion()
+  return v.split(' ').pop() ?? v
 }
 
 export async function compile(
-    sources: SolcInput,
-    option: { bin?: string } = {}
+  sources: SolcInput,
+  option: { bin?: string } = {}
 ): Promise<SolcOutput> {
-    const input = JSON.stringify({
-        language: 'Solidity',
-        sources: resolveInputs(sources),
-        settings: {
-            optimizer: { enabled: true, runs: 200 },
-            outputSelection: {
-                '*': {
-                    '*': ['abi'],
-                },
-            },
+  const input = JSON.stringify({
+    language: 'Solidity',
+    sources: resolveInputs(sources),
+    settings: {
+      optimizer: { enabled: true, runs: 200 },
+      outputSelection: {
+        '*': {
+          '*': ['abi'],
         },
-    })
+      },
+    },
+  })
 
-    if (option.bin) {
-        return compileWithBin(input, option.bin)
-    }
+  if (option.bin) {
+    return compileWithBin(input, option.bin)
+  }
 
-    return resolc(input)
+  return resolc(input)
 }
 
 /**
@@ -120,83 +120,81 @@ export async function compile(
  * @param importPath - The import path to resolve.
  */
 export function tryResolveImport(importPath: string) {
-    // resolve local path
-    if (existsSync(importPath)) {
-        return path.resolve(importPath)
+  // resolve local path
+  if (existsSync(importPath)) {
+    return path.resolve(importPath)
+  }
+
+  const importRegex = /^(@?[^@/]+(?:\/[^@/]+)?)(?:@([^/]+))?(\/.+)$/
+  const match = importPath.match(importRegex)
+
+  if (!match) {
+    throw new Error('Invalid import path format.')
+  }
+
+  const basePackage = match[1] // "foo", "@scope/foo"
+  const specifiedVersion = match[2] // "1.2.3" (optional)
+  const relativePath = match[3] // "/path/to/file.sol"
+
+  let packageJsonPath
+  try {
+    packageJsonPath = require.resolve(path.join(basePackage, 'package.json'))
+  } catch {
+    throw new Error(`Could not resolve package ${basePackage}`)
+  }
+
+  // Check if a version was specified and compare with the installed version
+  if (specifiedVersion) {
+    const installedVersion = JSON.parse(
+      readFileSync(packageJsonPath, 'utf-8')
+    ).version
+
+    if (installedVersion !== specifiedVersion) {
+      throw new Error(
+        `Version mismatch: Specified ${basePackage}@${specifiedVersion}, but installed version is ${installedVersion}`
+      )
     }
+  }
 
-    const importRegex = /^(@?[^@/]+(?:\/[^@/]+)?)(?:@([^/]+))?(\/.+)$/
-    const match = importPath.match(importRegex)
+  const packageRoot = path.dirname(packageJsonPath)
 
-    if (!match) {
-        throw new Error('Invalid import path format.')
-    }
-
-    const basePackage = match[1] // "foo", "@scope/foo"
-    const specifiedVersion = match[2] // "1.2.3" (optional)
-    const relativePath = match[3] // "/path/to/file.sol"
-
-    let packageJsonPath
-    try {
-        packageJsonPath = require.resolve(
-            path.join(basePackage, 'package.json')
-        )
-    } catch {
-        throw new Error(`Could not resolve package ${basePackage}`)
-    }
-
-    // Check if a version was specified and compare with the installed version
-    if (specifiedVersion) {
-        const installedVersion = JSON.parse(
-            readFileSync(packageJsonPath, 'utf-8')
-        ).version
-
-        if (installedVersion !== specifiedVersion) {
-            throw new Error(
-                `Version mismatch: Specified ${basePackage}@${specifiedVersion}, but installed version is ${installedVersion}`
-            )
-        }
-    }
-
-    const packageRoot = path.dirname(packageJsonPath)
-
-    // Construct full path to the requested file
-    const resolvedPath = path.join(packageRoot, relativePath)
-    if (existsSync(resolvedPath)) {
-        return resolvedPath
-    } else {
-        throw new Error(`Resolved path ${resolvedPath} does not exist.`)
-    }
+  // Construct full path to the requested file
+  const resolvedPath = path.join(packageRoot, relativePath)
+  if (existsSync(resolvedPath)) {
+    return resolvedPath
+  } else {
+    throw new Error(`Resolved path ${resolvedPath} does not exist.`)
+  }
 }
 function compileWithBin(input: string, bin: string): PromiseLike<SolcOutput> {
-    return new Promise((resolve, reject) => {
-        const process = spawn(bin, ['--standard-json'])
+  return new Promise((resolve, reject) => {
+    const process = spawn(bin, ['--standard-json'])
 
-        let output = ''
-        let error = ''
+    let output = ''
+    let error = ''
 
-        process.stdin.write(input)
-        process.stdin.end()
+    process.stdin.write(input)
+    process.stdin.end()
 
-        process.stdout.on('data', (data) => {
-            output += data.toString()
-        })
-
-        process.stderr.on('data', (data) => {
-            error += data.toString()
-        })
-
-        process.on('close', (code) => {
-            if (code === 0) {
-                try {
-                    const result: SolcOutput = JSON.parse(output)
-                    resolve(result)
-                } catch {
-                    reject(new Error(`Failed to parse output`))
-                }
-            } else {
-                reject(new Error(`Process exited with code ${code}: ${error}`))
-            }
-        })
+    process.stdout.on('data', (data) => {
+      output += data.toString()
     })
+
+    process.stderr.on('data', (data) => {
+      error += data.toString()
+    })
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result: SolcOutput = JSON.parse(output)
+          resolve(result)
+        } catch {
+          reject(new Error(`Failed to parse output`))
+        }
+      } else {
+        reject(new Error(`Process exited with code ${code}: ${error}`))
+      }
+    })
+  })
 }

@@ -311,9 +311,6 @@ jobs:
           cp -f resolc.{wasm,js} js/resolc/src/resolc
           npm -w js/resolc run build
 
-      - name: Set version
-        run: npm -w js/resolc version --no-git-tag-version ${{github.event.release.tag_name}}
-
       - name: npm pack
         run: npm -w js/resolc pack
 

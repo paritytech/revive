@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0-dev.15"
+version = "0.1.0-dev.16"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -14,20 +14,20 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.81.0"
 
 [workspace.dependencies]
-revive-benchmarks = { version = "0.1.0-dev.15", path = "crates/benchmarks" }
-revive-builtins = { version = "0.1.0-dev.15", path = "crates/builtins" }
-revive-common = { version = "0.1.0-dev.15", path = "crates/common" }
-revive-differential = { version = "0.1.0-dev.15", path = "crates/differential" }
-revive-integration = { version = "0.1.0-dev.15", path = "crates/integration" }
-revive-linker = { version = "0.1.0-dev.15", path = "crates/linker" }
-lld-sys = { version = "0.1.0-dev.15", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.1.0-dev.15", path = "crates/llvm-context" }
-revive-runtime-api = { version = "0.1.0-dev.15", path = "crates/runtime-api" }
-revive-runner = { version = "0.1.0-dev.15", path = "crates/runner" }
-revive-solc-json-interface = { version = "0.1.0-dev.15", path = "crates/solc-json-interface" }
-revive-solidity = { version = "0.1.0-dev.15", path = "crates/solidity" }
-revive-stdlib = { version = "0.1.0-dev.15", path = "crates/stdlib" }
-revive-build-utils = { version = "0.1.0-dev.15", path = "crates/build-utils" }
+revive-benchmarks = { version = "0.1.0-dev.16", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0-dev.16", path = "crates/builtins" }
+revive-common = { version = "0.1.0-dev.16", path = "crates/common" }
+revive-differential = { version = "0.1.0-dev.16", path = "crates/differential" }
+revive-integration = { version = "0.1.0-dev.16", path = "crates/integration" }
+revive-linker = { version = "0.1.0-dev.16", path = "crates/linker" }
+lld-sys = { version = "0.1.0-dev.16", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.1.0-dev.16", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0-dev.16", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0-dev.16", path = "crates/runner" }
+revive-solc-json-interface = { version = "0.1.0-dev.16", path = "crates/solc-json-interface" }
+revive-solidity = { version = "0.1.0-dev.16", path = "crates/solidity" }
+revive-stdlib = { version = "0.1.0-dev.16", path = "crates/stdlib" }
+revive-build-utils = { version = "0.1.0-dev.16", path = "crates/build-utils" }
 
 hex = "0.4.3"
 cc = "1.2"

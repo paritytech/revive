@@ -35,7 +35,6 @@ Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
 
 ### Fixed
 - @parity/resolc: The solc dependency package is constrained to the latest supported version, preventing breaking the package ever time a new solc package was released. 
-
 - The resolc npm package no longer ignores the optimizer settings
 
 ## v0.1.0-dev.14

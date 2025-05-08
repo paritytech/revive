@@ -13,6 +13,10 @@ To create a new pre-release:
 7. After the release is published, another workflow should start automatically and update json files in https://github.com/paritytech/resolc-bin. Check the changes.
 8. Update the [contract-docs](https://github.com/paritytech/contract-docs/) accordingly
 
+# `resolc` NPM package release
+
+Will happen automatically. After the GH release process described above was successfull, ensure that the newly created release is marked as the latest release.
+
 # LLVM release
 
 To create a new LLVM release, run "Release LLVM" workflow. Use current LLVM version as parameter, e.g. `18.1.8`.

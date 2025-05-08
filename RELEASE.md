@@ -15,7 +15,7 @@ To create a new pre-release:
 
 # `resolc` NPM package release
 
-Will happen automatically. After the GH release process described above was successfull, ensure that the newly created release is marked as the latest release.
+Will happen automatically.
 
 # LLVM release
 

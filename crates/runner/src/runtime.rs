@@ -94,6 +94,12 @@ impl FindAuthor<<Runtime as frame_system::Config>::AccountId> for Runtime {
     where
         I: 'a + IntoIterator<Item = (frame_support::ConsensusEngineId, &'a [u8])>,
     {
-        Some([0xff; 32].into())
+        Some(
+            [[0xff; 20].as_slice(), [0xee; 12].as_slice()]
+                .concat()
+                .as_slice()
+                .try_into()
+                .unwrap(),
+        )
     }
 }

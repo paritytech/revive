@@ -7,7 +7,7 @@ repository.workspace = true
 description = "revive compiler stdlib components"
 
 [dependencies]
-inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-0"] }
+inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-1"] }
 
 [build-dependencies]
 revive-build-utils = { workspace = true }

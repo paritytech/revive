@@ -4,17 +4,19 @@
 
 This is a development pre-release.
 
-Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
+Supported `polkadot-sdk` rev: `2503.0.1`
 
 ## v0.1.0
 
 This is a development pre-release.
 
-Supported `polkadot-sdk` rev:`c29e72a8628835e34deb6aa7db9a78a2e4eabcee`
+Supported `polkadot-sdk` rev: `2503.0.1`
 
 ### Added
 
 ### Changed
+
+- Supported `polkadot-sdk` version is now `2503.0.1`
 
 ### Fixed
 

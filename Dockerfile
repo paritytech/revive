@@ -1,4 +1,4 @@
-FROM rust:1.84.0 AS llvm-builder
+FROM rust:1.85.0 AS llvm-builder
 WORKDIR /opt/revive
 
 RUN apt update && \ 
@@ -11,7 +11,7 @@ RUN make install-llvm-builder
 RUN revive-llvm --target-env musl clone
 RUN revive-llvm --target-env musl build  --llvm-projects lld --llvm-projects clang
 
-FROM messense/rust-musl-cross@sha256:68b86bc7cb2867259e6b233415a665ff4469c28b57763e78c3bfea1c68091561 AS resolc-builder
+FROM messense/rust-musl-cross@sha256:c0154e992adb791c3b848dd008939d19862549204f8cb26f5ca7a00f629e6067 AS resolc-builder
 WORKDIR /opt/revive
 
 RUN apt update && \ 

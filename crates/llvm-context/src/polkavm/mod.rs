@@ -7,12 +7,12 @@ pub mod evm;
 pub use self::r#const::*;
 
 use crate::debug_config::DebugConfig;
-use crate::memory::MemoryConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
 use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use sha3::Digest;
 
 use self::context::build::Build;
@@ -91,7 +91,7 @@ pub trait Dependency {
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &[String],
-        memory_config: MemoryConfig,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<String>;
 
     /// Resolves a full contract path.
@@ -113,7 +113,7 @@ impl Dependency for DummyDependency {
         _include_metadata_hash: bool,
         _debug_config: DebugConfig,
         _llvm_arguments: &[String],
-        _memory_config: MemoryConfig,
+        _memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<String> {
         Ok(String::new())
     }

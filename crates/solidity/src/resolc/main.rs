@@ -148,7 +148,7 @@ fn main_inner() -> anyhow::Result<()> {
         None => true,
     };
 
-    let memory_config = revive_llvm_context::MemoryConfig {
+    let memory_config = revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory {
         heap_size: arguments.heap_size,
         stack_size: arguments.stack_size,
     };
@@ -181,7 +181,6 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.allow_paths,
             debug_config,
             &arguments.llvm_arguments,
-            memory_config,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {

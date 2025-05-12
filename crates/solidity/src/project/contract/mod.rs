@@ -5,6 +5,7 @@ pub mod metadata;
 
 use std::collections::HashSet;
 
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
@@ -78,7 +79,7 @@ impl Contract {
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
-        memory_config: revive_llvm_context::MemoryConfig,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);

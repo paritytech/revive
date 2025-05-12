@@ -98,6 +98,7 @@ pub fn build_solidity_with_options(
         ),
         None,
         None,
+        None,
     )?;
 
     let mut output = solc.standard_json(input, None, vec![], None)?;
@@ -162,6 +163,7 @@ pub fn build_solidity_with_options_evm(
         ),
         None,
         None,
+        None,
     )?;
 
     let mut output = solc.standard_json(input, None, vec![], None)?;
@@ -211,6 +213,7 @@ pub fn build_solidity_and_detect_missing_libraries(
         None,
         SolcStandardJsonInputSettingsSelection::new_required(),
         SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
+        None,
         None,
         None,
     )?;
@@ -286,6 +289,7 @@ pub fn check_solidity_warning(
         SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
         None,
         suppressed_warnings,
+        None,
     )?;
 
     let output = solc.standard_json(input, None, vec![], None)?;

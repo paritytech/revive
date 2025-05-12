@@ -3,6 +3,7 @@
 pub mod metadata;
 pub mod metadata_hash;
 pub mod optimizer;
+pub mod polkavm;
 pub mod selection;
 
 use std::collections::BTreeMap;
@@ -13,6 +14,7 @@ use serde::Serialize;
 
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
+use self::polkavm::PolkaVM;
 use self::selection::Selection;
 
 /// The `solc --standard-json` input settings.
@@ -43,6 +45,9 @@ pub struct Settings {
     /// The metadata settings.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
+    /// The resolc custom PolkaVM settings.
+    #[serde(skip_serializing)]
+    pub polkavm: Option<PolkaVM>,
 }
 
 impl Settings {
@@ -54,6 +59,7 @@ impl Settings {
         output_selection: Selection,
         optimizer: Optimizer,
         metadata: Option<Metadata>,
+        polkavm: Option<PolkaVM>,
     ) -> Self {
         Self {
             evm_version,
@@ -63,6 +69,7 @@ impl Settings {
             optimizer,
             metadata,
             via_ir: Some(true),
+            polkavm,
         }
     }
 

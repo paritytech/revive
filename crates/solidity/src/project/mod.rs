@@ -67,7 +67,7 @@ impl Project {
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
-        memory_config: revive_llvm_context::MemoryConfig,
+        memory_config: revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
         #[cfg(feature = "parallel")]
@@ -321,7 +321,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
         include_metadata_hash: bool,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
-        memory_config: revive_llvm_context::MemoryConfig,
+        memory_config: revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<String> {
         let contract_path = project.resolve_path(identifier)?;
         let contract = project

@@ -185,8 +185,8 @@ pub struct Arguments {
     /// 1.Increasing the heap size will increase startup costs.
     /// 2.The heap size contributes to the total memory size a contract can use,
     ///   which includes the contracts code size
-    #[arg(long = "heap-size", default_value = "65536")]
-    pub heap_size: u32,
+    #[arg(long = "heap-size")]
+    pub heap_size: Option<u32>,
 
     /// The contracts total stack size in bytes.
     ///
@@ -200,8 +200,8 @@ pub struct Arguments {
     /// 1.Increasing the heap size will increase startup costs.
     /// 2.The stack size contributes to the total memory size a contract can use,
     ///   which includes the contracts code size
-    #[arg(long = "stack-size", default_value = "32768")]
-    pub stack_size: u32,
+    #[arg(long = "stack-size")]
+    pub stack_size: Option<u32>,
 }
 
 impl Arguments {
@@ -329,6 +329,22 @@ impl Arguments {
             }
             if self.metadata_hash.is_some() {
                 anyhow::bail!("Metadata hash mode must specified in standard JSON input settings.");
+            }
+
+            if self.heap_size.is_some() {
+                anyhow::bail!(
+                    "Heap size must be specified in standard JSON input polkavm memory settings."
+                );
+            }
+            if self.stack_size.is_some() {
+                anyhow::bail!(
+                    "Stack size must be specified in standard JSON input polkavm memory settings."
+                );
+            }
+            if self.emit_source_debug_info {
+                anyhow::bail!(
+                    "Debug info must be requested in standard JSON input polkavm settings."
+                );
             }
         }
 

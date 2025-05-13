@@ -148,10 +148,14 @@ fn main_inner() -> anyhow::Result<()> {
         None => true,
     };
 
-    let memory_config = revive_llvm_context::MemoryConfig {
-        heap_size: arguments.heap_size,
-        stack_size: arguments.stack_size,
-    };
+    let mut memory_config =
+        revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::default();
+    if let Some(heap_size) = arguments.heap_size {
+        memory_config.heap_size = heap_size
+    }
+    if let Some(stack_size) = arguments.stack_size {
+        memory_config.stack_size = stack_size
+    }
 
     let build = if arguments.yul {
         revive_solidity::yul(
@@ -181,7 +185,6 @@ fn main_inner() -> anyhow::Result<()> {
             arguments.allow_paths,
             debug_config,
             &arguments.llvm_arguments,
-            memory_config,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {

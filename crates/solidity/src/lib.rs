@@ -45,6 +45,8 @@ use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 
 /// Runs the Yul mode.
@@ -55,7 +57,7 @@ pub fn yul<T: Compiler>(
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
-    memory_config: revive_llvm_context::MemoryConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -94,7 +96,7 @@ pub fn llvm_ir(
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
-    memory_config: revive_llvm_context::MemoryConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
@@ -135,7 +137,7 @@ pub fn standard_output<T: Compiler>(
     suppressed_warnings: Option<Vec<ResolcWarning>>,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
-    memory_config: revive_llvm_context::MemoryConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
 
@@ -154,6 +156,10 @@ pub fn standard_output<T: Compiler>(
         ),
         None,
         suppressed_warnings,
+        Some(SolcStandardJsonInputSettingsPolkaVM::new(
+            Some(memory_config),
+            debug_config.emit_debug_info,
+        )),
     )?;
 
     let source_code_files = solc_input
@@ -208,9 +214,8 @@ pub fn standard_json<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    debug_config: revive_llvm_context::DebugConfig,
+    mut debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
-    memory_config: revive_llvm_context::MemoryConfig,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
 
@@ -223,6 +228,9 @@ pub fn standard_json<T: Compiler>(
 
     let optimizer_settings =
         revive_llvm_context::OptimizerSettings::try_from(&solc_input.settings.optimizer)?;
+
+    let polkavm_settings = solc_input.settings.polkavm.unwrap_or_default();
+    debug_config.emit_debug_info = polkavm_settings.debug_information;
 
     let include_metadata_hash = match solc_input.settings.metadata {
         Some(ref metadata) => metadata.bytecode_hash != Some(MetadataHash::None),
@@ -258,7 +266,7 @@ pub fn standard_json<T: Compiler>(
             include_metadata_hash,
             debug_config,
             llvm_arguments,
-            memory_config,
+            polkavm_settings.memory_config,
         )?;
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }
@@ -286,7 +294,7 @@ pub fn combined_json<T: Compiler>(
     output_directory: Option<PathBuf>,
     overwrite: bool,
     llvm_arguments: &[String],
-    memory_config: revive_llvm_context::MemoryConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<()> {
     let build = standard_output(
         input_files,

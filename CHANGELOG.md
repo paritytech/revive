@@ -14,6 +14,8 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 
 ### Added
 
+- Add the PolkaVM heap size, stack size and debug info CLI compiler options to the standard JSON settings. This makes the standard JSON input succint for reproducible builds.
+
 ### Changed
 
 - Supported `polkadot-sdk` version is now `2503.0.1`

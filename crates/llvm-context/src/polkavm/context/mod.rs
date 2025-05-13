@@ -25,8 +25,8 @@ use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 
-use crate::memory::MemoryConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
 use crate::polkavm::DebugConfig;
@@ -88,7 +88,7 @@ where
     /// The extra LLVM arguments that were used during target initialization.
     llvm_arguments: &'ctx [String],
     /// The PVM memory configuration.
-    memory_config: MemoryConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
     /// The project dependency manager. It can be any entity implementing the trait.
     /// The manager is used to get information about contracts and their dependencies during
@@ -228,7 +228,7 @@ where
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &'ctx [String],
-        memory_config: MemoryConfig,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> Self {
         Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);

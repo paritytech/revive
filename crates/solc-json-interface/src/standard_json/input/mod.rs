@@ -18,6 +18,7 @@ use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJ
 use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
 use crate::warning::Warning;
+use crate::SolcStandardJsonInputSettingsPolkaVM;
 
 use self::language::Language;
 use self::settings::Settings;
@@ -63,6 +64,7 @@ impl Input {
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: Option<SolcStandardJsonInputSettingsMetadata>,
         #[cfg(feature = "resolc")] suppressed_warnings: Option<Vec<Warning>>,
+        polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
         let libraries = Settings::parse_libraries(library_map)?;
@@ -90,6 +92,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 metadata,
+                polkavm,
             ),
             #[cfg(feature = "resolc")]
             suppressed_warnings,
@@ -109,6 +112,7 @@ impl Input {
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: Option<SolcStandardJsonInputSettingsMetadata>,
         suppressed_warnings: Option<Vec<Warning>>,
+        polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
     ) -> anyhow::Result<Self> {
         #[cfg(feature = "parallel")]
         let iter = sources.into_par_iter(); // Parallel iterator
@@ -129,6 +133,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 metadata,
+                polkavm,
             ),
             suppressed_warnings,
         })

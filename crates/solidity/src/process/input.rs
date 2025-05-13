@@ -1,6 +1,7 @@
 //! Process for compiling a single compilation unit.
 //! The input data.
 
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -23,7 +24,7 @@ pub struct Input {
     /// The extra LLVM arguments give used for manual control.
     pub llvm_arguments: Vec<String>,
     /// The PVM memory configuration.
-    pub memory_config: revive_llvm_context::MemoryConfig,
+    pub memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 }
 
 impl Input {
@@ -35,7 +36,7 @@ impl Input {
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: Vec<String>,
-        memory_config: revive_llvm_context::MemoryConfig,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> Self {
         Self {
             contract,

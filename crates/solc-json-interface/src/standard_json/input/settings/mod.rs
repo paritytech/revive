@@ -18,7 +18,7 @@ use self::polkavm::PolkaVM;
 use self::selection::Selection;
 
 /// The `solc --standard-json` input settings.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// The target EVM version.

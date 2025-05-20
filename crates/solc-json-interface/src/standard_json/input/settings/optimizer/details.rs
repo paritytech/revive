@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// The `solc --standard-json` input settings optimizer details.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     /// Whether the pass is enabled.

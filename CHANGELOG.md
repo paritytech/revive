@@ -19,6 +19,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 ### Changed
 
 - Supported `polkadot-sdk` version is now `2503.0.1`
+- The `emsdk` version is now `4.0.9`
 
 ### Fixed
 

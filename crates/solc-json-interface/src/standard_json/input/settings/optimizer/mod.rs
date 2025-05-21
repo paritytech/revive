@@ -8,7 +8,7 @@ use serde::Serialize;
 use self::details::Details;
 
 /// The `solc --standard-json` input settings optimizer.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Optimizer {
     /// Whether the optimizer is enabled.

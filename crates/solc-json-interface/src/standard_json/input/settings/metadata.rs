@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::standard_json::input::settings::metadata_hash::MetadataHash;
 
 /// The `solc --standard-json` input settings metadata.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     /// The bytecode hash mode.

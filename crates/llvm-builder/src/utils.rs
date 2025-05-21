@@ -38,7 +38,7 @@ pub const MUSL_SNAPSHOTS_URL: &str = "https://git.musl-libc.org/cgit/musl/snapsh
 pub const EMSDK_SOURCE_URL: &str = "https://github.com/emscripten-core/emsdk.git";
 
 /// The emscripten SDK version.
-pub const EMSDK_VERSION: &str = "3.1.64";
+pub const EMSDK_VERSION: &str = "4.0.9";
 
 /// The subprocess runner.
 ///

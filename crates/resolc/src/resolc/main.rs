@@ -51,14 +51,6 @@ fn main_inner() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if arguments.license {
-        let license_mit = include_str!("../../../../LICENSE-MIT");
-        let license_apache = include_str!("../../../../LICENSE-APACHE");
-
-        writeln!(std::io::stdout(), "{}\n{}\n", license_mit, license_apache)?;
-        return Ok(());
-    }
-
     #[cfg(feature = "parallel")]
     rayon::ThreadPoolBuilder::new()
         .stack_size(RAYON_WORKER_STACK_SIZE)

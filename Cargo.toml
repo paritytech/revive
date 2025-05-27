@@ -14,7 +14,7 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.85.0"
 
 [workspace.dependencies]
-resolc  = { version = "0.1.0", path = "crates/resolc" }
+resolc  = { path = "crates/resolc" }
 revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
 revive-builtins = { version = "0.1.0", path = "crates/builtins" }
 revive-common = { version = "0.1.0", path = "crates/common" }

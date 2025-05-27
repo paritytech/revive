@@ -6,6 +6,16 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+## v0.2.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2503.0.1`
+
+### Changed
+
+- Removed the license printer from the `resolc` binary.
+
 ## v0.1.0
 
 This is a development pre-release.

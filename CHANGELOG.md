@@ -22,6 +22,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 - The `emsdk` version is now `4.0.9`
 
 ### Fixed
+- The LLVM builder with newer toolchains.
 
 ## v0.1.0-dev.16
 

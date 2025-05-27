@@ -1,6 +1,6 @@
 [package]
 name = "resolc"
-version = "0.2.0"
+version = "0.2.0-dev.1"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -37,7 +37,7 @@ revive-solc-json-interface = { workspace = true, features = ["resolc"] }
 revive-yul = { workspace = true }
 
 [target.'cfg(target_env = "musl")'.dependencies]
-mimalloc = { version = "*", default-features = false }
+mimalloc = { version = "0.1.46", default-features = false }
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 libc = { workspace = true }

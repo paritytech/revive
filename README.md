@@ -19,11 +19,7 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 - `solc`: The [Ethereum Solidity reference compiler](https://github.com/ethereum/solidity/) implemenation.`resolc` uses `solc` during the compilation process, please refer to the [Ethereum Solidity documentation](https://docs.soliditylang.org/en/latest/installing-solidity.html) for installation instructions.
 
 ### `resolc` binary releases
-`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for the following supported platforms:
-- Linux (MUSL)
-- MacOS (uinversal)
-- Windows
-- Wasm via emscripten
+`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below.
 
 <details>
   <summary>MacOS users</summary>

@@ -4679,7 +4679,7 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 
 [[package]]
 name = "lld-sys"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "cc",
  "libc",
@@ -8533,7 +8533,7 @@ dependencies = [
 
 [[package]]
 name = "resolc"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -8558,7 +8558,7 @@ dependencies = [
 
 [[package]]
 name = "revive-benchmarks"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "alloy-primitives 1.1.2",
  "criterion",
@@ -8570,18 +8570,18 @@ dependencies = [
 
 [[package]]
 name = "revive-build-utils"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 
 [[package]]
 name = "revive-builtins"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "revive-build-utils",
 ]
 
 [[package]]
 name = "revive-common"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -8591,7 +8591,7 @@ dependencies = [
 
 [[package]]
 name = "revive-differential"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "alloy-genesis",
  "alloy-primitives 1.1.2",
@@ -8604,7 +8604,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "alloy-primitives 1.1.2",
  "alloy-sol-types 1.1.2",
@@ -8620,7 +8620,7 @@ dependencies = [
 
 [[package]]
 name = "revive-linker"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -8632,7 +8632,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-builder"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8654,7 +8654,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-context"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -8676,7 +8676,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "alloy-primitives 1.1.2",
  "anyhow",
@@ -8695,7 +8695,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -8705,7 +8705,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solc-json-interface"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "rayon",
@@ -8717,7 +8717,7 @@ dependencies = [
 
 [[package]]
 name = "revive-stdlib"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "inkwell",
  "revive-build-utils",
@@ -8725,7 +8725,7 @@ dependencies = [
 
 [[package]]
 name = "revive-yul"
-version = "0.1.0-dev.16"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "inkwell",

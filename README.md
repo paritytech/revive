@@ -146,5 +146,5 @@ make test
 # Acknowledgements
 
 The revive compiler project, after some early experiments with EVM bytecode translations, decided to fork the `era-compiler` framework.
-[Frontend](https://github.com/matter-labs/era-compiler-solidity), [code generator](https://github.com/matter-labs/era-compiler-llvm-context) and some supporting libraries are based of ZKSync `zksolc`. I'd like to thank the orginal authors for providing a useable code base under a generous license.
+[Frontend](https://github.com/matter-labs/era-compiler-solidity), [code generator](https://github.com/matter-labs/era-compiler-llvm-context) and some supporting libraries are based of ZKSync `zksolc`. I'd like to express my gratitude and thank the original authors for providing a useable code base under a generous license.
 

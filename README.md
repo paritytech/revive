@@ -14,7 +14,39 @@ This is experimental software in active development and not ready just yet for p
 Discussion around the development is hosted on the [Polkadot Forum](https://forum.polkadot.network/t/contracts-update-solidity-on-polkavm/6949#a-new-solidity-compiler-1).
 
 ## Installation
-Please consult [the documentation](https://contracts.polkadot.io/revive_compiler/installation) for installation instructions.
+Building Solidity contracts for PolkaVM requires installing the following two compilers:
+- `resolc`: The revive Solidity compiler YUL frontend and PolkaVM code generator (provided by this repository).
+- `solc`: The [Ethereum Solidity reference compiler](https://github.com/ethereum/solidity/) implemenation.`resolc` uses `solc` during the compilation process, please refer to the [Ethereum Solidity documentation](https://docs.soliditylang.org/en/latest/installing-solidity.html) for installation instructions.
+
+### `resolc` binary releases
+`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below.
+
+<details>
+  <summary>MacOS users</summary>
+
+> **MacOS** users need to clear the `downloaded` attribute from the binary and set the executable flag.
+> ```sh
+> xattr -rc resolc-universal-apple-darwin
+> chmod +x resolc-universal-apple-darwin
+> ```
+
+</details>
+
+<details>
+  <summary>Linux users</summary>
+
+> **Linux** users need to set the executable flag.
+> ```sh
+> chmod +x resolc-x86_64-unknown-linux-musl
+> ```
+
+</details>
+
+
+### `resolc` NPM package
+We distribute the revive compiler as [node.js module](https://www.npmjs.com/package/@parity/resolc) and [hardhat plugin](https://www.npmjs.com/package/@parity/hardhat-polkadot-resolc).
+
+Note: The `solc` dependency is bundled via NPM packaging and defaults to the latest supported version.
 
 ## Building from source
 
@@ -99,8 +131,6 @@ Ensure that your branch passes `make test` locally when submitting a pull reques
 ### Design overview
 See the [relevant section in our documentation](https://contracts.polkadot.io/revive_compiler/architecture) to learn more about how the compiler works. 
 
-[Frontend](https://github.com/matter-labs/era-compiler-solidity) and [code generator](https://github.com/matter-labs/era-compiler-llvm-context) are based of ZKSync `zksolc` (the project started as a fork of the era compiler).
-
 ### Tests
 
 Before running the tests, ensure that Geth (Go Ethereum) is installed on your system. Follow the installation guide here: [Installing Geth](https://geth.ethereum.org/docs/getting-started/installing-geth).
@@ -109,3 +139,8 @@ Once Geth is installed, you can run the tests using the following command:
 ```sh
 make test
 ```
+# Acknowledgements
+
+The revive compiler project, after some early experiments with EVM bytecode translations, decided to fork the `era-compiler` framework.
+[Frontend](https://github.com/matter-labs/era-compiler-solidity), [code generator](https://github.com/matter-labs/era-compiler-llvm-context) and some supporting libraries are based of ZKSync `zksolc`. I'd like to express my gratitude and thank the original authors for providing a useable code base under a generous license.
+

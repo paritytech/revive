@@ -5,7 +5,7 @@ pub mod arguments;
 use std::io::Write;
 use std::str::FromStr;
 
-use revive_solidity::Process;
+use resolc::Process;
 
 use self::arguments::Arguments;
 
@@ -36,7 +36,7 @@ fn main_inner() -> anyhow::Result<()> {
             std::io::stdout(),
             "{} version {}",
             env!("CARGO_PKG_DESCRIPTION"),
-            revive_solidity::ResolcVersion::default().long
+            resolc::ResolcVersion::default().long
         )?;
         return Ok(());
     }
@@ -45,8 +45,8 @@ fn main_inner() -> anyhow::Result<()> {
         writeln!(
             std::io::stdout(),
             ">={},<={}",
-            revive_solidity::SolcFirstSupportedVersion,
-            revive_solidity::SolcLastSupportedVersion,
+            resolc::SolcFirstSupportedVersion,
+            resolc::SolcLastSupportedVersion,
         )?;
         return Ok(());
     }
@@ -71,20 +71,20 @@ fn main_inner() -> anyhow::Result<()> {
             let mut infile = std::fs::File::open(fname)?;
             #[cfg(target_os = "emscripten")]
             {
-                return revive_solidity::WorkerProcess::run(Some(&mut infile));
+                return resolc::WorkerProcess::run(Some(&mut infile));
             }
             #[cfg(not(target_os = "emscripten"))]
             {
-                return revive_solidity::NativeProcess::run(Some(&mut infile));
+                return resolc::NativeProcess::run(Some(&mut infile));
             }
         }
         #[cfg(target_os = "emscripten")]
         {
-            return revive_solidity::WorkerProcess::run(None);
+            return resolc::WorkerProcess::run(None);
         }
         #[cfg(not(target_os = "emscripten"))]
         {
-            return revive_solidity::NativeProcess::run(None);
+            return resolc::NativeProcess::run(None);
         }
     }
 
@@ -111,14 +111,16 @@ fn main_inner() -> anyhow::Result<()> {
     let mut solc = {
         #[cfg(target_os = "emscripten")]
         {
-            revive_solidity::SoljsonCompiler
+            resolc::SoljsonCompiler
         }
 
         #[cfg(not(target_os = "emscripten"))]
         {
-            revive_solidity::SolcCompiler::new(arguments.solc.unwrap_or_else(|| {
-                revive_solidity::SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()
-            }))?
+            resolc::SolcCompiler::new(
+                arguments
+                    .solc
+                    .unwrap_or_else(|| resolc::SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()),
+            )?
         }
     };
 
@@ -158,7 +160,7 @@ fn main_inner() -> anyhow::Result<()> {
     }
 
     let build = if arguments.yul {
-        revive_solidity::yul(
+        resolc::yul(
             input_files.as_slice(),
             &mut solc,
             optimizer_settings,
@@ -168,7 +170,7 @@ fn main_inner() -> anyhow::Result<()> {
             memory_config,
         )
     } else if arguments.llvm_ir {
-        revive_solidity::llvm_ir(
+        resolc::llvm_ir(
             input_files.as_slice(),
             optimizer_settings,
             include_metadata_hash,
@@ -177,7 +179,7 @@ fn main_inner() -> anyhow::Result<()> {
             memory_config,
         )
     } else if arguments.standard_json {
-        revive_solidity::standard_json(
+        resolc::standard_json(
             &mut solc,
             arguments.detect_missing_libraries,
             arguments.base_path,
@@ -188,7 +190,7 @@ fn main_inner() -> anyhow::Result<()> {
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
-        revive_solidity::combined_json(
+        resolc::combined_json(
             format,
             input_files.as_slice(),
             arguments.libraries,
@@ -210,7 +212,7 @@ fn main_inner() -> anyhow::Result<()> {
         )?;
         return Ok(());
     } else {
-        revive_solidity::standard_output(
+        resolc::standard_output(
             input_files.as_slice(),
             arguments.libraries,
             &mut solc,

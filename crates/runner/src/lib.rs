@@ -44,7 +44,7 @@ pub use crate::specs::*;
 mod runtime;
 mod specs;
 
-#[cfg(not(feature = "revive-solidity"))]
+#[cfg(not(feature = "resolc"))]
 pub(crate) const NO_SOLIDITY_FRONTEND: &str =
     "revive-runner was built without the solidity frontend; please enable the 'solidity' feature!";
 
@@ -234,7 +234,7 @@ impl CallResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Code {
-    #[cfg(feature = "revive-solidity")]
+    #[cfg(feature = "resolc")]
     /// Compile a single solidity source and use the blob of `contract`
     Solidity {
         path: Option<std::path::PathBuf>,
@@ -270,7 +270,7 @@ impl From<Code> for pallet_revive::Code {
                 let Ok(source_code) = std::fs::read_to_string(&path) else {
                     panic!("Failed to reead source code from {}", path.display());
                 };
-                pallet_revive::Code::Upload(revive_solidity::test_utils::compile_blob_with_options(
+                pallet_revive::Code::Upload(resolc::test_utils::compile_blob_with_options(
                     &contract,
                     &source_code,
                     solc_optimizer.unwrap_or(true),

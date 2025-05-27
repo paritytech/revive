@@ -13,7 +13,7 @@ alloy-sol-types = { workspace = true }
 hex = { workspace = true }
 serde_json = { workspace = true }
 
-revive-solidity = { workspace = true }
+resolc = { workspace = true }
 revive-runner = { workspace = true }
 revive-llvm-context = { workspace = true }
 

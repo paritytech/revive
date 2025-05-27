@@ -1,8 +1,8 @@
 use alloy_primitives::{Address, Bytes, I256, U256};
 use alloy_sol_types::{sol, SolCall, SolConstructor};
 
+use resolc::test_utils::*;
 use revive_llvm_context::OptimizerSettings;
-use revive_solidity::test_utils::*;
 
 #[derive(Clone)]
 pub struct Contract {

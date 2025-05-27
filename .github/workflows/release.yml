@@ -143,7 +143,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
     env:
-      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive-workflow-test/releases/download/${{ github.ref_name }}/resolc.wasm
+      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

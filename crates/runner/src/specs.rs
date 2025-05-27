@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 use alloy_primitives::keccak256;
-#[cfg(feature = "revive-solidity")]
+#[cfg(feature = "resolc")]
 use alloy_primitives::Address;
-#[cfg(feature = "revive-solidity")]
+#[cfg(feature = "resolc")]
+use resolc::test_utils::*;
+#[cfg(feature = "resolc")]
 use revive_differential::{Evm, EvmLog};
-#[cfg(feature = "revive-solidity")]
-use revive_solidity::test_utils::*;
 
 const SPEC_MARKER_BEGIN: &str = "/* runner.json";
 const SPEC_MARKER_END: &str = "*/";
@@ -256,7 +256,7 @@ impl Specs {
             };
 
             match code {
-                #[cfg(feature = "revive-solidity")]
+                #[cfg(feature = "resolc")]
                 Code::Bytes(bytes) if bytes.is_empty() => {
                     let contract_source = match std::fs::read_to_string(contract_path) {
                         Err(err) => panic!("unable to read {contract_path}: {err}"),
@@ -264,9 +264,9 @@ impl Specs {
                     };
                     *bytes = compile_blob(contract_name, &contract_source)
                 }
-                #[cfg(not(feature = "revive-solidity"))]
+                #[cfg(not(feature = "resolc"))]
                 Code::Bytes(_) => panic!("{NO_SOLIDITY_FRONTEND}"),
-                #[cfg(feature = "revive-solidity")]
+                #[cfg(feature = "resolc")]
                 Code::Solidity { path, .. } if path.is_none() => *path = Some(contract_path.into()),
                 _ => continue,
             }

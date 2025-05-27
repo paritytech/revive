@@ -1,0 +1,51 @@
+[package]
+name = "resolc"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors = [
+    "Oleksandr Zarudnyi <a.zarudnyy@matterlabs.dev>",
+    "Cyrill Leutwiler <cyrill@parity.io>",
+]
+description = "Solidity frontend for the revive compiler"
+
+[[bin]]
+name = "resolc"
+path = "src/resolc/main.rs"
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+inkwell = { workspace = true }
+once_cell = { workspace = true }
+path-slash = { workspace = true }
+rayon = { workspace = true, optional = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha3 = { workspace = true }
+which = { workspace = true }
+
+revive-common = { workspace = true }
+revive-llvm-context = { workspace = true }
+revive-solc-json-interface = { workspace = true, features = ["resolc"] }
+revive-yul = { workspace = true }
+
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { version = "*", default-features = false }
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+libc = { workspace = true }
+inkwell = { workspace = true, features = ["target-riscv", "llvm18-1-no-llvm-linking"]}
+
+[build-dependencies]
+git2 = { workspace = true, default-features = false }
+
+[features]
+parallel = ["rayon"]
+default = ["parallel"]

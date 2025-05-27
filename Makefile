@@ -11,7 +11,7 @@
 	machete \
 	test \
 	test-integration \
-	test-solidity \
+	test-resolc \
 	test-workspace \
 	test-cli \
 	test-wasm \
@@ -24,24 +24,24 @@
 install: install-bin install-npm
 
 install-bin:
-	cargo install --locked --path crates/solidity
+	cargo install --force --locked --path crates/resolc
 
 install-npm:
 	npm install && npm fund
 
 install-wasm: install-npm
-	cargo build --target wasm32-unknown-emscripten -p revive-solidity --release --no-default-features
+	cargo build --target wasm32-unknown-emscripten -p resolc --release --no-default-features
 	npm run build:package
 
 install-llvm-builder:
-	cargo install --path crates/llvm-builder
+	cargo install --force --locked --path crates/llvm-builder
 
 install-llvm: install-llvm-builder
 	revive-llvm clone
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
 install-revive-runner:
-	cargo install --path crates/runner --no-default-features --locked
+	cargo install --locked --force --path crates/runner --no-default-features
 
 format:
 	cargo fmt --all --check
@@ -58,8 +58,8 @@ test: format clippy machete test-cli test-workspace install-revive-runner
 test-integration: install-bin
 	cargo test --package revive-integration
 
-test-solidity: install
-	cargo test --package revive-solidity
+test-resolc: install
+	cargo test --package resolc
 
 test-workspace: install
 	cargo test --workspace --exclude revive-llvm-builder
@@ -90,6 +90,6 @@ clean:
 	cargo clean ; \
 	revive-llvm clean ; \
 	rm -rf node_modules ; \
-	rm -rf crates/solidity/src/tests/cli-tests/artifacts ; \
-	cargo uninstall revive-solidity ; \
+	rm -rf crates/resolc/src/tests/cli-tests/artifacts ; \
+	cargo uninstall resolc ; \
 	cargo uninstall revive-llvm-builder ;

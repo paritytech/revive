@@ -8359,6 +8359,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "resolc"
+version = "0.1.0-dev.16"
+dependencies = [
+ "anyhow",
+ "clap",
+ "git2",
+ "hex",
+ "inkwell",
+ "libc",
+ "mimalloc",
+ "once_cell",
+ "path-slash",
+ "rayon",
+ "revive-common",
+ "revive-llvm-context",
+ "revive-solc-json-interface",
+ "revive-yul",
+ "semver 1.0.26",
+ "serde",
+ "serde_json",
+ "sha3",
+ "which",
+]
+
+[[package]]
 name = "revive-benchmarks"
 version = "0.1.0-dev.16"
 dependencies = [
@@ -8412,9 +8437,9 @@ dependencies = [
  "alloy-sol-types",
  "hex",
  "rayon",
+ "resolc",
  "revive-llvm-context",
  "revive-runner",
- "revive-solidity",
  "serde",
  "serde_json",
  "sha1",
@@ -8487,9 +8512,9 @@ dependencies = [
  "hex",
  "parity-scale-codec",
  "polkadot-sdk 2503.0.1",
+ "resolc",
  "revive-differential",
  "revive-llvm-context",
- "revive-solidity",
  "scale-info",
  "serde",
  "serde_json",
@@ -8518,38 +8543,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "revive-solidity"
-version = "0.1.0-dev.16"
-dependencies = [
- "anyhow",
- "clap",
- "git2",
- "hex",
- "inkwell",
- "libc",
- "mimalloc",
- "num",
- "once_cell",
- "path-slash",
- "rayon",
- "regex",
- "revive-common",
- "revive-llvm-context",
- "revive-solc-json-interface",
- "semver 1.0.26",
- "serde",
- "serde_json",
- "sha3",
- "thiserror 2.0.12",
- "which",
-]
-
-[[package]]
 name = "revive-stdlib"
 version = "0.1.0-dev.16"
 dependencies = [
  "inkwell",
  "revive-build-utils",
+]
+
+[[package]]
+name = "revive-yul"
+version = "0.1.0-dev.16"
+dependencies = [
+ "anyhow",
+ "inkwell",
+ "num",
+ "regex",
+ "revive-common",
+ "revive-llvm-context",
+ "serde",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

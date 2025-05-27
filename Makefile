@@ -24,7 +24,7 @@
 install: install-bin install-npm
 
 install-bin:
-	cargo install --locked --path crates/resolc
+	cargo install --force --locked --path crates/resolc
 
 install-npm:
 	npm install && npm fund
@@ -34,14 +34,14 @@ install-wasm: install-npm
 	npm run build:package
 
 install-llvm-builder:
-	cargo install --path crates/llvm-builder
+	cargo install --force --locked --path crates/llvm-builder
 
 install-llvm: install-llvm-builder
 	revive-llvm clone
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
 install-revive-runner:
-	cargo install --path crates/runner --no-default-features --locked
+	cargo install --locked --force --path crates/runner --no-default-features
 
 format:
 	cargo fmt --all --check

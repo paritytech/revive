@@ -94,7 +94,7 @@ jobs:
 
       - name: Install LLVM Builder
         run: |
-          cargo install --path crates/llvm-builder
+          cargo install --locked --force --path crates/llvm-builder
 
       - name: Clone LLVM
         run: |

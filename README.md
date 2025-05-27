@@ -44,9 +44,9 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 
 
 ### `resolc` NPM package
-We distribute the revive compiler as [node.js module](https://www.npmjs.com/package/@parity/resolc) and a [hardhat plugin](https://www.npmjs.com/package/@parity/hardhat-polkadot-resolc).
+We distribute the revive compiler as [node.js module](https://www.npmjs.com/package/@parity/resolc) and [hardhat plugin](https://www.npmjs.com/package/@parity/hardhat-polkadot-resolc).
 
-Note: The `solc` depenendency is bundled via NPM packaging and defaults to the latest supported version.
+Note: The `solc` dependency is bundled via NPM packaging and defaults to the latest supported version.
 
 ## Building from source
 

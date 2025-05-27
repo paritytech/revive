@@ -23,10 +23,6 @@ pub struct Arguments {
     #[arg(long = "supported-solc-versions")]
     pub supported_solc_versions: bool,
 
-    /// Print the licence and exit.
-    #[arg(long = "license")]
-    pub license: bool,
-
     /// Specify the input paths and remappings.
     /// If an argument contains a '=', it is considered a remapping.
     /// Multiple Solidity files can be passed in the default Solidity mode.

@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::yul::parser::statement::object::Object;
+use revive_yul::parser::statement::object::Object;
 
 use self::llvm_ir::LLVMIR;
 use self::yul::Yul;

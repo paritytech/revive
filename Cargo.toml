@@ -28,6 +28,7 @@ revive-solc-json-interface = { version = "0.1.0-dev.16", path = "crates/solc-jso
 revive-solidity = { version = "0.1.0-dev.16", path = "crates/solidity" }
 revive-stdlib = { version = "0.1.0-dev.16", path = "crates/stdlib" }
 revive-build-utils = { version = "0.1.0-dev.16", path = "crates/build-utils" }
+revive-yul = { version = "0.1.0-dev.16", path = "crates/yul" }
 
 hex = "0.4.3"
 cc = "1.2"

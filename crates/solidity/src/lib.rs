@@ -7,7 +7,6 @@ pub(crate) mod process;
 pub(crate) mod project;
 pub(crate) mod solc;
 pub(crate) mod version;
-pub(crate) mod yul;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;

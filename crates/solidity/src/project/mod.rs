@@ -9,10 +9,13 @@ use std::path::Path;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use revive_solc_json_interface::SolcStandardJsonOutput;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
+
+use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_yul::lexer::Lexer;
+use revive_yul::parser::statement::object::Object;
 
 use crate::build::contract::Contract as ContractBuild;
 use crate::build::Build;
@@ -22,8 +25,6 @@ use crate::process::Process;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
 use crate::solc::Compiler;
-use crate::yul::lexer::Lexer;
-use crate::yul::parser::statement::object::Object;
 
 use self::contract::Contract;
 

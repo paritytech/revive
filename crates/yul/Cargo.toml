@@ -1,0 +1,20 @@
+[package]
+name = "revive-yul"
+description = "The revive YUL parser library."
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+inkwell = { workspace = true }
+num = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+revive-common = { workspace = true }
+revive-llvm-context = { workspace = true }

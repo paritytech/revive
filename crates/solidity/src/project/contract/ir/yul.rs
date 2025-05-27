@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::yul::parser::statement::object::Object;
+use revive_yul::parser::statement::object::Object;
 
 /// The contract Yul source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]

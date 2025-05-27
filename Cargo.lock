@@ -8528,14 +8528,13 @@ dependencies = [
  "inkwell",
  "libc",
  "mimalloc",
- "num",
  "once_cell",
  "path-slash",
  "rayon",
- "regex",
  "revive-common",
  "revive-llvm-context",
  "revive-solc-json-interface",
+ "revive-yul",
  "semver 1.0.26",
  "serde",
  "serde_json",
@@ -8550,6 +8549,20 @@ version = "0.1.0-dev.16"
 dependencies = [
  "inkwell",
  "revive-build-utils",
+]
+
+[[package]]
+name = "revive-yul"
+version = "0.1.0-dev.16"
+dependencies = [
+ "anyhow",
+ "inkwell",
+ "num",
+ "regex",
+ "revive-common",
+ "revive-llvm-context",
+ "serde",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

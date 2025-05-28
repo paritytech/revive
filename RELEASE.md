@@ -4,7 +4,11 @@ Prior to the first stable release we neither have formal release processes nor d
 
 To create a new pre-release:
 
-1. Create a release PR which updates the versions in the workspace `Cargo.toml` and updates the `CHANGELOG.md` accordingly.
+1. Create a release PR which, if necessary:
+  - Updates the versions in the workspace `Cargo.toml`
+  - Updates the version in each crate `Cargo.toml`
+  - Updates the version of the NPM package in `js/resolc/package.json`
+  - Updates the `CHANGELOG.md` to reflect all observable changes
 2. If the CI passes, merge the release PR.
 3. Push a `vX.Y.Z` tag that has the same version as in `Cargo.toml`
 4. The release workflow will attempt to build and publish a new pre-release if the latest tag does match the cargo package version.

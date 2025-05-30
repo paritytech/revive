@@ -9,6 +9,8 @@ pub use self::standard_json::input::settings::metadata::Metadata as SolcStandard
 pub use self::standard_json::input::settings::metadata_hash::MetadataHash as SolcStandardJsonInputSettingsMetadataHash;
 pub use self::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 pub use self::standard_json::input::settings::polkavm::memory::MemoryConfig as SolcStandardJsonInputSettingsPolkaVMMemory;
+pub use self::standard_json::input::settings::polkavm::memory::DEFAULT_HEAP_SIZE as PolkaVMDefaultHeapMemorySize;
+pub use self::standard_json::input::settings::polkavm::memory::DEFAULT_STACK_SIZE as PolkaVMDefaultStackMemorySize;
 pub use self::standard_json::input::settings::polkavm::PolkaVM as SolcStandardJsonInputSettingsPolkaVM;
 pub use self::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
 pub use self::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;

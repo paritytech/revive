@@ -229,7 +229,7 @@ pub fn standard_json<T: Compiler>(
         revive_llvm_context::OptimizerSettings::try_from(&solc_input.settings.optimizer)?;
 
     let polkavm_settings = solc_input.settings.polkavm.unwrap_or_default();
-    debug_config.emit_debug_info = polkavm_settings.debug_information;
+    debug_config.emit_debug_info = polkavm_settings.debug_information.unwrap_or_default();
 
     let include_metadata_hash = match solc_input.settings.metadata {
         Some(ref metadata) => metadata.bytecode_hash != Some(MetadataHash::None),
@@ -265,7 +265,9 @@ pub fn standard_json<T: Compiler>(
             include_metadata_hash,
             debug_config,
             llvm_arguments,
-            polkavm_settings.memory_config,
+            polkavm_settings
+                .memory_config
+                .unwrap_or_else(SolcStandardJsonInputSettingsPolkaVMMemory::default),
         )?;
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
     }

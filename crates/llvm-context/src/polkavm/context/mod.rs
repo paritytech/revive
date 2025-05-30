@@ -25,6 +25,8 @@ use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
+use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
@@ -233,7 +235,13 @@ where
         Self::set_data_layout(llvm, &module);
         Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
-        Self::set_polkavm_stack_size(llvm, &module, memory_config.stack_size);
+        Self::set_polkavm_stack_size(
+            llvm,
+            &module,
+            memory_config
+                .stack_size
+                .unwrap_or(PolkaVMDefaultStackMemorySize),
+        );
         Self::set_module_flags(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);
@@ -1443,7 +1451,11 @@ where
     }
 
     pub fn heap_size(&self) -> inkwell::values::IntValue<'ctx> {
-        self.xlen_type()
-            .const_int(self.memory_config.heap_size as u64, false)
+        self.xlen_type().const_int(
+            self.memory_config
+                .heap_size
+                .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
+            false,
+        )
     }
 }

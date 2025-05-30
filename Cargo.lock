@@ -8705,7 +8705,7 @@ dependencies = [
 
 [[package]]
 name = "revive-solc-json-interface"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "rayon",

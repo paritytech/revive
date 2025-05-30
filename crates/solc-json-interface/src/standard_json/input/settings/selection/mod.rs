@@ -29,6 +29,14 @@ impl Selection {
         }
     }
 
+    /// Creates the selection required for test compilation (includes EVM bytecode).
+    pub fn new_required_for_tests() -> Self {
+        Self {
+            all: Some(FileSelection::new_required_for_tests()),
+            files: BTreeMap::new(),
+        }
+    }
+
     /// Extends the user's output selection with flag required by our compilation process.
     pub fn extend_with_required(&mut self) -> &mut Self {
         self.all

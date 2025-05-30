@@ -11,16 +11,18 @@ pub mod memory;
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
 pub struct PolkaVM {
     /// The PolkaVM target machine memory configuration settings.
-    pub memory_config: MemoryConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_config: Option<MemoryConfig>,
     /// Instruct LLVM to emit debug information.
-    pub debug_information: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_information: Option<bool>,
 }
 
 impl PolkaVM {
     pub fn new(memory_config: Option<MemoryConfig>, debug_information: bool) -> Self {
         Self {
-            memory_config: memory_config.unwrap_or_default(),
-            debug_information,
+            memory_config,
+            debug_information: Some(debug_information),
         }
     }
 }

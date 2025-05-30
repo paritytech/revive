@@ -142,14 +142,10 @@ fn main_inner() -> anyhow::Result<()> {
         None => true,
     };
 
-    let mut memory_config =
-        revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::default();
-    if let Some(heap_size) = arguments.heap_size {
-        memory_config.heap_size = heap_size
-    }
-    if let Some(stack_size) = arguments.stack_size {
-        memory_config.stack_size = stack_size
-    }
+    let memory_config = revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::new(
+        arguments.heap_size,
+        arguments.stack_size,
+    );
 
     let build = if arguments.yul {
         resolc::yul(

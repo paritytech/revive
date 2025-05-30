@@ -16,6 +16,10 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 
 - Removed the license printer from the `resolc` binary.
 
+### Fixed
+
+- solc-json-interface: Serializing of any custom key in the JSON input is only skipped if not provided.
+
 ## v0.1.0
 
 This is a development pre-release.

@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { resolc, version as resolcVersion } from './resolc'
 import path from 'path'
 import { existsSync, readFileSync } from 'fs'
+import resolvePkg from 'resolve-pkg'
 
 export type SolcInput = {
   [contractName: string]: {
@@ -149,17 +150,15 @@ export function tryResolveImport(importPath: string) {
   const specifiedVersion = match[2] // "1.2.3" (optional)
   const relativePath = match[3] // "/path/to/file.sol"
 
-  let packageJsonPath
-  try {
-    packageJsonPath = require.resolve(path.join(basePackage, 'package.json'))
-  } catch {
-    throw new Error(`Could not resolve package ${basePackage}`)
+  const packageRoot = resolvePkg(basePackage)
+  if (!packageRoot) {
+    throw new Error(`Package ${basePackage} not found.`)
   }
 
   // Check if a version was specified and compare with the installed version
   if (specifiedVersion) {
     const installedVersion = JSON.parse(
-      readFileSync(packageJsonPath, 'utf-8')
+      readFileSync(path.join(packageRoot, 'package.json'), 'utf-8')
     ).version
 
     if (installedVersion !== specifiedVersion) {
@@ -168,8 +167,6 @@ export function tryResolveImport(importPath: string) {
       )
     }
   }
-
-  const packageRoot = path.dirname(packageJsonPath)
 
   // Construct full path to the requested file
   const resolvedPath = path.join(packageRoot, relativePath)

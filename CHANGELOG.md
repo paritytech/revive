@@ -15,10 +15,12 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 ### Changed
 
 - Removed the license printer from the `resolc` binary.
+- EVM bytecode is no longer requested from solc (except in test utils) leading to less compilation work in the pipeline.
 
 ### Fixed
 
 - solc-json-interface: Serializing of any custom key in the JSON input is only skipped if not provided.
+- npm package resolution no longer fails with an 'ERR_PACKAGE_PATH_NOT_EXPORTED' error for packages defining exports fields in the `package.json`.
 
 ## v0.1.0
 

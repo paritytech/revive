@@ -28,7 +28,7 @@ revive-runner = { version = "0.1.0", path = "crates/runner" }
 revive-solc-json-interface = { version = "0.2.0", path = "crates/solc-json-interface" }
 revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
 revive-build-utils = { version = "0.1.0", path = "crates/build-utils" }
-revive-yul = { version = "0.1.0", path = "crates/yul" }
+revive-yul = { version = "0.2.0", path = "crates/yul" }
 
 hex = "0.4.3"
 cc = "1.2"

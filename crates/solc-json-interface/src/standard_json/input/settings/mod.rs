@@ -46,7 +46,7 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
     /// The resolc custom PolkaVM settings.
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub polkavm: Option<PolkaVM>,
 }
 
@@ -75,6 +75,7 @@ impl Settings {
 
     /// Sets the necessary defaults.
     pub fn normalize(&mut self, version: &semver::Version) {
+        self.polkavm = None;
         self.optimizer.normalize(version);
     }
 

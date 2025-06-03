@@ -14,21 +14,21 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.85.0"
 
 [workspace.dependencies]
-resolc  = { path = "crates/resolc" }
-revive-benchmarks = { path = "crates/benchmarks" }
-revive-builtins = { path = "crates/builtins" }
-revive-common = { path = "crates/common" }
-revive-differential = { path = "crates/differential" }
-revive-integration = { path = "crates/integration" }
-revive-linker = { path = "crates/linker" }
-lld-sys = { path = "crates/lld-sys" }
-revive-llvm-context = { path = "crates/llvm-context" }
-revive-runtime-api = { path = "crates/runtime-api" }
-revive-runner = { path = "crates/runner" }
-revive-solc-json-interface = { path = "crates/solc-json-interface" }
-revive-stdlib = { path = "crates/stdlib" }
-revive-build-utils = { path = "crates/build-utils" }
-revive-yul = { path = "crates/yul" }
+resolc  = { version = "0.2.0", path = "crates/resolc" }
+revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
+revive-builtins = { version = "0.1.0", path = "crates/builtins" }
+revive-common = { version = "0.1.0", path = "crates/common" }
+revive-differential = { version = "0.1.0", path = "crates/differential" }
+revive-integration = { version = "0.1.0", path = "crates/integration" }
+revive-linker = { version = "0.1.0", path = "crates/linker" }
+lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
+revive-llvm-context = { version = "0.2.0", path = "crates/llvm-context" }
+revive-runtime-api = { version = "0.1.0", path = "crates/runtime-api" }
+revive-runner = { version = "0.1.0", path = "crates/runner" }
+revive-solc-json-interface = { version = "0.2.0", path = "crates/solc-json-interface" }
+revive-stdlib = { version = "0.1.0", path = "crates/stdlib" }
+revive-build-utils = { version = "0.1.0", path = "crates/build-utils" }
+revive-yul = { version = "0.1.0", path = "crates/yul" }
 
 hex = "0.4.3"
 cc = "1.2"

@@ -130,6 +130,26 @@ export async function compile(
 }
 
 /**
+ * resolve the package root
+ * use resolve-pkg to find the package root, and fallback to using require.resolve if the package defines an exports field
+ * see https://github.com/sindresorhus/resolve-pkg/issues/9
+ **/
+function resolvePkgRoot(basePackage: string) {
+  const packageRoot = resolvePkg(basePackage)
+  if (packageRoot) {
+    return packageRoot
+  }
+
+  try {
+    const packageExport = require.resolve(basePackage)
+    const endIndex = packageExport.indexOf(basePackage) + basePackage.length
+    return packageExport.substring(0, endIndex)
+  } catch {}
+
+  return undefined
+}
+
+/**
  * Resolve an import path to a file path.
  * @param importPath - The import path to resolve.
  */
@@ -150,7 +170,7 @@ export function tryResolveImport(importPath: string) {
   const specifiedVersion = match[2] // "1.2.3" (optional)
   const relativePath = match[3] // "/path/to/file.sol"
 
-  const packageRoot = resolvePkg(basePackage)
+  const packageRoot = resolvePkgRoot(basePackage)
   if (!packageRoot) {
     throw new Error(`Package ${basePackage} not found.`)
   }

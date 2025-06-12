@@ -22,6 +22,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: wasm32-unknown-emscripten
@@ -68,6 +70,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Create Target Directory
         run: mkdir -p ${{ env.REVIVE_WASM_INSTALL_DIR }}

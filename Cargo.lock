@@ -8646,9 +8646,7 @@ dependencies = [
  "num_cpus",
  "path-slash",
  "regex",
- "serde",
  "tar",
- "toml 0.8.22",
  "which",
 ]
 

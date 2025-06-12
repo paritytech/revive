@@ -27,6 +27,8 @@ jobs:
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       # Check that tag and version in Cargo.toml match
       - name: Check versions
@@ -91,6 +93,8 @@ jobs:
     needs: [check-version-changed]
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # without this it will override our rust flags
@@ -146,6 +150,8 @@ jobs:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: wasm32-unknown-emscripten

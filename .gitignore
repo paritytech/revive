@@ -8,7 +8,9 @@ target-llvm
 /*.yul
 /*.ll
 /*.s
-/llvm*
+/llvm-*
+# Allow llvm submodule directory
+!/llvm
 node_modules
 artifacts
 tmp

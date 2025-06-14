@@ -6,6 +6,18 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+## v0.3.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2503.0.1`
+
+### Fixed
+
+- llvm-context: Bugfix the SAR YUL builtin translation.
+- npm package: Bugfix the exports field defined in the `package.json`.
+
+
 ## v0.2.0
 
 This is a development pre-release.

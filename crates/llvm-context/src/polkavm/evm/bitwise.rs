@@ -204,7 +204,7 @@ where
             &context.word_type().const_all_ones(),
             overflow_negative_block,
         ),
-        (&context.word_const(0), overflow_block),
+        (&context.word_const(0), overflow_positive_block),
     ]);
     Ok(result.as_basic_value())
 }

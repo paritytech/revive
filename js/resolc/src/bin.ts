@@ -23,7 +23,10 @@ async function main() {
   program
     .option('--bin', 'Binary of the contracts in hex.')
     .option('--abi', 'ABI of the contracts.')
-    .option('--stats', 'Print statistics about Resolc vs Solc compilation.')
+    .option(
+      '--diff-stats',
+      'Print statistics about Resolc vs Solc compilation.'
+    )
     .option(
       '--base-path <path>',
       'Root of the project source tree. ' +
@@ -51,13 +54,13 @@ async function main() {
     outputDir?: string
     prettyJson: boolean
     basePath?: string
-    stats: boolean
+    diffStats: boolean
     includePath?: string[]
   }>()
 
   // when using --stats option, we want to run solc as well to compare outputs size
-  if (options.stats) {
-    const args = process.argv.filter((arg) => !arg.startsWith('--stats'))
+  if (options.diffStats) {
+    const args = process.argv.filter((arg) => !arg.startsWith('--diff-stats'))
     try {
       execSync(`npx solc ${args.slice(2).join(' ')}`)
     } catch (err) {
@@ -151,7 +154,7 @@ async function main() {
 
   if (!output) {
     abort('No output from compiler')
-  } else if (output.errors && !options.stats) {
+  } else if (output.errors && !options.diffStats) {
     for (const error in output.errors) {
       const message = output.errors[error]
       if (message.severity === 'warning') {
@@ -202,12 +205,12 @@ async function main() {
         contractStats.push({
           file: fileName,
           contract: contractName,
-          polkavm: (polkavmSize / 1024).toFixed(2) + ' kB',
-          bin: (binSize / 1024).toFixed(2) + ' kB',
-          diff:
+          ['resolc (kB)']: Number((polkavmSize / 1024).toFixed(2)),
+          ['solc (kB)']: Number((binSize / 1024).toFixed(2)),
+          ['diff (%)']:
             binSize > 0
-              ? `${((polkavmSize / binSize - 1) * 100).toFixed(2)}%`
-              : 'N/A',
+              ? Number(((polkavmSize / binSize - 1) * 100).toFixed(2))
+              : Number.NaN,
         })
       }
 
@@ -220,8 +223,10 @@ async function main() {
     }
   }
 
-  if (options.stats && contractStats.length > 0) {
-    console.table(contractStats)
+  if (options.diffStats && contractStats.length > 0) {
+    console.table(
+      contractStats.sort((a, b) => b['resolc (kB)'] - a['resolc (kB)'])
+    )
   }
 
   // Put back original exception handlers.

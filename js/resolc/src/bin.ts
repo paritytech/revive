@@ -62,7 +62,7 @@ async function main() {
   if (options.diffStats) {
     const args = process.argv.filter((arg) => !arg.startsWith('--diff-stats'))
     try {
-      execSync(`npx solc ${args.slice(2).join(' ')}`)
+      execSync(`npx --yes solc@latest ${args.slice(2).join(' ')}`)
     } catch (err) {
       abort(`Failed to run solc: ${err}`)
     }

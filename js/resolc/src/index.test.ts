@@ -68,6 +68,16 @@ test('resolve import', () => {
       file: './fixtures/storage.sol',
       expected: resolve('fixtures/storage.sol'),
     },
+
+    // package with exports
+    {
+      file: '@redstone-finance/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol',
+      expected: resolve(
+        __dirname,
+        '../../..',
+        'node_modules/@redstone-finance/evm-connector/contracts/data-services/PrimaryProdDataServiceConsumerBase.sol'
+      ),
+    },
     // scopped module with version
     {
       file: '@openzeppelin/contracts@5.1.0/token/ERC20/ERC20.sol',
@@ -100,16 +110,19 @@ test('resolve import', () => {
   ]
 
   for (const { file, expected } of cases) {
+    let resolved
     try {
-      const resolved = tryResolveImport(file)
-      assert(
-        resolved === expected,
-        `\nGot:\n${resolved}\nExpected:\n${expected}`
-      )
+      resolved = tryResolveImport(file)
     } catch (error) {
       assert(
         String(error) == expected,
-        `\nGot:\n${String(error)}\nExpected:\n${expected}`
+        `\nExpected:\n${expected}\nGot:\n${String(error)}\n`
+      )
+    }
+    if (resolved) {
+      assert(
+        resolved === expected,
+        `\nExpected:\n${expected}\nGot:\n${resolved}`
       )
     }
   }

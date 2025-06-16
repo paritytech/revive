@@ -60,6 +60,7 @@ test_spec!(mload, "MLoad", "MLoad.sol");
 test_spec!(delegate_no_contract, "DelegateCaller", "DelegateCaller.sol");
 test_spec!(function_type, "FunctionType", "FunctionType.sol");
 test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
+test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

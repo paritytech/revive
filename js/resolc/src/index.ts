@@ -50,11 +50,7 @@ export function resolveInputs(sources: SolcInput): SolcInput {
     language: 'Solidity',
     sources,
     settings: {
-      outputSelection: {
-        '*': {
-          '*': ['evm.bytecode.object'],
-        },
-      },
+      outputSelection: {}, // no outputs requested, only resolves imports
     },
   }
 
@@ -106,7 +102,7 @@ export async function compile(
       enabled: true,
       runs: 200,
     },
-    bin,
+    bin = process.env.RESOLC_BIN,
   } = option
 
   const input = JSON.stringify({

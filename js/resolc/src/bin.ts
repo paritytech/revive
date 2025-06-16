@@ -6,6 +6,7 @@ import * as os from 'os'
 import * as path from 'path'
 import * as resolc from '.'
 import { SolcInput } from '.'
+import { execSync } from 'child_process'
 
 async function main() {
   // hold on to any exception handlers that existed prior to this script running, we'll be adding them back at the end
@@ -17,11 +18,12 @@ async function main() {
 
   const program = new commander.Command()
 
-  program.name('solcjs')
+  program.name('resolcjs')
   program.version(resolc.version())
   program
     .option('--bin', 'Binary of the contracts in hex.')
     .option('--abi', 'ABI of the contracts.')
+    .option('--stats', 'Print statistics about Resolc vs Solc compilation.')
     .option(
       '--base-path <path>',
       'Root of the project source tree. ' +
@@ -49,8 +51,20 @@ async function main() {
     outputDir?: string
     prettyJson: boolean
     basePath?: string
+    stats: boolean
     includePath?: string[]
   }>()
+
+  // when using --stats option, we want to run solc as well to compare outputs size
+  if (options.stats) {
+    const args = process.argv.filter((arg) => !arg.startsWith('--stats'))
+    try {
+      execSync(`npx solc ${args.slice(2).join(' ')}`)
+    } catch (err) {
+      abort(`Failed to run solc: ${err}`)
+    }
+  }
+
   const files: string[] = program.args
   const destination = options.outputDir ?? '.'
 
@@ -160,19 +174,41 @@ async function main() {
     })
   }
 
+  const contractStats = []
+
   for (const fileName in output.contracts) {
     for (const contractName in output.contracts[fileName]) {
       let contractFileName = fileName + ':' + contractName
       contractFileName = contractFileName.replace(/[:./\\]/g, '_')
-
-      if (options.bin) {
-        writeFile(
-          contractFileName + '.polkavm',
-          Buffer.from(
-            output.contracts[fileName][contractName].evm.bytecode.object,
-            'hex'
-          )
+      let polkavmSize = 0
+      let binSize = 0
+      if (
+        options.bin &&
+        output.contracts?.[fileName]?.[contractName]?.evm?.bytecode?.object
+      ) {
+        const pvmData = Buffer.from(
+          output.contracts[fileName][contractName].evm.bytecode.object,
+          'hex'
         )
+        writeFile(contractFileName + '.polkavm', pvmData)
+        polkavmSize = pvmData.length
+
+        const binOutPath = path.join(destination, `${contractFileName}.bin`)
+        if (fs.existsSync(binOutPath)) {
+          try {
+            binSize = fs.statSync(binOutPath).size || 0
+          } catch {}
+        }
+        contractStats.push({
+          file: fileName,
+          contract: contractName,
+          polkavm: (polkavmSize / 1024).toFixed(2) + ' kB',
+          bin: (binSize / 1024).toFixed(2) + ' kB',
+          diff:
+            binSize > 0
+              ? `${((polkavmSize / binSize - 1) * 100).toFixed(2)}%`
+              : 'N/A',
+        })
       }
 
       if (options.abi) {
@@ -182,6 +218,10 @@ async function main() {
         )
       }
     }
+  }
+
+  if (options.stats && contractStats.length > 0) {
+    console.table(contractStats)
   }
 
   // Put back original exception handlers.

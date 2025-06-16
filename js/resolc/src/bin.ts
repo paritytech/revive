@@ -151,7 +151,7 @@ async function main() {
 
   if (!output) {
     abort('No output from compiler')
-  } else if (output.errors) {
+  } else if (output.errors && !options.stats) {
     for (const error in output.errors) {
       const message = output.errors[error]
       if (message.severity === 'warning') {

@@ -240,9 +240,7 @@ fn main_inner() -> anyhow::Result<()> {
 
                 writeln!(
                     std::io::stdout(),
-                    "Contract `{}` assembly:\n\n{}",
-                    path,
-                    assembly_text
+                    "Contract `{path}` assembly:\n\n{assembly_text}"
                 )?;
             }
             if arguments.output_binary {

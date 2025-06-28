@@ -30,7 +30,7 @@ impl std::str::FromStr for Sanitizer {
             "thread" => Ok(Self::Thread),
             "dataflow" => Ok(Self::DataFlow),
             "address;undefined" => Ok(Self::AddressUndefined),
-            value => Err(format!("Unsupported sanitizer: `{}`", value)),
+            value => Err(format!("Unsupported sanitizer: `{value}`")),
         }
     }
 }

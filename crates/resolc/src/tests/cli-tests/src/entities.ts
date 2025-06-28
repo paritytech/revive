@@ -15,6 +15,11 @@ const pathToBasicYulContract = path.join(
   'yul',
   contractYulFilename
 )
+const pathToMemsetYulContract = path.join(
+  pathToContracts,
+  'yul',
+  'memset.yul'
+)
 const pathToBasicSolContract = path.join(
   pathToContracts,
   'solidity',
@@ -42,6 +47,7 @@ export const paths = {
   pathToContracts: pathToContracts,
   pathToBasicSolContract: pathToBasicSolContract,
   pathToBasicYulContract: pathToBasicYulContract,
+  pathToMemsetYulContract: pathToMemsetYulContract,
   pathToSolBinOutputFile: pathToSolBinOutputFile,
   pathToSolAsmOutputFile: pathToSolAsmOutputFile,
 }

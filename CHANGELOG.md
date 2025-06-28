@@ -15,6 +15,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 ### Fixed
 
 - llvm-context: Bugfix the SAR YUL builtin translation.
+- runtime-api: Add the missing `memset` builtin.
 - npm package: Bugfix the exports field defined in the `package.json`.
 
 

@@ -6,7 +6,7 @@ authors = [
     "Anton Baliasnikov <aba@matterlabs.dev>",
     "Cyrill Leutwiler <cyrill@parity.io>",
 ]
-version.workspace = true
+version = "0.2.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

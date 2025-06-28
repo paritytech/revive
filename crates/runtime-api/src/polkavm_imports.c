@@ -30,6 +30,12 @@ void * memmove(void *dst, const void *src, size_t n) {
 	return dst;
 }
 
+void * memset(void *b, int c, size_t len) {
+    uint8_t *dest = b;
+    while (len-- > 0) *dest++ = c;
+    return b;
+}
+
 // Imports
 
 POLKAVM_IMPORT(void, address, uint32_t)

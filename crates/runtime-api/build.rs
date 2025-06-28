@@ -37,12 +37,11 @@ fn compile(source_path: &str, bitcode_path: &str) {
             source_path,
         ])
         .output()
-        .unwrap_or_else(|error| panic!("failed to execute clang: {}", error));
+        .unwrap_or_else(|error| panic!("failed to execute clang: {error}"));
 
     assert!(
         output.status.success(),
-        "failed to compile the PolkaVM C API: {:?}",
-        output
+        "failed to compile the PolkaVM C API: {output:?}"
     );
 }
 

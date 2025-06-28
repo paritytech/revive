@@ -16,7 +16,7 @@ impl std::str::FromStr for CcacheVariant {
         match value {
             "ccache" => Ok(Self::Ccache),
             "sccache" => Ok(Self::Sccache),
-            value => Err(format!("Unsupported ccache variant: `{}`", value)),
+            value => Err(format!("Unsupported ccache variant: `{value}`")),
         }
     }
 }

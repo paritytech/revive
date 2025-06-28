@@ -15,7 +15,7 @@ impl std::str::FromStr for TargetTriple {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "polkavm" => Ok(Self::PolkaVM),
-            value => Err(format!("Unsupported target triple: `{}`", value)),
+            value => Err(format!("Unsupported target triple: `{value}`")),
         }
     }
 }

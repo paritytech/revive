@@ -121,10 +121,10 @@ fn optimizer() {
 
     assert!(
         size_when_optimized_for_cycles < size_when_unoptimized,
-        "Expected the cycles-optimized bytecode to be smaller than the unoptimized. Optimized: {}B, Unoptimized: {}B", size_when_optimized_for_cycles, size_when_unoptimized,
+        "Expected the cycles-optimized bytecode to be smaller than the unoptimized. Optimized: {size_when_optimized_for_cycles}B, Unoptimized: {size_when_unoptimized}B",
     );
     assert!(
         size_when_optimized_for_size < size_when_unoptimized,
-        "Expected the size-optimized bytecode to be smaller than the unoptimized. Optimized: {}B, Unoptimized: {}B", size_when_optimized_for_size, size_when_unoptimized,
+        "Expected the size-optimized bytecode to be smaller than the unoptimized. Optimized: {size_when_optimized_for_size}B, Unoptimized: {size_when_unoptimized}B",
     );
 }

@@ -127,23 +127,22 @@ pub fn build(
     sanitizer: Option<sanitizer::Sanitizer>,
     enable_valgrind: bool,
 ) -> anyhow::Result<()> {
-    log::trace!("build type: {:?}", build_type);
-    log::trace!("target env: {:?}", target_env);
-    log::trace!("targets: {:?}", targets);
-    log::trace!("llvm projects: {:?}", llvm_projects);
-    log::trace!("enable rtti: {:?}", enable_rtti);
-    log::trace!("default target: {:?}", default_target);
-    log::trace!("eneable tests: {:?}", enable_tests);
-    log::trace!("enable_coverage: {:?}", enable_coverage);
-    log::trace!("extra args: {:?}", extra_args);
-    log::trace!("sanitzer: {:?}", sanitizer);
-    log::trace!("enable valgrind: {:?}", enable_valgrind);
+    log::trace!("build type: {build_type:?}");
+    log::trace!("target env: {target_env:?}");
+    log::trace!("targets: {targets:?}");
+    log::trace!("llvm projects: {llvm_projects:?}");
+    log::trace!("enable rtti: {enable_rtti:?}");
+    log::trace!("default target: {default_target:?}");
+    log::trace!("eneable tests: {enable_tests:?}");
+    log::trace!("enable_coverage: {enable_coverage:?}");
+    log::trace!("extra args: {extra_args:?}");
+    log::trace!("sanitzer: {sanitizer:?}");
+    log::trace!("enable valgrind: {enable_valgrind:?}");
 
     if !PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE).exists() {
         log::error!(
-            "LLVM project source directory {} does not exist (run `revive-llvm --target-env {} clone`)",
-            LLVMPath::DIRECTORY_LLVM_SOURCE,
-            target_env
+            "LLVM project source directory {} does not exist (run `revive-llvm --target-env {target_env} clone`)",
+            LLVMPath::DIRECTORY_LLVM_SOURCE
         )
     }
 

@@ -17,12 +17,11 @@ fn main() {
             "stdlib.ll",
         ])
         .output()
-        .unwrap_or_else(|error| panic!("failed to execute llvm-as: {}", error));
+        .unwrap_or_else(|error| panic!("failed to execute llvm-as: {error}"));
 
     assert!(
         output.status.success(),
-        "failed to assemble the stdlib: {:?}",
-        output
+        "failed to assemble the stdlib: {output:?}"
     );
 
     let bitcode = fs::read(bitcode_path).expect("bitcode should have been built");

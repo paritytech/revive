@@ -30,7 +30,7 @@ impl TryFrom<&PathBuf> for Lock {
     fn try_from(path: &PathBuf) -> Result<Self, Self::Error> {
         let mut config_str = String::new();
         let mut config_file =
-            File::open(path).with_context(|| format!("Error opening {:?} file", path))?;
+            File::open(path).with_context(|| format!("Error opening {path:?} file"))?;
         config_file.read_to_string(&mut config_str)?;
         Ok(toml::from_str(&config_str)?)
     }

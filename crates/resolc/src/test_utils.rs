@@ -361,7 +361,7 @@ fn compile_evm(
     .expect("source should compile");
     let object = &contracts
         .get(contract_name)
-        .unwrap_or_else(|| panic!("contract '{}' didn't produce bin-runtime", contract_name));
+        .unwrap_or_else(|| panic!("contract '{contract_name}' didn't produce bin-runtime"));
     let code = if runtime {
         object.1.object.as_str()
     } else {

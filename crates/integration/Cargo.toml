@@ -1,6 +1,6 @@
 [package]
 name = "revive-integration"
-version.workspace = true
+version = "0.1.1"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

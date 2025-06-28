@@ -69,8 +69,8 @@ fn main_inner() -> anyhow::Result<()> {
                 })
                 .collect();
 
-            log::debug!("extra_args: {:#?}", extra_args);
-            log::debug!("extra_args_unescaped: {:#?}", extra_args_unescaped);
+            log::debug!("extra_args: {extra_args:#?}");
+            log::debug!("extra_args_unescaped: {extra_args_unescaped:#?}");
 
             if let Some(ccache_variant) = ccache_variant {
                 revive_llvm_builder::utils::check_presence(ccache_variant.to_string().as_str())?;

@@ -29,7 +29,7 @@ impl FromStr for Platform {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "PolkaVM" => Ok(Self::PolkaVM),
-            value => Err(format!("Unsupported platform: `{}`", value)),
+            value => Err(format!("Unsupported platform: `{value}`")),
         }
     }
 }

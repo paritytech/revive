@@ -22,7 +22,7 @@ impl std::str::FromStr for BuildType {
             "Release" => Ok(Self::Release),
             "RelWithDebInfo" => Ok(Self::RelWithDebInfo),
             "MinSizeRel" => Ok(Self::MinSizeRel),
-            value => Err(format!("Unsupported build type: `{}`", value)),
+            value => Err(format!("Unsupported build type: `{value}`")),
         }
     }
 }

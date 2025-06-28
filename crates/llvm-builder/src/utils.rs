@@ -92,7 +92,7 @@ pub fn unpack_tar(filename: PathBuf, path: &str) -> anyhow::Result<()> {
 pub fn download_musl(name: &str) -> anyhow::Result<()> {
     log::info!("downloading musl {name}");
     let tar_file_name = format!("{name}.tar.gz");
-    let url = format!("{}/{tar_file_name}", MUSL_SNAPSHOTS_URL);
+    let url = format!("{MUSL_SNAPSHOTS_URL}/{tar_file_name}");
     let target_path = crate::llvm_path::DIRECTORY_LLVM_TARGET
         .get()
         .unwrap()
@@ -223,6 +223,6 @@ pub fn install_emsdk() -> anyhow::Result<()> {
 /// The LLVM target directory default path.
 pub fn directory_target_llvm(target_env: crate::target_env::TargetEnv) -> PathBuf {
     crate::llvm_path::DIRECTORY_LLVM_TARGET
-        .get_or_init(|| PathBuf::from(format!("./target-llvm/{}/", target_env)))
+        .get_or_init(|| PathBuf::from(format!("./target-llvm/{target_env}/")))
         .clone()
 }

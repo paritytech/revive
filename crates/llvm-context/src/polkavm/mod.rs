@@ -37,7 +37,7 @@ pub fn build_assembly_text(
     let mut disassembled_code = Vec::new();
     disassembler
         .disassemble_into(&mut disassembled_code)
-        .with_context(|| format!("Failed to disassemble contract: {}", contract_path))?;
+        .with_context(|| format!("Failed to disassemble contract: {contract_path}"))?;
 
     let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
         format!("Failed to convert disassembled code to string for contract: {contract_path}")

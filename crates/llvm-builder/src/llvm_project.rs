@@ -22,7 +22,7 @@ impl std::str::FromStr for LLVMProject {
             "lld" => Ok(Self::LLD),
             "lldb" => Ok(Self::LLDB),
             "mlir" => Ok(Self::MLIR),
-            value => Err(format!("Unsupported LLVM project to enable: `{}`", value)),
+            value => Err(format!("Unsupported LLVM project to enable: `{value}`")),
         }
     }
 }

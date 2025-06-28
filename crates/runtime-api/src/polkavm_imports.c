@@ -32,7 +32,8 @@ void * memmove(void *dst, const void *src, size_t n) {
 
 void * memset(void *b, int c, size_t len) {
     uint8_t *dest = b;
-    while (len-- > 0) *dest++ = c;
+    uint8_t val = (uint8_t)c;
+    while (len-- > 0) *dest++ = val;
     return b;
 }
 

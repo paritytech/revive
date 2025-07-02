@@ -8,6 +8,7 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
 pub mod heap;
+//pub mod stack;
 pub mod storage;
 
 /// The LLVM pointer.

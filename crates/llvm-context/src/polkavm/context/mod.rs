@@ -503,10 +503,17 @@ where
             }
         };
 
+        let stack_variables = format!("__vars_{name}");
+        self.declare_global(
+            &stack_variables,
+            self.word_type().array_type(0),
+            Default::default(),
+        );
         let function = Function::new(
             name.to_owned(),
             FunctionDeclaration::new(r#type, value),
             r#return,
+            self.get_global(&stack_variables).unwrap().value,
             entry_block,
             return_block,
         );

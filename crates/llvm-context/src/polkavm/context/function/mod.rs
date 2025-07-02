@@ -7,7 +7,7 @@ pub mod r#return;
 pub mod runtime;
 pub mod yul_data;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use inkwell::debug_info::AsDIScope;
 
@@ -29,6 +29,10 @@ pub struct Function<'ctx> {
     declaration: Declaration<'ctx>,
     /// The stack representation.
     stack: HashMap<String, Pointer<'ctx>>,
+    /// The stack variables buffer.
+    stack_variables: inkwell::values::GlobalValue<'ctx>,
+    /// The stack variable names to slot mapping.
+    stack_slots: BTreeMap<String, usize>,
     /// The return value entity.
     r#return: Return<'ctx>,
 
@@ -53,6 +57,7 @@ impl<'ctx> Function<'ctx> {
         name: String,
         declaration: Declaration<'ctx>,
         r#return: Return<'ctx>,
+        stack_variables: inkwell::values::GlobalValue<'ctx>,
 
         entry_block: inkwell::basic_block::BasicBlock<'ctx>,
         return_block: inkwell::basic_block::BasicBlock<'ctx>,
@@ -61,6 +66,8 @@ impl<'ctx> Function<'ctx> {
             name,
             declaration,
             stack: HashMap::with_capacity(Self::STACK_HASHMAP_INITIAL_CAPACITY),
+            stack_variables,
+            stack_slots: BTreeMap::new(),
             r#return,
 
             entry_block,
@@ -278,5 +285,41 @@ impl<'ctx> Function<'ctx> {
         self.yul_data
             .as_mut()
             .expect("The Yul data must have been initialized")
+    }
+
+    /// Returns the stack variables global value.
+    pub fn stack_variables(&self) -> inkwell::values::GlobalValue<'ctx> {
+        self.stack_variables
+    }
+
+    /// Returns the slot for the given variable name.
+    pub fn stack_variable_slot(&mut self, name: String) -> usize {
+        let len = self.stack_slots.len();
+        *self.stack_slots.entry(name).or_insert_with(|| len)
+    }
+
+    pub fn stack_variable_pointer<D: crate::PolkaVMDependency + Clone>(
+        &mut self,
+        name: String,
+        context: &mut super::Context<'ctx, D>,
+    ) -> Pointer<'ctx> {
+        let pointer_name = format!("var_{}", &name);
+        let slot = self.stack_variable_slot(name);
+        Pointer::new(
+            context.word_type(),
+            Default::default(),
+            unsafe {
+                context.builder().build_gep(
+                    context.word_type(),
+                    self.stack_variables().as_pointer_value(),
+                    &[
+                        context.xlen_type().const_zero(),
+                        context.xlen_type().const_int(slot as u64, false),
+                    ],
+                    &pointer_name,
+                )
+            }
+            .unwrap(),
+        )
     }
 }

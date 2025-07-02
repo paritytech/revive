@@ -310,7 +310,7 @@ impl<'ctx> Function<'ctx> {
             Default::default(),
             unsafe {
                 context.builder().build_gep(
-                    context.word_type(),
+                    context.word_type().array_type(0),
                     self.stack_variables().as_pointer_value(),
                     &[
                         context.xlen_type().const_zero(),

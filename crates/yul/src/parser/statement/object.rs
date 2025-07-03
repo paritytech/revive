@@ -204,10 +204,21 @@ where
         revive_llvm_context::PolkaVMEventLogFunction::<3>.declare(context)?;
         revive_llvm_context::PolkaVMEventLogFunction::<4>.declare(context)?;
 
+        revive_llvm_context::PolkaVMAdditionFunction.declare(context)?;
+        revive_llvm_context::PolkaVMSubstractionFunction.declare(context)?;
+        revive_llvm_context::PolkaVMMultiplicationFunction.declare(context)?;
         revive_llvm_context::PolkaVMDivisionFunction.declare(context)?;
         revive_llvm_context::PolkaVMSignedDivisionFunction.declare(context)?;
         revive_llvm_context::PolkaVMRemainderFunction.declare(context)?;
         revive_llvm_context::PolkaVMSignedRemainderFunction.declare(context)?;
+
+        revive_llvm_context::PolkaVMOrFunction.declare(context)?;
+        revive_llvm_context::PolkaVMXorFunction.declare(context)?;
+        revive_llvm_context::PolkaVMAndFunction.declare(context)?;
+        revive_llvm_context::PolkaVMShlFunction.declare(context)?;
+        revive_llvm_context::PolkaVMShrFunction.declare(context)?;
+        revive_llvm_context::PolkaVMSarFunction.declare(context)?;
+        revive_llvm_context::PolkaVMByteFunction.declare(context)?;
 
         revive_llvm_context::PolkaVMSbrkFunction.declare(context)?;
 
@@ -258,10 +269,21 @@ where
         revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
         revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
 
+        revive_llvm_context::PolkaVMAdditionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSubstractionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMMultiplicationFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMOrFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMXorFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMAndFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMShlFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMShrFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSarFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMByteFunction.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
 

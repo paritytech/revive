@@ -7,6 +7,141 @@ use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
+/// Implements the ADD operator according to the EVM specification.
+pub struct Addition;
+
+impl<D> RuntimeFunction<D> for Addition
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_addition";
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(
+            &[context.word_type().into(), context.word_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let operand_1 = Self::paramater(context, 0).into_int_value();
+        let operand_2 = Self::paramater(context, 1).into_int_value();
+
+        Ok(Some(
+            context
+                .builder()
+                .build_int_add(operand_1, operand_2, "ADD")
+                .map(Into::into)?,
+        ))
+    }
+}
+
+impl<D> WriteLLVM<D> for Addition
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
+/// Implements the SUB operator according to the EVM specification.
+pub struct Subtraction;
+
+impl<D> RuntimeFunction<D> for Subtraction
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_subtraction";
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(
+            &[context.word_type().into(), context.word_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let operand_1 = Self::paramater(context, 0).into_int_value();
+        let operand_2 = Self::paramater(context, 1).into_int_value();
+
+        Ok(Some(
+            context
+                .builder()
+                .build_int_sub(operand_1, operand_2, "SUB")
+                .map(Into::into)?,
+        ))
+    }
+}
+
+impl<D> WriteLLVM<D> for Subtraction
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
+/// Implements the MUL operator according to the EVM specification.
+pub struct Multiplication;
+
+impl<D> RuntimeFunction<D> for Multiplication
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_multiplication";
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(
+            &[context.word_type().into(), context.word_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let operand_1 = Self::paramater(context, 0).into_int_value();
+        let operand_2 = Self::paramater(context, 1).into_int_value();
+
+        Ok(Some(
+            context
+                .builder()
+                .build_int_mul(operand_1, operand_2, "MUL")
+                .map(Into::into)?,
+        ))
+    }
+}
+
+impl<D> WriteLLVM<D> for Multiplication
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
 /// Implements the division operator according to the EVM specification.
 pub struct Division;
 

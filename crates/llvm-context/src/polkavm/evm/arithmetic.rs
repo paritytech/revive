@@ -1,14 +1,15 @@
 //! Translates the arithmetic operations.
 
-use inkwell::values::BasicValue;
-
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::PolkaVMAdditionFunction;
 use crate::PolkaVMDivisionFunction;
+use crate::PolkaVMMultiplicationFunction;
 use crate::PolkaVMRemainderFunction;
 use crate::PolkaVMSignedDivisionFunction;
 use crate::PolkaVMSignedRemainderFunction;
+use crate::PolkaVMSubstractionFunction;
 
 /// Translates the arithmetic addition.
 pub fn addition<'ctx, D>(
@@ -19,10 +20,11 @@ pub fn addition<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let name = <PolkaVMAdditionFunction as RuntimeFunction<D>>::NAME;
+    let declaration = <PolkaVMAdditionFunction as RuntimeFunction<D>>::declaration(context);
     Ok(context
-        .builder()
-        .build_int_add(operand_1, operand_2, "addition_result")?
-        .as_basic_value_enum())
+        .build_call(declaration, &[operand_1.into(), operand_2.into()], "SUB")
+        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value")))
 }
 
 /// Translates the arithmetic subtraction.
@@ -34,10 +36,11 @@ pub fn subtraction<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let name = <PolkaVMSubstractionFunction as RuntimeFunction<D>>::NAME;
+    let declaration = <PolkaVMSubstractionFunction as RuntimeFunction<D>>::declaration(context);
     Ok(context
-        .builder()
-        .build_int_sub(operand_1, operand_2, "subtraction_result")?
-        .as_basic_value_enum())
+        .build_call(declaration, &[operand_1.into(), operand_2.into()], "SUB")
+        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value")))
 }
 
 /// Translates the arithmetic multiplication.
@@ -49,10 +52,11 @@ pub fn multiplication<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let name = <PolkaVMMultiplicationFunction as RuntimeFunction<D>>::NAME;
+    let declaration = <PolkaVMMultiplicationFunction as RuntimeFunction<D>>::declaration(context);
     Ok(context
-        .builder()
-        .build_int_mul(operand_1, operand_2, "multiplication_result")?
-        .as_basic_value_enum())
+        .build_call(declaration, &[operand_1.into(), operand_2.into()], "MUL")
+        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value")))
 }
 
 /// Translates the arithmetic division.

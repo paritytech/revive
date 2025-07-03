@@ -293,14 +293,55 @@ jobs:
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
-  generate_nightly_json:
+  create-macos-fat-binary:
+    # if: startsWith(github.ref_name , 'main')
+    needs: [build]
+    outputs:
+      resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
+      resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create macOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Make Executable
+        run: |
+          chmod +x resolc-universal-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          # retention-days: 40
+          retention-days: 1
+
+      - name: Set output variables
+        id: set-output
+        env:
+          TARGET: resolc-universal-apple-darwin
+        run: |
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
+
+  generate-nightly-json:
     runs-on: ubuntu-24.04
-    if: startsWith(github.ref_name , 'main')
-    needs: [build-wasm, build]
+    # if: startsWith(github.ref_name , 'main')
+    needs: [build-wasm, build, create-macos-fat-binary]
     steps:
       - run: |
           echo '${{ toJSON(needs.build.outputs) }}'
           echo '${{ toJSON(needs.build-wasm.outputs) }}'
+          echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}'
 
   create-release:
     if: startsWith(github.ref_name, 'v')

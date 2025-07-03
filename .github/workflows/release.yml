@@ -169,8 +169,8 @@ jobs:
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          export url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          export sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"
           echo "${{ matrix.target }}_url=${url}"
           echo "${{ matrix.target }}_url=${url}" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.target }}_sha=${sha}"

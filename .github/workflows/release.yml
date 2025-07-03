@@ -167,7 +167,7 @@ jobs:
         # if: startsWith(github.ref_name , 'main')
         id: set-output
         run: |
-          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}""
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
           export url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
           export sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"
@@ -288,7 +288,7 @@ jobs:
         env:
           TARGET: resolc-wasm32-unknown-emscripten
         run: |
-          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}""
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
           export url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
           export sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"

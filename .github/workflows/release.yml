@@ -68,14 +68,14 @@ jobs:
     # github actions matrix jobs don't support multiple outputs
     # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
     outputs:
-      x86_64_unknown_linux_musl_url: ${{ steps.set-output.outputs.x86_64_unknown_linux_musl_url }}
-      x86_64_unknown_linux_musl_sha: ${{ steps.set-output.outputs.x86_64_unknown_linux_musl_sha }}
-      aarch64_apple_darwin_url: ${{ steps.set-output.outputs.aarch64_apple_darwin_url }}
-      aarch64_apple_darwin_sha: ${{ steps.set-output.outputs.aarch64_apple_darwin_sha }}
-      x86_64_apple_darwin_url: ${{ steps.set-output.outputs.x86_64_apple_darwin_url }}
-      x86_64_apple_darwin_sha: ${{ steps.set-output.outputs.x86_64_apple_darwin_sha }}
-      x86_64_pc_windows_msvc_url: ${{ steps.set-output.outputs.x86_64_pc_windows_msvc_url }}
-      x86_64_pc_windows_msvc_sha: ${{ steps.set-output.outputs.x86_64_pc_windows_msvc_sha }}
+      x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.x86_64-unknown-linux-musl_url }}
+      x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.x86_64-unknown-linux-musl_sha }}
+      aarch64-apple-darwin_url: ${{ steps.set-output.outputs.aarch64-apple-darwin_url }}
+      aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.aarch64-apple-darwin_sha }}
+      x86_64-apple-darwin_url: ${{ steps.set-output.outputs.x86_64-apple-darwin_url }}
+      x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.x86_64-apple-darwin_sha }}
+      x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.x86_64-pc-windows-msvc_url }}
+      x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.x86_64-pc-windows-msvc_sha }}
     strategy:
       matrix:
         target:

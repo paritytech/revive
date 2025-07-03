@@ -72,6 +72,7 @@ impl Literal {
     /// Converts the literal into its LLVM.
     pub fn into_llvm<'ctx, D>(
         self,
+        binding: Option<(String, revive_llvm_context::PolkaVMPointer<'ctx>)>,
         context: &revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<revive_llvm_context::PolkaVMArgument<'ctx>>
     where
@@ -97,7 +98,17 @@ impl Literal {
                     BooleanLiteral::True => num::BigUint::one(),
                 };
 
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
+                match binding {
+                    Some((id, pointer)) => {
+                        context.build_store(pointer, value)?;
+                        Ok(revive_llvm_context::PolkaVMArgument::pointer(pointer, id)
+                            .with_constant(constant))
+                    }
+                    None => {
+                        Ok(revive_llvm_context::PolkaVMArgument::value(value)
+                            .with_constant(constant))
+                    }
+                }
             }
             LexicalLiteral::Integer(inner) => {
                 let r#type = self.yul_type.unwrap_or_default().into_llvm(context);
@@ -125,7 +136,17 @@ impl Literal {
                 }
                 .expect("Always valid");
 
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
+                match binding {
+                    Some((id, pointer)) => {
+                        context.build_store(pointer, value)?;
+                        Ok(revive_llvm_context::PolkaVMArgument::pointer(pointer, id)
+                            .with_constant(constant))
+                    }
+                    None => {
+                        Ok(revive_llvm_context::PolkaVMArgument::value(value)
+                            .with_constant(constant))
+                    }
+                }
             }
             LexicalLiteral::String(inner) => {
                 let string = inner.inner;
@@ -216,7 +237,16 @@ impl Literal {
                     )
                     .expect("The value is valid")
                     .as_basic_value_enum();
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_original(string))
+                match binding {
+                    Some((id, pointer)) => {
+                        context.build_store(pointer, value)?;
+                        Ok(revive_llvm_context::PolkaVMArgument::pointer(pointer, id)
+                            .with_original(string))
+                    }
+                    None => Ok(
+                        revive_llvm_context::PolkaVMArgument::value(value).with_original(string)
+                    ),
+                }
             }
         }
     }

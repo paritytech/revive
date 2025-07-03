@@ -99,16 +99,25 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<()> {
-        let _pointers: Vec<revive_llvm_context::PolkaVMPointer<'ctx>> = self
+        let bindings: Vec<(String, revive_llvm_context::PolkaVMPointer<'ctx>)> = self
             .bindings
-            .iter()
+            .into_iter()
             .map(|binding| {
-                context
-                    .current_function()
-                    .borrow_mut()
-                    .stack_variable_pointer(binding.inner.to_string(), context)
+                (
+                    binding.inner.clone(),
+                    context
+                        .current_function()
+                        .borrow_mut()
+                        .stack_variable_pointer(binding.inner, context),
+                )
             })
             .collect();
+
+        if let Some(expression) = self.expression {
+            expression.into_llvm(&bindings, context)?;
+        }
+
+        /*
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
             context.set_debug_location(self.location.line, 0, None)?;
@@ -223,6 +232,7 @@ where
                 })?;
             context.build_store(pointer, value)?;
         }
+        */
 
         Ok(())
     }

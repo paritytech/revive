@@ -100,7 +100,7 @@ impl Expression {
     /// Converts the expression into an LLVM value.
     pub fn into_llvm<'ctx, D>(
         self,
-        //bindings: &[String],
+        bindings: &[(String, revive_llvm_context::PolkaVMPointer<'ctx>)],
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>>
     where
@@ -109,7 +109,13 @@ impl Expression {
         match self {
             Self::Literal(literal) => literal
                 .clone()
-                .into_llvm(context)
+                .into_llvm(
+                    bindings
+                        .first()
+                        .to_owned()
+                        .map(|(id, binding)| (id.to_string(), *binding)),
+                    context,
+                )
                 .map_err(|error| {
                     anyhow::anyhow!(
                         "{} Invalid literal `{}`: {}",
@@ -139,9 +145,10 @@ impl Expression {
                     _ => argument,
                 }))
             }
-            Self::FunctionCall(call) => Ok(call
-                .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::value)),
+            Self::FunctionCall(call) => {
+                call.into_llvm(bindings, context)?;
+                Ok(None)
+            }
         }
     }
 }

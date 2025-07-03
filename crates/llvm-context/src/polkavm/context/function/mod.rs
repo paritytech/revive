@@ -298,11 +298,16 @@ impl<'ctx> Function<'ctx> {
         *self.stack_slots.entry(name).or_insert_with(|| len)
     }
 
+    /// References the stack variable `name`.
     pub fn stack_variable_pointer<D: crate::PolkaVMDependency + Clone>(
         &mut self,
         name: String,
         context: &mut super::Context<'ctx, D>,
     ) -> Pointer<'ctx> {
+        if let Some(pointer) = self.get_stack_pointer(&name) {
+            return pointer;
+        }
+
         let pointer_name = format!("var_{}", &name);
         let slot = self.stack_variable_slot(name);
         Pointer::new(

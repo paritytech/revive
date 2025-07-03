@@ -231,8 +231,80 @@ where
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
         context.set_current_function(self.identifier.as_str(), Some(self.location.line))?;
+
         context.set_basic_block(context.current_function().borrow().entry_block());
 
+        let return_types: Vec<_> = self
+            .arguments
+            .iter()
+            .map(|argument| {
+                let yul_type = argument.r#type.to_owned().unwrap_or_default();
+                yul_type.into_llvm(context)
+            })
+            .collect();
+        for (index, argument) in self.result.iter().enumerate() {
+            let pointer = context
+                .current_function()
+                .borrow()
+                .get_nth_param(index)
+                .into_pointer_value();
+            let pointer = revive_llvm_context::PolkaVMPointer::new(
+                return_types[index],
+                Default::default(),
+                pointer,
+            );
+            context.build_store(pointer, pointer.r#type.const_zero())?;
+            context
+                .current_function()
+                .borrow_mut()
+                .insert_stack_pointer(argument.inner.clone(), pointer);
+        }
+
+        let argument_types: Vec<_> = self
+            .arguments
+            .iter()
+            .map(|argument| {
+                let yul_type = argument.r#type.to_owned().unwrap_or_default();
+                yul_type.into_llvm(context)
+            })
+            .collect();
+        for (index, argument) in self.arguments.iter().enumerate() {
+            let pointer = context
+                .current_function()
+                .borrow()
+                .get_nth_param(index + self.result.len())
+                .into_pointer_value();
+            let pointer = revive_llvm_context::PolkaVMPointer::new(
+                argument_types[index],
+                Default::default(),
+                pointer,
+            );
+            context
+                .current_function()
+                .borrow_mut()
+                .insert_stack_pointer(argument.inner.clone(), pointer);
+        }
+
+        self.body.into_llvm(context)?;
+        context.set_debug_location(self.location.line, 0, None)?;
+
+        match context
+            .basic_block()
+            .get_last_instruction()
+            .map(|instruction| instruction.get_opcode())
+        {
+            Some(inkwell::values::InstructionOpcode::Br) => {}
+            Some(inkwell::values::InstructionOpcode::Switch) => {}
+            _ => context
+                .build_unconditional_branch(context.current_function().borrow().return_block()),
+        }
+
+        context.set_basic_block(context.current_function().borrow().return_block());
+        context.build_return(None);
+
+        context.pop_debug_scope();
+
+        /*
         let r#return = context.current_function().borrow().r#return();
         match r#return {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
@@ -319,6 +391,7 @@ where
         }
 
         context.pop_debug_scope();
+        */
 
         Ok(())
     }

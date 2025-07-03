@@ -117,8 +117,9 @@ impl FunctionCall {
     /// Converts the function call into an LLVM value.
     pub fn into_llvm<'ctx, D>(
         mut self,
+        bindings: &[(String, revive_llvm_context::PolkaVMPointer<'ctx>)],
         context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
+    ) -> anyhow::Result<()>
     where
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
@@ -126,15 +127,26 @@ impl FunctionCall {
 
         match self.name {
             Name::UserDefined(name) => {
-                let mut values = Vec::with_capacity(self.arguments.len());
-                for argument in self.arguments.into_iter().rev() {
+                let mut values = Vec::with_capacity(bindings.len() + self.arguments.len());
+                for (n, argument) in self.arguments.into_iter().rev().enumerate() {
+                    let id = format!("arg_{n}");
+                    let binding_pointer = context.build_alloca(context.word_type(), &id);
                     let value = argument
-                        .into_llvm(context)?
+                        .into_llvm(&[(id, binding_pointer)], context)?
                         .expect("Always exists")
-                        .access(context)?;
+                        .as_pointer(context)?
+                        .value
+                        .as_basic_value_enum();
                     values.push(value);
                 }
                 values.reverse();
+
+                let values = bindings
+                    .into_iter()
+                    .map(|(_, pointer)| pointer.value.as_basic_value_enum())
+                    .chain(values.into_iter())
+                    .collect::<Vec<_>>();
+
                 let function = context.get_function(name.as_str()).ok_or_else(|| {
                     anyhow::anyhow!("{} Undeclared function `{}`", location, name)
                 })?;
@@ -151,13 +163,13 @@ impl FunctionCall {
                     );
                 }
 
-                let return_value = context.build_call(
+                let _return_value = context.build_call(
                     function.borrow().declaration(),
                     values.as_slice(),
                     format!("{name}_call").as_str(),
                 );
 
-                Ok(return_value)
+                Ok(())
             }
 
             Name::Add => {

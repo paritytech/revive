@@ -115,13 +115,29 @@ impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Assignment
 where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
-    fn into_llvm(
+    fn into_llvm<'ctx>(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
     ) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, 0, None)?;
 
-        let value = match self.initializer.into_llvm(context)? {
+        let bindings: Vec<(String, revive_llvm_context::PolkaVMPointer<'ctx>)> = self
+            .bindings
+            .into_iter()
+            .map(|binding| {
+                (
+                    binding.inner.clone(),
+                    context
+                        .current_function()
+                        .borrow_mut()
+                        .stack_variable_pointer(binding.inner, context),
+                )
+            })
+            .collect();
+
+        self.initializer.into_llvm(bindings.as_slice(), context)?;
+        /*
+        let value = match self.initializer.into_llvm(bindings.as_slice(), context)? {
             Some(value) => value,
             None => return Ok(()),
         };
@@ -180,6 +196,8 @@ where
             )?;
             context.build_store(binding_pointer, value)?;
         }
+
+        */
 
         Ok(())
     }

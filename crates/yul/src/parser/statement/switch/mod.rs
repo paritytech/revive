@@ -123,7 +123,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
-        let scrutinee = self.expression.into_llvm(context)?;
+        let scrutinee = self.expression.into_llvm(&[], context)?;
 
         if self.cases.is_empty() {
             if let Some(block) = self.default {
@@ -137,7 +137,7 @@ where
 
         let mut branches = Vec::with_capacity(self.cases.len());
         for (index, case) in self.cases.into_iter().enumerate() {
-            let constant = case.literal.into_llvm(context)?.access(context)?;
+            let constant = case.literal.into_llvm(None, context)?.access(context)?;
 
             let expression_block = context
                 .append_basic_block(format!("switch_case_branch_{}_block", index + 1).as_str());

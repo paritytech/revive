@@ -74,9 +74,10 @@ where
 
         context.build_unconditional_branch(condition_block);
         context.set_basic_block(condition_block);
+        let binding_pointer = context.build_alloca(context.word_type(), "if_condition");
         let condition = self
             .condition
-            .into_llvm(context)?
+            .into_llvm(&[("todo".to_string(), binding_pointer)], context)?
             .expect("Always exists")
             .access(context)?
             .into_int_value();

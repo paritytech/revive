@@ -1278,6 +1278,20 @@ where
     where
         T: BasicType<'ctx>,
     {
+        let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            vec![self.llvm().ptr_type(Default::default()).into(); return_values_size]
+                .into_iter()
+                .chain(
+                    argument_types
+                        .as_slice()
+                        .iter()
+                        .map(T::as_basic_type_enum)
+                        .map(inkwell::types::BasicMetadataTypeEnum::from),
+                )
+                .collect();
+        self.void_type().fn_type(&argument_types.as_slice(), false)
+
+        /*
         let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
             .as_slice()
             .iter()
@@ -1294,6 +1308,7 @@ where
                 .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
         }
+        */
     }
 
     /// Modifies the call site value, setting the default attributes.

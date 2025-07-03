@@ -169,12 +169,10 @@ jobs:
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "${{ matrix.target }}_url=${url}"
-          echo "${{ matrix.target }}_url=${url}" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.target }}_sha=${sha}"
-          echo "${{ matrix.target }}_sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
 
   build-wasm:
     runs-on: ubuntu-24.04
@@ -290,12 +288,10 @@ jobs:
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          export url="${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          export sha="${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "${TARGET}_url=${url}"
-          echo "${TARGET}_url=${url}" >> "$GITHUB_OUTPUT"
-          echo "${TARGET}_sha=${sha}"
-          echo "${TARGET}_sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
   generate_nightly_json:
     runs-on: ubuntu-24.04

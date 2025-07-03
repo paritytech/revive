@@ -166,6 +166,7 @@ jobs:
       - name: Set output variables
         # if: startsWith(github.ref_name , 'main')
         id: set-output
+        shell: bash
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"

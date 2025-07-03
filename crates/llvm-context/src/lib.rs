@@ -19,6 +19,7 @@ pub use self::polkavm::context::function::declaration::Declaration as PolkaVMFun
 pub use self::polkavm::context::function::intrinsics::Intrinsics as PolkaVMIntrinsicFunction;
 pub use self::polkavm::context::function::llvm_runtime::LLVMRuntime as PolkaVMLLVMRuntime;
 pub use self::polkavm::context::function::r#return::Return as PolkaVMFunctionReturn;
+pub use self::polkavm::context::function::runtime::arithmetics::Addition as PolkaVMAdditionFunction;
 pub use self::polkavm::context::function::runtime::arithmetics::Division as PolkaVMDivisionFunction;
 pub use self::polkavm::context::function::runtime::arithmetics::Remainder as PolkaVMRemainderFunction;
 pub use self::polkavm::context::function::runtime::arithmetics::SignedDivision as PolkaVMSignedDivisionFunction;

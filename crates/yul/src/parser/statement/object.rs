@@ -204,6 +204,7 @@ where
         revive_llvm_context::PolkaVMEventLogFunction::<3>.declare(context)?;
         revive_llvm_context::PolkaVMEventLogFunction::<4>.declare(context)?;
 
+        revive_llvm_context::PolkaVMAdditionFunction.declare(context)?;
         revive_llvm_context::PolkaVMDivisionFunction.declare(context)?;
         revive_llvm_context::PolkaVMSignedDivisionFunction.declare(context)?;
         revive_llvm_context::PolkaVMRemainderFunction.declare(context)?;
@@ -258,6 +259,7 @@ where
         revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
         revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
 
+        revive_llvm_context::PolkaVMAdditionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;

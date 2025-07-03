@@ -8,6 +8,65 @@ use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Implements the division operator according to the EVM specification.
+pub struct Addition;
+
+impl<D> RuntimeFunction<D> for Addition
+where
+    D: Dependency + Clone,
+{
+    const NAME: &'static str = "__revive_addition";
+
+    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(
+            &[
+                context.llvm().ptr_type(Default::default()).into(),
+                context.llvm().ptr_type(Default::default()).into(),
+                context.llvm().ptr_type(Default::default()).into(),
+            ],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx, D>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let result_pointer = Self::paramater(context, 0).into_pointer_value();
+        let operand_1 = Self::paramater(context, 1).into_pointer_value();
+        let operand_2 = Self::paramater(context, 2).into_pointer_value();
+
+        let operand_1 = context
+            .builder()
+            .build_load(context.word_type(), operand_1, "operand_1")?
+            .into_int_value();
+        let operand_2 = context
+            .builder()
+            .build_load(context.word_type(), operand_2, "operand_2")?
+            .into_int_value();
+        let result = context
+            .builder()
+            .build_int_add(operand_1, operand_2, "addition_result")?;
+
+        context.builder().build_store(result_pointer, result)?;
+
+        Ok(None)
+    }
+}
+
+impl<D> WriteLLVM<D> for Addition
+where
+    D: Dependency + Clone,
+{
+    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+        <Self as RuntimeFunction<_>>::emit(&self, context)
+    }
+}
+
+/// Implements the division operator according to the EVM specification.
 pub struct Division;
 
 impl<D> RuntimeFunction<D> for Division

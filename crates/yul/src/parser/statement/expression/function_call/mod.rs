@@ -176,10 +176,11 @@ impl FunctionCall {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::addition(
                     context,
-                    arguments[0].into_int_value(),
-                    arguments[1].into_int_value(),
-                )
-                .map(Some)
+                    bindings,
+                    arguments[0].into_pointer_value(),
+                    arguments[1].into_pointer_value(),
+                )?;
+                Ok(())
             }
             Name::Sub => {
                 let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
@@ -998,10 +999,12 @@ impl FunctionCall {
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let mut arguments = Vec::with_capacity(N);
-        for expression in self.arguments.drain(0..N).rev() {
+        for (index, expression) in self.arguments.drain(0..N).rev().enumerate() {
+            let name = format!("arg_{index}");
+            let pointer = context.build_alloca(context.word_type(), &name);
             arguments.push(
                 expression
-                    .into_llvm(context)?
+                    .into_llvm(&[(name, pointer)], context)?
                     .expect("Always exists")
                     .access(context)?,
             );
@@ -1020,8 +1023,14 @@ impl FunctionCall {
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let mut arguments = Vec::with_capacity(N);
-        for expression in self.arguments.drain(0..N).rev() {
-            arguments.push(expression.into_llvm(context)?.expect("Always exists"));
+        for (index, expression) in self.arguments.drain(0..N).rev().enumerate() {
+            let name = format!("arg_{index}");
+            let pointer = context.build_alloca(context.word_type(), &name);
+            arguments.push(
+                expression
+                    .into_llvm(&[(name, pointer)], context)?
+                    .expect("Always exists"),
+            );
         }
         arguments.reverse();
 

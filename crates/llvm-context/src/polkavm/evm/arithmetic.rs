@@ -5,6 +5,7 @@ use inkwell::values::BasicValue;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
+use crate::PolkaVMAdditionFunction;
 use crate::PolkaVMDivisionFunction;
 use crate::PolkaVMRemainderFunction;
 use crate::PolkaVMSignedDivisionFunction;
@@ -13,16 +14,20 @@ use crate::PolkaVMSignedRemainderFunction;
 /// Translates the arithmetic addition.
 pub fn addition<'ctx, D>(
     context: &mut Context<'ctx, D>,
-    operand_1: inkwell::values::IntValue<'ctx>,
-    operand_2: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
+    binding: inkwell::values::PointerValue<'ctx>,
+    operand_1: inkwell::values::PointerValue<'ctx>,
+    operand_2: inkwell::values::PointerValue<'ctx>,
+) -> anyhow::Result<()>
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .builder()
-        .build_int_add(operand_1, operand_2, "addition_result")?
-        .as_basic_value_enum())
+    let declaration = <PolkaVMAdditionFunction as RuntimeFunction<D>>::declaration(context);
+    context.build_call(
+        declaration,
+        &[binding.into(), operand_1.into(), operand_2.into()],
+        "add",
+    );
+    Ok(())
 }
 
 /// Translates the arithmetic subtraction.

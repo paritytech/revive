@@ -6,6 +6,18 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+## v0.4.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2503.0.1`
+
+### Added
+- Line debug information per YUL builtin and for `if` statements.
+
+### Fixed
+- The debug info source file matches the YUL path in `--debug-output-dir`, allowing tools to display the source line. 
+
 ## v0.3.0
 
 This is a development pre-release.

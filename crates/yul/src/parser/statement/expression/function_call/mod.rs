@@ -123,6 +123,7 @@ impl FunctionCall {
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         let location = self.location;
+        context.set_debug_location(location.line, 0, None)?;
 
         match self.name {
             Name::UserDefined(name) => {

@@ -247,7 +247,7 @@ where
         let intrinsics = Intrinsics::new(llvm, &module);
         let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
         let debug_info = debug_config.emit_debug_info.then(|| {
-            let debug_info = DebugInfo::new(&module);
+            let debug_info = DebugInfo::new(&module, &debug_config);
             debug_info.initialize_module(llvm, &module);
             debug_info
         });

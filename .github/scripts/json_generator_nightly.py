@@ -25,6 +25,9 @@ def validate_env_variables():
     if "TAG" not in os.environ:
         print("Error: TAG environment variable is not set.")
         sys.exit(1)
+    if "FILEPATH" not in os.environ:
+        print("Error: FILEPATH environment variable is not set.")
+        sys.exit(1)
 
 
 def fetch_data_file():
@@ -34,7 +37,7 @@ def fetch_data_file():
     """
     # read data.json file
     artifacts_data = {}
-    data_file_path = os.path.join('data.json')
+    data_file_path = os.environ["FILEPATH"]
     if not os.path.exists(data_file_path):
         print("Error: data.json file not found.")
         sys.exit(1)

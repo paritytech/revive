@@ -389,10 +389,10 @@ jobs:
           echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}' >> data.json
           echo ']' >> data.json
           chmod +x bins/resolc-x86_64-unknown-linux-musl
-          FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
-          LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
-          FILEPATH=$(readlink -f data.json)
-          TAG=$(cd revive;gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
+          export FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
+          export LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
+          export FILEPATH=$(readlink -f data.json)
+          export TAG=$(cd revive;gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
           cd resolc-bin
           mkdir -p nightly
           cd nightly

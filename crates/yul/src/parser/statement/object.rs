@@ -220,6 +220,7 @@ where
         revive_llvm_context::PolkaVMSarFunction.declare(context)?;
         revive_llvm_context::PolkaVMByteFunction.declare(context)?;
 
+        revive_llvm_context::PolkaVMCall.declare(context)?;
         revive_llvm_context::PolkaVMCallReentrancyProtector.declare(context)?;
 
         revive_llvm_context::PolkaVMSbrkFunction.declare(context)?;
@@ -287,6 +288,7 @@ where
         revive_llvm_context::PolkaVMSarFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMByteFunction.into_llvm(context)?;
 
+        revive_llvm_context::PolkaVMCall.into_llvm(context)?;
         revive_llvm_context::PolkaVMCallReentrancyProtector.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;

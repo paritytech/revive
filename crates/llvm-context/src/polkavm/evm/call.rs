@@ -6,7 +6,7 @@ use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::PolkaVMCallReentrancyProtector;
+use crate::{PolkaVMCall, PolkaVMCallReentrancyProtector};
 
 const STATIC_CALL_FLAG: u32 = 0b0001_0000;
 const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
@@ -28,6 +28,9 @@ pub fn call<'ctx, D>(
 where
     D: Dependency + Clone,
 {
+    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
+    let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
+
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
     let output_length = context.safe_truncate_int_to_xlen(output_length)?;
 
@@ -47,64 +50,23 @@ where
         )?
     };
 
-    let address_pointer = context.build_address_argument_store(address)?;
-
     let value = value.unwrap_or_else(|| context.word_const(0));
-    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
-    context.build_store(value_pointer, value)?;
 
-    let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
-    let output_offset = context.safe_truncate_int_to_xlen(output_offset)?;
-
-    let input_pointer = context.build_heap_gep(input_offset, input_length)?;
-    let output_pointer = context.build_heap_gep(output_offset, output_length)?;
-
-    let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
-    context.build_store(output_length_pointer, output_length)?;
-
-    let flags_and_callee = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        flags,
-        address_pointer.to_int(context),
-        "address_and_callee",
-    )?;
-    let deposit_and_value = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        deposit_limit_pointer.to_int(context),
-        value_pointer.to_int(context),
-        "deposit_and_value",
-    )?;
-    let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        input_length,
-        input_pointer.to_int(context),
-        "input_data",
-    )?;
-    let output_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        output_length_pointer.to_int(context),
-        output_pointer.to_int(context),
-        "output_data",
-    )?;
-
-    let name = revive_runtime_api::polkavm_imports::CALL;
+    let name = <PolkaVMCall as RuntimeFunction<D>>::NAME;
+    let declaration = <PolkaVMCall as RuntimeFunction<D>>::declaration(context);
+    let arguments = &[
+        address.into(),
+        value.into(),
+        input_offset.into(),
+        input_length.into(),
+        output_offset.into(),
+        output_length.into(),
+        deposit_limit_pointer.value.into(),
+        flags.into(),
+    ];
     let success = context
-        .build_runtime_call(
-            name,
-            &[
-                flags_and_callee.into(),
-                context.register_type().const_all_ones().into(),
-                context.register_type().const_all_ones().into(),
-                deposit_and_value.into(),
-                input_data.into(),
-                output_data.into(),
-            ],
-        )
-        .unwrap_or_else(|| panic!("{name} should return a value"))
+        .build_call(declaration, arguments, "call")
+        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value"))
         .into_int_value();
 
     let is_success = context.builder().build_int_compare(

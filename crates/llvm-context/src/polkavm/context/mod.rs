@@ -46,6 +46,7 @@ use self::code_type::CodeType;
 use self::debug_info::DebugInfo;
 use self::function::declaration::Declaration as FunctionDeclaration;
 use self::function::intrinsics::Intrinsics;
+use self::function::llvm_runtime::LLVMRuntime;
 use self::function::r#return::Return as FunctionReturn;
 use self::function::runtime::revive::Exit;
 use self::function::runtime::revive::WordToPointer;
@@ -78,6 +79,8 @@ where
     globals: HashMap<String, Global<'ctx>>,
     /// The LLVM intrinsic functions, defined on the LLVM side.
     intrinsics: Intrinsics<'ctx>,
+    /// The LLVM runtime functions, defined on the LLVM side.
+    llvm_runtime: LLVMRuntime<'ctx>,
     /// The declared functions.
     functions: HashMap<String, Rc<RefCell<Function<'ctx>>>>,
     /// The current active function.
@@ -118,6 +121,16 @@ where
 
     /// The loop stack default capacity.
     const LOOP_STACK_INITIAL_CAPACITY: usize = 16;
+
+    /// Link in the stdlib module.
+    fn link_stdlib_module(
+        llvm: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) {
+        module
+            .link_in_module(revive_stdlib::module(llvm, "revive_stdlib").unwrap())
+            .expect("the stdlib module should be linkable");
+    }
 
     /// Link in the PolkaVM imports module, containing imported functions,
     /// and marking them as external (they need to be relocatable as too).
@@ -202,8 +215,7 @@ where
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
     ) {
-        let source_module =
-            revive_runtime_api::polkavm_imports::module(llvm, "revive_runtime").unwrap();
+        let source_module = revive_stdlib::module(llvm, "revive_stdlib").unwrap();
         let data_layout = source_module.get_data_layout();
         module.set_data_layout(&data_layout);
     }
@@ -221,6 +233,7 @@ where
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> Self {
         Self::set_data_layout(llvm, &module);
+        Self::link_stdlib_module(llvm, &module);
         Self::link_polkavm_imports(llvm, &module);
         Self::set_polkavm_stack_size(
             llvm,
@@ -232,6 +245,7 @@ where
         Self::set_module_flags(llvm, &module);
 
         let intrinsics = Intrinsics::new(llvm, &module);
+        let llvm_runtime = LLVMRuntime::new(llvm, &module, &optimizer);
         let debug_info = debug_config.emit_debug_info.then(|| {
             let debug_info = DebugInfo::new(&module);
             debug_info.initialize_module(llvm, &module);
@@ -246,6 +260,7 @@ where
             code_type: None,
             globals: HashMap::with_capacity(Self::GLOBALS_HASHMAP_INITIAL_CAPACITY),
             intrinsics,
+            llvm_runtime,
             functions: HashMap::with_capacity(Self::FUNCTIONS_HASHMAP_INITIAL_CAPACITY),
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
@@ -434,6 +449,11 @@ where
     /// Returns the LLVM intrinsics collection reference.
     pub fn intrinsics(&self) -> &Intrinsics<'ctx> {
         &self.intrinsics
+    }
+
+    /// Returns the LLVM runtime function collection reference.
+    pub fn llvm_runtime(&self) -> &LLVMRuntime<'ctx> {
+        &self.llvm_runtime
     }
 
     /// Appends a function to the current module.

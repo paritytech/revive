@@ -398,6 +398,9 @@ jobs:
           cd nightly
           python3 ../../revive/.github/scripts/json_generator_nightly.py
           cat linux/list.json
+          cat macos/list.json
+          cat windows/list.json
+          cat wasm/list.json
 
   create-release:
     if: startsWith(github.ref_name, 'v')

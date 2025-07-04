@@ -179,8 +179,8 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
     outputs:
-      resolc-webjs_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
-      resolc-webjs_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
+      resolc-web.js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
+      resolc-web.js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:

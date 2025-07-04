@@ -68,9 +68,27 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 pub static WEIGHT_TO_FEE: &str = "weight_to_fee";
 
+pub static DIV: &str = "div";
+pub static SDIV: &str = "sdiv";
+pub static ADDMOD: &str = "addmod";
+pub static MULMOD: &str = "mulmod";
+pub static MOD: &str = "mod";
+pub static SMOD: &str = "smod";
+pub static EXP: &str = "exp";
+pub static SIGNEXT: &str = "signext";
+
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 33] = [
+pub static IMPORTS: [&str; 41] = [
+    DIV,
+    SDIV,
+    ADDMOD,
+    MULMOD,
+    MOD,
+    SMOD,
+    EXP,
+    SIGNEXT,
+    //
     ADDRESS,
     BALANCE,
     BALANCE_OF,

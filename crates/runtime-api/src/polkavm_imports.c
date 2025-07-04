@@ -104,3 +104,19 @@ POLKAVM_IMPORT(uint64_t, set_storage, uint32_t, uint32_t, uint32_t, uint32_t, ui
 POLKAVM_IMPORT(void, value_transferred, uint32_t)
 
 POLKAVM_IMPORT(void, weight_to_fee, uint64_t, uint64_t, uint32_t);
+
+POLKAVM_IMPORT(void, div, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, sdiv, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, addmod, uint32_t, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, mulmod, uint32_t, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, mod, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, smod, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, exp, uint32_t, uint32_t, uint32_t);
+
+POLKAVM_IMPORT(void, signext, uint32_t, uint32_t, uint32_t);

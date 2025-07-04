@@ -1,7 +1,5 @@
 //! Translates the mathematical operations.
 
-use inkwell::values::BasicValue;
-
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
 
@@ -15,17 +13,26 @@ pub fn add_mod<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .build_call(
-            context.llvm_runtime().add_mod,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-                modulo.as_basic_value_enum(),
-            ],
-            "add_mod_call",
-        )
-        .expect("Always exists"))
+    let result_pointer =
+        context.build_alloca_at_entry(context.word_type(), "addmod_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "addmod_operand_1");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "addmod_operand_2");
+    let modulo_pointer =
+        context.build_alloca_at_entry(context.word_type(), "addmod_modulo_operand");
+
+    context.build_store(operand_2_pointer, operand_2)?;
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(modulo_pointer, modulo)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+        modulo_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::ADDMOD, arguments);
+    context.build_load(result_pointer, "addmod_result")
 }
 
 /// Translates the `mulmod` instruction.
@@ -38,17 +45,26 @@ pub fn mul_mod<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .build_call(
-            context.llvm_runtime().mul_mod,
-            &[
-                operand_1.as_basic_value_enum(),
-                operand_2.as_basic_value_enum(),
-                modulo.as_basic_value_enum(),
-            ],
-            "mul_mod_call",
-        )
-        .expect("Always exists"))
+    let result_pointer =
+        context.build_alloca_at_entry(context.word_type(), "mulmod_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "mulmod_operand_1");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "mulmod_operand_2");
+    let modulo_pointer =
+        context.build_alloca_at_entry(context.word_type(), "mulmod_modulo_operand");
+
+    context.build_store(operand_2_pointer, operand_2)?;
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(modulo_pointer, modulo)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+        modulo_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::MULMOD, arguments);
+    context.build_load(result_pointer, "addmod_result")
 }
 
 /// Translates the `exp` instruction.
@@ -60,13 +76,22 @@ pub fn exponent<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .build_call(
-            context.llvm_runtime().exp,
-            &[value.as_basic_value_enum(), exponent.as_basic_value_enum()],
-            "exp_call",
-        )
-        .expect("Always exists"))
+    let result_pointer = context.build_alloca_at_entry(context.word_type(), "exp_result_pointer");
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "exp_value_pointer");
+    let exponent_pointer =
+        context.build_alloca_at_entry(context.word_type(), "exp_exponent_pointer");
+
+    context.build_store(value_pointer, value)?;
+    context.build_store(exponent_pointer, exponent)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        value_pointer.to_int(context).into(),
+        exponent_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::EXP, arguments);
+    context.build_load(result_pointer, "exponent_result")
 }
 
 /// Translates the `signextend` instruction.
@@ -78,11 +103,20 @@ pub fn sign_extend<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    Ok(context
-        .build_call(
-            context.llvm_runtime().sign_extend,
-            &[bytes.as_basic_value_enum(), value.as_basic_value_enum()],
-            "sign_extend_call",
-        )
-        .expect("Always exists"))
+    let result_pointer =
+        context.build_alloca_at_entry(context.word_type(), "signext_result_pointer");
+    let bytes_pointer = context.build_alloca_at_entry(context.word_type(), "bytes_pointer");
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "signext_value_pointer");
+
+    context.build_store(bytes_pointer, bytes)?;
+    context.build_store(value_pointer, value)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        bytes_pointer.to_int(context).into(),
+        value_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::EXP, arguments);
+    context.build_load(result_pointer, "signext_mod_result")
 }

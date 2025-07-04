@@ -179,8 +179,8 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
     outputs:
-      resolc-wasm32-unknown-emscripten_url: ${{ steps.set-output.outputs.resolc-wasm32-unknown-emscripten_url }}
-      resolc-wasm32-unknown-emscripten_sha: ${{ steps.set-output.outputs.resolc-wasm32-unknown-emscripten_sha }}
+      resolc-webjs_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
+      resolc-webjs_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
@@ -306,7 +306,7 @@ jobs:
         # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         id: set-output
         env:
-          TARGET: resolc_web.js
+          TARGET: resolc_web_js
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"

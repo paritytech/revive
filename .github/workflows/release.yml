@@ -377,7 +377,10 @@ jobs:
           merge-multiple: true
           path: bins
 
-      - run: |
+      - name: Generate JSON
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           echo '[' > data.json
           echo '${{ toJSON(needs.build.outputs) }}' >> data.json
           echo ',' >> data.json

@@ -392,7 +392,7 @@ jobs:
           FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
           LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
           FILEPATH=$(readlink -f data.json)
-          TAG=$(gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
+          TAG=$(cd revive;gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
           cd resolc-bin
           mkdir -p nightly
           cd nightly

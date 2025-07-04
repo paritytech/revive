@@ -360,10 +360,41 @@ jobs:
     # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
     needs: [build-wasm, build, create-macos-fat-binary]
     steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-bin
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-bin
+          path: resolc-bin
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: bins
+
       - run: |
-          echo '${{ toJSON(needs.build.outputs) }}'
-          echo '${{ toJSON(needs.build-wasm.outputs) }}'
-          echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}'
+          echo '[' > data.json
+          echo '${{ toJSON(needs.build.outputs) }}' >> data.json
+          echo ',' >> data.json
+          echo '${{ toJSON(needs.build-wasm.outputs) }}' >> data.json
+          echo ',' >> data.json
+          echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}' >> data.json
+          echo ']' >> data.json
+          chmod +x bins/resolc-x86_64-unknown-linux-musl
+          FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
+          LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
+          FILEPATH=$(readlink -f data.json)
+          TAG=$(gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
+          cd resolc-bin
+          mkdir -p nightly
+          cd nightly
+          python3 ../../revive/.github/scripts/json_generator_nightly.py
+          cat linux/list.json
 
   create-release:
     if: startsWith(github.ref_name, 'v')

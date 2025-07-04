@@ -68,14 +68,14 @@ jobs:
     # github actions matrix jobs don't support multiple outputs
     # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
     outputs:
-      x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.x86_64-unknown-linux-musl_url }}
-      x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.x86_64-unknown-linux-musl_sha }}
-      aarch64-apple-darwin_url: ${{ steps.set-output.outputs.aarch64-apple-darwin_url }}
-      aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.aarch64-apple-darwin_sha }}
-      x86_64-apple-darwin_url: ${{ steps.set-output.outputs.x86_64-apple-darwin_url }}
-      x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.x86_64-apple-darwin_sha }}
-      x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.x86_64-pc-windows-msvc_url }}
-      x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.x86_64-pc-windows-msvc_sha }}
+      resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
+      resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
+      resolc-aarch64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_url }}
+      resolc-aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_sha }}
+      resolc-x86_64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_url }}
+      resolc-x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_sha }}
+      resolc-x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_url }}
+      resolc-x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_sha }}
     strategy:
       matrix:
         target:
@@ -279,7 +279,7 @@ jobs:
         # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         with:
           name: resolc.js
-          path: resolc-wasm32-unknown-emscripten/release/resolc.js
+          path: resolc-wasm32-unknown-emscripten/resolc.js
           # retention-days: 40
           retention-days: 1
 
@@ -288,17 +288,17 @@ jobs:
         # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         with:
           name: resolc.wasm
-          path: resolc-wasm32-unknown-emscripten/release/resolc.wasm
+          path: resolc-wasm32-unknown-emscripten/resolc.wasm
           # retention-days: 40
           retention-days: 1
 
-      - name: Upload artifacts resolc.wasm (nightly)
+      - name: Upload artifacts resolc_web.js (nightly)
         uses: actions/upload-artifact@v4
         id: artifact-upload-step
         # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         with:
           name: resolc_web.js
-          path: resolc-wasm32-unknown-emscripten/release/resolc_web.js
+          path: resolc-wasm32-unknown-emscripten/resolc_web.js
           # retention-days: 40
           retention-days: 1
 

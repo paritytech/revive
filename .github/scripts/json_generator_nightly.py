@@ -78,7 +78,7 @@ def generate_asset_json_nightly(name, url, checksum):
     """Generate JSON for a specific asset."""
     # Date in format YYYY-MM-DD
     date = datetime.now().strftime("%Y.%m.%d")
-    last_version = os.environ.get("TAG").rstrip('v')
+    last_version = os.environ.get("TAG").replace('v','')
     version = f"{last_version}-nightly.{date}"
     SHA = os.environ.get("GITHUB_SHA", "")[:8]
     build = f"commit.{SHA}"

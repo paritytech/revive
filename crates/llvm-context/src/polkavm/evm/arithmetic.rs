@@ -2,13 +2,13 @@
 
 use inkwell::values::BasicValue;
 
-use crate::polkavm::context::runtime::RuntimeFunction;
+//use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::Dependency;
-use crate::PolkaVMDivisionFunction;
-use crate::PolkaVMRemainderFunction;
-use crate::PolkaVMSignedDivisionFunction;
-use crate::PolkaVMSignedRemainderFunction;
+//use crate::PolkaVMDivisionFunction;
+//use crate::PolkaVMRemainderFunction;
+//use crate::PolkaVMSignedDivisionFunction;
+//use crate::PolkaVMSignedRemainderFunction;
 
 /// Translates the arithmetic addition.
 pub fn addition<'ctx, D>(
@@ -64,11 +64,21 @@ pub fn division<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMDivisionFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMDivisionFunction as RuntimeFunction<D>>::declaration(context);
-    Ok(context
-        .build_call(declaration, &[operand_1.into(), operand_2.into()], "div")
-        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value",)))
+    let result_pointer = context.build_alloca_at_entry(context.word_type(), "div_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "operand_1_pointer");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "operand_2_pointer");
+
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(operand_2_pointer, operand_2)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::DIV, arguments);
+    context.build_load(result_pointer, "div_result")
 }
 
 /// Translates the arithmetic remainder.
@@ -80,11 +90,21 @@ pub fn remainder<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMRemainderFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMRemainderFunction as RuntimeFunction<D>>::declaration(context);
-    Ok(context
-        .build_call(declaration, &[operand_1.into(), operand_2.into()], "rem")
-        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value",)))
+    let result_pointer = context.build_alloca_at_entry(context.word_type(), "rem_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "operand_1_pointer");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "operand_2_pointer");
+
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(operand_2_pointer, operand_2)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::MOD, arguments);
+    context.build_load(result_pointer, "rem_result")
 }
 
 /// Translates the signed arithmetic division.
@@ -99,11 +119,21 @@ pub fn division_signed<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMSignedDivisionFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMSignedDivisionFunction as RuntimeFunction<D>>::declaration(context);
-    Ok(context
-        .build_call(declaration, &[operand_1.into(), operand_2.into()], "sdiv")
-        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value",)))
+    let result_pointer = context.build_alloca_at_entry(context.word_type(), "sdiv_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "operand_1_pointer");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "operand_2_pointer");
+
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(operand_2_pointer, operand_2)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::SDIV, arguments);
+    context.build_load(result_pointer, "sdiv_result")
 }
 
 /// Translates the signed arithmetic remainder.
@@ -115,9 +145,19 @@ pub fn remainder_signed<'ctx, D>(
 where
     D: Dependency + Clone,
 {
-    let name = <PolkaVMSignedRemainderFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMSignedRemainderFunction as RuntimeFunction<D>>::declaration(context);
-    Ok(context
-        .build_call(declaration, &[operand_1.into(), operand_2.into()], "srem")
-        .unwrap_or_else(|| panic!("revive runtime function {name} should return a value",)))
+    let result_pointer = context.build_alloca_at_entry(context.word_type(), "srem_result_pointer");
+    let operand_1_pointer = context.build_alloca_at_entry(context.word_type(), "operand_1_pointer");
+    let operand_2_pointer = context.build_alloca_at_entry(context.word_type(), "operand_2_pointer");
+
+    context.build_store(operand_1_pointer, operand_1)?;
+    context.build_store(operand_2_pointer, operand_2)?;
+
+    let arguments = &[
+        result_pointer.to_int(context).into(),
+        operand_1_pointer.to_int(context).into(),
+        operand_2_pointer.to_int(context).into(),
+    ];
+
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::SMOD, arguments);
+    context.build_load(result_pointer, "rsem_result")
 }

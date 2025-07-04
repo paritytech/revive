@@ -306,7 +306,7 @@ jobs:
         # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         id: set-output
         env:
-          TARGET: resolc-wasm32-unknown-emscripten
+          TARGET: resolc_web.js
         run: |
           echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"

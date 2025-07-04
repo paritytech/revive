@@ -2,6 +2,7 @@
 
 pub mod ir_type;
 
+use std::path::Path;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -16,8 +17,14 @@ pub struct DebugConfig {
     pub output_directory: Option<PathBuf>,
     /// Whether debug info should be emitted.
     pub emit_debug_info: bool,
-    /// The YUL source file path.
+    /// The YUL debug output file path.
+    ///
+    /// Is expected to be configured when running in YUL mode.
     pub contract_path: Option<PathBuf>,
+    /// The YUL input file path.
+    ///
+    /// Is expected to be configured when not running in YUL mode.
+    pub yul_path: Option<PathBuf>,
 }
 
 impl DebugConfig {
@@ -27,7 +34,13 @@ impl DebugConfig {
             output_directory,
             emit_debug_info,
             contract_path: None,
+            yul_path: None,
         }
+    }
+
+    /// Set the current YUL path.
+    pub fn set_yul_path(&mut self, yul_path: &Path) {
+        self.yul_path = yul_path.to_path_buf().into();
     }
 
     /// Set the current contract path.
@@ -35,9 +48,15 @@ impl DebugConfig {
         self.contract_path = self.yul_source_path(contract_path);
     }
 
-    /// Returns the source YUL path for the module,
-    /// or `None` if there is no debug output directory.
+    /// Returns with the following precedence:
+    /// 1. The YUL source path if it was configured.
+    /// 2. The source YUL path from the debug output dir if it was configured.
+    /// 3. `None` if there is no debug output directory.
     pub fn yul_source_path(&self, contract_path: &str) -> Option<PathBuf> {
+        if let Some(path) = self.yul_path.as_ref() {
+            return Some(path.clone());
+        }
+
         self.output_directory.as_ref().map(|output_directory| {
             let mut file_path = output_directory.to_owned();
             let full_file_name = Self::full_file_name(contract_path, None, IRType::Yul);

@@ -16,6 +16,8 @@ pub struct DebugConfig {
     pub output_directory: Option<PathBuf>,
     /// Whether debug info should be emitted.
     pub emit_debug_info: bool,
+    /// The YUL source file path.
+    pub contract_path: Option<PathBuf>,
 }
 
 impl DebugConfig {
@@ -24,15 +26,29 @@ impl DebugConfig {
         Self {
             output_directory,
             emit_debug_info,
+            contract_path: None,
         }
+    }
+
+    /// Set the current contract path.
+    pub fn set_contract_path(&mut self, contract_path: &str) {
+        self.contract_path = self.yul_source_path(contract_path);
+    }
+
+    /// Returns the source YUL path for the module,
+    /// or `None` if there is no debug output directory.
+    pub fn yul_source_path(&self, contract_path: &str) -> Option<PathBuf> {
+        self.output_directory.as_ref().map(|output_directory| {
+            let mut file_path = output_directory.to_owned();
+            let full_file_name = Self::full_file_name(contract_path, None, IRType::Yul);
+            file_path.push(full_file_name);
+            file_path
+        })
     }
 
     /// Dumps the Yul IR.
     pub fn dump_yul(&self, contract_path: &str, code: &str) -> anyhow::Result<()> {
-        if let Some(output_directory) = self.output_directory.as_ref() {
-            let mut file_path = output_directory.to_owned();
-            let full_file_name = Self::full_file_name(contract_path, None, IRType::Yul);
-            file_path.push(full_file_name);
+        if let Some(file_path) = self.yul_source_path(contract_path) {
             std::fs::write(file_path, code)?;
         }
 

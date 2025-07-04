@@ -51,11 +51,20 @@ pub struct DebugInfo<'ctx> {
 
 impl<'ctx> DebugInfo<'ctx> {
     /// A shortcut constructor.
-    pub fn new(module: &inkwell::module::Module<'ctx>) -> Self {
+    pub fn new(
+        module: &inkwell::module::Module<'ctx>,
+        debug_config: &crate::debug_config::DebugConfig,
+    ) -> Self {
+        let module_name = module.get_name().to_string_lossy();
+        let yul_name = debug_config
+            .contract_path
+            .as_ref()
+            .map(|path| path.display().to_string());
+
         let (builder, compile_unit) = module.create_debug_info_builder(
             true,
             inkwell::debug_info::DWARFSourceLanguage::C,
-            module.get_name().to_string_lossy().as_ref(),
+            yul_name.as_deref().unwrap_or_else(|| module_name.as_ref()),
             "",
             "",
             false,

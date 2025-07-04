@@ -33,6 +33,7 @@ pub use self::polkavm::context::function::runtime::bitwise::Sar as PolkaVMSarFun
 pub use self::polkavm::context::function::runtime::bitwise::Shl as PolkaVMShlFunction;
 pub use self::polkavm::context::function::runtime::bitwise::Shr as PolkaVMShrFunction;
 pub use self::polkavm::context::function::runtime::bitwise::Xor as PolkaVMXorFunction;
+pub use self::polkavm::context::function::runtime::call::CallReentrancyProtector as PolkaVMCallReentrancyProtector;
 pub use self::polkavm::context::function::runtime::deploy_code::DeployCode as PolkaVMDeployCodeFunction;
 pub use self::polkavm::context::function::runtime::entry::Entry as PolkaVMEntryFunction;
 pub use self::polkavm::context::function::runtime::revive::Exit as PolkaVMExitFunction;

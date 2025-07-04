@@ -220,6 +220,8 @@ where
         revive_llvm_context::PolkaVMSarFunction.declare(context)?;
         revive_llvm_context::PolkaVMByteFunction.declare(context)?;
 
+        revive_llvm_context::PolkaVMCallReentrancyProtector.declare(context)?;
+
         revive_llvm_context::PolkaVMSbrkFunction.declare(context)?;
 
         let mut entry = revive_llvm_context::PolkaVMEntryFunction::default();
@@ -284,6 +286,8 @@ where
         revive_llvm_context::PolkaVMShrFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMSarFunction.into_llvm(context)?;
         revive_llvm_context::PolkaVMByteFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMCallReentrancyProtector.into_llvm(context)?;
 
         revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
 

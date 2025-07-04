@@ -2,6 +2,7 @@
 
 pub mod arithmetics;
 pub mod bitwise;
+pub mod call;
 pub mod deploy_code;
 pub mod entry;
 pub mod revive;

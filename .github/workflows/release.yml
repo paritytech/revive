@@ -65,6 +65,17 @@ jobs:
           echo 'EOF' >> $GITHUB_OUTPUT
 
   build:
+    # github actions matrix jobs don't support multiple outputs
+    # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
+    outputs:
+      resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
+      resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
+      resolc-aarch64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_url }}
+      resolc-aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_sha }}
+      resolc-x86_64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_url }}
+      resolc-x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_sha }}
+      resolc-x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_url }}
+      resolc-x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_sha }}
     strategy:
       matrix:
         target:
@@ -133,15 +144,43 @@ jobs:
           echo $result
           if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
 
-      - uses: actions/upload-artifact@v4
+      # don't keep artifacts long if not main branch
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v4
+      #   if: ! github.event_name == 'schedule'
+      #   with:
+      #     name: resolc-${{ matrix.target }}
+      #     path: resolc-${{ matrix.target }}*
+      #     retention-days: 1
+
+      - name: Upload artifacts (nightly)
+        uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-${{ matrix.target }}*
+          # retention-days: 40
           retention-days: 1
+
+      - name: Set output variables (nightly)
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        id: set-output
+        shell: bash
+        run: |
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "resolc-${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "resolc-${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "resolc-${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "resolc-${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
 
   build-wasm:
     runs-on: ubuntu-24.04
     needs: [check-version-changed]
+    outputs:
+      resolc-web.js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
+      resolc-web.js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
@@ -223,11 +262,145 @@ jobs:
           mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
           mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
-      - uses: actions/upload-artifact@v4
+      # don't keep artifacts long if not scheduled
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v4
+      #   if: ! github.event_name == 'schedule'
+      #   with:
+      #     name: resolc-wasm32-unknown-emscripten
+      #     path: resolc-wasm32-unknown-emscripten/*
+      #     retention-days: 1
+
+      # There is no way to upload several files as several artifacts with a single upload-artifact step
+      # It's needed to have resolc_web.js separately for night builds for resolc-bin repo
+      # https://github.com/actions/upload-artifact/issues/331
+      - name: Upload artifact resolc.js (nightly)
+        uses: actions/upload-artifact@v4
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
         with:
-          name: resolc-wasm32-unknown-emscripten
-          path: resolc-wasm32-unknown-emscripten/*
+          name: resolc.js
+          path: resolc-wasm32-unknown-emscripten/resolc.js
+          # retention-days: 40
           retention-days: 1
+
+      - name: Upload artifacts resolc.wasm (nightly)
+        uses: actions/upload-artifact@v4
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        with:
+          name: resolc.wasm
+          path: resolc-wasm32-unknown-emscripten/resolc.wasm
+          # retention-days: 40
+          retention-days: 1
+
+      - name: Upload artifacts resolc_web.js (nightly)
+        uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        with:
+          name: resolc_web.js
+          path: resolc-wasm32-unknown-emscripten/resolc_web.js
+          # retention-days: 40
+          retention-days: 1
+
+      - name: Set output variables
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        id: set-output
+        env:
+          TARGET: resolc_web_js
+        run: |
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
+
+  create-macos-fat-binary:
+    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    needs: [build]
+    outputs:
+      resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
+      resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create macOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Make Executable
+        run: |
+          chmod +x resolc-universal-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          # retention-days: 40
+          retention-days: 1
+
+      - name: Set output variables
+        id: set-output
+        env:
+          TARGET: resolc-universal-apple-darwin
+        run: |
+          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
+          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
+
+  generate-nightly-json:
+    runs-on: ubuntu-24.04
+    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    needs: [build-wasm, build, create-macos-fat-binary]
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-bin
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-bin
+          path: resolc-bin
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: bins
+
+      - name: Generate JSON
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo '[' > data.json
+          echo '${{ toJSON(needs.build.outputs) }}' >> data.json
+          echo ',' >> data.json
+          echo '${{ toJSON(needs.build-wasm.outputs) }}' >> data.json
+          echo ',' >> data.json
+          echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}' >> data.json
+          echo ']' >> data.json
+          chmod +x bins/resolc-x86_64-unknown-linux-musl
+          export FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
+          export LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")
+          export FILEPATH=$(readlink -f data.json)
+          export TAG=$(cd revive;gh release list --json name,isLatest --jq '.[] | select(.isLatest)|.name')
+          cd resolc-bin
+          mkdir -p nightly
+          cd nightly
+          python3 ../../revive/.github/scripts/json_generator_nightly.py
+          cat linux/list.json
+          cat macos/list.json
+          cat windows/list.json
+          cat wasm/list.json
 
   create-release:
     if: startsWith(github.ref_name, 'v')

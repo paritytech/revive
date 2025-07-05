@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+"""
+This script generates JSON files for different platforms based on GitHub release data.
+It fetches release information from a specified GitHub repository and tag,
+parses the release assets, and generates JSON files for each platform with relevant metadata.
+It also handles checksum files and updates a list.json file for each platform.
+It requires the GITHUB_TOKEN environment variable to be set for authentication.
+Usage:
+    python json_generator.py <repo> <tag>
+"""
 import os
 import sys
 import json

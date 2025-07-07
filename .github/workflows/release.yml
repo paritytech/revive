@@ -64,6 +64,39 @@ jobs:
           echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
 
+  # check if there were commits yesterday
+  check_commits:
+    runs-on: ubuntu-latest
+    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    outputs:
+      has_commits: ${{ steps.check_commits.outputs.has_commits }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history to check previous commits
+          ref: "main"
+
+      - name: Check for commits from yesterday
+        id: check_commits
+        run: |
+          # Get yesterday's date in YYYY-MM-DD format
+          YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
+          echo "Checking for commits from: $YESTERDAY"
+
+          # Check if there were any commits yesterday
+          COMMIT_COUNT=$(git log --oneline --since="$YESTERDAY 00:00:00" --until="$YESTERDAY 23:59:59" | wc -l)
+
+          echo "Found $COMMIT_COUNT commits from yesterday"
+
+          if [ $COMMIT_COUNT -gt 0 ]; then
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+            echo "✅ Found $COMMIT_COUNT commits from yesterday - continuing workflow"
+          else
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+            echo "❌ No commits found from yesterday - skipping remaining steps"
+          fi
+
   build:
     # github actions matrix jobs don't support multiple outputs
     # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
@@ -156,7 +189,7 @@ jobs:
       - name: Upload artifacts (nightly)
         uses: actions/upload-artifact@v4
         id: artifact-upload-step
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-${{ matrix.target }}*
@@ -164,7 +197,7 @@ jobs:
           retention-days: 1
 
       - name: Set output variables (nightly)
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         id: set-output
         shell: bash
         run: |
@@ -276,7 +309,7 @@ jobs:
       # https://github.com/actions/upload-artifact/issues/331
       - name: Upload artifact resolc.js (nightly)
         uses: actions/upload-artifact@v4
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc.js
           path: resolc-wasm32-unknown-emscripten/resolc.js
@@ -285,7 +318,7 @@ jobs:
 
       - name: Upload artifacts resolc.wasm (nightly)
         uses: actions/upload-artifact@v4
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc.wasm
           path: resolc-wasm32-unknown-emscripten/resolc.wasm
@@ -295,7 +328,7 @@ jobs:
       - name: Upload artifacts resolc_web.js (nightly)
         uses: actions/upload-artifact@v4
         id: artifact-upload-step
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc_web.js
           path: resolc-wasm32-unknown-emscripten/resolc_web.js
@@ -303,7 +336,7 @@ jobs:
           retention-days: 1
 
       - name: Set output variables
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         id: set-output
         env:
           TARGET: resolc_web_js
@@ -316,7 +349,7 @@ jobs:
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
   create-macos-fat-binary:
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
     needs: [build]
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
@@ -357,7 +390,7 @@ jobs:
 
   generate-nightly-json:
     runs-on: ubuntu-24.04
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
     needs: [build-wasm, build, create-macos-fat-binary]
     steps:
       - name: Checkout revive
@@ -377,9 +410,21 @@ jobs:
           merge-multiple: true
           path: bins
 
+      # - uses: actions/create-github-app-token@v1
+      #   id: app-token
+      #   with:
+      #     app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+      #     private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+      #     owner: paritytech
+      #     repositories: resolc-bin
+
       - name: Generate JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_NAME: "paritytech-revive-json"
+          Green: "\e[32m"
+          NC: "\e[0m"
         run: |
           echo '[' > data.json
           echo '${{ toJSON(needs.build.outputs) }}' >> data.json
@@ -397,10 +442,25 @@ jobs:
           mkdir -p nightly
           cd nightly
           python3 ../../revive/.github/scripts/json_generator_nightly.py
-          cat linux/list.json
-          cat macos/list.json
-          cat windows/list.json
-          cat wasm/list.json
+
+          git status
+          exit 0
+
+          echo "${Green}Add new remote with gh app token${NC}"
+          git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")
+
+          echo "${Green}Remove http section that causes issues with gh app auth token${NC}"
+          sed -i.bak '/\[http/d' ./.git/config
+          sed -i.bak '/extraheader/d' ./.git/config
+
+          git config user.email "ci@parity.io"
+          git config user.name "${APP_NAME}"
+
+          git add .
+          git commit -m "Update json"
+          git push origin main
+
+          echo "::notice::nightly info.list files were successfully published to https://github.com/paritytech/resolc-bin"
 
   create-release:
     if: startsWith(github.ref_name, 'v')

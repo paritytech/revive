@@ -1,5 +1,8 @@
 name: Build & Release
 on:
+  schedule:
+    # Run every day at 01:00 UTC
+    - cron: "0 1 * * *"
   push:
     branches: ["main"]
     tags:
@@ -67,7 +70,7 @@ jobs:
   # check if there were commits yesterday
   check_commits:
     runs-on: ubuntu-latest
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
+    if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
     outputs:
       has_commits: ${{ steps.check_commits.outputs.has_commits }}
     steps:
@@ -177,27 +180,26 @@ jobs:
           echo $result
           if [[ $result == *'0x50564d'* ]]; then exit 0; else exit 1; fi
 
-      # don't keep artifacts long if not main branch
-      # - name: Upload artifacts
-      #   uses: actions/upload-artifact@v4
-      #   if: ! github.event_name == 'schedule'
-      #   with:
-      #     name: resolc-${{ matrix.target }}
-      #     path: resolc-${{ matrix.target }}*
-      #     retention-days: 1
+      # don't keep artifacts long if not scheduled
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: ! github.event_name == 'schedule'
+        with:
+          name: resolc-${{ matrix.target }}
+          path: resolc-${{ matrix.target }}*
+          retention-days: 1
 
       - name: Upload artifacts (nightly)
         uses: actions/upload-artifact@v4
         id: artifact-upload-step
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-${{ matrix.target }}*
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Set output variables (nightly)
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         id: set-output
         shell: bash
         run: |
@@ -296,47 +298,44 @@ jobs:
           mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
       # don't keep artifacts long if not scheduled
-      # - name: Upload artifacts
-      #   uses: actions/upload-artifact@v4
-      #   if: ! github.event_name == 'schedule'
-      #   with:
-      #     name: resolc-wasm32-unknown-emscripten
-      #     path: resolc-wasm32-unknown-emscripten/*
-      #     retention-days: 1
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: ! github.event_name == 'schedule'
+        with:
+          name: resolc-wasm32-unknown-emscripten
+          path: resolc-wasm32-unknown-emscripten/*
+          retention-days: 1
 
       # There is no way to upload several files as several artifacts with a single upload-artifact step
       # It's needed to have resolc_web.js separately for night builds for resolc-bin repo
       # https://github.com/actions/upload-artifact/issues/331
       - name: Upload artifact resolc.js (nightly)
         uses: actions/upload-artifact@v4
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc.js
           path: resolc-wasm32-unknown-emscripten/resolc.js
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Upload artifacts resolc.wasm (nightly)
         uses: actions/upload-artifact@v4
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc.wasm
           path: resolc-wasm32-unknown-emscripten/resolc.wasm
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Upload artifacts resolc_web.js (nightly)
         uses: actions/upload-artifact@v4
         id: artifact-upload-step
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         with:
           name: resolc_web.js
           path: resolc-wasm32-unknown-emscripten/resolc_web.js
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Set output variables
-        # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+        if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
         id: set-output
         env:
           TARGET: resolc_web_js
@@ -349,7 +348,7 @@ jobs:
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
   create-macos-fat-binary:
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
     needs: [build]
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
@@ -390,7 +389,8 @@ jobs:
 
   generate-nightly-json:
     runs-on: ubuntu-24.04
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main') && ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    environment: tags
     needs: [build-wasm, build, create-macos-fat-binary]
     steps:
       - name: Checkout revive
@@ -410,18 +410,18 @@ jobs:
           merge-multiple: true
           path: bins
 
-      # - uses: actions/create-github-app-token@v1
-      #   id: app-token
-      #   with:
-      #     app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
-      #     private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
-      #     owner: paritytech
-      #     repositories: resolc-bin
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+          private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+          owner: paritytech
+          repositories: resolc-bin
 
       - name: Generate JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
           APP_NAME: "paritytech-revive-json"
           Green: "\e[32m"
           NC: "\e[0m"
@@ -444,7 +444,6 @@ jobs:
           python3 ../../revive/.github/scripts/json_generator_nightly.py
           cd ..
           git status
-          exit 0
 
           echo "${Green}Add new remote with gh app token${NC}"
           git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")

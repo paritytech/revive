@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
 This script generates JSON files for different platforms based on GitHub data.
-Requires the GITHUB_SHA, FIRST_SOLC_VERSION, LAST_SOLC_VERSION, and TAG environment variables to be set.
+Requires the GITHUB_SHA, FIRST_SOLC_VERSION, LAST_SOLC_VERSION, TAG and FILEPATH environment variables to be set.
 Usage:
     python json_generator_nightly.py
 """
 import os
 import sys
 import json
-import requests
 from datetime import datetime
 
 def validate_env_variables():

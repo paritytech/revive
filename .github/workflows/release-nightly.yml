@@ -53,7 +53,7 @@ jobs:
   build:
     # github actions matrix jobs don't support multiple outputs
     # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     outputs:
       resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
       resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
@@ -154,7 +154,7 @@ jobs:
   build-wasm:
     runs-on: ubuntu-24.04
     needs: [check_commits]
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     outputs:
       resolc-web.js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
       resolc-web.js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
@@ -280,7 +280,7 @@ jobs:
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
   create-macos-fat-binary:
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     needs: [build]
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
@@ -321,7 +321,7 @@ jobs:
 
   generate-nightly-json:
     runs-on: ubuntu-24.04
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     environment: tags
     needs: [build-wasm, build, create-macos-fat-binary, check_commits]
     steps:
@@ -342,18 +342,18 @@ jobs:
           merge-multiple: true
           path: bins
 
-      - uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
-          private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
-          owner: paritytech
-          repositories: resolc-bin
+      # - uses: actions/create-github-app-token@v1
+      #   id: app-token
+      #   with:
+      #     app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+      #     private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+      #     owner: paritytech
+      #     repositories: resolc-bin
 
       - name: Generate JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TOKEN: ${{ steps.app-token.outputs.token }}
+          # TOKEN: ${{ steps.app-token.outputs.token }}
           APP_NAME: "paritytech-revive-json"
           Green: "\e[32m"
           NC: "\e[0m"
@@ -376,6 +376,7 @@ jobs:
           python3 ../../revive/.github/scripts/json_generator_nightly.py
           cd ..
           git status
+          exit 0
 
           echo "${Green}Add new remote with gh app token${NC}"
           git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")

@@ -442,7 +442,7 @@ jobs:
           mkdir -p nightly
           cd nightly
           python3 ../../revive/.github/scripts/json_generator_nightly.py
-
+          cd ..
           git status
           exit 0
 
@@ -456,7 +456,7 @@ jobs:
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"
 
-          git add .
+          git add nightly/
           git commit -m "Update json"
           git push origin main
 

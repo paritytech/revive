@@ -134,7 +134,6 @@ def main():
 
     validate_env_variables()
     data = fetch_data_file()
-    print(f"{data}")
 
     # Mapping of asset names to platform folders
     platform_mapping = {

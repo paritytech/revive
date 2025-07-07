@@ -53,6 +53,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+        context.set_debug_location(self.location.line, 0, None)?;
         let condition = self
             .condition
             .into_llvm(context)?

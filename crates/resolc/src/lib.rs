@@ -54,7 +54,7 @@ pub fn yul<T: Compiler>(
     solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
-    debug_config: revive_llvm_context::DebugConfig,
+    mut debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
@@ -77,6 +77,7 @@ pub fn yul<T: Compiler>(
     let solc_validator = Some(&*solc);
     let project = Project::try_from_yul_path(path, solc_validator)?;
 
+    debug_config.set_yul_path(path);
     let build = project.compile(
         optimizer_settings,
         include_metadata_hash,

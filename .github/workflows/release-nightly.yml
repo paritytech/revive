@@ -322,7 +322,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     environment: tags
-    needs: [build-wasm, build, create-macos-fat-binary, check-commits]
+    needs: [build-wasm, build, create-macos-fat-binary, check_commits]
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4

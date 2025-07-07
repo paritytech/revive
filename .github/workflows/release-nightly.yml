@@ -47,6 +47,7 @@ jobs:
           else
             echo "has_commits=false" >> $GITHUB_OUTPUT
             echo "❌ No commits found from yesterday - skipping remaining steps"
+            echo "::notice::❌ No commits found from yesterday - skipping remaining steps"
           fi
 
   build:

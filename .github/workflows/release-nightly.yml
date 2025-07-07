@@ -3,9 +3,6 @@ on:
   schedule:
     # Run every day at 01:00 UTC
     - cron: "0 1 * * *"
-  # temporary for tests
-  pull_request:
-    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -19,7 +16,6 @@ jobs:
   # check if there were commits yesterday
   check_commits:
     runs-on: ubuntu-latest
-    # if: github.event_name == 'schedule' && startsWith(github.ref_name , 'main')
     outputs:
       has_commits: ${{ steps.check_commits.outputs.has_commits }}
     steps:
@@ -53,7 +49,7 @@ jobs:
   build:
     # github actions matrix jobs don't support multiple outputs
     # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
-    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     outputs:
       resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
       resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
@@ -137,7 +133,6 @@ jobs:
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-${{ matrix.target }}*
-          # retention-days: 40
           retention-days: 40
 
       - name: Set output variables (nightly)
@@ -154,7 +149,7 @@ jobs:
   build-wasm:
     runs-on: ubuntu-24.04
     needs: [check_commits]
-    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     outputs:
       resolc-web.js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
       resolc-web.js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
@@ -247,16 +242,14 @@ jobs:
         with:
           name: resolc.js
           path: resolc-wasm32-unknown-emscripten/resolc.js
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Upload artifacts resolc.wasm (nightly)
         uses: actions/upload-artifact@v4
         with:
           name: resolc.wasm
           path: resolc-wasm32-unknown-emscripten/resolc.wasm
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Upload artifacts resolc_web.js (nightly)
         uses: actions/upload-artifact@v4
@@ -264,8 +257,7 @@ jobs:
         with:
           name: resolc_web.js
           path: resolc-wasm32-unknown-emscripten/resolc_web.js
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Set output variables
         id: set-output
@@ -280,7 +272,7 @@ jobs:
           echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
 
   create-macos-fat-binary:
-    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     needs: [build]
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
@@ -304,8 +296,7 @@ jobs:
         with:
           name: resolc-universal-apple-darwin
           path: resolc-universal-apple-darwin
-          # retention-days: 40
-          retention-days: 1
+          retention-days: 40
 
       - name: Set output variables
         id: set-output
@@ -321,8 +312,8 @@ jobs:
 
   generate-nightly-json:
     runs-on: ubuntu-24.04
-    # if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
-    # environment: tags
+    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
+    environment: tags
     needs: [build-wasm, build, create-macos-fat-binary, check_commits]
     steps:
       - name: Checkout revive
@@ -342,18 +333,18 @@ jobs:
           merge-multiple: true
           path: bins
 
-      # - uses: actions/create-github-app-token@v1
-      #   id: app-token
-      #   with:
-      #     app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
-      #     private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
-      #     owner: paritytech
-      #     repositories: resolc-bin
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
+          private-key: ${{ secrets.REVIVE_JSON_APP_KEY }}
+          owner: paritytech
+          repositories: resolc-bin
 
       - name: Generate JSON
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # TOKEN: ${{ steps.app-token.outputs.token }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
           APP_NAME: "paritytech-revive-json"
           Green: "\e[32m"
           NC: "\e[0m"
@@ -376,7 +367,6 @@ jobs:
           python3 ../../revive/.github/scripts/json_generator_nightly.py
           cd ..
           git status
-          exit 0
 
           echo "${Green}Add new remote with gh app token${NC}"
           git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")
@@ -389,7 +379,7 @@ jobs:
           git config user.name "${APP_NAME}"
 
           git add nightly/
-          git commit -m "Update json"
+          git commit -m "Update nightly json"
           git push origin main
 
           echo "::notice::nightly info.list files were successfully published to https://github.com/paritytech/resolc-bin"

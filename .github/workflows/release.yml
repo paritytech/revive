@@ -2,12 +2,11 @@ name: Build & Release
 on:
   push:
     branches: ["main"]
-  # temporary disable for tests
-  #   tags:
-  #     - "v*"
-  # pull_request:
-  #   branches: ["main"]
-  #   types: [opened, synchronize, labeled, unlabeled]
+    tags:
+      - "v*"
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, labeled, unlabeled]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -15,6 +14,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # if changed, dont forget to update the env var in release-nightly.yml
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:c0154e992adb791c3b848dd008939d19862549204f8cb26f5ca7a00f629e6067
 
 jobs:

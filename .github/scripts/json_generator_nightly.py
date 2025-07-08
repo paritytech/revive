@@ -76,7 +76,7 @@ def extract_build_hash():
 def generate_asset_json_nightly(name, url, checksum):
     """Generate JSON for a specific asset."""
     # Date in format YYYY-MM-DD
-    date = datetime.now().strftime("%Y.%m.%d")
+    date = datetime.now().strftime("%Y.%-m.%-d")
     last_version = os.environ.get("TAG").replace('v','')
     version = f"{last_version}-nightly.{date}"
     SHA = os.environ.get("GITHUB_SHA", "")[:8]

@@ -40,6 +40,8 @@ impl Compiler for SoljsonCompiler {
             anyhow::bail!("configuring allow paths is not supported with solJson")
         }
 
+        input.normalize();
+
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
         let input_json = serde_json::to_string(&input).expect("Always valid");

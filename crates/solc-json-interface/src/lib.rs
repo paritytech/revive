@@ -7,6 +7,7 @@ pub use self::combined_json::contract::Contract as CombinedJsonContract;
 pub use self::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
 pub use self::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 pub use self::standard_json::input::settings::metadata_hash::MetadataHash as SolcStandardJsonInputSettingsMetadataHash;
+pub use self::standard_json::input::settings::optimizer::yul_details::YulDetails as SolcStandardJsonInputSettingsYulOptimizerDetails;
 pub use self::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
 pub use self::standard_json::input::settings::polkavm::memory::MemoryConfig as SolcStandardJsonInputSettingsPolkaVMMemory;
 pub use self::standard_json::input::settings::polkavm::memory::DEFAULT_HEAP_SIZE as PolkaVMDefaultHeapMemorySize;

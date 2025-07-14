@@ -1,6 +1,7 @@
 //! The `solc --standard-json` input settings optimizer.
 
 pub mod details;
+pub mod yul_details;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -41,13 +42,8 @@ impl Optimizer {
     }
 
     /// Sets the necessary defaults.
-    pub fn normalize(&mut self, version: &semver::Version) {
+    pub fn normalize(&mut self) {
         self.mode = None;
         self.fallback_to_optimizing_for_size = None;
-        self.details = if version >= &semver::Version::new(0, 5, 5) {
-            Some(Details::disabled(version))
-        } else {
-            None
-        };
     }
 }

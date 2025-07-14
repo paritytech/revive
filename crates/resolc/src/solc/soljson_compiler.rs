@@ -40,8 +40,7 @@ impl Compiler for SoljsonCompiler {
             anyhow::bail!("configuring allow paths is not supported with solJson")
         }
 
-        let version = self.version()?.validate(&include_paths)?.default;
-        input.normalize(&version);
+        input.normalize();
 
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 

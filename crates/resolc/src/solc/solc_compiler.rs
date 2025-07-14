@@ -45,8 +45,6 @@ impl Compiler for SolcCompiler {
         include_paths: Vec<String>,
         allow_paths: Option<String>,
     ) -> anyhow::Result<SolcStandardJsonOutput> {
-        let version = self.version()?.validate(&include_paths)?.default;
-
         let mut command = std::process::Command::new(self.executable.as_str());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
@@ -65,7 +63,7 @@ impl Compiler for SolcCompiler {
             command.arg(allow_paths);
         }
 
-        input.normalize(&version);
+        input.normalize();
 
         let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 

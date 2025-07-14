@@ -77,7 +77,7 @@ impl Contract {
         project: Project,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: revive_llvm_context::DebugConfig,
+        mut debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<ContractBuild> {
@@ -117,6 +117,7 @@ impl Contract {
             _ => llvm.create_module(self.path.as_str()),
         };
 
+        debug_config.set_contract_path(&self.path);
         let mut context = revive_llvm_context::PolkaVMContext::new(
             &llvm,
             module,

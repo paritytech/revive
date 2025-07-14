@@ -74,9 +74,9 @@ impl Settings {
     }
 
     /// Sets the necessary defaults.
-    pub fn normalize(&mut self, version: &semver::Version) {
+    pub fn normalize(&mut self) {
         self.polkavm = None;
-        self.optimizer.normalize(version);
+        self.optimizer.normalize();
     }
 
     /// Parses the library list and returns their double hashmap with path and name as keys.

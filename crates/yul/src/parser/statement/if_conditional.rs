@@ -54,6 +54,7 @@ where
 {
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
         let binding_pointer = context.build_alloca(context.word_type(), "if_condition");
+        context.set_debug_location(self.location.line, 0, None)?;
         let condition = self
             .condition
             .into_llvm(&[("todo".to_string(), binding_pointer)], context)?

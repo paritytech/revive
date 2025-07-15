@@ -15,6 +15,8 @@ use crate::optimizer::settings::size_level::SizeLevel;
 use crate::optimizer::Optimizer;
 use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::pointer::Pointer;
+use crate::polkavm::context::Context;
+use crate::polkavm::Dependency;
 
 use self::declaration::Declaration;
 use self::r#return::Return;
@@ -28,7 +30,9 @@ pub struct Function<'ctx> {
     /// The LLVM function declaration.
     declaration: Declaration<'ctx>,
     /// The stack representation.
-    stack: HashMap<String, Pointer<'ctx>>,
+    stack: HashMap<String, u64>,
+    /// The stack variables pointer.
+    stack_variables: Pointer<'ctx>,
     /// The return value entity.
     r#return: Return<'ctx>,
 
@@ -56,11 +60,14 @@ impl<'ctx> Function<'ctx> {
 
         entry_block: inkwell::basic_block::BasicBlock<'ctx>,
         return_block: inkwell::basic_block::BasicBlock<'ctx>,
+
+        stack_variables: Pointer<'ctx>,
     ) -> Self {
         Self {
             name,
             declaration,
             stack: HashMap::with_capacity(Self::STACK_HASHMAP_INITIAL_CAPACITY),
+            stack_variables,
             r#return,
 
             entry_block,
@@ -210,22 +217,49 @@ impl<'ctx> Function<'ctx> {
 
     /// Saves the pointer to a stack variable, returning the pointer to the shadowed variable,
     /// if it exists.
-    pub fn insert_stack_pointer(
+    pub fn insert_stack_pointer<D: Dependency + Clone>(
         &mut self,
+        context: &mut Context<'ctx, D>,
         name: String,
-        pointer: Pointer<'ctx>,
-    ) -> Option<Pointer<'ctx>> {
-        self.stack.insert(name, pointer)
+    ) -> Pointer<'ctx> {
+        let pointer_name = format!("{}_stack_pointer", &name);
+        let len = self.stack.len();
+        let index = *self.stack.entry(name).or_insert_with(|| len as u64);
+        let indices = &[
+            context.xlen_type().const_zero(),
+            context.xlen_type().const_int(index, false),
+        ];
+
+        context.build_gep(
+            self.stack_variables,
+            indices,
+            context.word_type(),
+            &pointer_name,
+        )
     }
 
     /// Gets the pointer to a stack variable.
-    pub fn get_stack_pointer(&self, name: &str) -> Option<Pointer<'ctx>> {
-        self.stack.get(name).copied()
-    }
+    pub fn get_stack_pointer<D: Dependency + Clone>(
+        &self,
+        context: &mut Context<'ctx, D>,
+        name: String,
+    ) -> Pointer<'ctx> {
+        let pointer_name = format!("{}_stack_pointer", &name);
+        let index = *self
+            .stack
+            .get(&name)
+            .unwrap_or_else(|| panic!("stack pointer access prior to insertion: {name}"));
+        let indices = &[
+            context.xlen_type().const_zero(),
+            context.xlen_type().const_int(index, false),
+        ];
 
-    /// Removes the pointer to a stack variable.
-    pub fn remove_stack_pointer(&mut self, name: &str) {
-        self.stack.remove(name);
+        context.build_gep(
+            self.stack_variables,
+            indices,
+            context.word_type(),
+            &pointer_name,
+        )
     }
 
     /// Returns the return entity representation.

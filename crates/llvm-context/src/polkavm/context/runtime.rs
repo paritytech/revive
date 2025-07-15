@@ -35,6 +35,7 @@ where
             Self::r#type(context),
             0,
             Some(inkwell::module::Linkage::External),
+            0,
         )?;
 
         let mut attributes = Self::ATTRIBUTES.to_vec();

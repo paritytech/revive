@@ -70,10 +70,11 @@ impl Type {
         D: revive_llvm_context::PolkaVMDependency + Clone,
     {
         match self {
-            Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),
-            Self::Int(bitlength) => context.integer_type(bitlength),
+            //Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),
+            //Self::Int(bitlength) => context.integer_type(bitlength),
             Self::UInt(bitlength) => context.integer_type(bitlength),
-            Self::Custom(_) => context.word_type(),
+            //Self::Custom(_) => context.word_type(),
+            _ => unreachable!("no other YUL type is supported"),
         }
     }
 }

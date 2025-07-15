@@ -104,11 +104,10 @@ where
             context.set_debug_location(self.location.line, 0, None)?;
             let identifier_type = identifier.r#type.clone().unwrap_or_default();
             let r#type = identifier_type.into_llvm(context);
-            let pointer = context.build_alloca(r#type, identifier.inner.as_str());
-            context
+            let pointer = context
                 .current_function()
                 .borrow_mut()
-                .insert_stack_pointer(identifier.inner.clone(), pointer);
+                .insert_stack_pointer(context, identifier.inner.clone());
 
             let value = if let Some(expression) = self.expression {
                 match expression.into_llvm(context)? {
@@ -140,15 +139,11 @@ where
                 .to_owned()
                 .unwrap_or_default()
                 .into_llvm(context);
-            let pointer = context.build_alloca(
-                yul_type.as_basic_type_enum(),
-                format!("binding_{index}_pointer").as_str(),
-            );
-            context.build_store(pointer, yul_type.const_zero())?;
-            context
+            let pointer = context
                 .current_function()
                 .borrow_mut()
-                .insert_stack_pointer(binding.inner.to_owned(), pointer);
+                .insert_stack_pointer(context, binding.inner.to_owned());
+            context.build_store(pointer, yul_type.const_zero())?;
         }
 
         let expression = match self.expression.take() {
@@ -203,14 +198,7 @@ where
             let pointer = context
                 .current_function()
                 .borrow_mut()
-                .get_stack_pointer(binding.inner.as_str())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "{} Assignment to an undeclared variable `{}`",
-                        binding.location,
-                        binding.inner
-                    )
-                })?;
+                .get_stack_pointer(context, binding.inner.to_owned());
             context.build_store(pointer, value)?;
         }
 

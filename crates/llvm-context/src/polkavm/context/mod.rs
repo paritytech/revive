@@ -463,6 +463,7 @@ where
         r#type: inkwell::types::FunctionType<'ctx>,
         return_values_length: usize,
         linkage: Option<inkwell::module::Linkage>,
+        stack_variables: u32,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let value = self.module().add_function(name, r#type, linkage);
 
@@ -484,15 +485,30 @@ where
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
+        self.builder().position_at_end(entry_block);
+        let stack_variables_pointer = self.build_alloca(
+            self.word_type().array_type(stack_variables),
+            "stack_variables",
+        );
+
         let r#return = match return_values_length {
             0 => FunctionReturn::none(),
             1 => {
-                self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(self.word_type(), "return_pointer");
-                FunctionReturn::primitive(pointer)
+                //self.set_basic_block(entry_block);
+                //let pointer = self
+                //    .current_function()
+                //    .borrow_mut()
+                //    .insert_stack_pointer(self, format!("{name}_return_pointer"));
+
+                FunctionReturn::primitive(self.build_gep(
+                    stack_variables_pointer,
+                    &[self.xlen_type().const_zero(), self.xlen_type().const_zero()],
+                    self.word_type(),
+                    "return_pointer",
+                ))
             }
             size => {
-                self.set_basic_block(entry_block);
+                //self.set_basic_block(entry_block);
                 let pointer = self.build_alloca(
                     self.structure_type(
                         vec![self.word_type().as_basic_type_enum(); size].as_slice(),
@@ -509,6 +525,7 @@ where
             r#return,
             entry_block,
             return_block,
+            stack_variables_pointer,
         );
         Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
         let function = Rc::new(RefCell::new(function));
@@ -736,6 +753,23 @@ where
         pointer
     }
 
+    pub fn variable_decl<T: BasicType<'ctx> + Clone + Copy>(
+        &self,
+        r#type: T,
+        name: &str,
+    ) -> Pointer<'ctx> {
+        let pointer = self.builder.build_alloca(r#type, name).unwrap();
+
+        pointer
+            .as_instruction()
+            .unwrap()
+            .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
+            .expect("Alignment is valid");
+
+        Pointer::new(r#type, AddressSpace::Stack, pointer)
+    }
+
+    /// Truncate `address` to the ethereum address length and store it as bytes on the stack.
     /// Builds an aligned stack allocation at the current position.
     /// Use this if [`build_alloca_at_entry`] might change program semantics.
     /// Otherwise, alloca should always be built at the function prelude!

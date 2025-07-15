@@ -145,6 +145,7 @@ where
             entry_function_type,
             0,
             Some(inkwell::module::Linkage::External),
+            0,
         )?;
 
         context.declare_global(

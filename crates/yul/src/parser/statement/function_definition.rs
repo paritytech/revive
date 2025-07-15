@@ -212,6 +212,7 @@ where
             function_type,
             self.result.len(),
             Some(inkwell::module::Linkage::External),
+            1024,
         )?;
         revive_llvm_context::PolkaVMFunction::set_attributes(
             context.llvm(),
@@ -244,7 +245,7 @@ where
                 context
                     .current_function()
                     .borrow_mut()
-                    .insert_stack_pointer(identifier.inner, pointer);
+                    .insert_stack_pointer(context, identifier.inner);
             }
             revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
                 for (index, identifier) in self.result.into_iter().enumerate() {
@@ -264,25 +265,24 @@ where
                     context
                         .current_function()
                         .borrow_mut()
-                        .insert_stack_pointer(identifier.inner.clone(), pointer);
+                        .insert_stack_pointer(context, identifier.inner.clone());
                 }
             }
         };
 
-        let argument_types: Vec<_> = self
-            .arguments
-            .iter()
-            .map(|argument| {
-                let yul_type = argument.r#type.to_owned().unwrap_or_default();
-                yul_type.into_llvm(context)
-            })
-            .collect();
+        //let argument_types: Vec<_> = self
+        //    .arguments
+        //    .iter()
+        //    .map(|argument| {
+        //        let yul_type = argument.r#type.to_owned().unwrap_or_default();
+        //        yul_type.into_llvm(context)
+        //    })
+        //    .collect();
         for (index, argument) in self.arguments.iter().enumerate() {
-            let pointer = context.build_alloca(argument_types[index], argument.inner.as_str());
-            context
+            let pointer = context
                 .current_function()
                 .borrow_mut()
-                .insert_stack_pointer(argument.inner.clone(), pointer);
+                .insert_stack_pointer(context, argument.inner.clone());
             context.build_store(
                 pointer,
                 context.current_function().borrow().get_nth_param(index),

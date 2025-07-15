@@ -130,15 +130,8 @@ where
             let identifier = self.bindings.remove(0);
             let pointer = context
                 .current_function()
-                .borrow()
-                .get_stack_pointer(identifier.inner.as_str())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "{} Assignment to an undeclared variable `{}`",
-                        identifier.location,
-                        identifier.inner,
-                    )
-                })?;
+                .borrow_mut()
+                .get_stack_pointer(context, identifier.inner.clone());
             context.build_store(pointer, value.access(context)?)?;
             return Ok(());
         }
@@ -165,15 +158,8 @@ where
 
             let binding_pointer = context
                 .current_function()
-                .borrow()
-                .get_stack_pointer(binding.inner.as_str())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "{} Assignment to an undeclared variable `{}`",
-                        binding.location,
-                        binding.inner,
-                    )
-                })?;
+                .borrow_mut()
+                .get_stack_pointer(context, binding.inner.clone());
             let value = context.build_load(
                 field_pointer,
                 format!("assignment_binding_{index}_value").as_str(),

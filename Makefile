@@ -6,6 +6,7 @@
 	install-llvm-builder \
 	install-llvm \
 	install-revive-runner \
+	install-revive-explorer \
 	format \
 	clippy \
 	machete \
@@ -42,6 +43,9 @@ install-llvm: install-llvm-builder
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
+
+install-revive-explorer:
+	cargo install --locked --force --path crates/explorer --no-default-features
 
 format:
 	cargo fmt --all --check

@@ -7858,15 +7858,14 @@ dependencies = [
 
 [[package]]
 name = "polkavm"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2a01db119bb3a86572c0641ba6e7c9786fbd2ac89c25b43b688c4e353787526"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 dependencies = [
  "libc",
  "log",
- "polkavm-assembler 0.24.0",
- "polkavm-common 0.24.0",
- "polkavm-linux-raw 0.24.0",
+ "polkavm-assembler 0.26.0",
+ "polkavm-common 0.26.0",
+ "polkavm-linux-raw 0.26.0",
 ]
 
 [[package]]
@@ -7889,9 +7888,8 @@ dependencies = [
 
 [[package]]
 name = "polkavm-assembler"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eea6105f3f344abe0bf0151d67b3de6f5d24353f2393355ecf3f5f6e06d7fd0b"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 dependencies = [
  "log",
 ]
@@ -7919,12 +7917,11 @@ dependencies = [
 
 [[package]]
 name = "polkavm-common"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d91ed9e5af472f729fcf3b3c1cf17508ddbb3505259dd6e2ee0fb5a29e105d22"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 dependencies = [
  "log",
- "polkavm-assembler 0.24.0",
+ "polkavm-assembler 0.26.0",
 ]
 
 [[package]]
@@ -7991,15 +7988,14 @@ dependencies = [
 
 [[package]]
 name = "polkavm-disassembler"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "383c89eec2735ae2991687ed8f241d4921fa09d632f4b3cdf43ede2914bff9d2"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 dependencies = [
  "clap",
  "iced-x86",
- "polkavm 0.24.0",
- "polkavm-common 0.24.0",
- "polkavm-linker 0.24.0",
+ "polkavm 0.26.0",
+ "polkavm-common 0.26.0",
+ "polkavm-linker 0.26.0",
 ]
 
 [[package]]
@@ -8020,16 +8016,15 @@ dependencies = [
 
 [[package]]
 name = "polkavm-linker"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06c95a521a1331024ebe5823ffdfba9ea6df40b934b0804049d5171887579806"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 dependencies = [
  "dirs",
  "gimli 0.31.1",
  "hashbrown 0.14.5",
  "log",
  "object 0.36.7",
- "polkavm-common 0.24.0",
+ "polkavm-common 0.26.0",
  "regalloc2 0.9.3",
  "rustc-demangle",
 ]
@@ -8048,9 +8043,8 @@ checksum = "be6cd1d48c5e7814d287a3e12a339386a5dfa2f3ac72f932335f4cf56467f1b3"
 
 [[package]]
 name = "polkavm-linux-raw"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec0b13e26ec7234dba213ca17118c70c562809bdce0eefe84f92613d5c8da26"
+version = "0.26.0"
+source = "git+https://github.com/aman4150/polkavm/?branch=linker_optimizations#972ea5879d327deabf34df4d0f6a38b513345492"
 
 [[package]]
 name = "poly1305"
@@ -8616,6 +8610,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "revive-explorer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "revive-yul",
+]
+
+[[package]]
 name = "revive-integration"
 version = "0.1.1"
 dependencies = [
@@ -8638,7 +8641,7 @@ dependencies = [
  "anyhow",
  "libc",
  "lld-sys",
- "polkavm-linker 0.24.0",
+ "polkavm-linker 0.26.0",
  "revive-builtins",
  "tempfile",
 ]
@@ -8675,7 +8678,7 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "num",
- "polkavm-common 0.24.0",
+ "polkavm-common 0.26.0",
  "polkavm-disassembler",
  "revive-common",
  "revive-linker",

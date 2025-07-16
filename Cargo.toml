@@ -19,6 +19,7 @@ revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
 revive-builtins = { version = "0.1.0", path = "crates/builtins" }
 revive-common = { version = "0.1.0", path = "crates/common" }
 revive-differential = { version = "0.1.0", path = "crates/differential" }
+revive-explorer = { version = "0.1.0", path = "crates/explore" }
 revive-integration = { version = "0.1.1", path = "crates/integration" }
 revive-linker = { version = "0.1.0", path = "crates/linker" }
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
@@ -49,10 +50,10 @@ which = "7.0"
 path-slash = "0.2"
 rayon = "1.10"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.24.0"
-polkavm-linker = "0.24.0"
-polkavm-disassembler = "0.24.0"
-polkavm = "0.24.0"
+polkavm-common = { git = "https://github.com/aman4150/polkavm/", branch = "linker_optimizations" }
+polkavm-linker = { git = "https://github.com/aman4150/polkavm/", branch = "linker_optimizations" }
+polkavm-disassembler = { git = "https://github.com/aman4150/polkavm/", branch = "linker_optimizations" }
+polkavm = { git = "https://github.com/aman4150/polkavm/", branch = "linker_optimizations" }
 alloy-primitives = { version = "1.1", features = ["serde"] }
 alloy-sol-types = "1.1"
 alloy-genesis = "1.0"

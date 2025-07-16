@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let mut analyzer = Analyzer::new();
 
     for line in objdump::objdump(&args.file, args.objdump)?.lines() {
-        analyzer.next_line(line);
+        analyzer.next_line(line)?;
     }
 
     analyzer.display();

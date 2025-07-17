@@ -48,6 +48,7 @@ where
             function_type,
             0,
             Some(inkwell::module::Linkage::External),
+            None,
         )?;
 
         self.inner.declare(context)
@@ -74,7 +75,6 @@ where
         }
 
         context.set_basic_block(context.current_function().borrow().return_block());
-        context.set_debug_location(0, 0, None)?;
         context.build_return(None);
 
         context.pop_debug_scope();

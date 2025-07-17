@@ -463,6 +463,7 @@ where
         r#type: inkwell::types::FunctionType<'ctx>,
         return_values_length: usize,
         linkage: Option<inkwell::module::Linkage>,
+        location: Option<(u32, u32)>,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let value = self.module().add_function(name, r#type, linkage);
 
@@ -478,7 +479,8 @@ where
                 Some(scp) => scp,
             };
             self.push_debug_scope(func_scope.as_debug_info_scope());
-            self.set_debug_location(0, 0, Some(func_scope.as_debug_info_scope()))?;
+            let (line, column) = location.unwrap_or((0, 0));
+            self.set_debug_location(line, column, Some(func_scope.as_debug_info_scope()))?;
         }
 
         let entry_block = self.llvm.append_basic_block(value, "entry");
@@ -533,7 +535,11 @@ where
 
     /// Sets the current active function. If debug-info generation is enabled,
     /// constructs a debug-scope and pushes in on the scope-stack.
-    pub fn set_current_function(&mut self, name: &str, line: Option<u32>) -> anyhow::Result<()> {
+    pub fn set_current_function(
+        &mut self,
+        name: &str,
+        location: Option<(u32, u32)>,
+    ) -> anyhow::Result<()> {
         let function = self.functions.get(name).cloned().ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
@@ -542,7 +548,8 @@ where
         if let Some(scope) = self.current_function().borrow().get_debug_scope() {
             self.push_debug_scope(scope);
         }
-        self.set_debug_location(line.unwrap_or_default(), 0, None)?;
+        let (line, column) = location.unwrap_or_default();
+        self.set_debug_location(line, column, None)?;
 
         Ok(())
     }
@@ -723,17 +730,23 @@ where
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        let current_block = self.basic_block();
-        let entry_block = self.current_function().borrow().entry_block();
+        // TODO: Revisit. While at entry should be preferred in theory:
+        // - It has negligible code size impact on real word contracts.
+        // - Sometimes has negative impact on code size.
+        // - Messes up debug information used to analyze code size issues.
+        self.build_alloca(r#type, name)
 
-        match entry_block.get_first_instruction() {
-            Some(instruction) => self.builder().position_before(&instruction),
-            None => self.builder().position_at_end(entry_block),
-        }
+        // let current_block = self.basic_block();
+        // let entry_block = self.current_function().borrow().entry_block();
 
-        let pointer = self.build_alloca(r#type, name);
-        self.set_basic_block(current_block);
-        pointer
+        // match entry_block.get_first_instruction() {
+        //     Some(instruction) => self.builder().position_before(&instruction),
+        //     None => self.builder().position_at_end(entry_block),
+        // }
+
+        // let pointer = self.build_alloca(r#type, name);
+        // self.set_basic_block(current_block);
+        // pointer
     }
 
     /// Builds an aligned stack allocation at the current position.

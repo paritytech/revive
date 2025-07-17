@@ -155,7 +155,10 @@ where
             function.into_llvm(context)?;
         }
 
-        context.set_current_function(current_function.as_str(), Some(self.location.line))?;
+        context.set_current_function(
+            current_function.as_str(),
+            Some((self.location.line, self.location.column)),
+        )?;
 
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();
@@ -169,12 +172,16 @@ where
                 )
                 .as_debug_info_scope();
             context.push_debug_scope(di_block_scope);
-            context.set_debug_location(self.location.line, 0, None)?;
+            context.set_debug_location(self.location.line, self.location.column, None)?;
         }
 
         context.set_basic_block(current_block);
         for statement in local_statements.into_iter() {
-            context.set_debug_location(statement.location().line, 0, None)?;
+            context.set_debug_location(
+                statement.location().line,
+                statement.location().column,
+                None,
+            )?;
             if context.basic_block().get_terminator().is_some() {
                 break;
             }

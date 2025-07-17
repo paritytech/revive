@@ -212,6 +212,7 @@ where
             function_type,
             self.result.len(),
             Some(inkwell::module::Linkage::External),
+            Some((self.location.line, self.location.column)),
         )?;
         revive_llvm_context::PolkaVMFunction::set_attributes(
             context.llvm(),
@@ -230,7 +231,10 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        context.set_current_function(self.identifier.as_str(), Some(self.location.line))?;
+        context.set_current_function(
+            self.identifier.as_str(),
+            Some((self.location.line, self.location.column)),
+        )?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         let r#return = context.current_function().borrow().r#return();
@@ -290,7 +294,7 @@ where
         }
 
         self.body.into_llvm(context)?;
-        context.set_debug_location(self.location.line, 0, None)?;
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         match context
             .basic_block()

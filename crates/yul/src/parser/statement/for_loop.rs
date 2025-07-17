@@ -72,6 +72,7 @@ where
         let increment_block = context.append_basic_block("for_increment");
         let join_block = context.append_basic_block("for_join");
 
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         context.build_unconditional_branch(condition_block);
         context.set_basic_block(condition_block);
         let condition = self
@@ -80,6 +81,7 @@ where
             .expect("Always exists")
             .access(context)?
             .into_int_value();
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         let condition = context.builder().build_int_z_extend_or_bit_cast(
             condition,
             context.word_type(),
@@ -98,10 +100,12 @@ where
         context.set_basic_block(body_block);
         self.body.into_llvm(context)?;
         context.build_unconditional_branch(increment_block);
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         context.set_basic_block(increment_block);
         self.finalizer.into_llvm(context)?;
         context.build_unconditional_branch(condition_block);
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         context.pop_loop();
         context.set_basic_block(join_block);

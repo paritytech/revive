@@ -40,6 +40,7 @@ pub fn check_attribute_null_pointer_is_invalid() {
                 .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
+            None,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -63,6 +64,7 @@ pub fn check_attribute_optimize_for_size_mode_3() {
                 .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
+            None,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -86,6 +88,7 @@ pub fn check_attribute_optimize_for_size_mode_z() {
                 .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
+            None,
         )
         .expect("Failed to add function");
     assert!(function
@@ -109,6 +112,7 @@ pub fn check_attribute_min_size_mode_3() {
                 .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
+            None,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -132,6 +136,7 @@ pub fn check_attribute_min_size_mode_z() {
                 .fn_type(&[context.word_type().into()], false),
             1,
             Some(inkwell::module::Linkage::External),
+            None,
         )
         .expect("Failed to add function");
     assert!(function

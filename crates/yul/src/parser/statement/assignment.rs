@@ -119,7 +119,7 @@ where
         mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
-        context.set_debug_location(self.location.line, 0, None)?;
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         let value = match self.initializer.into_llvm(context)? {
             Some(value) => value,
@@ -149,7 +149,7 @@ where
         context.build_store(tuple_pointer, value)?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {
-            context.set_debug_location(self.location.line, 0, None)?;
+            context.set_debug_location(self.location.line, self.location.column, None)?;
 
             let field_pointer = context.build_gep(
                 tuple_pointer,

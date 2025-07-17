@@ -14,6 +14,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 
 ### Added
 - Line debug information per YUL builtin and for `if` statements.
+- Column numbers in debug information.
 - Support for the YUL optimizer details in the standard json input definition.
 
 ### Fixed

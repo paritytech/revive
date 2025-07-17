@@ -123,6 +123,7 @@ where
     D: revive_llvm_context::PolkaVMDependency + Clone,
 {
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         let scrutinee = self.expression.into_llvm(context)?;
 
         if self.cases.is_empty() {
@@ -143,6 +144,7 @@ where
                 .append_basic_block(format!("switch_case_branch_{}_block", index + 1).as_str());
             context.set_basic_block(expression_block);
             case.block.into_llvm(context)?;
+            context.set_debug_location(self.location.line, self.location.column, None)?;
             context.build_unconditional_branch(join_block);
 
             branches.push((constant.into_int_value(), expression_block));
@@ -159,6 +161,7 @@ where
             None => join_block,
         };
 
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         context.set_basic_block(current_block);
         context.builder().build_switch(
             scrutinee
@@ -169,6 +172,7 @@ where
             branches.as_slice(),
         )?;
 
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         context.set_basic_block(join_block);
 
         Ok(())

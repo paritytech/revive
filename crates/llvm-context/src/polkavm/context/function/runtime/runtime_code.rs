@@ -48,6 +48,7 @@ where
             function_type,
             0,
             Some(inkwell::module::Linkage::External),
+            None,
         )?;
 
         self.inner.declare(context)

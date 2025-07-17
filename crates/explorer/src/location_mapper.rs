@@ -14,27 +14,41 @@ use revive_yul::{
     },
 };
 
+pub const OTHER: &str = "other";
+pub const INTERNAL: &str = "internal";
+pub const BLOCK: &str = "block";
+pub const FUNCTION_CALL: &str = "function_call";
+pub const FOR: &str = "for";
+pub const IF: &str = "if";
+pub const CONTINUE: &str = "continue";
+pub const BREAK: &str = "break";
+pub const LEAVE: &str = "leave";
+pub const SWITCH: &str = "switch";
+pub const DECLARATION: &str = "let";
+pub const ASSIGNMENT: &str = "assignment";
+pub const FUNCTION_DEFINITION: &str = "function_definition";
+
 /// The location to statements map type alias.
 pub type LocationMap = HashMap<Location, String>;
 
 /// Construct a [LocationMap] from the given YUL `source` file.
 pub fn map_locations(source: &Path) -> anyhow::Result<LocationMap> {
-    let mut lexer = Lexer::new(std::fs::read_to_string(&source)?);
+    let mut lexer = Lexer::new(std::fs::read_to_string(source)?);
     let ast = Object::parse(&mut lexer, None).map_err(|error| {
         anyhow::anyhow!("Contract `{}` parsing error: {:?}", source.display(), error)
     })?;
 
     let mut location_map = HashMap::with_capacity(1024);
     crate::location_mapper::object_mapper(&mut location_map, &ast);
-    location_map.insert(Location::new(0, 0), "other".to_string());
-    location_map.insert(Location::new(1, 0), "internal".to_string());
+    location_map.insert(Location::new(0, 0), OTHER.to_string());
+    location_map.insert(Location::new(1, 0), INTERNAL.to_string());
 
     Ok(location_map)
 }
 
 /// Map the [Block].
 fn block_mapper(map: &mut LocationMap, block: &Block) {
-    map.insert(block.location, "block".to_string());
+    map.insert(block.location, BLOCK.to_string());
 
     for statement in &block.statements {
         statement_mapper(map, statement);
@@ -45,7 +59,7 @@ fn block_mapper(map: &mut LocationMap, block: &Block) {
 fn expression_mapper(map: &mut LocationMap, expression: &Expression) {
     if let Expression::FunctionCall(call) = expression {
         let id = match call.name {
-            Name::UserDefined(_) => "function_call".to_string(),
+            Name::UserDefined(_) => FUNCTION_CALL.to_string(),
             _ => format!("{:?}", call.name),
         };
         map.insert(expression.location(), id);
@@ -66,7 +80,7 @@ fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
         Statement::Block(block) => block_mapper(map, block),
 
         Statement::ForLoop(for_loop) => {
-            map.insert(for_loop.location, "for".to_string());
+            map.insert(for_loop.location, FOR.to_string());
 
             expression_mapper(map, &for_loop.condition);
             block_mapper(map, &for_loop.body);
@@ -75,7 +89,7 @@ fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
         }
 
         Statement::IfConditional(if_conditional) => {
-            map.insert(if_conditional.location, "if".to_string());
+            map.insert(if_conditional.location, IF.to_string());
 
             expression_mapper(map, &if_conditional.condition);
             block_mapper(map, &if_conditional.block);
@@ -84,19 +98,19 @@ fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
         Statement::Expression(expression) => expression_mapper(map, expression),
 
         Statement::Continue(location) => {
-            map.insert(*location, "continue".to_string());
+            map.insert(*location, CONTINUE.to_string());
         }
 
         Statement::Leave(location) => {
-            map.insert(*location, "leave".to_string());
+            map.insert(*location, LEAVE.to_string());
         }
 
         Statement::Break(location) => {
-            map.insert(*location, "break".to_string());
+            map.insert(*location, BREAK.to_string());
         }
 
         Statement::Switch(switch) => {
-            map.insert(switch.expression.location(), "switch".to_string());
+            map.insert(switch.expression.location(), SWITCH.to_string());
 
             expression_mapper(map, &switch.expression);
             for case in &switch.cases {
@@ -108,13 +122,13 @@ fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
         }
 
         Statement::Assignment(assignment) => {
-            map.insert(assignment.location, "assignment".to_string());
+            map.insert(assignment.location, ASSIGNMENT.to_string());
 
             expression_mapper(map, &assignment.initializer);
         }
 
         Statement::VariableDeclaration(declaration) => {
-            map.insert(declaration.location, "let".to_string());
+            map.insert(declaration.location, DECLARATION.to_string());
 
             if let Some(expression) = declaration.expression.as_ref() {
                 expression_mapper(map, expression);
@@ -122,7 +136,7 @@ fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
         }
 
         Statement::FunctionDefinition(definition) => {
-            map.insert(definition.location, "function_definition".to_string());
+            map.insert(definition.location, FUNCTION_DEFINITION.to_string());
 
             block_mapper(map, &definition.body);
         }

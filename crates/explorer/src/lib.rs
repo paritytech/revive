@@ -3,3 +3,4 @@
 pub mod dwarfdump;
 pub mod dwarfdump_analyzer;
 pub mod location_mapper;
+pub mod yul_phaser;

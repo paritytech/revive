@@ -101,7 +101,7 @@ where
     ) -> anyhow::Result<()> {
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
-            context.set_debug_location(self.location.line, 0, None)?;
+            context.set_debug_location(self.location.line, self.location.column, None)?;
             let identifier_type = identifier.r#type.clone().unwrap_or_default();
             let r#type = identifier_type.into_llvm(context);
             let pointer = context.build_alloca(r#type, identifier.inner.as_str());
@@ -133,7 +133,7 @@ where
         }
 
         for (index, binding) in self.bindings.iter().enumerate() {
-            context.set_debug_location(self.location.line, 0, None)?;
+            context.set_debug_location(self.location.line, self.location.column, None)?;
 
             let yul_type = binding
                 .r#type

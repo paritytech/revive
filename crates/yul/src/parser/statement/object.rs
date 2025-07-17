@@ -279,17 +279,17 @@ where
             context.push_debug_scope(object_scope.as_debug_info_scope());
         }
 
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         if self.identifier.ends_with("_deployed") {
             revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code).into_llvm(context)?;
         } else {
             revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;
         }
-        context.set_debug_location(self.location.line, 0, None)?;
 
         if let Some(object) = self.inner_object {
             object.into_llvm(context)?;
         }
-        context.set_debug_location(self.location.line, 0, None)?;
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         context.pop_debug_scope();
 

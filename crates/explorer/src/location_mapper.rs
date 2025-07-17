@@ -2,20 +2,39 @@
 //!
 //! TODO: Refactor when the AST visitor is implemented.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
-use revive_yul::parser::statement::{
-    block::Block,
-    expression::{function_call::name::Name, Expression},
-    object::Object,
-    Statement,
+use revive_yul::{
+    lexer::{token::location::Location, Lexer},
+    parser::statement::{
+        block::Block,
+        expression::{function_call::name::Name, Expression},
+        object::Object,
+        Statement,
+    },
 };
 
+/// The location to statements map type alias.
+pub type LocationMap = HashMap<Location, String>;
+
+/// Construct a [LocationMap] from the given YUL `source` file.
+pub fn map_locations(source: &Path) -> anyhow::Result<LocationMap> {
+    let mut lexer = Lexer::new(std::fs::read_to_string(&source)?);
+    let ast = Object::parse(&mut lexer, None).map_err(|error| {
+        anyhow::anyhow!("Contract `{}` parsing error: {:?}", source.display(), error)
+    })?;
+
+    let mut location_map = HashMap::with_capacity(1024);
+    crate::location_mapper::object_mapper(&mut location_map, &ast);
+    location_map.insert(Location::new(0, 0), "other".to_string());
+    location_map.insert(Location::new(1, 0), "internal".to_string());
+
+    Ok(location_map)
+}
+
 /// Map the [Block].
-pub fn block_mapper(map: &mut HashMap<u32, Vec<String>>, block: &Block) {
-    map.entry(block.location.line)
-        .or_default()
-        .push("block".to_string());
+fn block_mapper(map: &mut LocationMap, block: &Block) {
+    map.insert(block.location, "block".to_string());
 
     for statement in &block.statements {
         statement_mapper(map, statement);
@@ -23,13 +42,13 @@ pub fn block_mapper(map: &mut HashMap<u32, Vec<String>>, block: &Block) {
 }
 
 /// Map the [Expression].
-pub fn expression_mapper(map: &mut HashMap<u32, Vec<String>>, expression: &Expression) {
+fn expression_mapper(map: &mut LocationMap, expression: &Expression) {
     if let Expression::FunctionCall(call) = expression {
         let id = match call.name {
             Name::UserDefined(_) => "function_call".to_string(),
             _ => format!("{:?}", call.name),
         };
-        map.entry(expression.location().line).or_default().push(id);
+        map.insert(expression.location(), id);
 
         for expression in &call.arguments {
             expression_mapper(map, expression);
@@ -38,7 +57,7 @@ pub fn expression_mapper(map: &mut HashMap<u32, Vec<String>>, expression: &Expre
 }
 
 /// Map the [Statement].
-pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Statement) {
+fn statement_mapper(map: &mut LocationMap, statement: &Statement) {
     match statement {
         Statement::Object(object) => object_mapper(map, object),
 
@@ -47,9 +66,7 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
         Statement::Block(block) => block_mapper(map, block),
 
         Statement::ForLoop(for_loop) => {
-            map.entry(for_loop.location.line)
-                .or_default()
-                .push("for".to_string());
+            map.insert(for_loop.location, "for".to_string());
 
             expression_mapper(map, &for_loop.condition);
             block_mapper(map, &for_loop.body);
@@ -58,9 +75,7 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
         }
 
         Statement::IfConditional(if_conditional) => {
-            map.entry(if_conditional.location.line)
-                .or_default()
-                .push("if".to_string());
+            map.insert(if_conditional.location, "if".to_string());
 
             expression_mapper(map, &if_conditional.condition);
             block_mapper(map, &if_conditional.block);
@@ -68,25 +83,20 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
 
         Statement::Expression(expression) => expression_mapper(map, expression),
 
-        Statement::Continue(location) => map
-            .entry(location.line)
-            .or_default()
-            .push("continue".to_string()),
+        Statement::Continue(location) => {
+            map.insert(*location, "continue".to_string());
+        }
 
-        Statement::Leave(location) => map
-            .entry(location.line)
-            .or_default()
-            .push("leave".to_string()),
+        Statement::Leave(location) => {
+            map.insert(*location, "leave".to_string());
+        }
 
-        Statement::Break(location) => map
-            .entry(location.line)
-            .or_default()
-            .push("break".to_string()),
+        Statement::Break(location) => {
+            map.insert(*location, "break".to_string());
+        }
 
         Statement::Switch(switch) => {
-            map.entry(switch.expression.location().line)
-                .or_default()
-                .push("switch".to_string());
+            map.insert(switch.expression.location(), "switch".to_string());
 
             expression_mapper(map, &switch.expression);
             for case in &switch.cases {
@@ -98,17 +108,13 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
         }
 
         Statement::Assignment(assignment) => {
-            map.entry(assignment.location.line)
-                .or_default()
-                .push("assignment".to_string());
+            map.insert(assignment.location, "assignment".to_string());
 
             expression_mapper(map, &assignment.initializer);
         }
 
         Statement::VariableDeclaration(declaration) => {
-            map.entry(declaration.location.line)
-                .or_default()
-                .push("let".to_string());
+            map.insert(declaration.location, "let".to_string());
 
             if let Some(expression) = declaration.expression.as_ref() {
                 expression_mapper(map, expression);
@@ -116,9 +122,7 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
         }
 
         Statement::FunctionDefinition(definition) => {
-            map.entry(definition.location.line)
-                .or_default()
-                .push("function_definition".to_string());
+            map.insert(definition.location, "function_definition".to_string());
 
             block_mapper(map, &definition.body);
         }
@@ -126,10 +130,8 @@ pub fn statement_mapper(map: &mut HashMap<u32, Vec<String>>, statement: &Stateme
 }
 
 /// Map the [Object].
-pub fn object_mapper(map: &mut HashMap<u32, Vec<String>>, object: &Object) {
-    map.entry(object.location.line)
-        .or_default()
-        .push(object.identifier.clone());
+fn object_mapper(map: &mut LocationMap, object: &Object) {
+    map.insert(object.location, object.identifier.clone());
 
     block_mapper(map, &object.code.block);
 

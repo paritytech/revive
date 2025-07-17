@@ -997,6 +997,8 @@ impl FunctionCall {
         }
         arguments.reverse();
 
+        context.set_debug_location(self.location.line, self.location.column, None)?;
+
         Ok(arguments.try_into().expect("Always successful"))
     }
 
@@ -1013,6 +1015,8 @@ impl FunctionCall {
             arguments.push(expression.into_llvm(context)?.expect("Always exists"));
         }
         arguments.reverse();
+
+        context.set_debug_location(self.location.line, self.location.column, None)?;
 
         Ok(arguments.try_into().expect("Always successful"))
     }

@@ -196,6 +196,7 @@ where
         &mut self,
         context: &mut revive_llvm_context::PolkaVMContext<D>,
     ) -> anyhow::Result<()> {
+        context.set_debug_location(self.location.line, self.location.column, None)?;
         let argument_types: Vec<_> = self
             .arguments
             .iter()

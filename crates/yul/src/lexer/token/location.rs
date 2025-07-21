@@ -1,5 +1,8 @@
 //! The lexical token location.
 
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -45,6 +48,13 @@ impl Location {
 impl PartialEq for Location {
     fn eq(&self, other: &Self) -> bool {
         self.line == other.line && self.column == other.column
+    }
+}
+
+impl Hash for Location {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.line.hash(state);
+        self.column.hash(state);
     }
 }
 

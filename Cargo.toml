@@ -19,6 +19,7 @@ revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
 revive-builtins = { version = "0.1.0", path = "crates/builtins" }
 revive-common = { version = "0.1.0", path = "crates/common" }
 revive-differential = { version = "0.1.0", path = "crates/differential" }
+revive-explorer = { version = "0.1.0", path = "crates/explore" }
 revive-integration = { version = "0.1.1", path = "crates/integration" }
 revive-linker = { version = "0.1.0", path = "crates/linker" }
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }

@@ -1,0 +1,20 @@
+[package]
+name = "revive-explorer"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Helper utility to inspect debug builds"
+
+[[bin]]
+name = "revive-explorer"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["help", "std", "derive"] }
+num_cpus = { workspace = true }
+
+revive-yul = { workspace = true }
+

@@ -14,7 +14,7 @@ use self::file::File as FileSelection;
 pub struct Selection {
     /// Only the 'all' wildcard is available for robustness reasons.
     #[serde(rename = "*", skip_serializing_if = "Option::is_none")]
-    all: Option<FileSelection>,
+    pub all: Option<FileSelection>,
 
     #[serde(skip_serializing_if = "BTreeMap::is_empty", flatten)]
     pub files: BTreeMap<String, FileSelection>,

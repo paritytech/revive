@@ -336,7 +336,15 @@ impl AstNode for FunctionDefinition {
     }
 
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        for argument in &self.arguments {
+            argument.accept(ast_visitor);
+        }
+
         self.body.accept(ast_visitor);
+
+        for result in &self.result {
+            result.accept(ast_visitor);
+        }
     }
 }
 

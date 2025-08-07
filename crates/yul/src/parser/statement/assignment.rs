@@ -190,7 +190,11 @@ impl AstNode for Assignment {
     fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
         ast_visitor.visit_assignment(&self);
     }
+
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        for binding in &self.bindings {
+            binding.accept(ast_visitor);
+        }
         self.initializer.accept(ast_visitor);
     }
 }

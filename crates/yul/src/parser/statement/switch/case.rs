@@ -68,6 +68,7 @@ impl AstNode for Case {
     }
 
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.literal.accept(ast_visitor);
         self.block.accept(ast_visitor);
     }
 }

@@ -225,6 +225,10 @@ impl AstNode for VariableDeclaration {
     }
 
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        for binding in &self.bindings {
+            binding.accept(ast_visitor);
+        }
+
         if let Some(initializer) = self.expression.as_ref() {
             initializer.accept(ast_visitor);
         }

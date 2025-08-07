@@ -18,6 +18,7 @@ use crate::parser::error::Error as ParserError;
 use crate::parser::identifier::Identifier;
 use crate::parser::statement::block::Block;
 use crate::parser::statement::expression::function_call::name::Name as FunctionName;
+use crate::visitor::AstNode;
 
 /// The function definition statement.
 /// All functions are translated in two steps:
@@ -326,6 +327,16 @@ where
         context.pop_debug_scope();
 
         Ok(())
+    }
+}
+
+impl AstNode for FunctionDefinition {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_function_definition(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.body.accept(ast_visitor);
     }
 }
 

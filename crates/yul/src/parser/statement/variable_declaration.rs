@@ -17,6 +17,7 @@ use crate::parser::error::Error as ParserError;
 use crate::parser::identifier::Identifier;
 use crate::parser::statement::expression::function_call::name::Name as FunctionName;
 use crate::parser::statement::expression::Expression;
+use crate::visitor::AstNode;
 
 /// The Yul variable declaration statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -215,6 +216,18 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl AstNode for VariableDeclaration {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_variable_declaration(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        if let Some(initializer) = self.expression.as_ref() {
+            initializer.accept(ast_visitor);
+        }
     }
 }
 

@@ -17,6 +17,7 @@ use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::statement::code::Code;
+use crate::visitor::AstNode;
 
 /// The upper-level YUL object, representing the deploy code.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -294,6 +295,20 @@ where
         context.pop_debug_scope();
 
         Ok(())
+    }
+}
+
+impl AstNode for Object {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_object(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.code.accept(ast_visitor);
+
+        if let Some(inner_object) = &self.inner_object {
+            inner_object.accept(ast_visitor);
+        }
     }
 }
 

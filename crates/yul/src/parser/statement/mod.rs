@@ -23,6 +23,8 @@ use crate::lexer::token::location::Location;
 use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
+use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 use self::assignment::Assignment;
 use self::block::Block;
@@ -174,6 +176,30 @@ impl Statement {
             Self::Continue(location) => *location,
             Self::Break(location) => *location,
             Self::Leave(location) => *location,
+        }
+    }
+}
+
+impl AstNode for Statement {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
+        ast_visitor.visit_statement(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
+        match self {
+            Self::Object(inner) => inner.accept(ast_visitor),
+            Self::Code(inner) => inner.accept(ast_visitor),
+            Self::Block(inner) => inner.accept(ast_visitor),
+            Self::Expression(inner) => inner.accept(ast_visitor),
+            Self::FunctionDefinition(inner) => inner.accept(ast_visitor),
+            Self::VariableDeclaration(inner) => inner.accept(ast_visitor),
+            Self::Assignment(inner) => inner.accept(ast_visitor),
+            Self::IfConditional(inner) => inner.accept(ast_visitor),
+            Self::Switch(inner) => inner.accept(ast_visitor),
+            Self::ForLoop(inner) => inner.accept(ast_visitor),
+            Self::Continue(_location) => {}
+            Self::Break(_location) => {}
+            Self::Leave(_location) => {}
         }
     }
 }

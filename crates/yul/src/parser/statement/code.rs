@@ -13,6 +13,7 @@ use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::statement::block::Block;
+use crate::visitor::AstNode;
 
 /// The YUL code entity, which is the first block of the object.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -63,6 +64,16 @@ where
         self.block.into_llvm(context)?;
 
         Ok(())
+    }
+}
+
+impl AstNode for Code {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_code(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.block.accept(ast_visitor);
     }
 }
 

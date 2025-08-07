@@ -15,6 +15,7 @@ use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::identifier::Identifier;
 use crate::parser::statement::expression::Expression;
+use crate::visitor::AstNode;
 
 /// The Yul assignment expression statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -182,5 +183,14 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl AstNode for Assignment {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_assignment(&self);
+    }
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.initializer.accept(ast_visitor);
     }
 }

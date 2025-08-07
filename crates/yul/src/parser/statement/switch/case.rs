@@ -13,6 +13,7 @@ use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::statement::block::Block;
 use crate::parser::statement::expression::literal::Literal;
+use crate::visitor::AstNode;
 
 /// The Yul switch statement case.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -58,6 +59,16 @@ impl Case {
     /// Get the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> HashSet<String> {
         self.block.get_missing_libraries()
+    }
+}
+
+impl AstNode for Case {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_case(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.block.accept(ast_visitor);
     }
 }
 

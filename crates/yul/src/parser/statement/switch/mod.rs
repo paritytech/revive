@@ -16,6 +16,7 @@ use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::statement::block::Block;
 use crate::parser::statement::expression::Expression;
+use crate::visitor::AstNode;
 
 use self::case::Case;
 
@@ -176,6 +177,24 @@ where
         context.set_basic_block(join_block);
 
         Ok(())
+    }
+}
+
+impl AstNode for Switch {
+    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        ast_visitor.visit_switch(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+        self.expression.accept(ast_visitor);
+
+        for case in &self.cases {
+            case.accept(ast_visitor);
+        }
+
+        if let Some(default) = self.default.as_ref() {
+            default.accept(ast_visitor);
+        }
     }
 }
 

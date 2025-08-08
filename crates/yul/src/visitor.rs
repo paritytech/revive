@@ -1,3 +1,5 @@
+//! The YUL AST visitor interface definitions.
+
 use crate::parser::{
     identifier::Identifier,
     statement::{
@@ -204,13 +206,14 @@ mod tests {
             self.indent();
         }
 
-        /// Append the current identation to the print buffer..
+        /// Append the current identation to the print buffer.
         fn indent(&mut self) {
             for _ in 0..self.indentation {
                 self.buffer.push_str("  ");
             }
         }
 
+        /// Append the given `nodes` comma-separated.
         fn separate(&mut self, nodes: &[impl AstNode]) {
             for (index, argument) in nodes.iter().enumerate() {
                 argument.accept(self);
@@ -224,7 +227,7 @@ mod tests {
 
     impl AstVisitor for Printer {
         fn visit(&mut self, node: &impl AstNode) {
-            node.visit_children(self);
+            node.accept(self);
         }
 
         fn visit_assignment(&mut self, node: &Assignment) {
@@ -756,7 +759,12 @@ object "ERC20_247" {
 
         assert_eq!(
             printer.buffer, printer2.buffer,
-            "the output from the printer must converge immediately"
+            "the output from the printers must converge immediately"
+        );
+
+        assert!(
+            !printer.buffer.is_empty(),
+            "the printer must produce output"
         );
     }
 }

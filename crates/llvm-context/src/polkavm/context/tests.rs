@@ -9,7 +9,7 @@ use crate::polkavm::DummyDependency;
 pub fn create_context(
     llvm: &inkwell::context::Context,
     optimizer_settings: OptimizerSettings,
-) -> Context<DummyDependency> {
+) -> Context<'_, DummyDependency> {
     crate::initialize_llvm(crate::Target::PVM, "resolc", Default::default());
 
     let module = llvm.create_module("test");

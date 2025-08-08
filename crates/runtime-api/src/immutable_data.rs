@@ -26,19 +26,19 @@ pub static GLOBAL_IMMUTABLE_DATA_SIZE: &str = "__immutable_data_size";
 pub static IMMUTABLE_DATA_MAX_SIZE: u32 = 4 * 1024;
 
 /// Returns the immutable data global type.
-pub fn data_type(context: &inkwell::context::Context, size: u32) -> inkwell::types::ArrayType {
+pub fn data_type(context: &inkwell::context::Context, size: u32) -> inkwell::types::ArrayType<'_> {
     context
         .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
         .array_type(size)
 }
 
 /// Returns the immutable data size global type.
-pub fn size_type(context: &inkwell::context::Context) -> inkwell::types::IntType {
+pub fn size_type(context: &inkwell::context::Context) -> inkwell::types::IntType<'_> {
     context.custom_width_int_type(revive_common::BIT_LENGTH_X32 as u32)
 }
 
 /// Creates a LLVM module with the immutable data and its `size` in bytes.
-pub fn module(context: &inkwell::context::Context, size: u32) -> inkwell::module::Module {
+pub fn module(context: &inkwell::context::Context, size: u32) -> inkwell::module::Module<'_> {
     let module = context.create_module(MODULE_NAME);
     let length = size / revive_common::BYTE_LENGTH_WORD as u32;
 

@@ -123,7 +123,7 @@ impl AstNode for ForLoop {
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
         self.initializer.accept(ast_visitor);
         self.condition.accept(ast_visitor);
-        self.body.accept(ast_visitor);
         self.finalizer.accept(ast_visitor);
+        self.body.accept(ast_visitor);
     }
 }

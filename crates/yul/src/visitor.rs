@@ -33,30 +33,28 @@ pub trait AstNode: std::fmt::Debug {
     ///
     /// This is supposed visit child nodes in the correct order.
     ///
-    /// Visitor implementations are supposed to call this method for traversing.
+    /// Visitor implementations call this method for traversing.
     fn visit_children(&self, _ast_visitor: &mut impl AstVisitor) {}
 
     /// Returns the lexer (source) location of the node.
     fn location(&self) -> Location;
 }
 
-/// This trait allows implementing custom AST visitor logic for each node type,
-/// without needing to worry about how the nodes must be traversed.
+/// This trait allows implementing custom AST visitor logic for each node type.
 ///
-/// The only thing the visitor needs to ensure is to call the nodes
-/// [AstNode::visit_children] method (in any trait method).
-/// This simplifies the implementation fo AST visitors a lot (see below example).
+/// The visitor can call the nodes [AstNode::visit_children] method (from any
+/// other trait method). This simplifies the implementation of AST visitors.
 ///
-/// Default implementations which do nothing except for visiting children
-/// are provided for each node type.
+/// Default implementations which do nothing except accepting the visitor via the
+/// [AstVisitor::visit] method are provided for each node type.
 ///
-/// The [AstVisitor::visit] method is the generic visitor method,
-/// which is seen by all nodes.
+/// The [AstVisitor::visit] method is the generic visitor method, seen by all
+/// nodes.
 ///
-/// Visited nodes are given read only access (non-mutable refernces) on purpose,
-/// as it's a compiler design best practice to not mutate the AST after parsing.
-/// Instead, mutable access to the [AstVisitor] instance itself is,
-/// provided, allowing to build a new representation instead if needed.
+/// Visited nodes are given read only access (non-mutable references); it's a
+/// compiler design practice to not mutate the AST after parsing.
+/// Instead, mutable access to the [AstVisitor] instance itself is provided,
+/// allowing to build a new representation if needed.
 ///
 /// # Example
 ///

@@ -188,7 +188,7 @@ where
 
 impl AstNode for Assignment {
     fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
-        ast_visitor.visit_assignment(&self);
+        ast_visitor.visit_assignment(self);
     }
 
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {

@@ -208,7 +208,7 @@ mod tests {
     impl Printer {
         /// Append a newline with the current identation to the print buffer.
         fn newline(&mut self) {
-            self.buffer.push_str("\n");
+            self.buffer.push('\n');
             self.indent();
         }
 
@@ -246,14 +246,14 @@ mod tests {
 
         fn visit_block(&mut self, node: &Block) {
             self.newline();
-            self.buffer.push_str("{");
+            self.buffer.push('{');
             self.indentation += 1;
 
             node.visit_children(self);
 
             self.indentation -= 1;
             self.newline();
-            self.buffer.push_str("}");
+            self.buffer.push('}');
         }
 
         fn visit_case(&mut self, node: &Case) {
@@ -278,20 +278,20 @@ mod tests {
 
         fn visit_function_call(&mut self, node: &FunctionCall) {
             self.buffer.push_str(&format!("{}", node.name));
-            self.buffer.push_str("(");
+            self.buffer.push('(');
 
             self.separate(&node.arguments);
 
-            self.buffer.push_str(")");
+            self.buffer.push(')');
         }
 
         fn visit_function_definition(&mut self, node: &FunctionDefinition) {
             self.buffer
                 .push_str(&format!("function {}", node.identifier));
 
-            self.buffer.push_str("(");
+            self.buffer.push('(');
             self.separate(&node.arguments);
-            self.buffer.push_str(")");
+            self.buffer.push(')');
 
             self.buffer.push_str(" -> ");
             self.separate(&node.result);
@@ -324,7 +324,7 @@ mod tests {
 
             self.indentation -= 1;
             self.newline();
-            self.buffer.push_str("}");
+            self.buffer.push('}');
         }
 
         fn visit_statement(&mut self, node: &Statement) {

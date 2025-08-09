@@ -50,7 +50,7 @@ pub const LITERAL: &str = "literal";
 pub struct LocationMapper(HashMap<Location, String>);
 
 impl LocationMapper {
-    /// Construct a [LocationMap] from the given YUL `source` file.
+    /// Construct a node location map from the given YUL `source` file.
     pub fn map_locations(source: &Path) -> anyhow::Result<HashMap<Location, String>> {
         let mut lexer = Lexer::new(std::fs::read_to_string(source)?);
         let ast = Object::parse(&mut lexer, None).map_err(|error| {

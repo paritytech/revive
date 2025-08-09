@@ -7,34 +7,7 @@ use std::{
 
 use revive_yul::lexer::token::location::Location;
 
-use crate::location_mapper::{self, map_locations, LocationMap};
-
-/// Unknwon code.
-pub const OTHER: &str = "other";
-/// Compiler internal code.
-pub const INTERNAL: &str = "internal";
-/// YUL block code.
-pub const BLOCK: &str = "block";
-/// YUL function call code.
-pub const FUNCTION_CALL: &str = "function_call";
-/// YUL conditional code.
-pub const IF: &str = "if";
-/// YUL loop code.
-pub const FOR: &str = "for";
-/// YUL loop continue code.
-pub const CONTINUE: &str = "continue";
-/// YUL loop break code.
-pub const BREAK: &str = "break";
-/// YUL switch code.
-pub const SWITCH: &str = "switch";
-/// YUL variable declaration code.
-pub const DECLARATION: &str = "let";
-/// YUL variable assignment code.
-pub const ASSIGNMENT: &str = "assignment";
-/// YUL function definition code.
-pub const FUNCTION_DEFINITION: &str = "function_definition";
-/// YUL function leave code.
-pub const LEAVE: &str = "leave";
+use crate::location_mapper::{self, LocationMapper};
 
 /// The dwarf dump analyzer.
 ///
@@ -48,7 +21,7 @@ pub struct DwarfdumpAnalyzer {
     source: PathBuf,
 
     /// The YUL location to statements map.
-    location_map: LocationMap,
+    location_map: HashMap<Location, String>,
 
     /// The `llvm-dwarfdump --debug-lines` output.
     debug_lines: String,
@@ -81,7 +54,7 @@ impl DwarfdumpAnalyzer {
 
     /// Populate the maps so that we can always unwrap later.
     fn map_locations(&mut self) -> anyhow::Result<()> {
-        self.location_map = map_locations(&self.source)?;
+        self.location_map = LocationMapper::map_locations(&self.source)?;
 
         self.statements_count = HashMap::with_capacity(self.location_map.len());
         self.statements_size = HashMap::with_capacity(self.location_map.len());
@@ -176,13 +149,12 @@ impl DwarfdumpAnalyzer {
                 location_mapper::BLOCK => "--block-cost",
                 location_mapper::FUNCTION_CALL => "--function-call-cost",
                 location_mapper::IF => "--if-cost",
-                location_mapper::CONTINUE => "--continue-cost",
-                location_mapper::BREAK => "--break-cost",
-                location_mapper::LEAVE => "--leave-cost",
                 location_mapper::SWITCH => "--switch-cost",
                 location_mapper::DECLARATION => "--variable-declaration-cost",
                 location_mapper::ASSIGNMENT => "--assignment-cost",
                 location_mapper::FUNCTION_DEFINITION => "--function-definition-cost",
+                location_mapper::IDENTIFIER => "--identifier-cost",
+                location_mapper::LITERAL => "--literal-cost",
                 _ => "--expression-statement-cost",
             };
 

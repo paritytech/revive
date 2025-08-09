@@ -16,6 +16,8 @@ use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::identifier::Identifier;
+use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 use self::function_call::FunctionCall;
 use self::literal::Literal;
@@ -142,5 +144,23 @@ impl Expression {
                 .into_llvm(context)?
                 .map(revive_llvm_context::PolkaVMArgument::value)),
         }
+    }
+}
+
+impl AstNode for Expression {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
+        ast_visitor.visit_expression(self);
+    }
+
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
+        match self {
+            Self::FunctionCall(inner) => inner.accept(ast_visitor),
+            Self::Identifier(inner) => inner.accept(ast_visitor),
+            Self::Literal(inner) => inner.accept(ast_visitor),
+        }
+    }
+
+    fn location(&self) -> Location {
+        self.location()
     }
 }

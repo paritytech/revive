@@ -19,6 +19,7 @@ use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::r#type::Type;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 /// Represents a literal in YUL without differentiating its type.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -224,11 +225,11 @@ impl Literal {
 }
 
 impl AstNode for Literal {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_literal(self);
     }
 
-    fn visit_children(&self, _ast_visitor: &mut impl crate::visitor::AstVisitor) {}
+    fn visit_children(&self, _ast_visitor: &mut impl AstVisitor) {}
 
     fn location(&self) -> Location {
         self.location

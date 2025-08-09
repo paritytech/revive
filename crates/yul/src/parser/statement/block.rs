@@ -18,6 +18,7 @@ use crate::parser::statement::assignment::Assignment;
 use crate::parser::statement::expression::Expression;
 use crate::parser::statement::Statement;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 /// The Yul source code block.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -228,11 +229,11 @@ where
 }
 
 impl AstNode for Block {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_block(self);
     }
 
-    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
         for statement in &self.statements {
             statement.accept(ast_visitor);
         }

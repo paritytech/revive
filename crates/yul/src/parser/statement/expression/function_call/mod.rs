@@ -20,6 +20,7 @@ use crate::parser::error::Error as ParserError;
 use crate::parser::statement::expression::literal::Literal;
 use crate::parser::statement::expression::Expression;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 use self::name::Name;
 
@@ -1024,11 +1025,11 @@ impl FunctionCall {
 }
 
 impl AstNode for FunctionCall {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_function_call(self);
     }
 
-    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
         for argument in &self.arguments {
             argument.accept(ast_visitor);
         }

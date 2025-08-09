@@ -17,6 +17,7 @@ use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
 use crate::parser::identifier::Identifier;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 use self::function_call::FunctionCall;
 use self::literal::Literal;
@@ -147,11 +148,11 @@ impl Expression {
 }
 
 impl AstNode for Expression {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_expression(self);
     }
 
-    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
         match self {
             Self::FunctionCall(inner) => inner.accept(ast_visitor),
             Self::Identifier(inner) => inner.accept(ast_visitor),

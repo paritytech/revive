@@ -11,6 +11,7 @@ use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::r#type::Type;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 /// The YUL source code identifier.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -116,11 +117,11 @@ impl Identifier {
 }
 
 impl AstNode for Identifier {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_identifier(self);
     }
 
-    fn visit_children(&self, _ast_visitor: &mut impl crate::visitor::AstVisitor) {}
+    fn visit_children(&self, _ast_visitor: &mut impl AstVisitor) {}
 
     fn location(&self) -> Location {
         self.location

@@ -17,6 +17,7 @@ use crate::parser::error::Error as ParserError;
 use crate::parser::statement::block::Block;
 use crate::parser::statement::expression::Expression;
 use crate::visitor::AstNode;
+use crate::visitor::AstVisitor;
 
 use self::case::Case;
 
@@ -181,11 +182,11 @@ where
 }
 
 impl AstNode for Switch {
-    fn accept(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn accept(&self, ast_visitor: &mut impl AstVisitor) {
         ast_visitor.visit_switch(self);
     }
 
-    fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
+    fn visit_children(&self, ast_visitor: &mut impl AstVisitor) {
         self.expression.accept(ast_visitor);
 
         for case in &self.cases {

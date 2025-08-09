@@ -44,7 +44,7 @@ pub const FUNCTION_DEFINITION: &str = "function_definition";
 /// Code attributed to an identifier.
 pub const IDENTIFIER: &str = "identifier";
 /// Code attributed to a literal.
-pub const LITERAL: &str = "identifier";
+pub const LITERAL: &str = "literal";
 
 /// The location to statements mapper.
 pub struct LocationMapper(HashMap<Location, String>);

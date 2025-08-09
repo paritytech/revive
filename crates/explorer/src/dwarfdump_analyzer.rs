@@ -152,7 +152,8 @@ impl DwarfdumpAnalyzer {
                 location_mapper::SWITCH => "--switch-cost",
                 location_mapper::DECLARATION => "--variable-declaration-cost",
                 location_mapper::ASSIGNMENT => "--assignment-cost",
-                location_mapper::FUNCTION_DEFINITION => "--identifier-cost",
+                location_mapper::FUNCTION_DEFINITION => "--function-definition-cost",
+                location_mapper::IDENTIFIER => "--identifier-cost",
                 location_mapper::LITERAL => "--literal-cost",
                 _ => "--expression-statement-cost",
             };

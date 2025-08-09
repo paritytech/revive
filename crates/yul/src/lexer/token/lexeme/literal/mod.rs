@@ -27,7 +27,7 @@ impl std::fmt::Display for Literal {
         match self {
             Self::Boolean(inner) => write!(f, "{inner}"),
             Self::Integer(inner) => write!(f, "{inner}"),
-            Self::String(inner) => write!(f, "{inner}"),
+            Self::String(inner) => write!(f, "\"{inner}\""),
         }
     }
 }

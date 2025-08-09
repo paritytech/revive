@@ -1,10 +1,13 @@
 //! The function name.
 
+use std::fmt;
+
 use serde::Deserialize;
 use serde::Serialize;
 
 /// The function name.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum Name {
     /// The user-defined function.
     UserDefined(String),
@@ -354,5 +357,132 @@ impl From<&str> for Name {
 
             input => Self::UserDefined(input.to_owned()),
         }
+    }
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Self::Verbatim {
+            input_size,
+            output_size,
+        } = self
+        {
+            return write!(f, "verbatim_{input_size}i_{output_size}o");
+        }
+
+        let token = match self {
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Mod => "mod",
+            Self::Sdiv => "sdiv",
+            Self::Smod => "smod",
+
+            Self::Lt => "lt",
+            Self::Gt => "gt",
+            Self::Eq => "eq",
+            Self::IsZero => "iszero",
+            Self::Slt => "slt",
+            Self::Sgt => "sgt",
+
+            Self::Or => "or",
+            Self::Xor => "xor",
+            Self::Not => "not",
+            Self::And => "and",
+            Self::Shl => "shl",
+            Self::Shr => "shr",
+            Self::Sar => "sar",
+            Self::Byte => "byte",
+            Self::Pop => "pop",
+
+            Self::AddMod => "addmod",
+            Self::MulMod => "mulmod",
+            Self::Exp => "exp",
+            Self::SignExtend => "signextend",
+
+            Self::Keccak256 => "keccak256",
+
+            Self::MLoad => "mload",
+            Self::MStore => "mstore",
+            Self::MStore8 => "mstore8",
+            Self::MCopy => "mcopy",
+
+            Self::SLoad => "sload",
+            Self::SStore => "sstore",
+            Self::TLoad => "tload",
+            Self::TStore => "tstore",
+            Self::LoadImmutable => "loadimmutable",
+            Self::SetImmutable => "setimmutable",
+
+            Self::CallDataLoad => "calldataload",
+            Self::CallDataSize => "calldatasize",
+            Self::CallDataCopy => "calldatacopy",
+            Self::CodeSize => "codesize",
+            Self::CodeCopy => "codecopy",
+            Self::ReturnDataSize => "returndatasize",
+            Self::ReturnDataCopy => "returndatacopy",
+            Self::ExtCodeSize => "extcodesize",
+            Self::ExtCodeHash => "extcodehash",
+
+            Self::Return => "return",
+            Self::Revert => "revert",
+
+            Self::Log0 => "log0",
+            Self::Log1 => "log1",
+            Self::Log2 => "log2",
+            Self::Log3 => "log3",
+            Self::Log4 => "log4",
+
+            Self::Call => "call",
+            Self::DelegateCall => "delegatecall",
+            Self::StaticCall => "staticcall",
+            Self::Create => "create",
+            Self::Create2 => "create2",
+
+            Self::DataSize => "datasize",
+            Self::DataOffset => "dataoffset",
+            Self::DataCopy => "datacopy",
+
+            Self::Stop => "stop",
+            Self::Invalid => "invalid",
+
+            Self::LinkerSymbol => "linkersymbol",
+            Self::MemoryGuard => "memoryguard",
+
+            Self::Address => "address",
+            Self::Caller => "caller",
+
+            Self::CallValue => "callvalue",
+            Self::Gas => "gas",
+            Self::Balance => "balance",
+            Self::SelfBalance => "selfbalance",
+
+            Self::GasLimit => "gaslimit",
+            Self::GasPrice => "gasprice",
+            Self::Origin => "origin",
+            Self::ChainId => "chainid",
+            Self::Timestamp => "timestamp",
+            Self::Number => "number",
+            Self::BlockHash => "blockhash",
+            Self::BlobHash => "blobhash",
+            Self::Difficulty => "difficulty",
+            Self::Prevrandao => "prevrandao",
+            Self::CoinBase => "coinbase",
+            Self::BaseFee => "basefee",
+            Self::BlobBaseFee => "blobbasefee",
+            Self::MSize => "msize",
+
+            Self::CallCode => "callcode",
+            Self::Pc => "pc",
+            Self::ExtCodeCopy => "extcodecopy",
+            Self::SelfDestruct => "selfdestruct",
+
+            Self::UserDefined(s) => s.as_str(),
+
+            Self::Verbatim { .. } => unreachable!(),
+        };
+
+        write!(f, "{token}")
     }
 }

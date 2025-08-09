@@ -10,6 +10,8 @@ use revive_explorer::{dwarfdump, dwarfdump_analyzer::DwarfdumpAnalyzer, yul_phas
 /// - The count of each YUL statement translated.
 /// - A per YUL statement break-down of bytecode size contributed per.
 /// - Estimated `yul-phaser` cost parameters.
+///
+/// Note: This tool might not be fully accurate, especially when the code was optimized.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -26,6 +28,7 @@ struct Args {
     yul_phaser: Option<PathBuf>,
 
     /// Path of the shared object to analyze.
+    /// It must have been compiled with debug info (-g).
     file: PathBuf,
 }
 

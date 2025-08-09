@@ -29,7 +29,16 @@ pub fn source_file(
     dwarfdump_executable: &Option<PathBuf>,
 ) -> anyhow::Result<PathBuf> {
     let output = dwarfdump(shared_object, dwarfdump_executable, &SOURCE_FILE_ARGUMENTS)?;
-    Ok(output.trim().into())
+    let output = output.trim();
+
+    if output.is_empty() {
+        anyhow::bail!(
+            "the shared object at path `{}` doesn't contain the source file name. Hint: compile with debug information (-g)?",
+            shared_object.display()
+        );
+    }
+
+    Ok(output.into())
 }
 
 /// The internal `llvm-dwarfdump` helper function.

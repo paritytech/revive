@@ -21,15 +21,15 @@ pub struct DwarfdumpAnalyzer {
     source: PathBuf,
 
     /// The YUL location to statements map.
-    location_map: HashMap<Location, &'static str>,
+    location_map: HashMap<Location, String>,
 
     /// The `llvm-dwarfdump --debug-lines` output.
     debug_lines: String,
 
     /// The observed statements.
-    statements_count: HashMap<&'static str, usize>,
+    statements_count: HashMap<String, usize>,
     /// The observed statement to instructions size.
-    statements_size: HashMap<&'static str, u64>,
+    statements_size: HashMap<String, u64>,
 }
 
 impl DwarfdumpAnalyzer {
@@ -61,10 +61,10 @@ impl DwarfdumpAnalyzer {
 
         for statement in self.location_map.values() {
             if !self.statements_size.contains_key(statement) {
-                self.statements_size.insert(statement, 0);
+                self.statements_size.insert(statement.clone(), 0);
             }
 
-            *self.statements_count.entry(statement).or_insert(0) += 1;
+            *self.statements_count.entry(statement.clone()).or_insert(0) += 1;
         }
 
         Ok(())
@@ -142,7 +142,7 @@ impl DwarfdumpAnalyzer {
             .filter(|(_, count)| **count > 0)
         {
             let size = self.statements_size.get(statement).unwrap();
-            let cost = match *statement {
+            let cost = match statement.as_str() {
                 location_mapper::FOR => "--for-loop-cost",
                 location_mapper::OTHER => continue,
                 location_mapper::INTERNAL => continue,

@@ -47,11 +47,11 @@ pub const IDENTIFIER: &str = "identifier";
 pub const LITERAL: &str = "identifier";
 
 /// The location to statements mapper.
-pub struct LocationMapper(HashMap<Location, &'static str>);
+pub struct LocationMapper(HashMap<Location, String>);
 
 impl LocationMapper {
     /// Construct a [LocationMap] from the given YUL `source` file.
-    pub fn map_locations(source: &Path) -> anyhow::Result<HashMap<Location, &'static str>> {
+    pub fn map_locations(source: &Path) -> anyhow::Result<HashMap<Location, String>> {
         let mut lexer = Lexer::new(std::fs::read_to_string(source)?);
         let ast = Object::parse(&mut lexer, None).map_err(|error| {
             anyhow::anyhow!("Contract `{}` parsing error: {:?}", source.display(), error)
@@ -59,8 +59,8 @@ impl LocationMapper {
 
         let mut location_map = Self(Default::default());
         ast.accept(&mut location_map);
-        location_map.0.insert(Location::new(0, 0), OTHER);
-        location_map.0.insert(Location::new(1, 0), INTERNAL);
+        location_map.0.insert(Location::new(0, 0), OTHER.into());
+        location_map.0.insert(Location::new(1, 0), INTERNAL.into());
 
         Ok(location_map.0)
     }
@@ -73,51 +73,51 @@ impl AstVisitor for LocationMapper {
 
     fn visit_block(&mut self, node: &Block) {
         node.visit_children(self);
-        self.0.insert(node.location, BLOCK);
+        self.0.insert(node.location, BLOCK.into());
     }
 
     fn visit_assignment(&mut self, node: &Assignment) {
         node.visit_children(self);
-        self.0.insert(node.location, ASSIGNMENT);
+        self.0.insert(node.location, ASSIGNMENT.into());
     }
 
     fn visit_if_conditional(&mut self, node: &IfConditional) {
         node.visit_children(self);
-        self.0.insert(node.location, IF);
+        self.0.insert(node.location, IF.into());
     }
 
     fn visit_variable_declaration(&mut self, node: &VariableDeclaration) {
         node.visit_children(self);
-        self.0.insert(node.location, DECLARATION);
+        self.0.insert(node.location, DECLARATION.into());
     }
 
     fn visit_function_call(&mut self, node: &FunctionCall) {
         node.visit_children(self);
-        self.0.insert(node.location, FUNCTION_CALL);
+        self.0.insert(node.location, node.name.to_string());
     }
 
     fn visit_function_definition(&mut self, node: &FunctionDefinition) {
         node.visit_children(self);
-        self.0.insert(node.location, FUNCTION_DEFINITION);
+        self.0.insert(node.location, FUNCTION_DEFINITION.into());
     }
 
     fn visit_identifier(&mut self, node: &Identifier) {
         node.visit_children(self);
-        self.0.insert(node.location, IDENTIFIER);
+        self.0.insert(node.location, IDENTIFIER.into());
     }
 
     fn visit_literal(&mut self, node: &Literal) {
         node.visit_children(self);
-        self.0.insert(node.location, LITERAL);
+        self.0.insert(node.location, LITERAL.into());
     }
 
     fn visit_for_loop(&mut self, node: &ForLoop) {
         node.visit_children(self);
-        self.0.insert(node.location, FOR);
+        self.0.insert(node.location, FOR.into());
     }
 
     fn visit_switch(&mut self, node: &Switch) {
         node.visit_children(self);
-        self.0.insert(node.location, SWITCH);
+        self.0.insert(node.location, SWITCH.into());
     }
 }

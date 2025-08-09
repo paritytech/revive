@@ -158,4 +158,8 @@ impl AstNode for Expression {
             Self::Literal(inner) => inner.accept(ast_visitor),
         }
     }
+
+    fn location(&self) -> Location {
+        self.location()
+    }
 }

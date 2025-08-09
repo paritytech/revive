@@ -197,4 +197,8 @@ impl AstNode for Assignment {
         }
         self.initializer.accept(ast_visitor);
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }

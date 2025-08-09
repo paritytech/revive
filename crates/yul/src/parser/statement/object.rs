@@ -310,6 +310,10 @@ impl AstNode for Object {
             inner_object.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

@@ -75,6 +75,10 @@ impl AstNode for Code {
     fn visit_children(&self, ast_visitor: &mut impl crate::visitor::AstVisitor) {
         self.block.accept(ast_visitor);
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

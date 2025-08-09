@@ -1,19 +1,22 @@
 //! The YUL AST visitor interface definitions.
 
-use crate::parser::{
-    identifier::Identifier,
-    statement::{
-        assignment::Assignment,
-        block::Block,
-        code::Code,
-        expression::{function_call::FunctionCall, literal::Literal, Expression},
-        for_loop::ForLoop,
-        function_definition::FunctionDefinition,
-        if_conditional::IfConditional,
-        object::Object,
-        switch::{case::Case, Switch},
-        variable_declaration::VariableDeclaration,
-        Statement,
+use crate::{
+    lexer::token::location::Location,
+    parser::{
+        identifier::Identifier,
+        statement::{
+            assignment::Assignment,
+            block::Block,
+            code::Code,
+            expression::{function_call::FunctionCall, literal::Literal, Expression},
+            for_loop::ForLoop,
+            function_definition::FunctionDefinition,
+            if_conditional::IfConditional,
+            object::Object,
+            switch::{case::Case, Switch},
+            variable_declaration::VariableDeclaration,
+            Statement,
+        },
     },
 };
 
@@ -32,6 +35,9 @@ pub trait AstNode: std::fmt::Debug {
     ///
     /// Visitor implementations are supposed to call this method for traversing.
     fn visit_children(&self, _ast_visitor: &mut impl AstVisitor) {}
+
+    /// Returns the lexer (source) location of the node.
+    fn location(&self) -> Location;
 }
 
 /// This trait allows implementing custom AST visitor logic for each node type,
@@ -282,12 +288,12 @@ mod tests {
         fn visit_function_definition(&mut self, node: &FunctionDefinition) {
             self.buffer
                 .push_str(&format!("function {}", node.identifier));
+
             self.buffer.push_str("(");
-
             self.separate(&node.arguments);
+            self.buffer.push_str(")");
 
-            self.buffer.push_str(") -> ");
-
+            self.buffer.push_str(" -> ");
             self.separate(&node.result);
 
             node.body.accept(self);
@@ -333,7 +339,6 @@ mod tests {
 
         fn visit_variable_declaration(&mut self, node: &VariableDeclaration) {
             self.buffer.push_str("let ");
-
             self.separate(&node.bindings);
 
             if let Some(initializer) = node.expression.as_ref() {

@@ -121,4 +121,8 @@ impl AstNode for Identifier {
     }
 
     fn visit_children(&self, _ast_visitor: &mut impl crate::visitor::AstVisitor) {}
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }

@@ -126,4 +126,8 @@ impl AstNode for ForLoop {
         self.finalizer.accept(ast_visitor);
         self.body.accept(ast_visitor);
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }

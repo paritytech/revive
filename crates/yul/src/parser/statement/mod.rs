@@ -202,4 +202,8 @@ impl AstNode for Statement {
             Self::Leave(_location) => {}
         }
     }
+
+    fn location(&self) -> Location {
+        self.location()
+    }
 }

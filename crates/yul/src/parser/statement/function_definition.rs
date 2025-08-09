@@ -346,6 +346,10 @@ impl AstNode for FunctionDefinition {
             result.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

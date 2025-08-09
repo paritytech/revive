@@ -233,6 +233,10 @@ impl AstNode for VariableDeclaration {
             initializer.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

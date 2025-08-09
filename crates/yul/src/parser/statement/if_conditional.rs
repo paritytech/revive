@@ -93,4 +93,8 @@ impl AstNode for IfConditional {
         self.condition.accept(ast_visitor);
         self.block.accept(ast_visitor);
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }

@@ -71,6 +71,10 @@ impl AstNode for Case {
         self.literal.accept(ast_visitor);
         self.block.accept(ast_visitor);
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

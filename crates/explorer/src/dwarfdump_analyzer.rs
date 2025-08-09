@@ -7,34 +7,7 @@ use std::{
 
 use revive_yul::lexer::token::location::Location;
 
-use crate::location_mapper::{self, map_locations, LocationMap};
-
-/// Unknwon code.
-pub const OTHER: &str = "other";
-/// Compiler internal code.
-pub const INTERNAL: &str = "internal";
-/// YUL block code.
-pub const BLOCK: &str = "block";
-/// YUL function call code.
-pub const FUNCTION_CALL: &str = "function_call";
-/// YUL conditional code.
-pub const IF: &str = "if";
-/// YUL loop code.
-pub const FOR: &str = "for";
-/// YUL loop continue code.
-pub const CONTINUE: &str = "continue";
-/// YUL loop break code.
-pub const BREAK: &str = "break";
-/// YUL switch code.
-pub const SWITCH: &str = "switch";
-/// YUL variable declaration code.
-pub const DECLARATION: &str = "let";
-/// YUL variable assignment code.
-pub const ASSIGNMENT: &str = "assignment";
-/// YUL function definition code.
-pub const FUNCTION_DEFINITION: &str = "function_definition";
-/// YUL function leave code.
-pub const LEAVE: &str = "leave";
+use crate::location_mapper::{self, LocationMapper};
 
 /// The dwarf dump analyzer.
 ///
@@ -48,15 +21,15 @@ pub struct DwarfdumpAnalyzer {
     source: PathBuf,
 
     /// The YUL location to statements map.
-    location_map: LocationMap,
+    location_map: HashMap<Location, &'static str>,
 
     /// The `llvm-dwarfdump --debug-lines` output.
     debug_lines: String,
 
     /// The observed statements.
-    statements_count: HashMap<String, usize>,
+    statements_count: HashMap<&'static str, usize>,
     /// The observed statement to instructions size.
-    statements_size: HashMap<String, u64>,
+    statements_size: HashMap<&'static str, u64>,
 }
 
 impl DwarfdumpAnalyzer {
@@ -81,17 +54,17 @@ impl DwarfdumpAnalyzer {
 
     /// Populate the maps so that we can always unwrap later.
     fn map_locations(&mut self) -> anyhow::Result<()> {
-        self.location_map = map_locations(&self.source)?;
+        self.location_map = LocationMapper::map_locations(&self.source)?;
 
         self.statements_count = HashMap::with_capacity(self.location_map.len());
         self.statements_size = HashMap::with_capacity(self.location_map.len());
 
         for statement in self.location_map.values() {
             if !self.statements_size.contains_key(statement) {
-                self.statements_size.insert(statement.clone(), 0);
+                self.statements_size.insert(statement, 0);
             }
 
-            *self.statements_count.entry(statement.clone()).or_insert(0) += 1;
+            *self.statements_count.entry(statement).or_insert(0) += 1;
         }
 
         Ok(())
@@ -169,20 +142,18 @@ impl DwarfdumpAnalyzer {
             .filter(|(_, count)| **count > 0)
         {
             let size = self.statements_size.get(statement).unwrap();
-            let cost = match statement.as_str() {
+            let cost = match *statement {
                 location_mapper::FOR => "--for-loop-cost",
                 location_mapper::OTHER => continue,
                 location_mapper::INTERNAL => continue,
                 location_mapper::BLOCK => "--block-cost",
                 location_mapper::FUNCTION_CALL => "--function-call-cost",
                 location_mapper::IF => "--if-cost",
-                location_mapper::CONTINUE => "--continue-cost",
-                location_mapper::BREAK => "--break-cost",
-                location_mapper::LEAVE => "--leave-cost",
                 location_mapper::SWITCH => "--switch-cost",
                 location_mapper::DECLARATION => "--variable-declaration-cost",
                 location_mapper::ASSIGNMENT => "--assignment-cost",
-                location_mapper::FUNCTION_DEFINITION => "--function-definition-cost",
+                location_mapper::FUNCTION_DEFINITION => "--identifier-cost",
+                location_mapper::LITERAL => "--literal-cost",
                 _ => "--expression-statement-cost",
             };
 

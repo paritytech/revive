@@ -1033,4 +1033,8 @@ impl AstNode for FunctionCall {
             argument.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }

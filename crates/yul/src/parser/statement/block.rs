@@ -237,6 +237,10 @@ impl AstNode for Block {
             statement.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

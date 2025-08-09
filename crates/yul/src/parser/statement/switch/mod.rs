@@ -196,6 +196,10 @@ impl AstNode for Switch {
             default.accept(ast_visitor);
         }
     }
+
+    fn location(&self) -> Location {
+        self.location
+    }
 }
 
 #[cfg(test)]

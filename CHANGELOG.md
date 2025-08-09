@@ -17,6 +17,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 - Column numbers in debug information.
 - Support for the YUL optimizer details in the standard json input definition.
 - The `revive-explorer` compiler utility.
+- `revive-yul`: The AST visitor interface.
 
 ### Fixed
 - The debug info source file matches the YUL path in `--debug-output-dir`, allowing tools to display the source line. 

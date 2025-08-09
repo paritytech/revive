@@ -77,12 +77,7 @@ pub trait AstNode: std::fmt::Debug {
 ///     /*
 ///
 ///     /// If we were interested in a per-statement breakdown of the AST,
-///     /// we would implement all `visit_*` methods to cover each node here.
-///     fn visit_assignment(&mut self, node: &Assignment) {
-///         self.visit_children(node);
-///         self.assignment_count += 1;
-///     }
-///
+///     /// we would implement `visit_*` methods to cover each node like this:
 ///     fn visit_block(&mut self, node: &Block) {
 ///         self.visit_children(node);
 ///         self.block_count += 1;

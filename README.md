@@ -76,9 +76,7 @@ export LLVM_SYS_181_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/targ
 <details>
   <summary>Building from source</summary>
 
- Use the provided [revive-llvm](crates/llvm-builder/README.md) utility to compile a compatible LLVM build locally and point `$LLVM_SYS_181_PREFIX` to the installation afterwards.
-
-The `Makefile` provides a shortcut target to obtain a compatible LLVM build:
+The `Makefile` provides a shortcut target to obtain a compatible LLVM build, using the provided [revive-llvm](crates/llvm-builder/README.md) utility. Once installed, point `$LLVM_SYS_181_PREFIX` to the installation afterwards:
 
 ```sh
 make install-llvm

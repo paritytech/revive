@@ -59,7 +59,7 @@ Obtain a compatible build for your host platform from the release section of thi
 
    * Install the builder using `cargo`:
       ```shell
-      cargo install --git https://github.com/paritytech/revive-llvm-builder --force --locked
+      cargo install --force --locked --path crates/llvm-builder
       ```
 
       > The builder is not the LLVM framework itself, but a tool that clones its repository and runs a sequence of build commands. By default it is installed in `~/.cargo/bin/`, which is recommended to be added to your `$PATH`.
@@ -88,7 +88,12 @@ Obtain a compatible build for your host platform from the release section of thi
 
       Build artifacts end up in the `./target-llvm/gnu/target-final/` directory by default.
       The `gnu` directory depends on the supported archticture and will either be `gnu`, `musl` or `emscripten`.
-      You now need to export the final target directory `$LLVM_SYS_181_PREFIX`: `export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final`
+      You now need to export the final target directory `$LLVM_SYS_181_PREFIX`:
+
+      ```shell
+      export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+      ```
+
       If built with the `--enable-tests` option, test tools will be in the `./target-llvm/gnu/build-final/` directory, along with copies of the build artifacts. For all supported build options, run `revive-llvm build --help`.
 
 </details>

@@ -29,7 +29,7 @@ fn execute_command(command: &str, arguments: &[&str]) -> CommandResult {
         .output()
         .unwrap();
 
-    let output = if result.status.success() { result.stdout } else { result.stderr };
+    let output = if !result.stdout.is_empty() { result.stdout } else { result.stderr };
 
     CommandResult {
         output: String::from_utf8(output).unwrap(),

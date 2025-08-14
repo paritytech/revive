@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod cli;
 mod factory_dependency;
 mod ir_artifacts;
 mod libraries;

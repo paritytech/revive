@@ -22,7 +22,7 @@ const JSON_ARGUMENTS: &[&str] = &[
 ];
 
 #[test]
-fn can_run_with_valid_argument() {
+fn runs_with_valid_argument() {
     for json_argument in JSON_ARGUMENTS {
         let arguments: &[&str] = &[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION, json_argument];
         let resolc_result = utils::execute_resolc(arguments);
@@ -40,10 +40,7 @@ fn can_run_with_valid_argument() {
         );
 
         let solc_result = utils::execute_solc(arguments);
-        assert_eq!(
-            solc_result.code, resolc_result.code,
-            "Expected solc and resolc to have the same exit code."
-        );
+        utils::assert_equal_exit_codes(&solc_result, &resolc_result);
     }
 }
 
@@ -70,10 +67,7 @@ fn fails_with_invalid_argument() {
         );
 
         let solc_result = utils::execute_solc(arguments);
-        assert_eq!(
-            solc_result.code, resolc_result.code,
-            "Expected solc and resolc to have the same exit code."
-        );
+        utils::assert_equal_exit_codes(&solc_result, &resolc_result);
     }
 }
 
@@ -86,12 +80,7 @@ fn fails_with_multiple_arguments() {
         JSON_ARGUMENTS[1],
     ];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
-    assert!(
-        !resolc_result.success,
-        "Providing multiple arguments should fail with exit code {}, got {}.",
-        revive_common::EXIT_CODE_FAILURE,
-        resolc_result.code
-    );
+    utils::assert_command_failure(&resolc_result, "Providing multiple arguments");
 
     assert!(
         resolc_result
@@ -102,10 +91,7 @@ fn fails_with_multiple_arguments() {
 
     // TODO: Resolc exit code == 101
     // let solc_result = utils::execute_solc(ARGUMENTS);
-    // assert_eq!(
-    //     solc_result.code, resolc_result.code,
-    //     "Expected solc and resolc to have the same exit code."
-    // );
+    // utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[rstest]
@@ -113,12 +99,7 @@ fn fails_with_multiple_arguments() {
 #[case::includes_input_file(&[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION])]
 fn fails_without_json_argument(#[case] arguments: &[&str]) {
     let resolc_result = utils::execute_resolc(arguments);
-    assert!(
-        !resolc_result.success,
-        "Omitting a JSON argument should fail with exit code {}, got {}",
-        revive_common::EXIT_CODE_FAILURE,
-        resolc_result.code
-    );
+    utils::assert_command_failure(&resolc_result, "Omitting a JSON argument");
 
     assert!(
         resolc_result.output.contains(
@@ -128,10 +109,7 @@ fn fails_without_json_argument(#[case] arguments: &[&str]) {
     );
 
     let solc_result = utils::execute_solc(arguments);
-    assert_eq!(
-        solc_result.code, resolc_result.code,
-        "Expected solc and resolc to have the same exit code."
-    );
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]
@@ -139,12 +117,7 @@ fn fails_with_yul_input_file() {
     for json_argument in JSON_ARGUMENTS {
         let arguments: &[&str] = &[utils::YUL_CONTRACT_PATH, JSON_OPTION, json_argument];
         let resolc_result = utils::execute_resolc(arguments);
-        assert!(
-            !resolc_result.success,
-            "Providing a Yul input source should fail with exit code {}, got {}.",
-            revive_common::EXIT_CODE_FAILURE,
-            resolc_result.code
-        );
+        utils::assert_command_failure(&resolc_result, "Providing a Yul input file");
 
         assert!(
             resolc_result
@@ -154,9 +127,6 @@ fn fails_with_yul_input_file() {
         );
 
         let solc_result = utils::execute_solc(arguments);
-        assert_eq!(
-            solc_result.code, resolc_result.code,
-            "Expected solc and resolc to have the same exit code."
-        );
+        utils::assert_equal_exit_codes(&solc_result, &resolc_result);
     }
 }

@@ -2,6 +2,8 @@
 
 use std::process::{Command, Stdio};
 
+use revive_common;
+
 use crate::SolcCompiler;
 
 pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
@@ -42,4 +44,20 @@ fn execute_command(command: &str, arguments: &[&str]) -> CommandResult {
         success: result.status.success(),
         code: result.status.code().unwrap(),
     }
+}
+
+pub fn assert_equal_exit_codes(solc_result: &CommandResult, resolc_result: &CommandResult) {
+    assert_eq!(
+        solc_result.code, resolc_result.code,
+        "Expected solc and resolc to have the same exit code."
+    );
+}
+
+pub fn assert_command_failure(result: &CommandResult, error_message_prefix: &str) {
+    assert!(
+        !result.success,
+        "{error_message_prefix} should fail with exit code {}, got {}.",
+        revive_common::EXIT_CODE_FAILURE,
+        result.code
+    );
 }

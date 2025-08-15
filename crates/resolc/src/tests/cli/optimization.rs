@@ -14,7 +14,7 @@ use crate::tests::cli::{utils, yul};
 #[case::level_3('3')]
 #[case::level_s('s')]
 #[case::level_z('z')]
-fn can_run_with_valid_level(#[case] level: char) {
+fn runs_with_valid_level(#[case] level: char) {
     let optimization_argument = format!("-O{level}");
     let arguments: &[&str] = &[
         utils::YUL_MEMSET_CONTRACT_PATH,

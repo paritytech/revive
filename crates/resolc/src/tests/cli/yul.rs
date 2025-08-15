@@ -12,7 +12,7 @@ pub const YUL_OPTION: &str = "--yul";
 const SOLC_YUL_OPTION: &str = "--strict-assembly";
 
 #[test]
-fn can_run_with_valid_input_file() {
+fn runs_with_valid_input_file() {
     const ARGUMENTS: &[&str] = &[utils::YUL_CONTRACT_PATH, YUL_OPTION];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
     assert!(
@@ -32,22 +32,14 @@ fn can_run_with_valid_input_file() {
 
     const SOLC_ARGUMENTS: &[&str] = &[utils::YUL_CONTRACT_PATH, SOLC_YUL_OPTION];
     let solc_result = utils::execute_solc(SOLC_ARGUMENTS);
-    assert_eq!(
-        solc_result.code, resolc_result.code,
-        "Expected solc and resolc to have the same exit code."
-    );
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]
 fn fails_without_input_file() {
     const ARGUMENTS: &[&str] = &[YUL_OPTION];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
-    assert!(
-        !resolc_result.success,
-        "Omitting an input file should fail with exit code {}, got {}.",
-        revive_common::EXIT_CODE_FAILURE,
-        resolc_result.code
-    );
+    utils::assert_command_failure(&resolc_result, "Omitting an input file");
 
     assert!(
         resolc_result.output.contains("The input file is missing"),
@@ -56,8 +48,5 @@ fn fails_without_input_file() {
 
     const SOLC_ARGUMENTS: &[&str] = &[SOLC_YUL_OPTION];
     let solc_result = utils::execute_solc(SOLC_ARGUMENTS);
-    assert_eq!(
-        solc_result.code, resolc_result.code,
-        "Expected solc and resolc to have the same exit code."
-    );
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }

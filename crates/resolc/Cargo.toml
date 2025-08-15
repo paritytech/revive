@@ -36,6 +36,9 @@ revive-llvm-context = { workspace = true }
 revive-solc-json-interface = { workspace = true, features = ["resolc"] }
 revive-yul = { workspace = true }
 
+[dev-dependencies]
+rstest = { workspace = true }
+
 [target.'cfg(target_env = "musl")'.dependencies]
 mimalloc = { version = "0.1.46", default-features = false }
 

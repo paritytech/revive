@@ -6,9 +6,9 @@ use revive_common;
 
 use crate::tests::cli::utils;
 
-const YUL_OPTION: &str = "--yul";
-/// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
-/// See section `--strict-assembly vs. --yul` in https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/
+pub const YUL_OPTION: &str = "--yul";
+// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
+// See section `--strict-assembly vs. --yul` in https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/
 const SOLC_YUL_OPTION: &str = "--strict-assembly";
 
 #[test]

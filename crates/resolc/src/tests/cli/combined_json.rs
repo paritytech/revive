@@ -50,7 +50,7 @@ fn can_run_with_valid_argument() {
 #[test]
 fn fails_with_invalid_argument() {
     for json_argument in JSON_ARGUMENTS {
-        let invalid_json_argument = "invalid-".to_string() + json_argument;
+        let invalid_json_argument = format!("invalid-{json_argument}");
         let arguments: &[&str] = &[
             utils::SOLIDITY_CONTRACT_PATH,
             JSON_OPTION,

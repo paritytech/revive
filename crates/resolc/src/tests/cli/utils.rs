@@ -6,6 +6,7 @@ use crate::SolcCompiler;
 
 pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
 pub const YUL_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/contract.yul";
+pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/memset.yul";
 
 pub struct CommandResult {
     pub output: String,

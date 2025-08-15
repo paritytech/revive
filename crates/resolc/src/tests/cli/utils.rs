@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use crate::SolcCompiler;
 
 pub const SOLIDITY_TEST_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
+pub const YUL_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/contract.yul";
 
 pub struct CommandResult {
     pub output: String,
@@ -29,7 +30,11 @@ fn execute_command(command: &str, arguments: &[&str]) -> CommandResult {
         .output()
         .unwrap();
 
-    let output = if !result.stdout.is_empty() { result.stdout } else { result.stderr };
+    let output = if !result.stdout.is_empty() {
+        result.stdout
+    } else {
+        result.stderr
+    };
 
     CommandResult {
         output: String::from_utf8(output).unwrap(),

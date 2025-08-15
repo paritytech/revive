@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 
 use crate::SolcCompiler;
 
-pub const SOLIDITY_TEST_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
+pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
 pub const YUL_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/contract.yul";
 
 pub struct CommandResult {

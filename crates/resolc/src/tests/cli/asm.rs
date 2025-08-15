@@ -23,8 +23,7 @@ fn runs_with_valid_input_file() {
     for pattern in &["deploy", "call", "seal_return"] {
         assert!(
             resolc_result.output.contains(pattern),
-            "Expected the output to contain `{}`.",
-            pattern
+            "Expected the output to contain `{pattern}`."
         );
     }
 

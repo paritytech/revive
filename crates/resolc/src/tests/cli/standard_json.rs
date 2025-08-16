@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use revive_common;
-
 use crate::tests::cli::utils;
 
 const JSON_OPTION: &str = "--standard-json";
@@ -13,13 +11,7 @@ fn runs_with_valid_input_file() {
     const ARGUMENTS: &[&str] = &[JSON_OPTION];
     let resolc_result =
         utils::execute_resolc_with_stdin_input(ARGUMENTS, utils::STANDARD_JSON_CONTRACTS_PATH);
-    assert!(
-        resolc_result.success,
-        "Providing a valid input file to stdin should succeed with exit code {}, got {}.\nDetails: {}",
-        revive_common::EXIT_CODE_SUCCESS,
-        resolc_result.code,
-        resolc_result.output
-    );
+    utils::assert_command_success(&resolc_result, "Providing a valid input file to stdin");
 
     assert!(
         resolc_result.output.contains("contracts"),

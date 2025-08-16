@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use revive_common;
-
 use crate::tests::cli::utils;
 
 const ASM_OPTION: &str = "--asm";
@@ -12,13 +10,7 @@ const ASM_OPTION: &str = "--asm";
 fn runs_with_valid_input_file() {
     const ARGUMENTS: &[&str] = &[utils::SOLIDITY_CONTRACT_PATH, ASM_OPTION];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
-    assert!(
-        resolc_result.success,
-        "Providing a valid input file should succeed with exit code {}, got {}.\nDetails: {}",
-        revive_common::EXIT_CODE_SUCCESS,
-        resolc_result.code,
-        resolc_result.output
-    );
+    utils::assert_command_success(&resolc_result, "Providing a valid input file");
 
     for pattern in &["deploy", "call", "seal_return"] {
         assert!(

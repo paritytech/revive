@@ -4,7 +4,6 @@
 
 use std::path::Path;
 
-use revive_common;
 use rstest::rstest;
 
 use crate::tests::cli::utils;
@@ -30,13 +29,7 @@ fn assert_valid_output_file(
     output_file_type: &str,
     output_file_path: &str,
 ) {
-    assert!(
-        result.success,
-        "Providing an output directory should succeed with exit code {}, got {}.\nDetails: {}",
-        revive_common::EXIT_CODE_SUCCESS,
-        result.code,
-        result.output
-    );
+    utils::assert_command_success(&result, "Providing an output directory");
 
     assert!(
         result.output.contains("Compiler run successful"),

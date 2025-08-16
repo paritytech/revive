@@ -9,12 +9,7 @@ use crate::tests::cli::utils;
 fn shows_usage_with_help() {
     const ARGUMENTS: &[&str] = &["--help"];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
-    assert!(
-        resolc_result.success,
-        "Providing the `--help` option should succeed with exit code {}, got {}.",
-        revive_common::EXIT_CODE_SUCCESS,
-        resolc_result.code
-    );
+    utils::assert_command_success(&resolc_result, "Providing the `--help` option");
 
     assert!(
         resolc_result.output.contains("Usage: resolc"),

@@ -83,6 +83,16 @@ pub fn assert_equal_exit_codes(solc_result: &CommandResult, resolc_result: &Comm
     );
 }
 
+pub fn assert_command_success(result: &CommandResult, error_message_prefix: &str) {
+    assert!(
+        result.success,
+        "{error_message_prefix} should succeed with exit code {}, got {}.\nDetails: {}",
+        revive_common::EXIT_CODE_SUCCESS,
+        result.code,
+        result.output
+    );
+}
+
 pub fn assert_command_failure(result: &CommandResult, error_message_prefix: &str) {
     assert!(
         !result.success,

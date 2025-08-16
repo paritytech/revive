@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use revive_common;
-
 use crate::tests::cli::utils;
 
 pub const YUL_OPTION: &str = "--yul";
@@ -15,13 +13,7 @@ const SOLC_YUL_OPTION: &str = "--strict-assembly";
 fn runs_with_valid_input_file() {
     const ARGUMENTS: &[&str] = &[utils::YUL_CONTRACT_PATH, YUL_OPTION];
     let resolc_result = utils::execute_resolc(ARGUMENTS);
-    assert!(
-        resolc_result.success,
-        "Providing a valid input file should succeed with exit code {}, got {}.\nDetails: {}",
-        revive_common::EXIT_CODE_SUCCESS,
-        resolc_result.code,
-        resolc_result.output
-    );
+    utils::assert_command_success(&resolc_result, "Providing a valid input file");
 
     assert!(
         resolc_result

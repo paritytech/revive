@@ -40,7 +40,7 @@ fn assert_valid_output_file(
 
     assert!(
         result.output.contains("Compiler run successful"),
-        "Expected the compiler output to contain a success message",
+        "Expected the compiler output to contain a success message.",
     );
 
     assert!(

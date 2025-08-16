@@ -89,14 +89,14 @@ fn fails_with_multiple_arguments() {
         "Expected the output to contain a specific error message."
     );
 
-    // TODO: Resolc exit code == 101
+    // FIX: Resolc exit code == 101
     // let solc_result = utils::execute_solc(ARGUMENTS);
     // utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[rstest]
-#[case::excludes_input_file(&[JSON_OPTION])]
-#[case::includes_input_file(&[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION])]
+#[case::exclude_input_file(&[JSON_OPTION])]
+#[case::include_input_file(&[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION])]
 fn fails_without_json_argument(#[case] arguments: &[&str]) {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting a JSON argument");

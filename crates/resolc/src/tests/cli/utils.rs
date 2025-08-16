@@ -1,6 +1,9 @@
 //! Common utilities used for CLI tests.
 
-use std::process::{Command, Stdio};
+use std::{
+    fs::File,
+    process::{Command, Stdio},
+};
 
 use revive_common;
 
@@ -9,25 +12,52 @@ use crate::SolcCompiler;
 pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
 pub const YUL_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/contract.yul";
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/memset.yul";
+pub const STANDARD_JSON_CONTRACTS_PATH: &str =
+    "src/tests/cli/contracts/standard_json/solidity_contracts.json";
 
+/// The result of executing a command.
 pub struct CommandResult {
+    /// The data written to `stdout` if any,
+    /// otherwise, the data written to `stderr`.
     pub output: String,
+    /// Whether termination was successful.
     pub success: bool,
+    /// The exit code of the process.
     pub code: i32,
 }
 
 pub fn execute_resolc(arguments: &[&str]) -> CommandResult {
-    execute_command("resolc", arguments)
+    execute_command("resolc", arguments, None)
+}
+
+pub fn execute_resolc_with_stdin_input(arguments: &[&str], stdin_file_path: &str) -> CommandResult {
+    execute_command("resolc", arguments, Some(stdin_file_path))
 }
 
 pub fn execute_solc(arguments: &[&str]) -> CommandResult {
-    execute_command(SolcCompiler::DEFAULT_EXECUTABLE_NAME, arguments)
+    execute_command(SolcCompiler::DEFAULT_EXECUTABLE_NAME, arguments, None)
 }
 
-fn execute_command(command: &str, arguments: &[&str]) -> CommandResult {
+pub fn execute_solc_with_stdin_input(arguments: &[&str], stdin_file_path: &str) -> CommandResult {
+    execute_command(
+        SolcCompiler::DEFAULT_EXECUTABLE_NAME,
+        arguments,
+        Some(stdin_file_path),
+    )
+}
+
+fn execute_command(
+    command: &str,
+    arguments: &[&str],
+    stdin_file_path: Option<&str>,
+) -> CommandResult {
+    let stdin_config = match stdin_file_path {
+        Some(path) => Stdio::from(File::open(path).unwrap()),
+        None => Stdio::null(),
+    };
     let result = Command::new(command)
         .args(arguments)
-        .stdin(Stdio::null())
+        .stdin(stdin_config)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -40,7 +70,7 @@ fn execute_command(command: &str, arguments: &[&str]) -> CommandResult {
     };
 
     CommandResult {
-        output: String::from_utf8(output).unwrap(),
+        output: String::from_utf8_lossy(&output).to_string(),
         success: result.status.success(),
         code: result.status.code().unwrap(),
     }

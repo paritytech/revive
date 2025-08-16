@@ -29,7 +29,7 @@ fn assert_valid_output_file(
     output_file_type: &str,
     output_file_path: &str,
 ) {
-    utils::assert_command_success(&result, "Providing an output directory");
+    utils::assert_command_success(result, "Providing an output directory");
 
     assert!(
         result.output.contains("Compiler run successful"),

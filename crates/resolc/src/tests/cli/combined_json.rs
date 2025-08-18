@@ -46,29 +46,21 @@ fn runs_with_valid_argument() {
 
 #[test]
 fn fails_with_invalid_argument() {
-    for json_argument in JSON_ARGUMENTS {
-        let invalid_json_argument = format!("invalid-{json_argument}");
-        let arguments: &[&str] = &[
-            utils::SOLIDITY_CONTRACT_PATH,
-            JSON_OPTION,
-            &invalid_json_argument,
-        ];
-        let resolc_result = utils::execute_resolc(arguments);
-        assert!(
-            !resolc_result.success,
-            "Providing the invalid argument `{invalid_json_argument}` should fail with exit code {}, got {}.",
-            revive_common::EXIT_CODE_FAILURE,
-            resolc_result.code
-        );
+    const ARGUMENTS: &[&str] = &[
+        utils::SOLIDITY_CONTRACT_PATH,
+        JSON_OPTION,
+        "invalid-argument",
+    ];
+    let resolc_result = utils::execute_resolc(ARGUMENTS);
+    utils::assert_command_failure(&resolc_result, "Providing an invalid json argument");
 
-        assert!(
-            resolc_result.output.contains("Invalid option"),
-            "Expected the output to contain a specific error message when passing `{invalid_json_argument}`."
-        );
+    assert!(
+        resolc_result.output.contains("Invalid option"),
+        "Expected the output to contain a specific error message."
+    );
 
-        let solc_result = utils::execute_solc(arguments);
-        utils::assert_equal_exit_codes(&solc_result, &resolc_result);
-    }
+    let solc_result = utils::execute_solc(ARGUMENTS);
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]

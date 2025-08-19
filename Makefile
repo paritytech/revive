@@ -14,7 +14,6 @@
 	test-integration \
 	test-resolc \
 	test-workspace \
-	test-cli \
 	test-wasm \
 	test-llvm-builder
 	bench \
@@ -57,7 +56,7 @@ machete:
 	cargo install cargo-machete
 	cargo machete
 
-test: format clippy machete test-cli test-workspace install-revive-runner install-revive-explorer
+test: format clippy machete test-workspace install-revive-runner install-revive-explorer
 
 test-integration: install-bin
 	cargo test --package revive-integration
@@ -67,9 +66,6 @@ test-resolc: install
 
 test-workspace: install
 	cargo test --workspace --exclude revive-llvm-builder
-
-test-cli: install
-	npm run test:cli
 
 test-wasm: install-wasm
 	npm run test:wasm
@@ -94,6 +90,6 @@ clean:
 	cargo clean ; \
 	revive-llvm clean ; \
 	rm -rf node_modules ; \
-	rm -rf crates/resolc/src/tests/cli-tests/artifacts ; \
+	rm -rf crates/resolc/src/tests/cli/artifacts ; \
 	cargo uninstall resolc ; \
 	cargo uninstall revive-llvm-builder ;

@@ -2,14 +2,12 @@
   "name": "root",
   "private": true,
   "scripts": {
-    "test:cli": "npm run test -w crates/resolc/src/tests/cli-tests",
     "test:wasm": "npm run test:node -w js/emscripten",
     "build:package": "npm run build:package -w js/emscripten",
     "lint": "npx eslint 'js/**/*.{cjs,mjs,ts}' && npx prettier --check '**/*.{mjs,cjs,ts}'",
     "lint:fix": "npx prettier --write '**/*.{mjs,cjs,ts}'"
   },
   "workspaces": [
-    "crates/resolc/src/tests/cli-tests",
     "js/emscripten",
     "js/resolc"
   ],

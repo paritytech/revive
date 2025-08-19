@@ -51,7 +51,7 @@ fn assert_valid_output_file(
 #[case::binary_output("--bin", OUTPUT_BIN_FILE_PATH)]
 #[case::assembly_output("--asm", OUTPUT_ASM_FILE_PATH)]
 fn writes_to_file(#[case] output_file_type: &str, #[case] output_file_path: &str) {
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "--overwrite",
         "-O3",
@@ -70,7 +70,7 @@ fn writes_debug_info_to_file_unoptimized(
     #[case] output_file_type: &str,
     #[case] output_file_path: &str,
 ) {
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--disable-solc-optimizer",
@@ -90,7 +90,7 @@ fn writes_debug_info_to_file_optimized(
     #[case] output_file_type: &str,
     #[case] output_file_path: &str,
 ) {
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--overwrite",
@@ -104,7 +104,7 @@ fn writes_debug_info_to_file_optimized(
 
 #[test]
 fn writes_llvm_debug_info_to_file_unoptimized() {
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--disable-solc-optimizer",
@@ -118,7 +118,7 @@ fn writes_llvm_debug_info_to_file_unoptimized() {
 
 #[test]
 fn writes_llvm_debug_info_to_file_optimized() {
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--overwrite",

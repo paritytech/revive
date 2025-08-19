@@ -24,7 +24,7 @@ const JSON_ARGUMENTS: &[&str] = &[
 #[test]
 fn runs_with_valid_argument() {
     for json_argument in JSON_ARGUMENTS {
-        let arguments: &[&str] = &[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION, json_argument];
+        let arguments = &[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION, json_argument];
         let resolc_result = utils::execute_resolc(arguments);
         assert!(
             resolc_result.success,
@@ -46,12 +46,12 @@ fn runs_with_valid_argument() {
 
 #[test]
 fn fails_with_invalid_argument() {
-    const ARGUMENTS: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         JSON_OPTION,
         "invalid-argument",
     ];
-    let resolc_result = utils::execute_resolc(ARGUMENTS);
+    let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Providing an invalid json argument");
 
     assert!(
@@ -59,20 +59,20 @@ fn fails_with_invalid_argument() {
         "Expected the output to contain a specific error message."
     );
 
-    let solc_result = utils::execute_solc(ARGUMENTS);
+    let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]
 fn fails_with_multiple_arguments() {
-    const ARGUMENTS: &[&str] = &[
+    let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         JSON_OPTION,
         JSON_ARGUMENTS[0],
         JSON_ARGUMENTS[1],
     ];
-    let resolc_result = utils::execute_resolc(ARGUMENTS);
-    utils::assert_command_failure(&resolc_result, "Providing multiple arguments");
+    let resolc_result = utils::execute_resolc(arguments);
+    utils::assert_command_failure(&resolc_result, "Providing multiple json arguments");
 
     assert!(
         resolc_result
@@ -82,7 +82,7 @@ fn fails_with_multiple_arguments() {
     );
 
     // FIX: Resolc exit code == 101
-    // let solc_result = utils::execute_solc(ARGUMENTS);
+    // let solc_result = utils::execute_solc(arguments);
     // utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
@@ -107,7 +107,7 @@ fn fails_without_json_argument(#[case] arguments: &[&str]) {
 #[test]
 fn fails_with_yul_input_file() {
     for json_argument in JSON_ARGUMENTS {
-        let arguments: &[&str] = &[utils::YUL_CONTRACT_PATH, JSON_OPTION, json_argument];
+        let arguments = &[utils::YUL_CONTRACT_PATH, JSON_OPTION, json_argument];
         let resolc_result = utils::execute_resolc(arguments);
         utils::assert_command_failure(&resolc_result, "Providing a Yul input file");
 

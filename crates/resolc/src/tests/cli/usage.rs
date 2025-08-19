@@ -7,8 +7,8 @@ use crate::tests::cli::utils;
 #[test]
 #[ignore = "Fix: 'resolc --help' should exit with success exit code"]
 fn shows_usage_with_help() {
-    const ARGUMENTS: &[&str] = &["--help"];
-    let resolc_result = utils::execute_resolc(ARGUMENTS);
+    let arguments = &["--help"];
+    let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_success(&resolc_result, "Providing the `--help` option");
 
     assert!(
@@ -16,7 +16,7 @@ fn shows_usage_with_help() {
         "Expected the output to contain usage information."
     );
 
-    let solc_result = utils::execute_solc(ARGUMENTS);
+    let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 

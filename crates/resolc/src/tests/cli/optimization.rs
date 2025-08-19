@@ -1,4 +1,4 @@
-//! The tests for running resolc with optimization.
+//! The tests for running resolc with explicit optimization.
 
 #![cfg(test)]
 
@@ -16,7 +16,7 @@ use crate::tests::cli::{utils, yul};
 #[case::level_z('z')]
 fn runs_with_valid_level(#[case] level: char) {
     let optimization_argument = format!("-O{level}");
-    let arguments: &[&str] = &[
+    let arguments = &[
         utils::YUL_MEMSET_CONTRACT_PATH,
         yul::YUL_OPTION,
         &optimization_argument,

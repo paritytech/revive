@@ -12,7 +12,7 @@ fn shows_usage_with_help() {
     utils::assert_command_success(&resolc_result, "Providing the `--help` option");
 
     assert!(
-        resolc_result.output.contains("Usage: resolc"),
+        resolc_result.stdout.contains("Usage: resolc"),
         "Expected the output to contain usage information."
     );
 
@@ -26,7 +26,7 @@ fn fails_without_options() {
     utils::assert_command_failure(&resolc_result, "Omitting options");
 
     assert!(
-        resolc_result.output.contains("Usage: resolc"),
+        resolc_result.stderr.contains("Usage: resolc"),
         "Expected the output to contain usage information."
     );
 

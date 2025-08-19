@@ -32,7 +32,7 @@ fn assert_valid_output_file(
     utils::assert_command_success(result, "Providing an output directory");
 
     assert!(
-        result.output.contains("Compiler run successful"),
+        result.stderr.contains("Compiler run successful"),
         "Expected the compiler output to contain a success message.",
     );
 

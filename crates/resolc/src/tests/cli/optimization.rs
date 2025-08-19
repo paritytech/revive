@@ -27,12 +27,12 @@ fn runs_with_valid_level(#[case] level: char) {
         "Providing the level `{optimization_argument}` should succeed with exit code {}, got {}.\nDetails: {}",
         revive_common::EXIT_CODE_SUCCESS,
         resolc_result.code,
-        resolc_result.output
+        resolc_result.stderr
     );
 
     assert!(
         resolc_result
-            .output
+            .stderr
             .contains("Compiler run successful. No output requested"),
         "Expected the output to contain a success message."
     );

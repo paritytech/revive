@@ -14,7 +14,7 @@ fn runs_with_valid_input_file() {
     utils::assert_command_success(&resolc_result, "Providing a valid input file to stdin");
 
     assert!(
-        resolc_result.output.contains("contracts"),
+        resolc_result.stdout.contains("contracts"),
         "Expected the output to contain a `contracts` field."
     );
 

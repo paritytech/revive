@@ -14,7 +14,7 @@ fn runs_with_valid_input_file() {
 
     for pattern in &["deploy", "call", "seal_return"] {
         assert!(
-            resolc_result.output.contains(pattern),
+            resolc_result.stdout.contains(pattern),
             "Expected the output to contain `{pattern}`."
         );
     }
@@ -29,7 +29,7 @@ fn fails_without_input_file() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting an input file");
 
-    let output = resolc_result.output.to_lowercase();
+    let output = resolc_result.stderr.to_lowercase();
     assert!(
         output.contains("no input sources specified") || output.contains("compilation aborted"),
         "Expected the output to contain a specific error message."

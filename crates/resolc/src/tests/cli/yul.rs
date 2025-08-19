@@ -17,7 +17,7 @@ fn runs_with_valid_input_file() {
 
     assert!(
         resolc_result
-            .output
+            .stderr
             .contains("Compiler run successful. No output requested"),
         "Expected the output to contain a success message."
     );
@@ -34,7 +34,7 @@ fn fails_without_input_file() {
     utils::assert_command_failure(&resolc_result, "Omitting an input file");
 
     assert!(
-        resolc_result.output.contains("The input file is missing"),
+        resolc_result.stderr.contains("The input file is missing"),
         "Expected the output to contain a specific error message."
     );
 

@@ -31,11 +31,11 @@ fn runs_with_valid_argument() {
             "Providing the `{json_argument}` argument should succeed with exit code {}, got {}.\nDetails: {}",
             revive_common::EXIT_CODE_SUCCESS,
             resolc_result.code,
-            resolc_result.output
+            resolc_result.stderr
         );
 
         assert!(
-            resolc_result.output.contains("contracts"),
+            resolc_result.stdout.contains("contracts"),
             "Expected the output to contain a `contracts` field when using the `{json_argument}` argument."
         );
 
@@ -55,7 +55,7 @@ fn fails_with_invalid_argument() {
     utils::assert_command_failure(&resolc_result, "Providing an invalid json argument");
 
     assert!(
-        resolc_result.output.contains("Invalid option"),
+        resolc_result.stdout.contains("Invalid option"),
         "Expected the output to contain a specific error message."
     );
 
@@ -76,7 +76,7 @@ fn fails_with_multiple_arguments() {
 
     assert!(
         resolc_result
-            .output
+            .stderr
             .contains("reading error: No such file or directory"),
         "Expected the output to contain a specific error message."
     );
@@ -94,7 +94,7 @@ fn fails_without_json_argument(#[case] arguments: &[&str]) {
     utils::assert_command_failure(&resolc_result, "Omitting a JSON argument");
 
     assert!(
-        resolc_result.output.contains(
+        resolc_result.stderr.contains(
             "a value is required for '--combined-json <COMBINED_JSON>' but none was supplied"
         ),
         "Expected the output to contain a specific error message."
@@ -113,7 +113,7 @@ fn fails_with_yul_input_file() {
 
         assert!(
             resolc_result
-                .output
+                .stderr
                 .contains("ParserError: Expected identifier"),
             "Expected the output to contain a specific error message."
         );

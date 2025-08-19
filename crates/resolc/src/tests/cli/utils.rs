@@ -17,9 +17,10 @@ pub const STANDARD_JSON_CONTRACTS_PATH: &str =
 
 /// The result of executing a command.
 pub struct CommandResult {
-    /// The data written to `stdout` if any,
-    /// otherwise, the data written to `stderr`.
-    pub output: String,
+    /// The data written to `stdout`.
+    pub stdout: String,
+    /// The data written to `stderr`.
+    pub stderr: String,
     /// Whether termination was successful.
     pub success: bool,
     /// The exit code of the process.
@@ -63,14 +64,9 @@ fn execute_command(
         .output()
         .unwrap();
 
-    let output = if !result.stdout.is_empty() {
-        result.stdout
-    } else {
-        result.stderr
-    };
-
     CommandResult {
-        output: String::from_utf8_lossy(&output).to_string(),
+        stdout: String::from_utf8_lossy(&result.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&result.stderr).to_string(),
         success: result.status.success(),
         code: result.status.code().unwrap(),
     }
@@ -89,7 +85,7 @@ pub fn assert_command_success(result: &CommandResult, error_message_prefix: &str
         "{error_message_prefix} should succeed with exit code {}, got {}.\nDetails: {}",
         revive_common::EXIT_CODE_SUCCESS,
         result.code,
-        result.output
+        result.stderr
     );
 }
 

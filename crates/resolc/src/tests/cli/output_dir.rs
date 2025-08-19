@@ -4,8 +4,6 @@
 
 use std::path::Path;
 
-use rstest::rstest;
-
 use crate::tests::cli::utils;
 
 const OUTPUT_DIRECTORY: &str = "src/tests/cli/artifacts";
@@ -47,59 +45,53 @@ fn assert_valid_output_file(
     );
 }
 
-#[rstest]
-#[case::binary_output("--bin", OUTPUT_BIN_FILE_PATH)]
-#[case::assembly_output("--asm", OUTPUT_ASM_FILE_PATH)]
-fn writes_to_file(#[case] output_file_type: &str, #[case] output_file_path: &str) {
+#[test]
+fn writes_to_file() {
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "--overwrite",
         "-O3",
-        output_file_type,
+        "--bin",
+        "--asm",
         "--output-dir",
         OUTPUT_DIRECTORY,
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, output_file_type, output_file_path);
+    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
 }
 
-#[rstest]
-#[case::binary_output("--bin", OUTPUT_BIN_FILE_PATH)]
-#[case::assembly_output("--asm", OUTPUT_ASM_FILE_PATH)]
-fn writes_debug_info_to_file_unoptimized(
-    #[case] output_file_type: &str,
-    #[case] output_file_path: &str,
-) {
+#[test]
+fn writes_debug_info_to_file_unoptimized() {
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--disable-solc-optimizer",
         "--overwrite",
-        output_file_type,
+        "--bin",
+        "--asm",
         "--output-dir",
         OUTPUT_DIRECTORY,
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, output_file_type, output_file_path);
+    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
 }
 
-#[rstest]
-#[case::binary_output("--bin", OUTPUT_BIN_FILE_PATH)]
-#[case::assembly_output("--asm", OUTPUT_ASM_FILE_PATH)]
-fn writes_debug_info_to_file_optimized(
-    #[case] output_file_type: &str,
-    #[case] output_file_path: &str,
-) {
+#[test]
+fn writes_debug_info_to_file_optimized() {
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--overwrite",
-        output_file_type,
+        "--bin",
+        "--asm",
         "--output-dir",
         OUTPUT_DIRECTORY,
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, output_file_type, output_file_path);
+    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
 }
 
 #[test]

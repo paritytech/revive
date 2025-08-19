@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use revive_common;
-use rstest::rstest;
 
 use crate::tests::cli::utils;
 
@@ -22,7 +21,7 @@ const JSON_ARGUMENTS: &[&str] = &[
 ];
 
 #[test]
-fn runs_with_valid_argument() {
+fn runs_with_valid_json_argument() {
     for json_argument in JSON_ARGUMENTS {
         let arguments = &[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION, json_argument];
         let resolc_result = utils::execute_resolc(arguments);
@@ -45,7 +44,7 @@ fn runs_with_valid_argument() {
 }
 
 #[test]
-fn fails_with_invalid_argument() {
+fn fails_with_invalid_json_argument() {
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         JSON_OPTION,
@@ -64,7 +63,7 @@ fn fails_with_invalid_argument() {
 }
 
 #[test]
-fn fails_with_multiple_arguments() {
+fn fails_with_multiple_json_arguments() {
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         JSON_OPTION,
@@ -86,10 +85,9 @@ fn fails_with_multiple_arguments() {
     // utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
-#[rstest]
-#[case::exclude_input_file(&[JSON_OPTION])]
-#[case::include_input_file(&[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION])]
-fn fails_without_json_argument(#[case] arguments: &[&str]) {
+#[test]
+fn fails_without_json_argument() {
+    let arguments = &[utils::SOLIDITY_CONTRACT_PATH, JSON_OPTION];
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting a JSON argument");
 
@@ -97,6 +95,21 @@ fn fails_without_json_argument(#[case] arguments: &[&str]) {
         resolc_result.stderr.contains(
             "a value is required for '--combined-json <COMBINED_JSON>' but none was supplied"
         ),
+        "Expected the output to contain a specific error message."
+    );
+
+    let solc_result = utils::execute_solc(arguments);
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn fails_without_solidity_input_file() {
+    let arguments = &[JSON_OPTION, JSON_ARGUMENTS[0]];
+    let resolc_result = utils::execute_resolc(arguments);
+    utils::assert_command_failure(&resolc_result, "Omitting a Solidity input file");
+
+    assert!(
+        resolc_result.stderr.contains("No input sources specified"),
         "Expected the output to contain a specific error message."
     );
 

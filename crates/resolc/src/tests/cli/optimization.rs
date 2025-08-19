@@ -34,3 +34,20 @@ fn runs_with_valid_level() {
         );
     }
 }
+
+#[test]
+fn fails_with_invalid_level() {
+    let arguments = &[utils::YUL_MEMSET_CONTRACT_PATH, yul::YUL_OPTION, "-O9"];
+    let resolc_result = utils::execute_resolc(arguments);
+    utils::assert_command_failure(&resolc_result, "Providing an invalid optimization level");
+
+    assert!(
+        resolc_result
+            .stderr
+            .contains("Unexpected optimization option"),
+        "Expected the output to contain a specific error message."
+    );
+
+    let solc_result = utils::execute_solc(arguments);
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+}

@@ -9,6 +9,7 @@ use std::path::Path;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
@@ -38,7 +39,7 @@ pub struct Project {
     /// The mapping of auxiliary identifiers, e.g. Yul object names, to full contract paths.
     pub identifier_paths: BTreeMap<String, String>,
     /// The library addresses.
-    pub libraries: BTreeMap<String, BTreeMap<String, String>>,
+    pub libraries: SolcStandardJsonInputSettingsLibraries,
 }
 
 impl Project {
@@ -46,7 +47,7 @@ impl Project {
     pub fn new(
         version: SolcVersion,
         contracts: BTreeMap<String, Contract>,
-        libraries: BTreeMap<String, BTreeMap<String, String>>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
     ) -> Self {
         let mut identifier_paths = BTreeMap::new();
         for (path, contract) in contracts.iter() {
@@ -152,6 +153,7 @@ impl Project {
     pub fn get_missing_libraries(&self) -> MissingLibraries {
         let deployed_libraries = self
             .libraries
+            .inner
             .iter()
             .flat_map(|(file, names)| {
                 names
@@ -177,10 +179,11 @@ impl Project {
     pub fn try_from_yul_path<T: Compiler>(
         path: &Path,
         solc_validator: Option<&T>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
     ) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path)
             .map_err(|error| anyhow::anyhow!("Yul file {:?} reading error: {}", path, error))?;
-        Self::try_from_yul_string(path, source_code.as_str(), solc_validator)
+        Self::try_from_yul_string(path, source_code.as_str(), solc_validator, libraries)
     }
 
     /// Parses the test Yul source code string and returns the source data.
@@ -189,6 +192,7 @@ impl Project {
         path: &Path,
         source_code: &str,
         solc_validator: Option<&T>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
     ) -> anyhow::Result<Self> {
         if let Some(solc) = solc_validator {
             solc.validate_yul(path)?;
@@ -214,15 +218,14 @@ impl Project {
             ),
         );
 
-        Ok(Self::new(
-            source_version,
-            project_contracts,
-            BTreeMap::new(),
-        ))
+        Ok(Self::new(source_version, project_contracts, libraries))
     }
 
     /// Parses the LLVM IR source code file and returns the source data.
-    pub fn try_from_llvm_ir_path(path: &Path) -> anyhow::Result<Self> {
+    pub fn try_from_llvm_ir_path(
+        path: &Path,
+        libraries: SolcStandardJsonInputSettingsLibraries,
+    ) -> anyhow::Result<Self> {
         let source_code = std::fs::read_to_string(path)
             .map_err(|error| anyhow::anyhow!("LLVM IR file {:?} reading error: {}", path, error))?;
         let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
@@ -243,18 +246,14 @@ impl Project {
             ),
         );
 
-        Ok(Self::new(
-            source_version,
-            project_contracts,
-            BTreeMap::new(),
-        ))
+        Ok(Self::new(source_version, project_contracts, libraries))
     }
 
     /// Converts the `solc` JSON output into a convenient project.
     pub fn try_from_standard_json_output(
         output: &SolcStandardJsonOutput,
         source_code_files: BTreeMap<String, String>,
-        libraries: BTreeMap<String, BTreeMap<String, String>>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Self> {
@@ -368,7 +367,7 @@ impl revive_llvm_context::PolkaVMDependency for Project {
     }
 
     fn resolve_library(&self, path: &str) -> anyhow::Result<String> {
-        for (file_path, contracts) in self.libraries.iter() {
+        for (file_path, contracts) in self.libraries.inner.iter() {
             for (contract_name, address) in contracts.iter() {
                 let key = format!("{file_path}:{contract_name}");
                 if key.as_str() == path {

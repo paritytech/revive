@@ -25,7 +25,7 @@ contract Test {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )

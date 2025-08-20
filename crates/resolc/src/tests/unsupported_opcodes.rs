@@ -30,7 +30,7 @@ contract FixedCodeCopy {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
@@ -68,7 +68,7 @@ fn callcode_yul() {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
@@ -125,7 +125,7 @@ fn extcodecopy_yul() {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
@@ -158,7 +158,7 @@ fn selfdestruct_yul() {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )

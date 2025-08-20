@@ -26,10 +26,10 @@ lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
 revive-llvm-context = { version = "0.3.0", path = "crates/llvm-context" }
 revive-runtime-api = { version = "0.2.0", path = "crates/runtime-api" }
 revive-runner = { version = "0.1.0", path = "crates/runner" }
-revive-solc-json-interface = { version = "0.2.0", path = "crates/solc-json-interface" }
+revive-solc-json-interface = { version = "0.3.0", path = "crates/solc-json-interface" }
 revive-stdlib = { version = "0.1.1", path = "crates/stdlib" }
 revive-build-utils = { version = "0.1.0", path = "crates/build-utils" }
-revive-yul = { version = "0.2.1", path = "crates/yul" }
+revive-yul = { version = "0.3.0", path = "crates/yul" }
 
 hex = "0.4.3"
 cc = "1.2"

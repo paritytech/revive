@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+
 pub const LIBRARY_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -37,7 +39,7 @@ fn not_specified() {
     sources.insert("test.sol".to_owned(), LIBRARY_TEST_SOURCE.to_owned());
 
     let output =
-        super::build_solidity_and_detect_missing_libraries(sources.clone(), BTreeMap::new())
+        super::build_solidity_and_detect_missing_libraries(sources.clone(), Default::default())
             .expect("Test failure");
     assert!(
         output
@@ -61,10 +63,11 @@ fn specified() {
     let mut sources = BTreeMap::new();
     sources.insert("test.sol".to_owned(), LIBRARY_TEST_SOURCE.to_owned());
 
-    let mut libraries = BTreeMap::new();
+    let mut libraries = SolcStandardJsonInputSettingsLibraries::default();
     libraries
+        .as_inner_mut()
         .entry("test.sol".to_string())
-        .or_insert_with(BTreeMap::new)
+        .or_default()
         .entry("SimpleLibrary".to_string())
         .or_insert("0x00000000000000000000000000000000DEADBEEF".to_string());
 

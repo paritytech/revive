@@ -18,6 +18,7 @@ use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJ
 use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
 use crate::warning::Warning;
+use crate::SolcStandardJsonInputSettingsLibraries;
 use crate::SolcStandardJsonInputSettingsPolkaVM;
 
 use self::language::Language;
@@ -58,7 +59,7 @@ impl Input {
         language: Language,
         evm_version: Option<revive_common::EVMVersion>,
         paths: &[PathBuf],
-        library_map: Vec<String>,
+        libraries: &[String],
         remappings: Option<BTreeSet<String>>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
@@ -67,8 +68,8 @@ impl Input {
         polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
-        let libraries = Settings::parse_libraries(library_map)?;
-        for library_file in libraries.keys() {
+        let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+        for library_file in libraries.as_inner().keys() {
             paths.insert(PathBuf::from(library_file));
         }
 
@@ -106,7 +107,7 @@ impl Input {
     pub fn try_from_sources(
         evm_version: Option<revive_common::EVMVersion>,
         sources: BTreeMap<String, String>,
-        libraries: BTreeMap<String, BTreeMap<String, String>>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
         remappings: Option<BTreeSet<String>>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,

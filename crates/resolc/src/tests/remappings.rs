@@ -42,7 +42,7 @@ fn default() {
 
     super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         Some(remappings),
         revive_llvm_context::OptimizerSettings::cycles(),
     )

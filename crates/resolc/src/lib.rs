@@ -43,14 +43,17 @@ use revive_solc_json_interface::standard_json::input::settings::metadata_hash::M
 use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 
 /// Runs the Yul mode.
+#[allow(clippy::too_many_arguments)]
 pub fn yul<T: Compiler>(
     input_files: &[PathBuf],
+    libraries: &[String],
     solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
@@ -58,6 +61,8 @@ pub fn yul<T: Compiler>(
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
+    let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
         0 => anyhow::bail!("The input file is missing"),
@@ -75,7 +80,7 @@ pub fn yul<T: Compiler>(
     }
 
     let solc_validator = Some(&*solc);
-    let project = Project::try_from_yul_path(path, solc_validator)?;
+    let project = Project::try_from_yul_path(path, solc_validator, libraries)?;
 
     debug_config.set_yul_path(path);
     let build = project.compile(
@@ -92,12 +97,15 @@ pub fn yul<T: Compiler>(
 /// Runs the LLVM IR mode.
 pub fn llvm_ir(
     input_files: &[PathBuf],
+    libraries: &[String],
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
+    let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+
     let path = match input_files.len() {
         1 => input_files.first().expect("Always exists"),
         0 => anyhow::bail!("The input file is missing"),
@@ -107,7 +115,7 @@ pub fn llvm_ir(
         ),
     };
 
-    let project = Project::try_from_llvm_ir_path(path)?;
+    let project = Project::try_from_llvm_ir_path(path, libraries)?;
 
     let build = project.compile(
         optimizer_settings,
@@ -124,7 +132,7 @@ pub fn llvm_ir(
 #[allow(clippy::too_many_arguments)]
 pub fn standard_output<T: Compiler>(
     input_files: &[PathBuf],
-    libraries: Vec<String>,
+    libraries: &[String],
     solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
@@ -281,7 +289,7 @@ pub fn standard_json<T: Compiler>(
 pub fn combined_json<T: Compiler>(
     format: String,
     input_files: &[PathBuf],
-    libraries: Vec<String>,
+    libraries: &[String],
     solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,

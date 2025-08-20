@@ -50,21 +50,21 @@ fn optimizer() {
 
     let build_unoptimized = super::build_solidity(
         sources.clone(),
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::none(),
     )
     .expect("Build failure");
     let build_optimized_for_cycles = super::build_solidity(
         sources.clone(),
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Build failure");
     let build_optimized_for_size = super::build_solidity(
         sources,
-        BTreeMap::new(),
+        Default::default(),
         None,
         revive_llvm_context::OptimizerSettings::size(),
     )

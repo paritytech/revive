@@ -11,6 +11,7 @@ use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use revive_solc_json_interface::warning::Warning;
 use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutput;
@@ -53,7 +54,7 @@ fn check_dependencies() {
 /// Builds the Solidity project and returns the standard JSON output.
 pub fn build_solidity(
     sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
     remappings: Option<BTreeSet<String>>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
@@ -65,7 +66,7 @@ pub fn build_solidity(
 /// - `solc_optimizer_enabled`: Whether to use the `solc` optimizer
 pub fn build_solidity_with_options(
     sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
     remappings: Option<BTreeSet<String>>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     solc_optimizer_enabled: bool,
@@ -131,7 +132,7 @@ pub fn build_solidity_with_options(
 /// Build a Solidity contract and get the EVM code
 pub fn build_solidity_with_options_evm(
     sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
     remappings: Option<BTreeSet<String>>,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
@@ -190,7 +191,7 @@ pub fn build_solidity_with_options_evm(
 /// Builds the Solidity project and returns the standard JSON output.
 pub fn build_solidity_and_detect_missing_libraries(
     sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
@@ -250,6 +251,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
         PathBuf::from("test.yul").as_path(),
         source_code,
         None,
+        SolcStandardJsonInputSettingsLibraries::default(),
     )?;
     let _build = project.compile(
         optimizer_settings,
@@ -266,7 +268,7 @@ pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
 pub fn check_solidity_warning(
     source_code: &str,
     warning_substring: &str,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
     skip_for_revive_edition: bool,
     suppressed_warnings: Option<Vec<Warning>>,
 ) -> anyhow::Result<bool> {

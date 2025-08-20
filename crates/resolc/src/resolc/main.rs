@@ -150,6 +150,7 @@ fn main_inner() -> anyhow::Result<()> {
     let build = if arguments.yul {
         resolc::yul(
             input_files.as_slice(),
+            arguments.libraries.as_slice(),
             &mut solc,
             optimizer_settings,
             include_metadata_hash,
@@ -160,6 +161,7 @@ fn main_inner() -> anyhow::Result<()> {
     } else if arguments.llvm_ir {
         resolc::llvm_ir(
             input_files.as_slice(),
+            arguments.libraries.as_slice(),
             optimizer_settings,
             include_metadata_hash,
             debug_config,
@@ -181,7 +183,7 @@ fn main_inner() -> anyhow::Result<()> {
         resolc::combined_json(
             format,
             input_files.as_slice(),
-            arguments.libraries,
+            arguments.libraries.as_slice(),
             &mut solc,
             evm_version,
             !arguments.disable_solc_optimizer,
@@ -202,7 +204,7 @@ fn main_inner() -> anyhow::Result<()> {
     } else {
         resolc::standard_output(
             input_files.as_slice(),
-            arguments.libraries,
+            arguments.libraries.as_slice(),
             &mut solc,
             evm_version,
             !arguments.disable_solc_optimizer,

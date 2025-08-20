@@ -1,5 +1,6 @@
 //! The `solc --standard-json` input settings.
 
+pub mod libraries;
 pub mod metadata;
 pub mod metadata_hash;
 pub mod optimizer;
@@ -12,6 +13,7 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use self::libraries::Libraries;
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
 use self::polkavm::PolkaVM;
@@ -26,7 +28,7 @@ pub struct Settings {
     pub evm_version: Option<revive_common::EVMVersion>,
     /// The linker library addresses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub libraries: Option<BTreeMap<String, BTreeMap<String, String>>>,
+    pub libraries: Option<Libraries>,
     /// The sorted list of remappings.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remappings: Option<BTreeSet<String>>,
@@ -54,7 +56,7 @@ impl Settings {
     /// A shortcut constructor.
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
-        libraries: BTreeMap<String, BTreeMap<String, String>>,
+        libraries: Libraries,
         remappings: Option<BTreeSet<String>>,
         output_selection: Selection,
         optimizer: Optimizer,

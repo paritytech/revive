@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use std::collections::BTreeMap;
-
 use revive_solc_json_interface::warning::Warning;
 
 pub const ECRECOVER_TEST_SOURCE: &str = r#"
@@ -28,7 +26,7 @@ fn ecrecover() {
         super::check_solidity_warning(
             ECRECOVER_TEST_SOURCE,
             "Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.",
-            BTreeMap::new(),
+            Default::default(),
             false,
             None,
         ).expect("Test failure")
@@ -41,7 +39,7 @@ fn ecrecover_suppressed() {
         !super::check_solidity_warning(
             ECRECOVER_TEST_SOURCE,
             "Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.",
-            BTreeMap::new(),
+            Default::default(),
             false,
             Some(vec![Warning::EcRecover]),
         ).expect("Test failure")
@@ -74,7 +72,7 @@ fn send() {
     assert!(super::check_solidity_warning(
         SEND_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
-        BTreeMap::new(),
+        Default::default(),
         false,
         None,
     )
@@ -86,7 +84,7 @@ fn send_suppressed() {
     assert!(!super::check_solidity_warning(
         SEND_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
-        BTreeMap::new(),
+        Default::default(),
         false,
         Some(vec![Warning::SendTransfer]),
     )
@@ -115,7 +113,7 @@ fn transfer() {
     assert!(super::check_solidity_warning(
         TRANSFER_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
-        BTreeMap::new(),
+        Default::default(),
         false,
         None,
     )
@@ -127,7 +125,7 @@ fn transfer_suppressed() {
     assert!(!super::check_solidity_warning(
         TRANSFER_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
-        BTreeMap::new(),
+        Default::default(),
         false,
         Some(vec![Warning::SendTransfer]),
     )
@@ -154,7 +152,7 @@ fn extcodesize() {
     assert!(super::check_solidity_warning(
         EXTCODESIZE_TEST_SOURCE,
         "Warning: Your code or one of its dependencies uses the 'extcodesize' instruction,",
-        BTreeMap::new(),
+        Default::default(),
         false,
         None,
     )
@@ -166,7 +164,7 @@ fn extcodesize_suppressed() {
     assert!(!super::check_solidity_warning(
         EXTCODESIZE_TEST_SOURCE,
         "Warning: Your code or one of its dependencies uses the 'extcodesize' instruction,",
-        BTreeMap::new(),
+        Default::default(),
         false,
         Some(vec![Warning::ExtCodeSize]),
     )
@@ -189,7 +187,7 @@ fn tx_origin() {
     assert!(super::check_solidity_warning(
         TX_ORIGIN_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
-        BTreeMap::new(),
+        Default::default(),
         false,
         None,
     )
@@ -201,7 +199,7 @@ fn tx_origin_suppressed() {
     assert!(!super::check_solidity_warning(
         TX_ORIGIN_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
-        BTreeMap::new(),
+        Default::default(),
         false,
         Some(vec![Warning::TxOrigin]),
     )
@@ -231,7 +229,7 @@ fn tx_origin_assembly() {
     assert!(super::check_solidity_warning(
         TX_ORIGIN_ASSEMBLY_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
-        BTreeMap::new(),
+        Default::default(),
         false,
         None,
     )
@@ -243,7 +241,7 @@ fn tx_origin_assembly_suppressed() {
     assert!(!super::check_solidity_warning(
         TX_ORIGIN_ASSEMBLY_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
-        BTreeMap::new(),
+        Default::default(),
         false,
         Some(vec![Warning::TxOrigin]),
     )

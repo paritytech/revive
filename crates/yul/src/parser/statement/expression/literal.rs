@@ -72,13 +72,10 @@ impl Literal {
     }
 
     /// Converts the literal into its LLVM.
-    pub fn into_llvm<'ctx, D>(
+    pub fn into_llvm<'ctx>(
         self,
-        context: &revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<revive_llvm_context::PolkaVMArgument<'ctx>>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &revive_llvm_context::PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<revive_llvm_context::PolkaVMArgument<'ctx>> {
         match self.inner {
             LexicalLiteral::Boolean(inner) => {
                 let value = self

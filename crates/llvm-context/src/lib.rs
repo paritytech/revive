@@ -67,8 +67,6 @@ pub use self::polkavm::evm::r#return as polkavm_evm_return;
 pub use self::polkavm::evm::return_data as polkavm_evm_return_data;
 pub use self::polkavm::evm::storage as polkavm_evm_storage;
 pub use self::polkavm::r#const as polkavm_const;
-pub use self::polkavm::Dependency as PolkaVMDependency;
-pub use self::polkavm::DummyDependency as PolkaVMDummyDependency;
 pub use self::polkavm::DummyLLVMWritable as PolkaVMDummyLLVMWritable;
 pub use self::polkavm::WriteLLVM as PolkaVMWriteLLVM;
 pub use self::target_machine::target::Target;

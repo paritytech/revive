@@ -31,18 +31,12 @@ impl Yul {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Yul
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for Yul {
+    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.object.declare(context)
     }
 
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.object.into_llvm(context)
     }
 }

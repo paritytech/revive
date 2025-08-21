@@ -3,15 +3,12 @@
 use crate::parser::statement::expression::function_call::FunctionCall;
 
 /// Translates the verbatim simulations.
-pub fn verbatim<'ctx, D>(
-    context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
+pub fn verbatim<'ctx>(
+    context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
     call: &mut FunctionCall,
     _input_size: usize,
     output_size: usize,
-) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
+) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
     if output_size > 1 {
         anyhow::bail!(
             "{} Verbatim instructions with multiple return values are not supported",
@@ -19,7 +16,7 @@ where
         );
     }
 
-    let mut arguments = call.pop_arguments::<D, 1>(context)?;
+    let mut arguments = call.pop_arguments::<1>(context)?;
     let identifier = arguments[0]
         .original
         .take()

@@ -100,13 +100,10 @@ impl Expression {
     }
 
     /// Converts the expression into an LLVM value.
-    pub fn into_llvm<'ctx, D>(
+    pub fn into_llvm<'ctx>(
         self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>> {
         match self {
             Self::Literal(literal) => literal
                 .clone()

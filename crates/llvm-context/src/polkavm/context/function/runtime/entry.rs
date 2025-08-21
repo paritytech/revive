@@ -6,7 +6,6 @@ use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// The entry function.
@@ -21,10 +20,7 @@ impl Entry {
 
     /// Initializes the global variables.
     /// The pointers are not initialized, because it's not possible to create a null pointer.
-    pub fn initialize_globals<D>(context: &mut Context<D>) -> anyhow::Result<()>
-    where
-        D: Dependency + Clone,
-    {
+    pub fn initialize_globals(context: &mut Context) -> anyhow::Result<()> {
         context.set_global(
             crate::polkavm::GLOBAL_CALLDATA_SIZE,
             context.xlen_type(),
@@ -64,10 +60,7 @@ impl Entry {
     }
 
     /// Populate the calldata size global value.
-    pub fn load_calldata_size<D>(context: &mut Context<D>) -> anyhow::Result<()>
-    where
-        D: Dependency + Clone,
-    {
+    pub fn load_calldata_size(context: &mut Context) -> anyhow::Result<()> {
         let call_data_size_pointer = context
             .get_global(crate::polkavm::GLOBAL_CALLDATA_SIZE)?
             .value
@@ -90,10 +83,7 @@ impl Entry {
 
     /// Calls the deploy code if the first function argument was `1`.
     /// Calls the runtime code otherwise.
-    pub fn leave_entry<D>(context: &mut Context<D>) -> anyhow::Result<()>
-    where
-        D: Dependency + Clone,
-    {
+    pub fn leave_entry(context: &mut Context) -> anyhow::Result<()> {
         context.set_debug_location(0, 0, None)?;
 
         let is_deploy = context
@@ -133,11 +123,8 @@ impl Entry {
     }
 }
 
-impl<D> WriteLLVM<D> for Entry
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
+impl WriteLLVM for Entry {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
         let entry_arguments = vec![context.bool_type().as_basic_type_enum()];
         let entry_function_type = context.function_type(entry_arguments, 0);
         context.add_function(
@@ -166,7 +153,7 @@ where
     /// Instead of a single entrypoint, the runtime expects two exports: `call ` and `deploy`.
     /// `call` and `deploy` directly call `entry`, signaling a deploy if the first arg is `1`.
     /// The `entry` function loads calldata, sets globals and calls the runtime or deploy code.
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
         let entry = context
             .get_function(runtime::FUNCTION_ENTRY)
             .expect("the entry function should already be declared")

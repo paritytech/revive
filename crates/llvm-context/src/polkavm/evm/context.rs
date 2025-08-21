@@ -4,15 +4,11 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the `gas_limit` instruction.
-pub fn gas_limit<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn gas_limit<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let gas_limit_value = context
         .build_runtime_call(revive_runtime_api::polkavm_imports::GAS_LIMIT, &[])
         .expect("the gas_limit syscall method should return a value")
@@ -25,12 +21,9 @@ where
 }
 
 /// Translates the `gas_price` instruction.
-pub fn gas_price<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn gas_price<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let gas_price_value = context
         .build_runtime_call(revive_runtime_api::polkavm_imports::GAS_PRICE, &[])
         .expect("the gas_price syscall method should return a value")
@@ -43,12 +36,9 @@ where
 }
 
 /// Translates the `tx.origin` instruction.
-pub fn origin<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn origin<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
     let address_pointer: Pointer<'_> = context
         .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
@@ -62,43 +52,31 @@ where
 }
 
 /// Translates the `chain_id` instruction.
-pub fn chain_id<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn chain_id<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::CHAIN_ID)
 }
 
 /// Translates the `block_number` instruction.
-pub fn block_number<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn block_number<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::BLOCK_NUMBER)
 }
 
 /// Translates the `block_timestamp` instruction.
-pub fn block_timestamp<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn block_timestamp<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::NOW)
 }
 
 /// Translates the `block_hash` instruction.
-pub fn block_hash<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn block_hash<'ctx>(
+    context: &mut Context<'ctx>,
     index: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let output_pointer = context.build_alloca_at_entry(context.word_type(), "blockhash_out_ptr");
     let index_pointer = context.build_alloca_at_entry(context.word_type(), "blockhash_index_ptr");
     context.build_store(index_pointer, index)?;
@@ -114,22 +92,16 @@ where
 }
 
 /// Translates the `difficulty` instruction.
-pub fn difficulty<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn difficulty<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context.word_const(2500000000000000).as_basic_value_enum())
 }
 
 /// Translates the `coinbase` instruction.
-pub fn coinbase<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn coinbase<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let pointer: Pointer<'_> = context
         .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
         .into();
@@ -141,22 +113,16 @@ where
 }
 
 /// Translates the `basefee` instruction.
-pub fn basefee<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn basefee<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.build_runtime_call_to_getter(revive_runtime_api::polkavm_imports::BASE_FEE)
 }
 
 /// Translates the `address` instruction.
-pub fn address<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn address<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let pointer: Pointer<'_> = context
         .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
         .into();
@@ -168,12 +134,9 @@ where
 }
 
 /// Translates the `caller` instruction.
-pub fn caller<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn caller<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let pointer: Pointer<'_> = context
         .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
         .into();

@@ -120,11 +120,8 @@ impl Switch {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Switch
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for Switch {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
         let scrutinee = self.expression.into_llvm(context)?;
 

@@ -3,19 +3,15 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the comparison operations.
 /// There is not difference between the EVM and LLVM IR behaviors.
-pub fn compare<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn compare<'ctx>(
+    context: &mut Context<'ctx>,
     operand_1: inkwell::values::IntValue<'ctx>,
     operand_2: inkwell::values::IntValue<'ctx>,
     operation: inkwell::IntPredicate,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let result = context.builder().build_int_compare(
         operation,
         operand_1,

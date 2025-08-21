@@ -50,11 +50,8 @@ impl IfConditional {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for IfConditional
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for IfConditional {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         let condition = self
             .condition
             .into_llvm(context)?

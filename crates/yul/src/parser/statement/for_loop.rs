@@ -62,11 +62,8 @@ impl ForLoop {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for ForLoop
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for ForLoop {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.initializer.into_llvm(context)?;
 
         let condition_block = context.append_basic_block("for_condition");

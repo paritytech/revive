@@ -6,21 +6,17 @@ use num::Zero;
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the contract `create` and `create2` instruction.
 ///
 /// A `salt` value of `None` is equivalent to `create1`.
-pub fn create<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn create<'ctx>(
+    context: &mut Context<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
     input_offset: inkwell::values::IntValue<'ctx>,
     input_length: inkwell::values::IntValue<'ctx>,
     salt: Option<inkwell::values::IntValue<'ctx>>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
     let input_length = context.safe_truncate_int_to_xlen(input_length)?;
 
@@ -96,19 +92,18 @@ where
 /// Translates the contract hash instruction, which is actually used to set the hash of the contract
 /// being created, or other related auxiliary data.
 /// Represents `dataoffset` in Yul and `PUSH [$]` in the EVM legacy assembly.
-pub fn contract_hash<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn contract_hash<'ctx>(
+    context: &mut Context<'ctx>,
     identifier: String,
-) -> anyhow::Result<Argument<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<Argument<'ctx>> {
     let code_type = context
         .code_type()
         .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?;
 
     let parent = context.module().get_name().to_str().expect("Always valid");
 
+    todo!()
+    /*
     let contract_path =
         context
             .resolve_path(identifier.as_str())
@@ -130,24 +125,24 @@ where
         .word_const_str_hex(hash_string.as_str())
         .as_basic_value_enum();
     Ok(Argument::value(hash_value).with_original(hash_string))
+    */
 }
 
 /// Translates the deploy call header size instruction. the header consists of
 /// the hash of the bytecode of the contract whose instance is being created.
 /// Represents `datasize` in Yul and `PUSH #[$]` in the EVM legacy assembly.
-pub fn header_size<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn header_size<'ctx>(
+    context: &mut Context<'ctx>,
     identifier: String,
-) -> anyhow::Result<Argument<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<Argument<'ctx>> {
     let code_type = context
         .code_type()
         .ok_or_else(|| anyhow::anyhow!("The contract code part type is undefined"))?;
 
     let parent = context.module().get_name().to_str().expect("Always valid");
 
+    todo!()
+    /*
     let contract_path =
         context
             .resolve_path(identifier.as_str())
@@ -169,4 +164,5 @@ where
         .word_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64)
         .as_basic_value_enum();
     Ok(Argument::value(size_value).with_constant(size_bigint))
+    */
 }

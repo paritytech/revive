@@ -1,17 +1,13 @@
 //! Translates the cryptographic operations.
 
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the `sha3` instruction.
-pub fn sha3<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn sha3<'ctx>(
+    context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
     length: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let offset_casted = context.safe_truncate_int_to_xlen(offset)?;
     let length_casted = context.safe_truncate_int_to_xlen(length)?;
     let input_pointer = context.build_heap_gep(offset_casted, length_casted)?;

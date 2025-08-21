@@ -32,7 +32,6 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
 use crate::polkavm::DebugConfig;
-use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 use crate::PolkaVMLoadHeapWordFunction;
@@ -61,10 +60,7 @@ use self::yul_data::YulData;
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
 /// and a superstructure over the inner `inkwell` LLVM context.
-pub struct Context<'ctx, D>
-where
-    D: Dependency + Clone,
-{
+pub struct Context<'ctx> {
     /// The inner LLVM context.
     llvm: &'ctx inkwell::context::Context,
     /// The inner LLVM context builder.
@@ -92,10 +88,6 @@ where
     /// The PVM memory configuration.
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
-    /// The project dependency manager. It can be any entity implementing the trait.
-    /// The manager is used to get information about contracts and their dependencies during
-    /// the multi-threaded compilation process.
-    dependency_manager: Option<D>,
     /// Whether to append the metadata hash at the end of bytecode.
     include_metadata_hash: bool,
     /// The debug info of the current module.
@@ -109,10 +101,7 @@ where
     yul_data: Option<YulData>,
 }
 
-impl<'ctx, D> Context<'ctx, D>
-where
-    D: Dependency + Clone,
-{
+impl<'ctx> Context<'ctx> {
     /// The functions hashmap default capacity.
     const FUNCTIONS_HASHMAP_INITIAL_CAPACITY: usize = 64;
 
@@ -226,7 +215,6 @@ where
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
         optimizer: Optimizer,
-        dependency_manager: Option<D>,
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &'ctx [String],
@@ -267,7 +255,6 @@ where
             llvm_arguments,
             memory_config,
 
-            dependency_manager,
             include_metadata_hash,
 
             debug_info,
@@ -650,54 +637,6 @@ where
             .expect("The current context is not in a loop")
     }
 
-    /// Compiles a contract dependency, if the dependency manager is set.
-    pub fn compile_dependency(&mut self, name: &str) -> anyhow::Result<String> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                Dependency::compile(
-                    manager,
-                    name,
-                    self.optimizer.settings().to_owned(),
-                    self.include_metadata_hash,
-                    self.debug_config.clone(),
-                    self.llvm_arguments,
-                    self.memory_config,
-                )
-            })
-    }
-
-    /// Gets a full contract_path from the dependency manager.
-    pub fn resolve_path(&self, identifier: &str) -> anyhow::Result<String> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                let full_path = manager.resolve_path(identifier)?;
-                Ok(full_path)
-            })
-    }
-
-    /// Gets a deployed library address from the dependency manager.
-    pub fn resolve_library(&self, path: &str) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                let address = manager.resolve_library(path)?;
-                let address = self.word_const_str_hex(address.as_str());
-                Ok(address)
-            })
-    }
-
-    /// Extracts the dependency manager.
-    pub fn take_dependency_manager(&mut self) -> D {
-        self.dependency_manager
-            .take()
-            .expect("The dependency manager is unset")
-    }
-
     /// Returns the debug info.
     pub fn debug_info(&self) -> Option<&DebugInfo<'ctx>> {
         self.debug_info.as_ref()
@@ -808,9 +747,9 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::NAME;
+                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction>::NAME;
                 let declaration =
-                    <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                    <PolkaVMLoadHeapWordFunction as RuntimeFunction>::declaration(self);
                 let arguments = [self
                     .builder()
                     .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
@@ -846,7 +785,7 @@ where
         match pointer.address_space {
             AddressSpace::Heap => {
                 let declaration =
-                    <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                    <PolkaVMStoreHeapWordFunction as RuntimeFunction>::declaration(self);
                 let arguments = [
                     pointer.to_int(self).as_basic_value_enum(),
                     value.as_basic_value_enum(),
@@ -966,10 +905,7 @@ where
     pub fn build_runtime_call_to_getter(
         &self,
         import: &'static str,
-    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-    where
-        D: Dependency + Clone,
-    {
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         let pointer = self.build_alloca_at_entry(self.word_type(), &format!("{import}_output"));
         self.build_runtime_call(import, &[pointer.to_int(self).into()]);
         self.build_load(pointer, import)
@@ -1064,7 +1000,7 @@ where
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<()> {
         self.build_call(
-            <Exit as RuntimeFunction<D>>::declaration(self),
+            <Exit as RuntimeFunction>::declaration(self),
             &[flags.into(), offset.into(), length.into()],
             "exit",
         );
@@ -1088,14 +1024,14 @@ where
 
         Ok(self
             .build_call(
-                <WordToPointer as RuntimeFunction<D>>::declaration(self),
+                <WordToPointer as RuntimeFunction>::declaration(self),
                 &[value.into()],
                 "word_to_pointer",
             )
             .unwrap_or_else(|| {
                 panic!(
                     "revive runtime function {} should return a value",
-                    <WordToPointer as RuntimeFunction<D>>::NAME,
+                    <WordToPointer as RuntimeFunction>::NAME,
                 )
             })
             .into_int_value())
@@ -1111,7 +1047,7 @@ where
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
         let call_site_value = self.builder().build_call(
-            <PolkaVMSbrkFunction as RuntimeFunction<D>>::declaration(self).function_value(),
+            <PolkaVMSbrkFunction as RuntimeFunction>::declaration(self).function_value(),
             &[offset.into(), size.into()],
             "alloc_start",
         )?;
@@ -1133,7 +1069,7 @@ where
             .unwrap_or_else(|| {
                 panic!(
                     "revive runtime function {} should return a value",
-                    <PolkaVMSbrkFunction as RuntimeFunction<D>>::NAME,
+                    <PolkaVMSbrkFunction as RuntimeFunction>::NAME,
                 )
             })
             .into_pointer_value())

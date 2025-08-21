@@ -4,19 +4,15 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Implements the division operator according to the EVM specification.
 pub struct Division;
 
-impl<D> RuntimeFunction<D> for Division
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Division {
     const NAME: &'static str = "__revive_division";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
             false,
@@ -25,7 +21,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let operand_1 = Self::paramater(context, 0).into_int_value();
         let operand_2 = Self::paramater(context, 1).into_int_value();
@@ -39,29 +35,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Division
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Division {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Implements the signed division operator according to the EVM specification.
 pub struct SignedDivision;
 
-impl<D> RuntimeFunction<D> for SignedDivision
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for SignedDivision {
     const NAME: &'static str = "__revive_signed_division";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
             false,
@@ -70,7 +60,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let operand_1 = Self::paramater(context, 0).into_int_value();
         let operand_2 = Self::paramater(context, 1).into_int_value();
@@ -121,29 +111,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for SignedDivision
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for SignedDivision {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Implements the remainder operator according to the EVM specification.
 pub struct Remainder;
 
-impl<D> RuntimeFunction<D> for Remainder
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Remainder {
     const NAME: &'static str = "__revive_remainder";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
             false,
@@ -152,7 +136,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let operand_1 = Self::paramater(context, 0).into_int_value();
         let operand_2 = Self::paramater(context, 1).into_int_value();
@@ -166,29 +150,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Remainder
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Remainder {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Implements the signed remainder operator according to the EVM specification.
 pub struct SignedRemainder;
 
-impl<D> RuntimeFunction<D> for SignedRemainder
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for SignedRemainder {
     const NAME: &'static str = "__revive_signed_remainder";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
             false,
@@ -197,7 +175,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let operand_1 = Self::paramater(context, 0).into_int_value();
         let operand_2 = Self::paramater(context, 1).into_int_value();
@@ -211,16 +189,13 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for SignedRemainder
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for SignedRemainder {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
@@ -231,13 +206,12 @@ where
 ///
 /// The result is either the calculated quotient or zero,
 ///  selected at runtime.
-fn wrapped_division<'ctx, D, F, T>(
-    context: &Context<'ctx, D>,
+fn wrapped_division<'ctx, F, T>(
+    context: &Context<'ctx>,
     denominator: inkwell::values::IntValue<'ctx>,
     f: F,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
 where
-    D: Dependency + Clone,
     F: FnOnce() -> anyhow::Result<T>,
     T: inkwell::values::IntMathValue<'ctx>,
 {

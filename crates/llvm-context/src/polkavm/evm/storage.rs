@@ -2,7 +2,6 @@
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::PolkaVMArgument;
 use crate::PolkaVMLoadStorageWordFunction;
 use crate::PolkaVMLoadTransientStorageWordFunction;
@@ -10,15 +9,12 @@ use crate::PolkaVMStoreStorageWordFunction;
 use crate::PolkaVMStoreTransientStorageWordFunction;
 
 /// Translates the storage load.
-pub fn load<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn load<'ctx>(
+    context: &mut Context<'ctx>,
     position: &PolkaVMArgument<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::NAME;
-    let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction<D>>::declaration(context);
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let name = <PolkaVMLoadStorageWordFunction as RuntimeFunction>::NAME;
+    let declaration = <PolkaVMLoadStorageWordFunction as RuntimeFunction>::declaration(context);
     let arguments = [position.as_pointer(context)?.value.into()];
     Ok(context
         .build_call(declaration, &arguments, "storage_load")
@@ -26,15 +22,12 @@ where
 }
 
 /// Translates the storage store.
-pub fn store<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn store<'ctx>(
+    context: &mut Context<'ctx>,
     position: &PolkaVMArgument<'ctx>,
     value: &PolkaVMArgument<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
-    let declaration = <PolkaVMStoreStorageWordFunction as RuntimeFunction<D>>::declaration(context);
+) -> anyhow::Result<()> {
+    let declaration = <PolkaVMStoreStorageWordFunction as RuntimeFunction>::declaration(context);
     let arguments = [
         position.as_pointer(context)?.value.into(),
         value.as_pointer(context)?.value.into(),
@@ -44,33 +37,27 @@ where
 }
 
 /// Translates the transient storage load.
-pub fn transient_load<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn transient_load<'ctx>(
+    context: &mut Context<'ctx>,
     position: &PolkaVMArgument<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    let name = <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::NAME;
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let name = <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction>::NAME;
     let arguments = [position.as_pointer(context)?.value.into()];
     let declaration =
-        <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
+        <PolkaVMLoadTransientStorageWordFunction as RuntimeFunction>::declaration(context);
     Ok(context
         .build_call(declaration, &arguments, "transient_storage_load")
         .unwrap_or_else(|| panic!("runtime function {name} should return a value")))
 }
 
 /// Translates the transient storage store.
-pub fn transient_store<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn transient_store<'ctx>(
+    context: &mut Context<'ctx>,
     position: &PolkaVMArgument<'ctx>,
     value: &PolkaVMArgument<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     let declaration =
-        <PolkaVMStoreTransientStorageWordFunction as RuntimeFunction<D>>::declaration(context);
+        <PolkaVMStoreTransientStorageWordFunction as RuntimeFunction>::declaration(context);
     let arguments = [
         position.as_pointer(context)?.value.into(),
         value.as_pointer(context)?.value.into(),

@@ -179,14 +179,8 @@ impl Object {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Object
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for Object {
+    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 
@@ -270,7 +264,7 @@ where
         Ok(())
     }
 
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();
             let object_name: &str = self.identifier.as_str();

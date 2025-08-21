@@ -93,13 +93,10 @@ impl VariableDeclaration {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for VariableDeclaration
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
+impl revive_llvm_context::PolkaVMWriteLLVM for VariableDeclaration {
     fn into_llvm<'ctx>(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
     ) -> anyhow::Result<()> {
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);

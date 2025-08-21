@@ -3,17 +3,13 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the bitwise OR.
-pub fn or<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn or<'ctx>(
+    context: &mut Context<'ctx>,
     operand_1: inkwell::values::IntValue<'ctx>,
     operand_2: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .builder()
         .build_or(operand_1, operand_2, "or_result")?
@@ -21,14 +17,11 @@ where
 }
 
 /// Translates the bitwise XOR.
-pub fn xor<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn xor<'ctx>(
+    context: &mut Context<'ctx>,
     operand_1: inkwell::values::IntValue<'ctx>,
     operand_2: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .builder()
         .build_xor(operand_1, operand_2, "xor_result")?
@@ -36,14 +29,11 @@ where
 }
 
 /// Translates the bitwise AND.
-pub fn and<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn and<'ctx>(
+    context: &mut Context<'ctx>,
     operand_1: inkwell::values::IntValue<'ctx>,
     operand_2: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .builder()
         .build_and(operand_1, operand_2, "and_result")?
@@ -51,14 +41,11 @@ where
 }
 
 /// Translates the bitwise shift left.
-pub fn shift_left<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn shift_left<'ctx>(
+    context: &mut Context<'ctx>,
     shift: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let overflow_block = context.append_basic_block("shift_left_overflow");
     let non_overflow_block = context.append_basic_block("shift_left_non_overflow");
     let join_block = context.append_basic_block("shift_left_join");
@@ -93,14 +80,11 @@ where
 }
 
 /// Translates the bitwise shift right.
-pub fn shift_right<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn shift_right<'ctx>(
+    context: &mut Context<'ctx>,
     shift: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let overflow_block = context.append_basic_block("shift_right_overflow");
     let non_overflow_block = context.append_basic_block("shift_right_non_overflow");
     let join_block = context.append_basic_block("shift_right_join");
@@ -137,14 +121,11 @@ where
 }
 
 /// Translates the arithmetic bitwise shift right.
-pub fn shift_right_arithmetic<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn shift_right_arithmetic<'ctx>(
+    context: &mut Context<'ctx>,
     shift: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let overflow_block = context.append_basic_block("shift_right_arithmetic_overflow");
     let overflow_positive_block =
         context.append_basic_block("shift_right_arithmetic_overflow_positive");
@@ -217,14 +198,11 @@ where
 /// Because this opcode returns zero on overflows, the index `operand_1`
 /// is checked for overflow. On overflow, the mask will be all zeros,
 /// resulting in a branchless implementation.
-pub fn byte<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn byte<'ctx>(
+    context: &mut Context<'ctx>,
     operand_1: inkwell::values::IntValue<'ctx>,
     operand_2: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     const MAX_INDEX_BYTES: u64 = 31;
 
     let is_overflow_bit = context.builder().build_int_compare(

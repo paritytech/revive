@@ -54,77 +54,23 @@ pub fn build_assembly_text(
 }
 
 /// Implemented by items which are translated into LLVM IR.
-pub trait WriteLLVM<D>
-where
-    D: Dependency + Clone,
-{
+pub trait WriteLLVM {
     /// Declares the entity in the LLVM IR.
     /// Is usually performed in order to use the item before defining it.
-    fn declare(&mut self, _context: &mut Context<D>) -> anyhow::Result<()> {
+    fn declare(&mut self, _context: &mut Context) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// Translates the entity into LLVM IR.
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()>;
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()>;
 }
 
 /// The dummy LLVM writable entity.
 #[derive(Debug, Default, Clone)]
 pub struct DummyLLVMWritable {}
 
-impl<D> WriteLLVM<D> for DummyLLVMWritable
-where
-    D: Dependency + Clone,
-{
-    fn into_llvm(self, _context: &mut Context<D>) -> anyhow::Result<()> {
+impl WriteLLVM for DummyLLVMWritable {
+    fn into_llvm(self, _context: &mut Context) -> anyhow::Result<()> {
         Ok(())
-    }
-}
-
-/// Implemented by items managing project dependencies.
-pub trait Dependency {
-    /// Compiles a project dependency.
-    fn compile(
-        dependency: Self,
-        path: &str,
-        optimizer_settings: OptimizerSettings,
-        include_metadata_hash: bool,
-        debug_config: DebugConfig,
-        llvm_arguments: &[String],
-        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-    ) -> anyhow::Result<String>;
-
-    /// Resolves a full contract path.
-    fn resolve_path(&self, identifier: &str) -> anyhow::Result<String>;
-
-    /// Resolves a library address.
-    fn resolve_library(&self, path: &str) -> anyhow::Result<String>;
-}
-
-/// The dummy dependency entity.
-#[derive(Debug, Default, Clone)]
-pub struct DummyDependency {}
-
-impl Dependency for DummyDependency {
-    fn compile(
-        _dependency: Self,
-        _path: &str,
-        _optimizer_settings: OptimizerSettings,
-        _include_metadata_hash: bool,
-        _debug_config: DebugConfig,
-        _llvm_arguments: &[String],
-        _memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-    ) -> anyhow::Result<String> {
-        Ok(String::new())
-    }
-
-    /// Resolves a full contract path.
-    fn resolve_path(&self, _identifier: &str) -> anyhow::Result<String> {
-        Ok(String::new())
-    }
-
-    /// Resolves a library address.
-    fn resolve_library(&self, _path: &str) -> anyhow::Result<String> {
-        Ok(String::new())
     }
 }

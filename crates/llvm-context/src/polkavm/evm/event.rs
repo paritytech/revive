@@ -4,16 +4,12 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// A function for emitting EVM event logs from contract code.
 pub struct EventLog<const N: usize>;
 
-impl<D, const N: usize> RuntimeFunction<D> for EventLog<N>
-where
-    D: Dependency + Clone,
-{
+impl<const N: usize> RuntimeFunction for EventLog<N> {
     const NAME: &'static str = match N {
         0 => "__revive_log_0",
         1 => "__revive_log_1",
@@ -23,7 +19,7 @@ where
         _ => unreachable!(),
     };
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         let mut parameter_types = vec![context.xlen_type().into(), context.xlen_type().into()];
         parameter_types.extend_from_slice(&[context.word_type().into(); N]);
         context.void_type().fn_type(&parameter_types, false)
@@ -31,7 +27,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let input_offset = Self::paramater(context, 0).into_int_value();
         let input_length = Self::paramater(context, 1).into_int_value();
@@ -98,82 +94,64 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for EventLog<0>
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for EventLog<0> {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
-impl<D> WriteLLVM<D> for EventLog<1>
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for EventLog<1> {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
-impl<D> WriteLLVM<D> for EventLog<2>
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for EventLog<2> {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
-impl<D> WriteLLVM<D> for EventLog<3>
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for EventLog<3> {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
-impl<D> WriteLLVM<D> for EventLog<4>
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for EventLog<4> {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Translates a log or event call.
-pub fn log<'ctx, D, const N: usize>(
-    context: &mut Context<'ctx, D>,
+pub fn log<'ctx, const N: usize>(
+    context: &mut Context<'ctx>,
     input_offset: inkwell::values::IntValue<'ctx>,
     input_length: inkwell::values::IntValue<'ctx>,
     topics: [inkwell::values::BasicValueEnum<'ctx>; N],
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
-    let declaration = <EventLog<N> as RuntimeFunction<D>>::declaration(context);
+) -> anyhow::Result<()> {
+    let declaration = <EventLog<N> as RuntimeFunction>::declaration(context);
     let mut arguments = vec![
         context.safe_truncate_int_to_xlen(input_offset)?.into(),
         context.safe_truncate_int_to_xlen(input_length)?.into(),

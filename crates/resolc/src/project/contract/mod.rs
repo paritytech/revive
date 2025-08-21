@@ -122,7 +122,6 @@ impl Contract {
             &llvm,
             module,
             optimizer,
-            Some(project),
             include_metadata_hash,
             debug_config,
             llvm_arguments,
@@ -174,18 +173,12 @@ impl Contract {
     }
 }
 
-impl<D> PolkaVMWriteLLVM<D> for Contract
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Contract {
+    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.ir.declare(context)
     }
 
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.ir.into_llvm(context)
     }
 }

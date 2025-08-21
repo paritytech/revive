@@ -190,14 +190,8 @@ impl FunctionDefinition {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for FunctionDefinition
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for FunctionDefinition {
+    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
         let argument_types: Vec<_> = self
             .arguments
@@ -232,7 +226,7 @@ where
 
     fn into_llvm(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext,
     ) -> anyhow::Result<()> {
         context.set_current_function(
             self.identifier.as_str(),

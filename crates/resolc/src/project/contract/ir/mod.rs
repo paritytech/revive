@@ -43,21 +43,15 @@ impl IR {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for IR
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl revive_llvm_context::PolkaVMWriteLLVM for IR {
+    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.declare(context),
             Self::LLVMIR(_inner) => Ok(()),
         }
     }
 
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         match self {
             Self::Yul(inner) => inner.into_llvm(context),
             Self::LLVMIR(_inner) => Ok(()),

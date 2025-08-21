@@ -113,13 +113,10 @@ impl Assignment {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Assignment
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
+impl revive_llvm_context::PolkaVMWriteLLVM for Assignment {
     fn into_llvm(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
+        context: &mut revive_llvm_context::PolkaVMContext,
     ) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
 

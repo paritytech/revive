@@ -5,7 +5,6 @@ use inkwell::values::BasicValue;
 use crate::polkavm::context::function::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Pointers are represented as opaque 256 bit integer values in EVM.
@@ -15,10 +14,7 @@ use crate::polkavm::WriteLLVM;
 /// (but wrong) pointers when truncated.
 pub struct WordToPointer;
 
-impl<D> RuntimeFunction<D> for WordToPointer
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for WordToPointer {
     const NAME: &'static str = "__revive_int_truncate";
 
     const ATTRIBUTES: &'static [Attribute] = &[
@@ -27,7 +23,7 @@ where
         Attribute::AlwaysInline,
     ];
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .xlen_type()
             .fn_type(&[context.word_type().into()], false)
@@ -35,7 +31,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let value = Self::paramater(context, 0).into_int_value();
         let truncated =
@@ -67,26 +63,20 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for WordToPointer
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for WordToPointer {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// The revive runtime exit function.
 pub struct Exit;
 
-impl<D> RuntimeFunction<D> for Exit
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Exit {
     const NAME: &'static str = "__revive_exit";
 
     const ATTRIBUTES: &'static [Attribute] = &[
@@ -95,7 +85,7 @@ where
         Attribute::AlwaysInline,
     ];
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
             &[
                 context.xlen_type().into(),
@@ -108,7 +98,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let flags = Self::paramater(context, 0).into_int_value();
         let offset = Self::paramater(context, 1).into_int_value();
@@ -133,15 +123,12 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Exit
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Exit {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }

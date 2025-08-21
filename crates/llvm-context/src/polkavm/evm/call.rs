@@ -4,7 +4,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 const STATIC_CALL_FLAG: u32 = 0b0001_0000;
 const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
@@ -12,8 +11,8 @@ const SOLIDITY_TRANSFER_GAS_STIPEND_THRESHOLD: u64 = 2300;
 
 /// Translates a contract call.
 #[allow(clippy::too_many_arguments)]
-pub fn call<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn call<'ctx>(
+    context: &mut Context<'ctx>,
     gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     value: Option<inkwell::values::IntValue<'ctx>>,
@@ -23,10 +22,7 @@ pub fn call<'ctx, D>(
     output_length: inkwell::values::IntValue<'ctx>,
     _constants: Vec<Option<num::BigUint>>,
     static_call: bool,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let address_pointer = context.build_address_argument_store(address)?;
 
     let value = value.unwrap_or_else(|| context.word_const(0));
@@ -116,8 +112,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn delegate_call<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn delegate_call<'ctx>(
+    context: &mut Context<'ctx>,
     _gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     input_offset: inkwell::values::IntValue<'ctx>,
@@ -125,10 +121,7 @@ pub fn delegate_call<'ctx, D>(
     output_offset: inkwell::values::IntValue<'ctx>,
     output_length: inkwell::values::IntValue<'ctx>,
     _constants: Vec<Option<num::BigUint>>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let address_pointer = context.build_address_argument_store(address)?;
 
     let input_offset = context.safe_truncate_int_to_xlen(input_offset)?;
@@ -199,21 +192,19 @@ where
 }
 
 /// Translates the Yul `linkersymbol` instruction.
-pub fn linker_symbol<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn linker_symbol<'ctx>(
+    context: &mut Context<'ctx>,
     mut arguments: [Argument<'ctx>; 1],
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let path = arguments[0]
         .original
         .take()
         .ok_or_else(|| anyhow::anyhow!("Linker symbol literal is missing"))?;
 
-    Ok(context
-        .resolve_library(path.as_str())?
-        .as_basic_value_enum())
+    todo!()
+    //Ok(context
+    //    .resolve_library(path.as_str())?
+    //    .as_basic_value_enum())
 }
 
 /// The Solidity `address.transfer` and `address.send` call detection heuristic.
@@ -236,18 +227,15 @@ where
 ///
 /// # Returns
 /// The call flags xlen `IntValue` and the deposit limit word `IntValue`.
-fn call_reentrancy_heuristic<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+fn call_reentrancy_heuristic<'ctx>(
+    context: &mut Context<'ctx>,
     gas: inkwell::values::IntValue<'ctx>,
     input_length: inkwell::values::IntValue<'ctx>,
     output_length: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<(
     inkwell::values::IntValue<'ctx>,
     inkwell::values::IntValue<'ctx>,
-)>
-where
-    D: Dependency + Clone,
-{
+)> {
     // Branch-free SSA implementation: First derive the heuristic boolean (int1) value.
     let input_length_or_output_length =
         context

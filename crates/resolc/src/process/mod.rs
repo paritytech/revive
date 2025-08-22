@@ -53,6 +53,7 @@ pub trait Process {
             input.memory_config,
             input.missing_libraries,
             input.factory_dependencies,
+            input.identifier_paths,
         );
 
         match result {

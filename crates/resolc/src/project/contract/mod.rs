@@ -3,6 +3,7 @@
 pub mod ir;
 pub mod metadata;
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
@@ -75,6 +76,7 @@ impl Contract {
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,
         factory_dependencies: BTreeSet<String>,
+        identifier_paths: BTreeMap<String, String>
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
@@ -125,7 +127,7 @@ impl Contract {
         context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
         match self.ir {
             IR::Yul(_) => {
-                context.set_yul_data(Default::default());
+                context.set_yul_data(revive_llvm_context::PolkaVMContextYulData::new(identifier_paths);
             }
             IR::LLVMIR(_) => {}
         }

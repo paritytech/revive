@@ -141,28 +141,31 @@ pub fn header_size<'ctx>(
 
     let parent = context.module().get_name().to_str().expect("Always valid");
 
-    todo!()
-    /*
-    let contract_path =
-        context
-            .resolve_path(identifier.as_str())
-            .map_err(|error| match code_type {
-                CodeType::Runtime if identifier.ends_with("_deployed") => {
-                    anyhow::anyhow!("type({}).runtimeCode is not supported", identifier)
-                }
-                _ => error,
-            })?;
-    if contract_path.as_str() == parent {
-        return Ok(Argument::value(context.word_const(0).as_basic_value_enum())
-            .with_constant(num::BigUint::zero()));
-    } else if identifier.ends_with("_deployed") && code_type == CodeType::Runtime {
-        anyhow::bail!("type({}).runtimeCode is not supported", identifier);
+    let full_path = match context.yul() {
+        Some(yul_data) => yul_data
+            .resolve_path(
+                identifier
+                    .strip_suffix("_deployed")
+                    .unwrap_or(identifier.as_str()),
+            )
+            .expect("Always exists"),
+        None => identifier.as_str(),
+    };
+
+    match code_type {
+        CodeType::Deploy if full_path == parent => {
+            return Ok(Argument::value(context.word_const(0).as_basic_value_enum())
+                .with_constant(num::BigUint::zero()));
+        }
+        CodeType::Runtime if context.yul().is_some() && identifier.ends_with("_deployed") => {
+            anyhow::bail!("type({identifier}).runtimeCode is not supported");
+        }
+        _ => {}
     }
 
-    let size_bigint = num::BigUint::from(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE);
     let size_value = context
         .word_const(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE as u64)
         .as_basic_value_enum();
+    let size_bigint = num::BigUint::from(crate::polkavm::DEPLOYER_CALL_HEADER_SIZE);
     Ok(Argument::value(size_value).with_constant(size_bigint))
-    */
 }

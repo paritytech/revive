@@ -1,6 +1,7 @@
 //! Process for compiling a single compilation unit.
 //! The input data.
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -31,6 +32,8 @@ pub struct Input {
     pub missing_libraries: BTreeSet<String>,
     /// Factory dependencies.
     pub factory_dependencies: BTreeSet<String>,
+    /// The mapping of auxiliary identifiers, e.g. Yul object names, to full contract paths.
+    pub identifier_paths: BTreeMap<String, String>,
 }
 
 impl Input {
@@ -45,6 +48,7 @@ impl Input {
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,
         factory_dependencies: BTreeSet<String>,
+        identifier_paths: BTreeMap<String, String>,
     ) -> Self {
         Self {
             contract,
@@ -56,6 +60,7 @@ impl Input {
             memory_config,
             missing_libraries,
             factory_dependencies,
+            identifier_paths,
         }
     }
 }

@@ -1369,19 +1369,8 @@ impl<'ctx> Context<'ctx> {
     /// Returns the Yul data reference.
     /// # Panics
     /// If the Yul data has not been initialized.
-    pub fn yul(&self) -> &YulData {
-        self.yul_data
-            .as_ref()
-            .expect("The Yul data must have been initialized")
-    }
-
-    /// Returns the Yul data mutable reference.
-    /// # Panics
-    /// If the Yul data has not been initialized.
-    pub fn yul_mut(&mut self) -> &mut YulData {
-        self.yul_data
-            .as_mut()
-            .expect("The Yul data must have been initialized")
+    pub fn yul(&self) -> Option<&YulData> {
+        self.yul_data.as_ref()
     }
 
     /// Returns the current number of immutables values in the contract.

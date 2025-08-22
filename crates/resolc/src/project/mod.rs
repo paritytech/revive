@@ -102,6 +102,7 @@ impl Project {
                     memory_config,
                     missing_libraries,
                     factory_dependencies,
+                    self.identifier_paths.clone(),
                 );
                 let process_output = {
                     #[cfg(target_os = "emscripten")]

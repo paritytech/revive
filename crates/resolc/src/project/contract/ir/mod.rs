@@ -3,6 +3,7 @@
 pub mod llvm_ir;
 pub mod yul;
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use serde::Deserialize;
@@ -34,11 +35,19 @@ impl IR {
         Self::LLVMIR(LLVMIR::new(path, source))
     }
 
+    /// Drains the list of factory dependencies.
+    pub fn drain_factory_dependencies(&mut self) -> BTreeSet<String> {
+        match self {
+            IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
+            IR::LLVMIR(_) => BTreeSet::new(),
+        }
+    }
+
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         match self {
             Self::Yul(inner) => inner.get_missing_libraries(),
-            Self::LLVMIR(_inner) => HashSet::new(),
+            Self::LLVMIR(_inner) => BTreeSet::new(),
         }
     }
 }

@@ -2,7 +2,7 @@
 
 pub mod case;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -108,8 +108,8 @@ impl Switch {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
         for case in self.cases.iter() {
             libraries.extend(case.get_missing_libraries());
         }

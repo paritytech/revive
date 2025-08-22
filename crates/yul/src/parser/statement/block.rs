@@ -1,6 +1,6 @@
 //! The source code block.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -123,8 +123,8 @@ impl Block {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
         for statement in self.statements.iter() {
             libraries.extend(statement.get_missing_libraries());
         }

@@ -77,8 +77,21 @@ impl Project {
         #[cfg(not(feature = "parallel"))]
         let iter = self.contracts.into_iter();
 
+        let deployed_libraries = self.libraries.as_paths();
         let results: BTreeMap<String, anyhow::Result<ContractBuild>> = iter
             .map(|(full_path, contract)| {
+                let factory_dependencies = contract
+                    .ir
+                    .drain_factory_dependencies()
+                    .iter()
+                    .map(|identifier| {
+                        self.identifier_paths
+                            .get(identifier)
+                            .cloned()
+                            .expect("Always exists")
+                    })
+                    .collect();
+                let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
                 let process_input = ProcessInput::new(
                     contract,
                     project.clone(),
@@ -87,6 +100,8 @@ impl Project {
                     debug_config.clone(),
                     llvm_arguments.to_vec(),
                     memory_config,
+                    missing_libraries,
+                    factory_dependencies,
                 );
                 let process_output = {
                     #[cfg(target_os = "emscripten")]

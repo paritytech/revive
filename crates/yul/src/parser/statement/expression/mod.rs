@@ -3,6 +3,7 @@
 pub mod function_call;
 pub mod literal;
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use serde::Deserialize;
@@ -82,11 +83,11 @@ impl Expression {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         match self {
             Self::FunctionCall(inner) => inner.get_missing_libraries(),
-            Self::Identifier(_) => HashSet::new(),
-            Self::Literal(_) => HashSet::new(),
+            Self::Identifier(_) => BTreeSet::new(),
+            Self::Literal(_) => BTreeSet::new(),
         }
     }
 

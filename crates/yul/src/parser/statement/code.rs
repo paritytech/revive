@@ -1,6 +1,6 @@
 //! The YUL code.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -52,7 +52,7 @@ impl Code {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.block.get_missing_libraries()
     }
 }

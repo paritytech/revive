@@ -1,6 +1,7 @@
 //! The Solidity contract build.
 
-use std::collections::HashSet;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -21,8 +22,12 @@ pub struct Contract {
     pub build: revive_llvm_context::PolkaVMBuild,
     /// The metadata JSON.
     pub metadata_json: serde_json::Value,
-    /// The factory dependencies.
-    pub factory_dependencies: HashSet<String>,
+    /// The unlinked missing libraries.
+    pub missing_libraries: BTreeSet<String>,
+    /// The unresolved factory dependencies.
+    pub factory_dependencies: BTreeSet<String>,
+    /// The resolved factory dependencies.
+    pub factory_dependencies_resolved: BTreeMap<[u8; revive_common::BYTE_LENGTH_WORD], String>,
     /// The binary object format.
     pub object_format: revive_common::ObjectFormat,
 }
@@ -34,7 +39,8 @@ impl Contract {
         identifier: String,
         build: revive_llvm_context::PolkaVMBuild,
         metadata_json: serde_json::Value,
-        factory_dependencies: HashSet<String>,
+        missing_libraries: BTreeSet<String>,
+        factory_dependencies: BTreeSet<String>,
         object_format: revive_common::ObjectFormat,
     ) -> Self {
         Self {
@@ -42,7 +48,9 @@ impl Contract {
             identifier,
             build,
             metadata_json,
+            missing_libraries,
             factory_dependencies,
+            factory_dependencies_resolved: BTreeMap::new(),
             object_format,
         }
     }

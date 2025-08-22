@@ -3,7 +3,7 @@
 pub mod name;
 pub mod verbatim;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use inkwell::values::BasicValue;
 use serde::Deserialize;
@@ -95,8 +95,8 @@ impl FunctionCall {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
 
         if let Name::LinkerSymbol = self.name {
             let _argument = self.arguments.first().expect("Always exists");

@@ -1,6 +1,8 @@
 //! Process for compiling a single compilation unit.
 //! The input data.
 
+use std::collections::BTreeSet;
+
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,6 +27,10 @@ pub struct Input {
     pub llvm_arguments: Vec<String>,
     /// The PVM memory configuration.
     pub memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    /// Missing unlinked libraries.
+    pub missing_libraries: BTreeSet<String>,
+    /// Factory dependencies.
+    pub factory_dependencies: BTreeSet<String>,
 }
 
 impl Input {
@@ -37,6 +43,8 @@ impl Input {
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: Vec<String>,
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+        missing_libraries: BTreeSet<String>,
+        factory_dependencies: BTreeSet<String>,
     ) -> Self {
         Self {
             contract,
@@ -46,6 +54,8 @@ impl Input {
             debug_config,
             llvm_arguments,
             memory_config,
+            missing_libraries,
+            factory_dependencies,
         }
     }
 }

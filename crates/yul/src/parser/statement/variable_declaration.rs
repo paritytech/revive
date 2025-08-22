@@ -1,6 +1,6 @@
 //! The variable declaration statement.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
@@ -84,10 +84,10 @@ impl VariableDeclaration {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.expression
             .as_ref()
-            .map_or_else(HashSet::new, |expression| {
+            .map_or_else(BTreeSet::new, |expression| {
                 expression.get_missing_libraries()
             })
     }

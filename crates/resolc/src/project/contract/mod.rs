@@ -3,6 +3,7 @@
 pub mod ir;
 pub mod metadata;
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -63,14 +64,6 @@ impl Contract {
         }
     }
 
-    /// Extract factory dependencies.
-    pub fn drain_factory_dependencies(&mut self) -> HashSet<String> {
-        match self.ir {
-            IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
-            IR::LLVMIR(_) => HashSet::new(),
-        }
-    }
-
     /// Compiles the specified contract, setting its build artifacts.
     pub fn compile(
         mut self,
@@ -80,6 +73,8 @@ impl Contract {
         mut debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+        missing_libraries: BTreeSet<String>,
+        factory_dependencies: BTreeSet<String>,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
         let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
@@ -135,8 +130,6 @@ impl Contract {
             IR::LLVMIR(_) => {}
         }
 
-        let factory_dependencies = self.drain_factory_dependencies();
-
         self.ir.declare(&mut context).map_err(|error| {
             anyhow::anyhow!(
                 "The contract `{}` LLVM IR generator declaration pass error: {}",
@@ -163,14 +156,19 @@ impl Contract {
             identifier,
             build,
             metadata_json,
+            missing_libraries,
             factory_dependencies,
             revive_common::ObjectFormat::ELF,
         ))
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        self.ir.get_missing_libraries()
+    pub fn get_missing_libraries(&self, deployed_libraries: &BTreeSet<String>) -> BTreeSet<String> {
+        self.ir
+            .get_missing_libraries()
+            .into_iter()
+            .filter(|library| !deployed_libraries.contains(library))
+            .collect::<BTreeSet<String>>()
     }
 }
 

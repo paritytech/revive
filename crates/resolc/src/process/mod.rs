@@ -51,6 +51,8 @@ pub trait Process {
             input.debug_config,
             &input.llvm_arguments,
             input.memory_config,
+            input.missing_libraries,
+            input.factory_dependencies,
         );
 
         match result {

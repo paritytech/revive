@@ -164,6 +164,7 @@ impl Contract {
             build,
             metadata_json,
             factory_dependencies,
+            revive_common::ObjectFormat::ELF,
         ))
     }
 

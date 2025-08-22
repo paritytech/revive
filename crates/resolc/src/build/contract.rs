@@ -23,6 +23,8 @@ pub struct Contract {
     pub metadata_json: serde_json::Value,
     /// The factory dependencies.
     pub factory_dependencies: HashSet<String>,
+    /// The binary object format.
+    pub object_format: revive_common::ObjectFormat,
 }
 
 impl Contract {
@@ -33,6 +35,7 @@ impl Contract {
         build: revive_llvm_context::PolkaVMBuild,
         metadata_json: serde_json::Value,
         factory_dependencies: HashSet<String>,
+        object_format: revive_common::ObjectFormat,
     ) -> Self {
         Self {
             path,
@@ -40,6 +43,7 @@ impl Contract {
             build,
             metadata_json,
             factory_dependencies,
+            object_format,
         }
     }
 

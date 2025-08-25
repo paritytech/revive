@@ -3,6 +3,7 @@
 pub(crate) mod base;
 pub(crate) mod bit_length;
 pub(crate) mod byte_length;
+pub(crate) mod contract_identifier;
 pub(crate) mod evm_version;
 pub(crate) mod exit_code;
 pub(crate) mod extension;
@@ -17,3 +18,5 @@ pub use self::exit_code::*;
 pub use self::extension::*;
 pub use self::object::*;
 pub use self::utils::*;
+pub use contract_identifier::*;
+

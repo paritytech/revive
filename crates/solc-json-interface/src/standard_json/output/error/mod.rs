@@ -1,5 +1,6 @@
 //! The `solc --standard-json` output error.
 
+pub mod error_handler;
 pub mod source_location;
 
 use std::str::FromStr;

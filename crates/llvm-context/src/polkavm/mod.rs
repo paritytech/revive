@@ -4,6 +4,8 @@ pub mod r#const;
 pub mod context;
 pub mod evm;
 
+use std::collections::BTreeMap;
+
 pub use self::r#const::*;
 
 use crate::debug_config::DebugConfig;
@@ -18,8 +20,8 @@ use sha3::Digest;
 use self::context::build::Build;
 use self::context::Context;
 
-/// Builds PolkaVM assembly text.
-pub fn build_assembly_text(
+/// Get a [Build] from contract bytecode and its auxilliary data.
+pub fn build(
     contract_path: &str,
     bytecode: &[u8],
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
@@ -49,8 +51,19 @@ pub fn build_assembly_text(
         assembly_text.to_owned(),
         metadata_hash,
         bytecode.to_owned(),
-        hex::encode(sha3::Keccak256::digest(bytecode)),
     ))
+}
+
+/// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
+pub fn link(
+    bytecode: inkwell::memory_buffer::MemoryBuffer,
+    linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
+) -> anyhow::Result<(
+    inkwell::memory_buffer::MemoryBuffer,
+    revive_common::ObjectFormat,
+)> {
+    todo!()
 }
 
 /// Implemented by items which are translated into LLVM IR.

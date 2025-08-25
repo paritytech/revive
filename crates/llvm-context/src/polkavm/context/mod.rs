@@ -329,7 +329,7 @@ impl<'ctx> Context<'ctx> {
         let polkavm_bytecode =
             revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
-        let build = match crate::polkavm::build_assembly_text(
+        let build = match crate::polkavm::build(
             contract_path,
             &polkavm_bytecode,
             metadata_hash,

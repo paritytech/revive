@@ -14,8 +14,8 @@ pub struct Build {
     pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     /// The PolkaVM binary bytecode.
     pub bytecode: Vec<u8>,
-    /// The PolkaVM bytecode hash.
-    pub bytecode_hash: String,
+    /// The PolkaVM bytecode hash. Unlinked builds don't have a hash yet.
+    pub bytecode_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     /// The hash-to-full-path mapping of the contract factory dependencies.
     pub factory_dependencies: BTreeMap<String, String>,
 }
@@ -26,13 +26,12 @@ impl Build {
         assembly_text: String,
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
         bytecode: Vec<u8>,
-        bytecode_hash: String,
     ) -> Self {
         Self {
             assembly_text,
             metadata_hash,
             bytecode,
-            bytecode_hash,
+            bytecode_hash: None,
             factory_dependencies: BTreeMap::new(),
         }
     }

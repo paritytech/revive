@@ -8,7 +8,7 @@ pub use self::debug_config::DebugConfig;
 pub use self::optimizer::settings::size_level::SizeLevel as OptimizerSettingsSizeLevel;
 pub use self::optimizer::settings::Settings as OptimizerSettings;
 pub use self::optimizer::Optimizer;
-pub use self::polkavm::build_assembly_text as polkavm_build_assembly_text;
+pub use self::polkavm::build as polkavm_build;
 pub use self::polkavm::context::address_space::AddressSpace as PolkaVMAddressSpace;
 pub use self::polkavm::context::argument::Argument as PolkaVMArgument;
 pub use self::polkavm::context::attribute::Attribute as PolkaVMAttribute;

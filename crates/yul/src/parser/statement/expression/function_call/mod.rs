@@ -870,13 +870,7 @@ impl FunctionCall {
                 let path = arguments[0].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} Linker symbol literal is missing", location)
                 })?;
-
-                todo!()
-                //Ok(Some(
-                //    context
-                //        .resolve_library(path.as_str())?
-                //        .as_basic_value_enum(),
-                //))
+                revive_llvm_context::polkavm_evm_call::linker_symbol(context, &path).map(Some)
             }
             Name::MemoryGuard => {
                 let arguments = self.pop_arguments_llvm::<1>(context)?;

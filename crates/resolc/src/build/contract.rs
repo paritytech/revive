@@ -153,7 +153,7 @@ impl Contract {
         }
 
         standard_json_contract.factory_dependencies = Some(self.build.factory_dependencies);
-        standard_json_contract.hash = Some(self.build.bytecode_hash);
+        standard_json_contract.hash = self.build.bytecode_hash.map(hex::encode);
 
         Ok(())
     }

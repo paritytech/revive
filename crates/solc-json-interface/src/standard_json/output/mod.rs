@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::standard_json::output::error::error_handler::ErrorHandler;
 #[cfg(feature = "resolc")]
 use crate::warning::Warning;
 
@@ -20,14 +21,14 @@ use self::source::Source;
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Output {
     /// The file-contract hashmap.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub contracts: Option<BTreeMap<String, BTreeMap<String, Contract>>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub contracts: BTreeMap<String, BTreeMap<String, Contract>>,
     /// The source code mapping data.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sources: Option<BTreeMap<String, Source>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, Source>,
     /// The compilation errors and warnings.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub errors: Option<Vec<SolcStandardJsonOutputError>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<SolcStandardJsonOutputError>,
     /// The `solc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
@@ -39,33 +40,44 @@ pub struct Output {
     pub revive_version: Option<String>,
 }
 
+#[cfg(feature = "resolc")]
 impl Output {
     /// Traverses the AST and returns the list of additional errors and warnings.
-    #[cfg(feature = "resolc")]
     pub fn preprocess_ast(&mut self, suppressed_warnings: &[Warning]) -> anyhow::Result<()> {
-        let sources = match self.sources.as_ref() {
-            Some(sources) => sources,
-            None => return Ok(()),
-        };
-
-        let mut messages = Vec::new();
-        for (path, source) in sources.iter() {
-            if let Some(ast) = source.ast.as_ref() {
-                let mut polkavm_messages = Source::get_messages(ast, suppressed_warnings);
-                for message in polkavm_messages.iter_mut() {
-                    message.push_contract_path(path.as_str());
-                }
-                messages.extend(polkavm_messages);
-            }
-        }
-        self.errors = match self.errors.take() {
-            Some(mut errors) => {
-                errors.extend(messages);
-                Some(errors)
-            }
-            None => Some(messages),
-        };
+        let messages: Vec<SolcStandardJsonOutputError> = self
+            .sources
+            .iter()
+            .map(|(_path, source)| {
+                source
+                    .ast
+                    .as_ref()
+                    .map(|ast| Source::get_messages(ast, suppressed_warnings))
+                    .unwrap_or_default()
+            })
+            .flatten()
+            .collect();
+        self.errors.extend(messages);
 
         Ok(())
+    }
+}
+
+impl ErrorHandler for Output {
+    fn errors(&self) -> Vec<&SolcStandardJsonOutputError> {
+        self.errors
+            .iter()
+            .filter(|error| error.severity == "error")
+            .collect()
+    }
+
+    fn take_warnings(&mut self) -> Vec<SolcStandardJsonOutputError> {
+        let warnings = self
+            .errors
+            .iter()
+            .filter(|message| message.severity == "warning")
+            .cloned()
+            .collect();
+        self.errors.retain(|message| message.severity != "warning");
+        warnings
     }
 }

@@ -194,17 +194,14 @@ pub fn delegate_call<'ctx>(
 /// Translates the Yul `linkersymbol` instruction.
 pub fn linker_symbol<'ctx>(
     context: &mut Context<'ctx>,
-    mut arguments: [Argument<'ctx>; 1],
+    path: &str,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-    let path = arguments[0]
-        .original
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("Linker symbol literal is missing"))?;
-
-    todo!()
-    //Ok(context
-    //    .resolve_library(path.as_str())?
-    //    .as_basic_value_enum())
+    context.declare_global(
+        &path,
+        context.integer_type(revive_common::BYTE_LENGTH_ETH_ADDRESS),
+        Default::default(),
+    );
+    context.build_load_address(context.get_global(path)?.into())
 }
 
 /// The Solidity `address.transfer` and `address.send` call detection heuristic.

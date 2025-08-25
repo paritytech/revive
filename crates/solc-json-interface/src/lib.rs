@@ -23,6 +23,8 @@ pub use self::standard_json::input::Input as SolcStandardJsonInput;
 pub use self::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
 pub use self::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
 pub use self::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
+pub use self::standard_json::output::error::error_handler::ErrorHandler as SolcStandardJsonOutputErrorHandler;
+pub use self::standard_json::output::error::Error as SolcStandardJsonOutputError;
 pub use self::standard_json::output::Output as SolcStandardJsonOutput;
 #[cfg(feature = "resolc")]
 pub use self::warning::Warning as ResolcWarning;

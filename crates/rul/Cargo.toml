@@ -1,0 +1,14 @@
+[package]
+name = "revive-rul"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "revive compiler rust backend"
+
+[dependencies]
+anyhow = { workspace = true }
+pallet-revive-uapi = { workspace = true }
+polkavm-linker = { workspace = true }
+

@@ -1,0 +1,9 @@
+[package]
+name = "revive-rul-runtime-library"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "revive compiler rust backend runtime library"
+

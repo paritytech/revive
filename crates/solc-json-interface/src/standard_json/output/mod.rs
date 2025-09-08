@@ -47,14 +47,13 @@ impl Output {
         let messages: Vec<SolcStandardJsonOutputError> = self
             .sources
             .iter()
-            .map(|(_path, source)| {
+            .flat_map(|(_path, source)| {
                 source
                     .ast
                     .as_ref()
                     .map(|ast| Source::get_messages(ast, suppressed_warnings))
                     .unwrap_or_default()
             })
-            .flatten()
             .collect();
         self.errors.extend(messages);
 

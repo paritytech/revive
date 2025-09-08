@@ -25,7 +25,7 @@ use self::metadata::Metadata;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contract {
     /// The absolute file path.
-    pub path: String,
+    pub identifier: revive_common::ContractIdentifier,
     /// The IR source code data.
     pub ir: IR,
     /// The metadata JSON.
@@ -35,7 +35,7 @@ pub struct Contract {
 impl Contract {
     /// A shortcut constructor.
     pub fn new(
-        path: String,
+        identifier: revive_common::ContractIdentifier,
         source_hash: [u8; revive_common::BYTE_LENGTH_WORD],
         source_version: SolcVersion,
         ir: IR,
@@ -49,7 +49,7 @@ impl Contract {
         });
 
         Self {
-            path,
+            identifier,
             ir,
             metadata_json,
         }
@@ -156,8 +156,7 @@ impl Contract {
         let build = context.build(self.path.as_str(), metadata_hash)?;
 
         Ok(ContractBuild::new(
-            self.path,
-            identifier,
+            self.identifier,
             build,
             metadata_json,
             missing_libraries,

@@ -33,18 +33,6 @@ impl Process for NativeProcess {
             anyhow::anyhow!("{:?} subprocess spawning error: {:?}", executable, error)
         })?;
 
-        #[cfg(debug_assertions)]
-        input
-            .debug_config
-            .dump_stage_output(&input.contract.path, Some("stage"), &input_json)
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "{:?} failed to log the recursive process output: {:?}",
-                    executable,
-                    error,
-                )
-            })?;
-
         process
             .stdin
             .as_ref()

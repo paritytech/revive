@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
@@ -14,10 +15,8 @@ use serde::Serialize;
 /// The Solidity contract build.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contract {
-    /// The contract path.
-    pub path: String,
-    /// The auxiliary identifier. Used to identify Yul objects.
-    pub identifier: String,
+    /// The contract identifier.
+    pub identifier: revive_common::ContractIdentifier,
     /// The LLVM module build.
     pub build: revive_llvm_context::PolkaVMBuild,
     /// The metadata JSON.
@@ -35,8 +34,7 @@ pub struct Contract {
 impl Contract {
     /// A shortcut constructor.
     pub fn new(
-        path: String,
-        identifier: String,
+        identifier: revive_common::ContractIdentifier,
         build: revive_llvm_context::PolkaVMBuild,
         metadata_json: serde_json::Value,
         missing_libraries: BTreeSet<String>,
@@ -44,7 +42,6 @@ impl Contract {
         object_format: revive_common::ObjectFormat,
     ) -> Self {
         Self {
-            path,
             identifier,
             build,
             metadata_json,
@@ -63,14 +60,15 @@ impl Contract {
         output_binary: bool,
         overwrite: bool,
     ) -> anyhow::Result<()> {
-        let file_name = Self::short_path(self.path.as_str());
+        let file_path = PathBuf::from(self.identifier.path);
+        let file_name = file_path
+            .file_name()
+            .expect("Always exists")
+            .to_str()
+            .expect("Always valid");
 
         if output_assembly {
-            let file_name = format!(
-                "{}.{}",
-                file_name,
-                revive_common::EXTENSION_POLKAVM_ASSEMBLY
-            );
+            let file_name = format!("{file_name}.{}", revive_common::EXTENSION_POLKAVM_ASSEMBLY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 
@@ -79,21 +77,17 @@ impl Contract {
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
                 );
             } else {
-                let assembly_text = self.build.assembly_text;
-
                 File::create(&file_path)
+                    .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
+                    .write_all(self.build.assembly_text.as_bytes())
                     .map_err(|error| {
-                        anyhow::anyhow!("File {:?} creating error: {}", file_path, error)
-                    })?
-                    .write_all(assembly_text.as_bytes())
-                    .map_err(|error| {
-                        anyhow::anyhow!("File {:?} writing error: {}", file_path, error)
+                        anyhow::anyhow!("File {file_path:?} writing error: {error}")
                     })?;
             }
         }
 
         if output_binary {
-            let file_name = format!("{}.{}", file_name, revive_common::EXTENSION_POLKAVM_BINARY);
+            let file_name = format!("{file_name}.{}", revive_common::EXTENSION_POLKAVM_BINARY);
             let mut file_path = path.to_owned();
             file_path.push(file_name);
 
@@ -103,12 +97,10 @@ impl Contract {
                 );
             } else {
                 File::create(&file_path)
-                    .map_err(|error| {
-                        anyhow::anyhow!("File {:?} creating error: {}", file_path, error)
-                    })?
+                    .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
                     .write_all(self.build.bytecode.as_slice())
                     .map_err(|error| {
-                        anyhow::anyhow!("File {:?} writing error: {}", file_path, error)
+                        anyhow::anyhow!("File {file_path:?} writing error: {error}")
                     })?;
             }
         }

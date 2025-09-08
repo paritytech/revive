@@ -5,16 +5,19 @@ pub mod contract;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
+
+use normpath::PathExt;
 
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
+use crate::build::contract::Contract;
 use crate::solc::version::Version as SolcVersion;
-use crate::ResolcVersion;
-
-use self::contract::Contract;
 
 /// The Solidity project PVM build.
 #[derive(Debug, Default)]
@@ -82,20 +85,23 @@ impl Build {
     }
 
     /// Writes all contracts assembly and bytecode to the combined JSON.
-    pub fn write_to_combined_json(self, combined_json: &mut CombinedJson) -> anyhow::Result<()> {
+    pub fn write_to_combined_json(
+        mut self,
+        combined_json: &mut CombinedJson,
+    ) -> anyhow::Result<()> {
         self.take_and_write_warnings();
         self.exit_on_error();
 
         for result in self.results.into_values() {
             let build = result.expect("Exits on an error above");
-            let name = build.name.clone();
+            let identifier = build.identifier.clone();
 
             let combined_json_contract =
                 match combined_json
                     .contracts
                     .iter_mut()
                     .find_map(|(json_path, contract)| {
-                        if Self::normalize_full_path(name.full_path.as_str())
+                        if Self::normalize_full_path(identifier.full_path.as_str())
                             .ends_with(Self::normalize_full_path(json_path).as_str())
                         {
                             Some(contract)
@@ -106,12 +112,12 @@ impl Build {
                     Some(contract) => contract,
                     None => {
                         combined_json.contracts.insert(
-                            name.full_path.clone(),
-                            era_solc::CombinedJsonContract::default(),
+                            identifier.full_path.clone(),
+                            CombinedJsonContract::default(),
                         );
                         combined_json
                             .contracts
-                            .get_mut(name.full_path.as_str())
+                            .get_mut(identifier.full_path.as_str())
                             .expect("Always exists")
                     }
                 };
@@ -124,30 +130,72 @@ impl Build {
 
     /// Writes all contracts assembly and bytecode to the standard JSON.
     pub fn write_to_standard_json(
-        mut self,
+        self,
         standard_json: &mut SolcStandardJsonOutput,
         solc_version: &SolcVersion,
     ) -> anyhow::Result<()> {
-        let contracts = match standard_json.contracts.as_mut() {
-            Some(contracts) => contracts,
-            None => return Ok(()),
-        };
+        let mut errors = Vec::with_capacity(self.results.len());
+        for result in self.results.into_values() {
+            let build = match result {
+                Ok(build) => build,
+                Err(error) => {
+                    errors.push(error);
+                    continue;
+                }
+            };
+            let identifier = build.identifier.clone();
 
-        for (path, contracts) in contracts.iter_mut() {
-            for (name, contract) in contracts.iter_mut() {
-                let full_name = format!("{path}:{name}");
-
-                if let Some(contract_data) = self.contracts.remove(full_name.as_str()) {
-                    contract_data.write_to_standard_json(contract)?;
+            match standard_json
+                .contracts
+                .get_mut(identifier.path.as_str())
+                .and_then(|contracts| {
+                    contracts.get_mut(
+                        identifier
+                            .name
+                            .as_deref()
+                            .unwrap_or(identifier.path.as_str()),
+                    )
+                }) {
+                Some(contract) => {
+                    build.write_to_standard_json(contract)?;
+                }
+                None => {
+                    let contracts = standard_json
+                        .contracts
+                        .entry(identifier.path.clone())
+                        .or_default();
+                    let mut contract = SolcStandardJsonOutputContract::default();
+                    build.write_to_standard_json(&mut contract)?;
+                    contracts.insert(identifier.name.unwrap_or(identifier.path), contract);
                 }
             }
         }
 
+        standard_json.errors.extend(errors);
         standard_json.version = Some(solc_version.default.to_string());
         standard_json.long_version = Some(solc_version.long.to_owned());
-        standard_json.revive_version = Some(ResolcVersion::default().long);
 
         Ok(())
+    }
+
+    /// Normalizes the full contract path.
+    ///
+    /// # Panics
+    /// If the path does not contain a colon.
+    fn normalize_full_path(path: &str) -> String {
+        let mut iterator = path.split(':');
+        let path = iterator.next().expect("Always exists");
+        let name = iterator.next().expect("Always exists");
+
+        let mut full_path = PathBuf::from(path)
+            .normalize()
+            .expect("Path normalization error")
+            .as_os_str()
+            .to_string_lossy()
+            .into_owned();
+        full_path.push(':');
+        full_path.push_str(name);
+        full_path
     }
 }
 

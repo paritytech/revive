@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// The contract.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Contract {
     /// The `solc` hashes output.

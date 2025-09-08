@@ -11,7 +11,7 @@ use serde::Serialize;
 use self::evm::EVM;
 
 /// The `solc --standard-json` output contract.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Contract {
     /// The contract ABI.
@@ -36,8 +36,8 @@ pub struct Contract {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ir: Option<String>,
     /// The contract optimized IR code.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ir_optimized: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ir_optimized: String,
     /// The contract PolkaVM bytecode hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,

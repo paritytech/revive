@@ -4,12 +4,9 @@ pub mod llvm_ir;
 pub mod yul;
 
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 
 use serde::Deserialize;
 use serde::Serialize;
-
-use revive_yul::parser::statement::object::Object;
 
 use self::llvm_ir::LLVMIR;
 use self::yul::Yul;
@@ -25,16 +22,6 @@ pub enum IR {
 }
 
 impl IR {
-    /// A shortcut constructor.
-    pub fn new_yul(source_code: String, object: Object) -> Self {
-        Self::Yul(Yul::new(source_code, object))
-    }
-
-    /// A shortcut constructor.
-    pub fn new_llvm_ir(path: String, source: String) -> Self {
-        Self::LLVMIR(LLVMIR::new(path, source))
-    }
-
     /// Drains the list of factory dependencies.
     pub fn drain_factory_dependencies(&mut self) -> BTreeSet<String> {
         match self {
@@ -49,6 +36,18 @@ impl IR {
             Self::Yul(inner) => inner.get_missing_libraries(),
             Self::LLVMIR(_inner) => BTreeSet::new(),
         }
+    }
+}
+
+impl From<Yul> for IR {
+    fn from(inner: Yul) -> Self {
+        Self::Yul(inner)
+    }
+}
+
+impl From<LLVMIR> for IR {
+    fn from(inner: LLVMIR) -> Self {
+        Self::LLVMIR(inner)
     }
 }
 

@@ -9,11 +9,15 @@ use std::path::Path;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_llvm_context::DebugConfig;
+use revive_llvm_context::OptimizerSettings;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
 
+use revive_common::ContractIdentifier;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_yul::lexer::Lexer;
 use revive_yul::parser::statement::object::Object;
@@ -66,11 +70,11 @@ impl Project {
     /// Compiles all contracts, returning their build artifacts.
     pub fn compile(
         self,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
+        optimizer_settings: OptimizerSettings,
         include_metadata_hash: bool,
-        debug_config: revive_llvm_context::DebugConfig,
+        debug_config: DebugConfig,
         llvm_arguments: &[String],
-        memory_config: revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
         let project = self.clone();
         #[cfg(feature = "parallel")]
@@ -268,19 +272,16 @@ impl Project {
 
     /// Converts the `solc` JSON output into a convenient project.
     pub fn try_from_standard_json_output(
-        output: &SolcStandardJsonOutput,
+        solc_output: &SolcStandardJsonOutput,
         source_code_files: BTreeMap<String, String>,
         libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Self> {
-        let mut input_contracts = Vec::with_capacity(output.contracts.len());
-        for (path, file) in output.contracts.iter() {
+        let mut input_contracts = Vec::with_capacity(solc_output.contracts.len());
+        for (path, file) in solc_output.contracts.iter() {
             for (name, contract) in file.iter() {
-                let name = revive_common::ContractIdentifier::new(
-                    (*path).to_owned(),
-                    Some((*name).to_owned()),
-                );
+                let name = ContractIdentifier::new((*path).to_owned(), Some((*name).to_owned()));
                 input_contracts.push((name, contract));
             }
         }
@@ -288,13 +289,13 @@ impl Project {
         let results = input_contracts
             .into_par_iter()
             .filter_map(|(name, contract)| {
-                let result = Yul::try_from_source(
+                let ir = match Yul::try_from_source(
                     name.full_path.as_str(),
                     contract.ir_optimized.as_str(),
                     Some(debug_config),
                 )
-                .map(|yul| yul.map(ContractIR::from));
-                let ir = match result {
+                .map(|yul| yul.map(IR::from))
+                {
                     Ok(ir) => ir?,
                     Err(error) => return Some((name.full_path, Err(error))),
                 };
@@ -318,61 +319,5 @@ impl Project {
             contracts,
             libraries,
         ))
-
-        /*
-                let files = match output.contracts.as_ref() {
-                    Some(files) => files,
-                    None => match &output.errors {
-                        Some(errors) if errors.iter().any(|e| e.severity == "error") => {
-                            anyhow::bail!(serde_json::to_string_pretty(errors).expect("Always valid"));
-                        }
-                        _ => &BTreeMap::new(),
-                    },
-                };
-                let mut project_contracts = BTreeMap::new();
-
-                for (path, contracts) in files.iter() {
-                    for (name, contract) in contracts.iter() {
-                        let full_path = format!("{path}:{name}");
-
-                        let ir_optimized = match contract.ir_optimized.to_owned() {
-                            Some(ir_optimized) => ir_optimized,
-                            None => continue,
-                        };
-                        if ir_optimized.is_empty() {
-                            continue;
-                        }
-
-                        debug_config.dump_yul(full_path.as_str(), ir_optimized.as_str())?;
-
-                        let mut lexer = Lexer::new(ir_optimized.to_owned());
-                        let object = Object::parse(&mut lexer, None).map_err(|error| {
-                            anyhow::anyhow!("Contract `{}` parsing error: {:?}", full_path, error)
-                        })?;
-
-                        let source = IR::new_yul(ir_optimized.to_owned(), object);
-
-                        let source_code = source_code_files
-                            .get(path.as_str())
-                            .ok_or_else(|| anyhow::anyhow!("Source code for path `{}` not found", path))?;
-                        let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
-
-                        let project_contract = Contract::new(
-                            full_path.clone(),
-                            source_hash,
-                            solc_version.to_owned(),
-                            source,
-                            contract.metadata.to_owned(),
-                        );
-                        project_contracts.insert(full_path, project_contract);
-                    }
-                }
-
-                Ok(Project::new(
-                    solc_version.to_owned(),
-                    project_contracts,
-                    libraries,
-                ))
-        */
     }
 }

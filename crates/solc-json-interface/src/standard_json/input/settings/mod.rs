@@ -6,12 +6,15 @@ pub mod metadata_hash;
 pub mod optimizer;
 pub mod polkavm;
 pub mod selection;
+pub mod warning_type;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use crate::standard_json::input::settings::warning_type::WarningType;
 
 use self::libraries::Libraries;
 use self::metadata::Metadata;
@@ -50,6 +53,15 @@ pub struct Settings {
     /// The resolc custom PolkaVM settings.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub polkavm: Option<PolkaVM>,
+
+    /// The suppressed warnings.
+    #[serde(default, skip_serializing)]
+    pub suppressed_warnings: Vec<WarningType>,
+
+    /// Whether to enable the missing libraries detection mode.
+    /// Deprecated in favor of post-compile-time linking.
+    #[serde(default, rename = "detectMissingLibraries", skip_serializing)]
+    pub detect_missing_libraries: bool,
 }
 
 impl Settings {
@@ -62,6 +74,8 @@ impl Settings {
         optimizer: Optimizer,
         metadata: Option<Metadata>,
         polkavm: Option<PolkaVM>,
+        suppressed_warnings: Vec<WarningType>,
+        detect_missing_libraries: bool,
     ) -> Self {
         Self {
             evm_version,
@@ -72,6 +86,8 @@ impl Settings {
             metadata,
             via_ir: Some(true),
             polkavm,
+            suppressed_warnings,
+            detect_missing_libraries,
         }
     }
 

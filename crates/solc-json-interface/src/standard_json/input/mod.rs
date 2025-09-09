@@ -144,4 +144,4 @@ impl Input {
     pub fn normalize(&mut self) {
         self.settings.normalize();
     }
-}
+R

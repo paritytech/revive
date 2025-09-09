@@ -19,4 +19,3 @@ pub use self::extension::*;
 pub use self::object::*;
 pub use self::utils::*;
 pub use contract_identifier::*;
-

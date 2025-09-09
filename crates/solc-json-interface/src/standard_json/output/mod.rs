@@ -59,6 +59,19 @@ impl Output {
 
         Ok(())
     }
+
+    /// Pushes an arbitrary error with path.
+    ///
+    /// Please do not push project-general errors without paths here.
+    pub fn push_error(&mut self, path: Option<String>, error: anyhow::Error) {
+        use crate::standard_json::output::error::source_location::SourceLocation;
+
+        self.errors.push(SolcStandardJsonOutputError::new_error(
+            error,
+            path.map(SourceLocation::new),
+            None,
+        ));
+    }
 }
 
 impl ErrorHandler for Output {

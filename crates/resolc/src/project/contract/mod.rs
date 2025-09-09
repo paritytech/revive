@@ -36,18 +36,9 @@ impl Contract {
     /// A shortcut constructor.
     pub fn new(
         identifier: revive_common::ContractIdentifier,
-        source_hash: [u8; revive_common::BYTE_LENGTH_WORD],
-        source_version: SolcVersion,
         ir: IR,
-        metadata_json: Option<serde_json::Value>,
+        metadata_json: serde_json::Value,
     ) -> Self {
-        let metadata_json = metadata_json.unwrap_or_else(|| {
-            serde_json::json!({
-                "source_hash": hex::encode(source_hash.as_slice()),
-                "source_version": serde_json::to_value(&source_version).expect("Always valid"),
-            })
-        });
-
         Self {
             identifier,
             ir,

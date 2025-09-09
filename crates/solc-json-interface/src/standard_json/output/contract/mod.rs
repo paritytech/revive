@@ -18,8 +18,8 @@ pub struct Contract {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub abi: Option<serde_json::Value>,
     /// The contract metadata.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub metadata: serde_json::Value,
     /// The contract developer documentation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub devdoc: Option<serde_json::Value>,

@@ -1,13 +1,18 @@
 //! The `solc --standard-json` output error.
 
 pub mod error_handler;
+pub mod mapped_location;
 pub mod source_location;
 
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::SolcStandardJsonInputSource;
+
+use self::mapped_location::MappedLocation;
 use self::source_location::SourceLocation;
 
 /// The `solc --standard-json` output error.
@@ -31,6 +36,72 @@ pub struct Error {
 }
 
 impl Error {
+    /// A shortcut constructor.
+    pub fn new<S>(
+        r#type: &str,
+        message: S,
+        source_location: Option<SourceLocation>,
+        sources: Option<&BTreeMap<String, SolcStandardJsonInputSource>>,
+    ) -> Self
+    where
+        S: std::fmt::Display,
+    {
+        let message = message.to_string();
+
+        let message_trimmed = message.trim();
+        let mut formatted_message = if message_trimmed.starts_with(r#type) {
+            message_trimmed.to_owned()
+        } else {
+            format!("{type}: {message_trimmed}")
+        };
+        formatted_message.push('\n');
+        if let Some(ref source_location) = source_location {
+            let source_code = sources.and_then(|sources| {
+                sources
+                    .get(source_location.file.as_str())
+                    .and_then(|source| source.content())
+            });
+            let mapped_location =
+                MappedLocation::try_from_source_location(source_location, source_code);
+            formatted_message.push_str(mapped_location.to_string().as_str());
+            formatted_message.push('\n');
+        }
+
+        Self {
+            component: "general".to_owned(),
+            error_code: None,
+            formatted_message,
+            message,
+            severity: r#type.to_lowercase(),
+            source_location,
+            r#type: r#type.to_owned(),
+        }
+    }
+
+    /// A shortcut constructor.
+    pub fn new_error<S>(
+        message: S,
+        source_location: Option<SourceLocation>,
+        sources: Option<&BTreeMap<String, SolcStandardJsonInputSource>>,
+    ) -> Self
+    where
+        S: std::fmt::Display,
+    {
+        Self::new("Error", message, source_location, sources)
+    }
+
+    /// A shortcut constructor.
+    pub fn new_warning<S>(
+        message: S,
+        source_location: Option<SourceLocation>,
+        sources: Option<&BTreeMap<String, SolcStandardJsonInputSource>>,
+    ) -> Self
+    where
+        S: std::fmt::Display,
+    {
+        Self::new("Warning", message, source_location, sources)
+    }
+
     /// Returns the `ecrecover` function usage warning.
     pub fn message_ecrecover(src: Option<&str>) -> Self {
         let message = r#"
@@ -53,7 +124,11 @@ implement other signature schemes.
     }
 
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
-    pub fn message_send_and_transfer(src: Option<&str>) -> Self {
+    pub fn error_send_and_transfer(
+        node: Option<&str>,
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, StandardJsonInputSource>,
+    ) -> Self {
         let message = r#"
 Warning: It looks like you are using '<address payable>.send/transfer(<X>)'.
 Using '<address payable>.send/transfer(<X>)' is deprecated and strongly discouraged!
@@ -66,15 +141,11 @@ and https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from
 "#
         .to_owned();
 
-        Self {
-            component: "general".to_owned(),
-            error_code: None,
-            formatted_message: message.clone(),
+        Self::new_error(
             message,
-            severity: "warning".to_owned(),
-            source_location: src.map(SourceLocation::from_str).and_then(Result::ok),
-            r#type: "Warning".to_owned(),
-        }
+            node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
+            Some(sources),
+        )
     }
 
     /// Returns the `extcodesize` instruction usage warning.

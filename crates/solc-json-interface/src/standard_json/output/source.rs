@@ -1,11 +1,14 @@
 //! The `solc --standard-json` output source.
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::standard_json::output::error::Error as SolcStandardJsonOutputError;
 #[cfg(feature = "resolc")]
 use crate::warning::Warning;
+use crate::SolcStandardJsonInputSource;
 
 /// The `solc --standard-json` output source.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -40,24 +43,30 @@ impl Source {
     }
 
     /// Checks the AST node for the `<address payable>`'s `send` and `transfer` methods usage.
-    pub fn check_send_and_transfer(ast: &serde_json::Value) -> Option<SolcStandardJsonOutputError> {
+    pub fn check_send_and_transfer(
+        ast: &serde_json::Value,
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+    ) -> Option<SolcStandardJsonOutputError> {
         let ast = ast.as_object()?;
 
-        if ast.get("nodeType")?.as_str()? != "FunctionCall" {
-            return None;
-        }
+        (ast.get("nodeType")?.as_str()? == "FunctionCall").then_some(())?;
 
         let expression = ast.get("expression")?.as_object()?;
-        if expression.get("nodeType")?.as_str()? != "MemberAccess" {
-            return None;
-        }
+        (expression.get("nodeType")?.as_str()? == "MemberAccess").then_some(())?;
         let member_name = expression.get("memberName")?.as_str()?;
-        if member_name != "send" && member_name != "transfer" {
-            return None;
-        }
+        ["send", "transfer"].contains(&member_name).then_some(())?;
 
-        Some(SolcStandardJsonOutputError::message_send_and_transfer(
+        let expression = expression.get("expression")?.as_object()?;
+        let type_descriptions = expression.get("typeDescriptions")?.as_object()?;
+        let type_identifier = type_descriptions.get("typeIdentifier")?.as_str()?;
+        let mut affected_types = vec!["t_address_payable"];
+        affected_types.contains(&type_identifier).then_some(())?;
+
+        Some(SolcStandardJsonOutputError::error_send_and_transfer(
             ast.get("src")?.as_str(),
+            id_paths,
+            sources,
         ))
     }
 
@@ -135,7 +144,9 @@ impl Source {
     #[cfg(feature = "resolc")]
     pub fn get_messages(
         ast: &serde_json::Value,
-        suppressed_warnings: &[Warning],
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+        suppressed_warnings: &[StandardJsonInputSettingsWarningType],
     ) -> Vec<SolcStandardJsonOutputError> {
         let mut messages = Vec::new();
         if !suppressed_warnings.contains(&Warning::EcRecover) {

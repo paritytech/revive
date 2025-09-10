@@ -6,6 +6,9 @@ use std::io::Write;
 use std::str::FromStr;
 
 use resolc::Process;
+use revive_solc_json_interface::{
+    SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutputError,
+};
 
 use self::arguments::Arguments;
 
@@ -18,19 +21,54 @@ const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() -> anyhow::Result<()> {
-    std::process::exit(match main_inner() {
-        Ok(()) => revive_common::EXIT_CODE_SUCCESS,
-        Err(error) => {
-            writeln!(std::io::stderr(), "{error}")?;
-            revive_common::EXIT_CODE_FAILURE
+    let arguments = <Arguments as clap::Parser>::try_parse()?;
+    let is_standard_json = arguments.standard_json.is_some();
+    let mut messages = arguments.validate();
+    if messages.iter().all(|error| error.severity != "error") {
+        if !is_standard_json {
+            std::io::stderr()
+                .write_all(
+                    messages
+                        .drain(..)
+                        .map(|error| error.to_string())
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                        .as_bytes(),
+                )
+                .expect("Stderr writing error");
         }
-    })
+        if let Err(error) = main_inner(arguments, &mut messages) {
+            messages.push(SolcStandardJsonOutputError::new_error(error, None, None));
+        }
+    }
+
+    if is_standard_json {
+        let output = SolcStandardJsonOutputError::new_with_messages(messages);
+        output.write_and_exit(SolcStandardJsonInputSettingsSelection::default());
+    }
+
+    let exit_code = if messages.iter().any(|error| error.severity == "error") {
+        revive_common::EXIT_CODE_FAILURE
+    } else {
+        revive_common::EXIT_CODE_SUCCESS
+    };
+    std::io::stderr()
+        .write_all(
+            messages
+                .into_iter()
+                .map(|error| error.to_string())
+                .collect::<Vec<String>>()
+                .join("\n")
+                .as_bytes(),
+        )
+        .expect("Stderr writing error");
+    std::process::exit(exit_code);
 }
 
-fn main_inner() -> anyhow::Result<()> {
-    let arguments = <Arguments as clap::Parser>::try_parse()?;
-    arguments.validate()?;
-
+fn main_inner(
+    mut arguments: Arguments,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
+) -> anyhow::Result<()> {
     if arguments.version {
         writeln!(
             std::io::stdout(),
@@ -58,25 +96,13 @@ fn main_inner() -> anyhow::Result<()> {
         .expect("Thread pool configuration failure");
 
     if arguments.recursive_process {
-        #[cfg(debug_assertions)]
-        if let Some(fname) = arguments.recursive_process_input {
-            let mut infile = std::fs::File::open(fname)?;
-            #[cfg(target_os = "emscripten")]
-            {
-                return resolc::WorkerProcess::run(Some(&mut infile));
-            }
-            #[cfg(not(target_os = "emscripten"))]
-            {
-                return resolc::NativeProcess::run(Some(&mut infile));
-            }
-        }
         #[cfg(target_os = "emscripten")]
         {
-            return resolc::WorkerProcess::run(None);
+            return resolc::WorkerProcess::run();
         }
         #[cfg(not(target_os = "emscripten"))]
         {
-            return resolc::NativeProcess::run(None);
+            return resolc::NativeProcess::run();
         }
     }
 
@@ -93,12 +119,9 @@ fn main_inner() -> anyhow::Result<()> {
 
     let (input_files, remappings) = arguments.split_input_files_and_remappings()?;
 
-    let suppressed_warnings = match arguments.suppress_warnings {
-        Some(warnings) => Some(revive_solc_json_interface::ResolcWarning::try_from_strings(
-            warnings.as_slice(),
-        )?),
-        None => None,
-    };
+    let suppressed_warnings = revive_solc_json_interface::ResolcWarning::try_from_strings(
+        arguments.suppress_warnings.unwrap_or_default().as_slice(),
+    )?;
 
     let mut solc = {
         #[cfg(target_os = "emscripten")]
@@ -172,6 +195,7 @@ fn main_inner() -> anyhow::Result<()> {
         resolc::standard_json(
             &mut solc,
             arguments.detect_missing_libraries,
+            &mut messages,
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
@@ -206,6 +230,7 @@ fn main_inner() -> anyhow::Result<()> {
             input_files.as_slice(),
             arguments.libraries.as_slice(),
             &mut solc,
+            &mut messages,
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,

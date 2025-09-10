@@ -92,7 +92,7 @@ pub struct Arguments {
     /// Switch to standard JSON input/output mode. Read from stdin, write the result to stdout.
     /// This is the default used by the Hardhat plugin.
     #[arg(long = "standard-json")]
-    pub standard_json: bool,
+    pub standard_json: Option<Option<String>>,
 
     /// Switch to missing deployable libraries detection mode.
     /// Only available for standard JSON input/output mode.

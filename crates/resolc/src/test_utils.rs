@@ -85,7 +85,7 @@ pub fn build_solidity_with_options(
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
 
-    let input = SolcStandardJsonInput::try_from_sources(
+    let input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
         sources.clone(),
         libraries.clone(),
@@ -150,7 +150,7 @@ pub fn build_solidity_with_options_evm(
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
 
-    let input = SolcStandardJsonInput::try_from_sources(
+    let input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
         sources.clone(),
         libraries.clone(),
@@ -207,7 +207,7 @@ pub fn build_solidity_and_detect_missing_libraries(
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
 
-    let input = SolcStandardJsonInput::try_from_sources(
+    let input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
         sources.clone(),
         libraries.clone(),
@@ -282,7 +282,7 @@ pub fn check_solidity_warning(
 
     let mut sources = BTreeMap::new();
     sources.insert("test.sol".to_string(), source_code.to_string());
-    let input = SolcStandardJsonInput::try_from_sources(
+    let input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
         sources.clone(),
         libraries,

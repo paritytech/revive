@@ -14,26 +14,17 @@ use self::output::Output;
 
 pub trait Process {
     /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-    fn run(input_file: Option<&mut std::fs::File>) -> anyhow::Result<()> {
+    fn run() -> anyhow::Result<()> {
         let mut stdin = std::io::stdin();
         let mut stdout = std::io::stdout();
         let mut stderr = std::io::stderr();
 
         let mut buffer = Vec::with_capacity(16384);
-        match input_file {
-            Some(ins) => {
-                if let Err(error) = ins.read_to_end(&mut buffer) {
-                    anyhow::bail!("Failed to read recursive process input file: {:?}", error);
-                }
-            }
-            None => {
-                if let Err(error) = stdin.read_to_end(&mut buffer) {
-                    anyhow::bail!(
-                        "Failed to read recursive process input from stdin: {:?}",
-                        error
-                    )
-                }
-            }
+        if let Err(error) = stdin.read_to_end(&mut buffer) {
+            anyhow::bail!(
+                "Failed to read recursive process input from stdin: {:?}",
+                error
+            )
         }
 
         let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;

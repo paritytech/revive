@@ -17,6 +17,8 @@ pub use self::standard_json::input::settings::polkavm::PolkaVM as SolcStandardJs
 pub use self::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
 pub use self::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
 pub use self::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+#[cfg(feature = "resolc")]
+pub use self::standard_json::input::settings::warning::Warning as ResolcWarning;
 pub use self::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
 pub use self::standard_json::input::source::Source as SolcStandardJsonInputSource;
 pub use self::standard_json::input::Input as SolcStandardJsonInput;
@@ -26,10 +28,6 @@ pub use self::standard_json::output::contract::Contract as SolcStandardJsonOutpu
 pub use self::standard_json::output::error::error_handler::ErrorHandler as SolcStandardJsonOutputErrorHandler;
 pub use self::standard_json::output::error::Error as SolcStandardJsonOutputError;
 pub use self::standard_json::output::Output as SolcStandardJsonOutput;
-#[cfg(feature = "resolc")]
-pub use self::warning::Warning as ResolcWarning;
 
 pub mod combined_json;
 pub mod standard_json;
-#[cfg(feature = "resolc")]
-pub mod warning;

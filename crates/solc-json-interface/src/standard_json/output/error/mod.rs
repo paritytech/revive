@@ -5,7 +5,6 @@ pub mod mapped_location;
 pub mod source_location;
 
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -102,32 +101,11 @@ impl Error {
         Self::new("Warning", message, source_location, sources)
     }
 
-    /// Returns the `ecrecover` function usage warning.
-    pub fn message_ecrecover(src: Option<&str>) -> Self {
-        let message = r#"
-Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.
-Polkadot comes with native account abstraction support, therefore it is highly recommended NOT
-to rely on the fact that the account has an ECDSA private key attached to it since accounts might
-implement other signature schemes.
-"#
-        .to_owned();
-
-        Self {
-            component: "general".to_owned(),
-            error_code: None,
-            formatted_message: message.clone(),
-            message,
-            severity: "warning".to_owned(),
-            source_location: src.map(SourceLocation::from_str).and_then(Result::ok),
-            r#type: "Warning".to_owned(),
-        }
-    }
-
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
     pub fn error_send_and_transfer(
         node: Option<&str>,
         id_paths: &BTreeMap<usize, &String>,
-        sources: &BTreeMap<String, StandardJsonInputSource>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
     ) -> Self {
         let message = r#"
 Warning: It looks like you are using '<address payable>.send/transfer(<X>)'.
@@ -148,32 +126,12 @@ and https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from
         )
     }
 
-    /// Returns the `extcodesize` instruction usage warning.
-    pub fn message_extcodesize(src: Option<&str>) -> Self {
-        let message = r#"
-Warning: Your code or one of its dependencies uses the 'extcodesize' instruction, which is
-usually needed in the following cases:
-  1. To detect whether an address belongs to a smart contract.
-  2. To detect whether the deploy code execution has finished.
-Polkadot comes with native account abstraction support (so smart contracts are just accounts
-coverned by code), and you should avoid differentiating between contracts and non-contract
-addresses.
-"#
-        .to_owned();
-
-        Self {
-            component: "general".to_owned(),
-            error_code: None,
-            formatted_message: message.clone(),
-            message,
-            severity: "warning".to_owned(),
-            source_location: src.map(SourceLocation::from_str).and_then(Result::ok),
-            r#type: "Warning".to_owned(),
-        }
-    }
-
     /// Returns the `origin` instruction usage warning.
-    pub fn message_tx_origin(src: Option<&str>) -> Self {
+    pub fn warning_tx_origin(
+        node: Option<&str>,
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+    ) -> Self {
         let message = r#"
 Warning: You are checking for 'tx.origin' in your code, which might lead to unexpected behavior.
 Polkadot comes with native account abstraction support, and therefore the initiator of a
@@ -182,15 +140,11 @@ to rely on tx.origin, but use msg.sender instead.
 "#
         .to_owned();
 
-        Self {
-            component: "general".to_owned(),
-            error_code: None,
-            formatted_message: message.clone(),
+        Self::new_warning(
             message,
-            severity: "warning".to_owned(),
-            source_location: src.map(SourceLocation::from_str).and_then(Result::ok),
-            r#type: "Warning".to_owned(),
-        }
+            node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
+            Some(sources),
+        )
     }
 
     /// Appends the contract path to the message..

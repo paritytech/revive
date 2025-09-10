@@ -9,9 +9,11 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(feature = "resolc")]
+use crate::standard_json::input::settings::warning::Warning;
 use crate::standard_json::output::error::error_handler::ErrorHandler;
 #[cfg(feature = "resolc")]
-use crate::warning::Warning;
+use crate::SolcStandardJsonInputSource;
 
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
@@ -43,15 +45,31 @@ pub struct Output {
 #[cfg(feature = "resolc")]
 impl Output {
     /// Traverses the AST and returns the list of additional errors and warnings.
-    pub fn preprocess_ast(&mut self, suppressed_warnings: &[Warning]) -> anyhow::Result<()> {
-        let messages: Vec<SolcStandardJsonOutputError> = self
+    pub fn preprocess_ast(
+        &mut self,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+        suppressed_warnings: &[Warning],
+    ) -> anyhow::Result<()> {
+        #[cfg(feature = "parallel")]
+        use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+        let id_paths: BTreeMap<usize, &String> = self
             .sources
             .iter()
+            .map(|(path, source)| (source.id, path))
+            .collect();
+
+        #[cfg(feature = "parallel")]
+        let iter = self.sources.par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = self.sources.iter();
+
+        let messages: Vec<SolcStandardJsonOutputError> = iter
             .flat_map(|(_path, source)| {
                 source
                     .ast
                     .as_ref()
-                    .map(|ast| Source::get_messages(ast, suppressed_warnings))
+                    .map(|ast| Source::get_messages(ast, &id_paths, sources, suppressed_warnings))
                     .unwrap_or_default()
             })
             .collect();

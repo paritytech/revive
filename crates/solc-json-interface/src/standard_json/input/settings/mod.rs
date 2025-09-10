@@ -6,7 +6,8 @@ pub mod metadata_hash;
 pub mod optimizer;
 pub mod polkavm;
 pub mod selection;
-pub mod warning_type;
+#[cfg(feature = "resolc")]
+pub mod warning;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -14,13 +15,13 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::standard_json::input::settings::warning_type::WarningType;
-
 use self::libraries::Libraries;
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
 use self::polkavm::PolkaVM;
 use self::selection::Selection;
+#[cfg(feature = "resolc")]
+use self::warning::Warning;
 
 /// The `solc --standard-json` input settings.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,8 +56,9 @@ pub struct Settings {
     pub polkavm: Option<PolkaVM>,
 
     /// The suppressed warnings.
+    #[cfg(feature = "resolc")]
     #[serde(default, skip_serializing)]
-    pub suppressed_warnings: Vec<WarningType>,
+    pub suppressed_warnings: Vec<self::warning::Warning>,
 
     /// Whether to enable the missing libraries detection mode.
     /// Deprecated in favor of post-compile-time linking.
@@ -64,6 +66,7 @@ pub struct Settings {
     pub detect_missing_libraries: bool,
 }
 
+#[cfg(feature = "resolc")]
 impl Settings {
     /// A shortcut constructor.
     pub fn new(
@@ -74,7 +77,7 @@ impl Settings {
         optimizer: Optimizer,
         metadata: Option<Metadata>,
         polkavm: Option<PolkaVM>,
-        suppressed_warnings: Vec<WarningType>,
+        suppressed_warnings: Vec<Warning>,
         detect_missing_libraries: bool,
     ) -> Self {
         Self {
@@ -95,33 +98,5 @@ impl Settings {
     pub fn normalize(&mut self) {
         self.polkavm = None;
         self.optimizer.normalize();
-    }
-
-    /// Parses the library list and returns their double hashmap with path and name as keys.
-    pub fn parse_libraries(
-        input: Vec<String>,
-    ) -> anyhow::Result<BTreeMap<String, BTreeMap<String, String>>> {
-        let mut libraries = BTreeMap::new();
-        for (index, library) in input.into_iter().enumerate() {
-            let mut path_and_address = library.split('=');
-            let path = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library #{} path is missing", index))?;
-            let mut file_and_contract = path.split(':');
-            let file = file_and_contract
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library `{}` file name is missing", path))?;
-            let contract = file_and_contract.next().ok_or_else(|| {
-                anyhow::anyhow!("The library `{}` contract name is missing", path)
-            })?;
-            let address = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library `{}` address is missing", path))?;
-            libraries
-                .entry(file.to_owned())
-                .or_insert_with(BTreeMap::new)
-                .insert(contract.to_owned(), address.to_owned());
-        }
-        Ok(libraries)
     }
 }

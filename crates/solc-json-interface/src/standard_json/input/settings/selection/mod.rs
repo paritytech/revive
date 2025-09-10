@@ -36,17 +36,6 @@ impl Selection {
             files: BTreeMap::new(),
         }
     }
-
-    /// Extends the user's output selection with flag required by our compilation process.
-    pub fn extend_with_required(&mut self) -> &mut Self {
-        self.all
-            .get_or_insert_with(FileSelection::new_required)
-            .extend_with_required();
-        for (_, v) in self.files.iter_mut() {
-            v.extend_with_required();
-        }
-        self
-    }
 }
 
 #[cfg(test)]

@@ -8698,9 +8698,11 @@ name = "revive-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hex",
  "serde",
  "serde_json",
  "serde_stacker",
+ "sha3",
 ]
 
 [[package]]

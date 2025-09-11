@@ -6,12 +6,14 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
+use std::path::PathBuf;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
+use revive_solc_json_interface::SolcStandardJsonInputSource;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
@@ -27,6 +29,7 @@ use crate::build::Build;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
+use crate::project::contract::ir::llvm_ir::LLVMIR;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
@@ -38,7 +41,7 @@ use self::contract::Contract;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
     /// The source code version.
-    pub version: SolcVersion,
+    pub version: Option<SolcVersion>,
     /// The project contracts,
     pub contracts: BTreeMap<String, Contract>,
     /// The mapping of auxiliary identifiers, e.g. Yul object names, to full contract paths.
@@ -50,7 +53,7 @@ pub struct Project {
 impl Project {
     /// A shortcut constructor.
     pub fn new(
-        version: SolcVersion,
+        version: Option<SolcVersion>,
         contracts: BTreeMap<String, Contract>,
         libraries: SolcStandardJsonInputSettingsLibraries,
     ) -> Self {
@@ -239,41 +242,75 @@ impl Project {
             ),
         );
 
-        Ok(Self::new(source_version, project_contracts, libraries))
+        Ok(Self::new(
+            Some(source_version),
+            project_contracts,
+            libraries,
+        ))
     }
 
     /// Parses the LLVM IR source code file and returns the source data.
-    pub fn try_from_llvm_ir_path(
-        path: &Path,
+    pub fn try_from_llvm_ir_paths(
+        paths: &[PathBuf],
         libraries: SolcStandardJsonInputSettingsLibraries,
+        solc_output: Option<&mut SolcStandardJsonOutput>,
     ) -> anyhow::Result<Self> {
-        let source_code = std::fs::read_to_string(path)
-            .map_err(|error| anyhow::anyhow!("LLVM IR file {:?} reading error: {}", path, error))?;
-        let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
+        let sources = paths
+            .iter()
+            .map(|path| {
+                let source = SolcStandardJsonInputSource::from(path.as_path());
+                (path.to_string_lossy().to_string(), source)
+            })
+            .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
+        Self::try_from_llvm_ir_sources(sources, libraries, solc_output)
+    }
 
-        let source_version =
-            SolcVersion::new_simple(revive_llvm_context::polkavm_const::LLVM_VERSION);
-        let path = path.to_string_lossy().to_string();
+    /// Parses the LLVM IR `sources` and returns an LLVM IR project.
+    pub fn try_from_llvm_ir_sources(
+        sources: BTreeMap<String, SolcStandardJsonInputSource>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        mut solc_output: Option<&mut SolcStandardJsonOutput>,
+    ) -> anyhow::Result<Self> {
+        let results = sources
+            .into_par_iter()
+            .map(|(path, mut source)| {
+                let source_code = match source.try_resolve() {
+                    Ok(()) => source.take_content().expect("Always exists"),
+                    Err(error) => return (path, Err(error)),
+                };
 
-        let mut project_contracts = BTreeMap::new();
-        project_contracts.insert(
-            path.clone(),
-            Contract::new(
-                path.clone(),
-                source_hash,
-                source_version.clone(),
-                IR::new_llvm_ir(path, source_code),
-                None,
-            ),
-        );
+                let source_hash = revive_common::Keccak256::from_slice(source_code.as_bytes());
 
-        Ok(Self::new(source_version, project_contracts, libraries))
+                let contract = Contract::new(
+                    ContractIdentifier::new(path.clone(), None),
+                    LLVMIR::new(path.clone(), source_code).into(),
+                    serde_json::json!({
+                        "source_hash": source_hash.to_string(),
+                    }),
+                );
+
+                (path, Ok(contract))
+            })
+            .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
+
+        let mut contracts = BTreeMap::new();
+        for (path, result) in results.into_iter() {
+            match result {
+                Ok(contract) => {
+                    contracts.insert(path, contract);
+                }
+                Err(error) => match solc_output {
+                    Some(ref mut solc_output) => solc_output.push_error(Some(path), error),
+                    None => anyhow::bail!(error),
+                },
+            }
+        }
+        Ok(Self::new(None, contracts, libraries))
     }
 
     /// Converts the `solc` JSON output into a convenient project.
     pub fn try_from_standard_json_output(
-        solc_output: &SolcStandardJsonOutput,
-        source_code_files: BTreeMap<String, String>,
+        solc_output: &mut SolcStandardJsonOutput,
         libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
         debug_config: &revive_llvm_context::DebugConfig,
@@ -286,8 +323,12 @@ impl Project {
             }
         }
 
-        let results = input_contracts
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let iter = input_contracts.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = input_contracts.into_iter();
+
+        let results = iter
             .filter_map(|(name, contract)| {
                 let ir = match Yul::try_from_source(
                     name.full_path.as_str(),
@@ -314,8 +355,7 @@ impl Project {
             }
         }
         Ok(Project::new(
-            era_solc::StandardJsonInputLanguage::Solidity,
-            Some(solc_version),
+            Some(solc_version.clone()),
             contracts,
             libraries,
         ))

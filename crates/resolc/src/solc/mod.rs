@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
 
 use self::version::Version;
 
@@ -29,7 +30,8 @@ pub trait Compiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
-        input: SolcStandardJsonInput,
+        input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,

@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::Bytecode;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use revive_solc_json_interface::warning::Warning;
+use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
@@ -269,16 +269,12 @@ pub fn check_solidity_warning(
     source_code: &str,
     warning_substring: &str,
     libraries: SolcStandardJsonInputSettingsLibraries,
-    skip_for_revive_edition: bool,
-    suppressed_warnings: Option<Vec<Warning>>,
+    suppressed_warnings: Option<Vec<ResolcWarning>>,
 ) -> anyhow::Result<bool> {
     check_dependencies();
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
-    if skip_for_revive_edition && solc_version.l2_revision.is_some() {
-        return Ok(true);
-    }
 
     let mut sources = BTreeMap::new();
     sources.insert("test.sol".to_string(), source_code.to_string());

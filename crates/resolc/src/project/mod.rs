@@ -14,6 +14,7 @@ use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSource;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Digest;
@@ -34,6 +35,7 @@ use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
 use crate::solc::Compiler;
+use crate::ProcessOutput;
 
 use self::contract::Contract;
 
@@ -73,21 +75,23 @@ impl Project {
     /// Compiles all contracts, returning their build artifacts.
     pub fn compile(
         self,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         optimizer_settings: OptimizerSettings,
         include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
+        let deployed_libraries = self.libraries.as_paths();
+
         let project = self.clone();
         #[cfg(feature = "parallel")]
         let iter = self.contracts.into_par_iter();
         #[cfg(not(feature = "parallel"))]
         let iter = self.contracts.into_iter();
 
-        let deployed_libraries = self.libraries.as_paths();
         let results: BTreeMap<String, anyhow::Result<ContractBuild>> = iter
-            .map(|(full_path, contract)| {
+            .map(|(path, mut contract)| {
                 let factory_dependencies = contract
                     .ir
                     .drain_factory_dependencies()
@@ -100,77 +104,35 @@ impl Project {
                     })
                     .collect();
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
-                let process_input = ProcessInput::new(
+                let input = ProcessInput::new(
                     contract,
-                    project.clone(),
-                    include_metadata_hash,
-                    optimizer_settings.clone(),
-                    debug_config.clone(),
-                    llvm_arguments.to_vec(),
-                    memory_config,
+                    self.solc_version.clone(),
+                    self.identifier_paths.clone(),
                     missing_libraries,
                     factory_dependencies,
-                    self.identifier_paths.clone(),
+                    enable_eravm_extensions,
+                    metadata_hash_type,
+                    append_cbor,
+                    optimizer_settings.clone(),
+                    llvm_options.clone(),
+                    output_assembly,
+                    debug_config.clone(),
                 );
-                let process_output = {
+                let result: Result<ProcessOutput, SolcStandardJsonOutputError> = {
                     #[cfg(target_os = "emscripten")]
                     {
-                        crate::WorkerProcess::call(process_input)
+                        crate::WorkerProcess::call(path.as_str(), input)
                     }
                     #[cfg(not(target_os = "emscripten"))]
                     {
-                        crate::NativeProcess::call(process_input)
+                        crate::NativeProcess::call(path.as_str(), input)
                     }
                 };
-                (full_path, process_output.map(|output| output.build))
+                let result = result.map(|output| output.build);
+                (path, result)
             })
-            .collect();
-
-        let mut build = Build::default();
-        let mut hashes = HashMap::with_capacity(results.len());
-        for (path, result) in results.iter() {
-            match result {
-                Ok(contract) => {
-                    hashes.insert(path.to_owned(), contract.build.bytecode_hash.to_owned());
-                }
-                Err(error) => {
-                    anyhow::bail!("Contract `{}` compiling error: {:?}", path, error);
-                }
-            }
-        }
-        for (path, result) in results.into_iter() {
-            match result {
-                Ok(mut contract) => {
-                    for dependency in contract.factory_dependencies.drain() {
-                        let dependency_path = project
-                            .identifier_paths
-                            .get(dependency.as_str())
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                panic!("Dependency `{dependency}` full path not found")
-                            });
-                        let hash = match hashes.get(dependency_path.as_str()) {
-                            Some(hash) => hash.to_owned(),
-                            None => anyhow::bail!(
-                                "Dependency contract `{}` not found in the project",
-                                dependency_path
-                            ),
-                        };
-                        contract
-                            .build
-                            .factory_dependencies
-                            .insert(hash, dependency_path);
-                    }
-
-                    build.contracts.insert(path, contract);
-                }
-                Err(error) => {
-                    anyhow::bail!("Contract `{}` compiling error: {:?}", path, error);
-                }
-            }
-        }
-
-        Ok(build)
+            .collect::<BTreeMap<String, Result<ContractBuild, SolcStandardJsonOutputError>>>();
+        Ok(Build::new(results, messages))
     }
 
     /// Get the list of missing deployable libraries.

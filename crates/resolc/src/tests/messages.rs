@@ -27,7 +27,6 @@ fn ecrecover() {
             ECRECOVER_TEST_SOURCE,
             "Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.",
             Default::default(),
-            false,
             None,
         ).expect("Test failure")
     );
@@ -40,7 +39,6 @@ fn ecrecover_suppressed() {
             ECRECOVER_TEST_SOURCE,
             "Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.",
             Default::default(),
-            false,
             Some(vec![Warning::EcRecover]),
         ).expect("Test failure")
     );
@@ -73,7 +71,6 @@ fn send() {
         SEND_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
         Default::default(),
-        false,
         None,
     )
     .expect("Test failure"));
@@ -85,7 +82,6 @@ fn send_suppressed() {
         SEND_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
         Default::default(),
-        false,
         Some(vec![Warning::SendTransfer]),
     )
     .expect("Test failure"));
@@ -114,7 +110,6 @@ fn transfer() {
         TRANSFER_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
         Default::default(),
-        false,
         None,
     )
     .expect("Test failure"));
@@ -126,7 +121,6 @@ fn transfer_suppressed() {
         TRANSFER_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
         Default::default(),
-        false,
         Some(vec![Warning::SendTransfer]),
     )
     .expect("Test failure"));
@@ -153,7 +147,6 @@ fn extcodesize() {
         EXTCODESIZE_TEST_SOURCE,
         "Warning: Your code or one of its dependencies uses the 'extcodesize' instruction,",
         Default::default(),
-        false,
         None,
     )
     .expect("Test failure"));
@@ -165,7 +158,6 @@ fn extcodesize_suppressed() {
         EXTCODESIZE_TEST_SOURCE,
         "Warning: Your code or one of its dependencies uses the 'extcodesize' instruction,",
         Default::default(),
-        false,
         Some(vec![Warning::ExtCodeSize]),
     )
     .expect("Test failure"));
@@ -188,7 +180,6 @@ fn tx_origin() {
         TX_ORIGIN_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
         Default::default(),
-        false,
         None,
     )
     .expect("Test failure"));
@@ -200,7 +191,6 @@ fn tx_origin_suppressed() {
         TX_ORIGIN_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
         Default::default(),
-        false,
         Some(vec![Warning::TxOrigin]),
     )
     .expect("Test failure"));
@@ -230,7 +220,6 @@ fn tx_origin_assembly() {
         TX_ORIGIN_ASSEMBLY_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
         Default::default(),
-        false,
         None,
     )
     .expect("Test failure"));
@@ -242,7 +231,6 @@ fn tx_origin_assembly_suppressed() {
         TX_ORIGIN_ASSEMBLY_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
         Default::default(),
-        false,
         Some(vec![Warning::TxOrigin]),
     )
     .expect("Test failure"));

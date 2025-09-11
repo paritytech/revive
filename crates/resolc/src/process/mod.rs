@@ -9,63 +9,59 @@ pub mod worker_process;
 
 use std::io::{Read, Write};
 
+use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
 use self::input::Input;
 use self::output::Output;
 
 pub trait Process {
     /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
     fn run() -> anyhow::Result<()> {
-        let mut stdin = std::io::stdin();
-        let mut stdout = std::io::stdout();
-        let mut stderr = std::io::stderr();
+        let input_json = std::io::read_to_string(std::io::stdin())
+            .map_err(|error| anyhow::anyhow!("Stdin reading error: {error}"))?;
+        let input: Input = revive_common::deserialize_from_str(input_json.as_str())
+            .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
 
-        let mut buffer = Vec::with_capacity(16384);
-        if let Err(error) = stdin.read_to_end(&mut buffer) {
-            anyhow::bail!(
-                "Failed to read recursive process input from stdin: {:?}",
-                error
-            )
-        }
+        let source_location = SourceLocation::new(input.contract.identifier.path);
 
-        let input: Input = revive_common::deserialize_from_slice(buffer.as_slice())?;
+        let result = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || {
+                input
+                    .contract
+                    .compile(
+                        input.identifier_paths,
+                        input.missing_libraries,
+                        input.factory_dependencies,
+                        input.metadata_hash_type,
+                        input.append_cbor,
+                        input.optimizer_settings,
+                        input.llvm_options,
+                        input.output_assembly,
+                        input.debug_config,
+                    )
+                    .map(Output::new)
+                    .map_err(|error| {
+                        SolcStandardJsonOutputError::new_error(error, Some(source_location), None)
+                    })
+            })
+            .expect("Threading error")
+            .join()
+            .expect("Threading error");
 
-        revive_llvm_context::initialize_llvm(
-            revive_llvm_context::Target::PVM,
-            crate::DEFAULT_EXECUTABLE_NAME,
-            &input.llvm_arguments,
-        );
+        serde_json::to_writer(std::io::stdout(), &result)
+            .map_err(|error| anyhow::anyhow!("Stdout writing error: {error}"))?;
 
-        let result = input.contract.compile(
-            input.project,
-            input.optimizer_settings,
-            input.include_metadata_hash,
-            input.debug_config,
-            &input.llvm_arguments,
-            input.memory_config,
-            input.missing_libraries,
-            input.factory_dependencies,
-            input.identifier_paths,
-        );
-
-        match result {
-            Ok(build) => {
-                let output = Output::new(build);
-                let json = serde_json::to_vec(&output).expect("Always valid");
-                stdout
-                    .write_all(json.as_slice())
-                    .expect("Stdout writing error");
-                Ok(())
-            }
-            Err(error) => {
-                let message = error.to_string();
-                stderr
-                    .write_all(message.as_bytes())
-                    .expect("Stderr writing error");
-                Err(error)
-            }
-        }
+        unsafe { inkwell::support::shutdown_llvm() };
+        Ok(())
     }
 
     /// Runs this process recursively to compile a single contract.
-    fn call(input: Input) -> anyhow::Result<Output>;
+    fn call<I: Serialize, O: DeserializeOwned>(
+        path: &str,
+        input: I,
+    ) -> Result<O, SolcStandardJsonOutputError>;
 }

@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 
+use revive_common::Keccak256;
+use revive_llvm_context::Optimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -49,7 +51,7 @@ impl Contract {
     /// Returns the contract identifier, which is:
     /// - the Yul object identifier for Yul
     /// - the module name for LLVM IR
-    pub fn identifier(&self) -> &str {
+    pub fn object_identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
             IR::LLVMIR(ref llvm_ir) => llvm_ir.path.as_str(),
@@ -60,6 +62,7 @@ impl Contract {
     pub fn compile(
         mut self,
         project: Project,
+        solc_version: Option<SolcVersion>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         include_metadata_hash: bool,
         mut debug_config: revive_llvm_context::DebugConfig,
@@ -69,82 +72,72 @@ impl Contract {
         factory_dependencies: BTreeSet<String>,
         identifier_paths: BTreeMap<String, String>,
     ) -> anyhow::Result<ContractBuild> {
-        let llvm = inkwell::context::Context::create();
-        let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
+        use revive_llvm_context::PolkaVMWriteLLVM;
 
-        let version = project.version.clone();
-        let identifier = self.identifier().to_owned();
+        let llvm = inkwell::context::Context::create();
+        let optimizer = Optimizer::new(optimizer_settings);
 
         let metadata = Metadata::new(
-            self.metadata_json.take(),
-            version.long.clone(),
-            version.l2_revision.clone(),
+            self.metadata_json,
+            solc_version
+                .as_ref()
+                .map(|version| version.default.to_owned()),
+            solc_version
+                .as_ref()
+                .map(|version| version.l2_revision.to_owned()),
             optimizer.settings().to_owned(),
-            llvm_arguments.to_vec(),
+            llvm_arguments.to_owned(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
-        let metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]> = if include_metadata_hash
-        {
-            let metadata_string = serde_json::to_string(&metadata).expect("Always valid");
-            Some(sha3::Keccak256::digest(metadata_string.as_bytes()).into())
-        } else {
-            None
-        };
+        let metadata_json_bytes = serde_json::to_vec(&metadata_json).expect("Always valid");
+        let metadata_bytes = Keccak256::from_slice(&metadata_json_bytes).into();
 
-        let module = match self.ir {
-            IR::LLVMIR(ref llvm_ir) => {
-                // Create the output module
-                let memory_buffer =
-                    inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(
-                        llvm_ir.source.as_bytes(),
-                        self.path.as_str(),
+        let build = match self.ir {
+            IR::Yul(mut yul) => {
+                let module = llvm.create_module(self.identifier.full_path.as_str());
+                let mut context: revive_llvm_context::PolkaVMContext =
+                    revive_llvm_context::PolkaVMContext::new(
+                        &llvm,
+                        module,
+                        optimizer,
+                        debug_config,
+                        llvm_arguments,
+                        memory_config,
                     );
-                llvm.create_module_from_ir(memory_buffer)
-                    .map_err(|error| anyhow::anyhow!(error.to_string()))?
+                context
+                    .set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
+                let yul_data = revive_llvm_context::PolkaVMContextYulData::new(identifier_paths);
+                context.set_yul_data(yul_data);
+
+                yul.declare(&mut context)?;
+                yul.into_llvm(&mut context)
+                    .map_err(|error| anyhow::anyhow!("LLVM IR generator: {error}"))?;
+
+                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
             }
-            _ => llvm.create_module(self.path.as_str()),
+            IR::LLVMIR(mut llvm_ir) => {
+                llvm_ir.source.push(char::from(0));
+                let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
+                    &llvm_ir.source.as_bytes()[..llvm_ir.source.len() - 1],
+                    self.identifier.full_path.as_str(),
+                );
+
+                let module = llvm
+                    .create_module_from_ir(memory_buffer)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                let context: revive_llvm_context::PolkaVMContext =
+                    revive_llvm_context::PolkaVMContext::new(
+                        &llvm,
+                        module,
+                        optimizer,
+                        debug_config,
+                        llvm_arguments,
+                        memory_config,
+                    );
+
+                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
+            }
         };
-
-        debug_config.set_contract_path(&self.path);
-        let mut context = revive_llvm_context::PolkaVMContext::new(
-            &llvm,
-            module,
-            optimizer,
-            include_metadata_hash,
-            debug_config,
-            llvm_arguments,
-            memory_config,
-        );
-        context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
-        match self.ir {
-            IR::Yul(_) => {
-                context.set_yul_data(revive_llvm_context::PolkaVMContextYulData::new(
-                    identifier_paths,
-                ));
-            }
-            IR::LLVMIR(_) => {}
-        }
-
-        self.ir.declare(&mut context).map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` LLVM IR generator declaration pass error: {}",
-                self.path,
-                error
-            )
-        })?;
-        self.ir.into_llvm(&mut context).map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` LLVM IR generator definition pass error: {}",
-                self.path,
-                error
-            )
-        })?;
-
-        if let Some(debug_info) = context.debug_info() {
-            debug_info.finalize_module()
-        }
-
-        let build = context.build(self.path.as_str(), metadata_hash)?;
 
         Ok(ContractBuild::new(
             self.identifier,

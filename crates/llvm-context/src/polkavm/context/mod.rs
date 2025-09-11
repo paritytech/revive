@@ -88,8 +88,6 @@ pub struct Context<'ctx> {
     /// The PVM memory configuration.
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
-    /// Whether to append the metadata hash at the end of bytecode.
-    include_metadata_hash: bool,
     /// The debug info of the current module.
     debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
@@ -215,7 +213,6 @@ impl<'ctx> Context<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
         optimizer: Optimizer,
-        include_metadata_hash: bool,
         debug_config: DebugConfig,
         llvm_arguments: &'ctx [String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
@@ -255,8 +252,6 @@ impl<'ctx> Context<'ctx> {
             llvm_arguments,
             memory_config,
 
-            include_metadata_hash,
-
             debug_info,
             debug_config,
 
@@ -269,7 +264,7 @@ impl<'ctx> Context<'ctx> {
     pub fn build(
         mut self,
         contract_path: &str,
-        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
+        metadata_hash: Option<revive_common::Keccak256>,
     ) -> anyhow::Result<Build> {
         let module_clone = self.module.clone();
 
@@ -332,7 +327,9 @@ impl<'ctx> Context<'ctx> {
         let build = match crate::polkavm::build(
             contract_path,
             &polkavm_bytecode,
-            metadata_hash,
+            metadata_hash
+                .as_ref()
+                .map(|hash| hash.as_bytes().try_into().unwrap()),
             self.debug_config(),
         ) {
             Ok(build) => build,

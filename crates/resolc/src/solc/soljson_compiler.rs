@@ -25,7 +25,8 @@ impl Compiler for SoljsonCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
         &mut self,
-        mut input: SolcStandardJsonInput,
+        input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,

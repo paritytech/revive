@@ -18,7 +18,6 @@ pub fn create_context(
         llvm,
         module,
         optimizer,
-        true,
         Default::default(),
         Default::default(),
         Default::default(),

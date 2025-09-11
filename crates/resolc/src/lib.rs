@@ -49,6 +49,7 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
+use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 /// Runs the Yul mode.
 #[allow(clippy::too_many_arguments)]
@@ -99,6 +100,7 @@ pub fn yul<T: Compiler>(
 pub fn llvm_ir(
     input_files: &[PathBuf],
     libraries: &[String],
+    messages: &mut Vec<SolcStandardJsonOutputError>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
@@ -106,26 +108,26 @@ pub fn llvm_ir(
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+    let linker_symbols = libraries.as_linker_symbols()?;
 
-    let path = match input_files.len() {
-        1 => input_files.first().expect("Always exists"),
-        0 => anyhow::bail!("The input file is missing"),
-        length => anyhow::bail!(
-            "Only one input file is allowed in the LLVM IR mode, but found {}",
-            length,
-        ),
-    };
+    let project = Project::try_from_llvm_ir_paths(input_files, libraries, None)?;
 
-    let project = Project::try_from_llvm_ir_path(path, libraries)?;
-
-    let build = project.compile(
+    let mut build = project.compile(
+        messages,
+        false,
+        metadata_hash_type,
+        append_cbor,
         optimizer_settings,
-        include_metadata_hash,
+        llvm_options,
+        output_assembly,
         debug_config,
-        llvm_arguments,
-        memory_config,
     )?;
+    build.take_warnings();
+    build.check_errors()?;
 
+    let mut build = build.link(linker_symbols);
+    build.take_and_write_warnings();
+    build.check_errors()?;
     Ok(build)
 }
 
@@ -171,8 +173,13 @@ pub fn standard_output<T: Compiler>(
         )),
         false,
     )?;
-    let mut solc_output =
-        solc.standard_json(solc_input, messages, base_path, include_paths, allow_paths)?;
+    let mut solc_output = solc.standard_json(
+        &mut solc_input,
+        messages,
+        base_path,
+        include_paths,
+        allow_paths,
+    )?;
     solc_output.take_and_write_warnings();
     solc_output.check_errors()?;
 
@@ -188,9 +195,8 @@ pub fn standard_output<T: Compiler>(
     solc_output.take_and_write_warnings();
     solc_output.check_errors()?;
 
-    let mut build = project.compile_to_eravm(
+    let mut build = project.compile(
         messages,
-        enable_eravm_extensions,
         metadata_hash_type,
         append_cbor,
         optimizer_settings,

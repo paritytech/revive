@@ -6,6 +6,8 @@ use super::Input;
 use super::Output;
 use super::Process;
 
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+
 use anyhow::Context;
 use serde::Deserialize;
 
@@ -29,7 +31,11 @@ enum Response {
 pub struct WorkerProcess;
 
 impl Process for WorkerProcess {
-    fn call(input: Input) -> anyhow::Result<Output> {
+    fn call<I, O>(path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
+    where
+        I: serde::Serialize,
+        O: serde::de::DeserializeOwned,
+    {
         let input_json = serde_json::to_vec(&input).expect("Always valid");
         let input_str = String::from_utf8(input_json).expect("Input shall be valid");
         // Prepare the input string for the Emscripten function

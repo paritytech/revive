@@ -67,8 +67,6 @@ impl Compiler for SolcCompiler {
 
         input.normalize();
 
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
-
         let input_json = serde_json::to_vec(&input).expect("Always valid");
 
         let process = command.spawn().map_err(|error| {
@@ -109,7 +107,7 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
-        output.preprocess_ast(suppressed_warnings.as_slice())?;
+        output.preprocess_ast(&input.sources, &input.suppressed_warnings)?;
 
         Ok(output)
     }
@@ -254,13 +252,6 @@ impl Compiler for SolcCompiler {
             .parse()
             .map_err(|error| anyhow::anyhow!("{} version parsing: {}", self.executable, error))?;
 
-        let l2_revision: Option<semver::Version> = stdout
-            .lines()
-            .nth(2)
-            .and_then(|line| line.split(' ').nth(1))
-            .and_then(|line| line.split('-').nth(1))
-            .and_then(|version| version.parse().ok());
-
-        Ok(Version::new(long, default, l2_revision))
+        Ok(Version::new(long, default))
     }
 }

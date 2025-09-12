@@ -83,11 +83,7 @@ impl Compiler for SoljsonCompiler {
             .ok_or_else(|| anyhow::anyhow!("Soljson version parsing: metadata dropping"))?
             .parse()
             .map_err(|error| anyhow::anyhow!("Soljson version parsing: {}", error))?;
-        let l2_revision: Option<semver::Version> = version
-            .split('-')
-            .nth(1)
-            .and_then(|version| version.parse().ok());
-        Ok(Version::new(long, default, l2_revision))
+        Ok(Version::new(long, default))
     }
 }
 

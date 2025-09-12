@@ -4,22 +4,20 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use revive_common::Keccak256;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::project::contract::Contract;
-use crate::project::Project;
 
 /// The input data.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Input {
     /// The contract representation.
     pub contract: Contract,
-    /// The project representation.
-    pub project: Project,
     /// Whether to append the metadata hash.
-    pub include_metadata_hash: bool,
+    pub metadata_hash: Keccak256,
     /// The optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
@@ -40,8 +38,7 @@ impl Input {
     /// A shortcut constructor.
     pub fn new(
         contract: Contract,
-        project: Project,
-        include_metadata_hash: bool,
+        metadata_hash: Keccak256,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: Vec<String>,
@@ -52,8 +49,7 @@ impl Input {
     ) -> Self {
         Self {
             contract,
-            project,
-            include_metadata_hash,
+            metadata_hash,
             optimizer_settings,
             debug_config,
             llvm_arguments,

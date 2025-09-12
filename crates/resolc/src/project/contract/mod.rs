@@ -82,9 +82,6 @@ impl Contract {
             solc_version
                 .as_ref()
                 .map(|version| version.default.to_owned()),
-            solc_version
-                .as_ref()
-                .map(|version| version.l2_revision.to_owned()),
             optimizer.settings().to_owned(),
             llvm_arguments.to_owned(),
         );

@@ -39,6 +39,7 @@ use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
 
+use revive_common::Keccak256;
 use revive_solc_json_interface::standard_json::input::settings::metadata_hash::MetadataHash;
 use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
@@ -56,43 +57,36 @@ use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 pub fn yul<T: Compiler>(
     input_files: &[PathBuf],
     libraries: &[String],
+    metadata_hash: Keccak256,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
     solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     include_metadata_hash: bool,
-    mut debug_config: revive_llvm_context::DebugConfig,
+    debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+    let linker_symbols = libraries.as_linker_symbols()?;
 
-    let path = match input_files.len() {
-        1 => input_files.first().expect("Always exists"),
-        0 => anyhow::bail!("The input file is missing"),
-        length => anyhow::bail!(
-            "Only one input file is allowed in the Yul mode, but found {}",
-            length,
-        ),
-    };
+    // solc.validate_yul_paths(paths, libraries.clone(), messages)?;
 
-    if solc.version()?.default != solc::LAST_SUPPORTED_VERSION {
-        anyhow::bail!(
-                "The Yul mode is only supported with the most recent version of the Solidity compiler: {}",
-                solc::LAST_SUPPORTED_VERSION,
-            );
-    }
+    let project = Project::try_from_yul_paths(input_files, None, libraries, debug_config)?;
 
-    let solc_validator = Some(&*solc);
-    let project = Project::try_from_yul_path(path, solc_validator, libraries)?;
-
-    debug_config.set_yul_path(path);
-    let build = project.compile(
+    let mut build = project.compile(
+        messages,
         optimizer_settings,
-        include_metadata_hash,
+        metadata_hash,
         debug_config,
         llvm_arguments,
         memory_config,
     )?;
+    build.take_and_write_warnings();
+    build.check_errors()?;
 
+    let mut build = build.link(linker_symbols);
+    build.take_and_write_warnings();
+    build.check_errors()?;
     Ok(build)
 }
 
@@ -100,9 +94,9 @@ pub fn yul<T: Compiler>(
 pub fn llvm_ir(
     input_files: &[PathBuf],
     libraries: &[String],
+    metadata_hash: Keccak256,
     messages: &mut Vec<SolcStandardJsonOutputError>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
-    include_metadata_hash: bool,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
@@ -114,13 +108,11 @@ pub fn llvm_ir(
 
     let mut build = project.compile(
         messages,
-        false,
-        metadata_hash_type,
-        append_cbor,
         optimizer_settings,
-        llvm_options,
-        output_assembly,
+        metadata_hash,
         debug_config,
+        llvm_arguments,
+        memory_config,
     )?;
     build.take_warnings();
     build.check_errors()?;

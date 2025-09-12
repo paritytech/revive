@@ -20,15 +20,13 @@ impl Yul {
     pub fn try_from_source(
         path: &str,
         source_code: &str,
-        debug_config: Option<&revive_llvm_context::DebugConfig>,
+        debug_config: &revive_llvm_context::DebugConfig,
     ) -> anyhow::Result<Option<Self>> {
         if source_code.is_empty() {
             return Ok(None);
         };
 
-        if let Some(debug_config) = debug_config {
-            debug_config.dump_yul(path, source_code)?;
-        }
+        debug_config.dump_yul(path, source_code)?;
 
         let mut lexer = Lexer::new(source_code.to_owned());
         let object = Object::parse(&mut lexer, None)

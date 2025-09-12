@@ -3,6 +3,7 @@
 pub mod evm;
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use serde::Deserialize;
@@ -44,7 +45,7 @@ pub struct Contract {
     /// The contract factory dependencies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub factory_dependencies: Option<BTreeMap<String, String>>,
-    /// The contract missing libraries.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub missing_libraries: Option<HashSet<String>>,
+    /// Missing linkable libraries.
+    #[serde(default, skip_deserializing)]
+    pub missing_libraries: BTreeSet<String>,
 }

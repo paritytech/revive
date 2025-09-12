@@ -3,6 +3,7 @@
 pub mod contract;
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
@@ -10,6 +11,7 @@ use std::path::PathBuf;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use revive_common::Keccak256;
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -61,7 +63,7 @@ impl Project {
     ) -> Self {
         let mut identifier_paths = BTreeMap::new();
         for (path, contract) in contracts.iter() {
-            identifier_paths.insert(contract.identifier().to_owned(), path.to_owned());
+            identifier_paths.insert(contract.object_identifier().to_owned(), path.to_owned());
         }
 
         Self {
@@ -77,20 +79,19 @@ impl Project {
         self,
         messages: &mut Vec<SolcStandardJsonOutputError>,
         optimizer_settings: OptimizerSettings,
-        include_metadata_hash: bool,
+        metadata_hash: Keccak256,
         debug_config: DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
         let deployed_libraries = self.libraries.as_paths();
 
-        let project = self.clone();
         #[cfg(feature = "parallel")]
         let iter = self.contracts.into_par_iter();
         #[cfg(not(feature = "parallel"))]
         let iter = self.contracts.into_iter();
 
-        let results: BTreeMap<String, anyhow::Result<ContractBuild>> = iter
+        let results = iter
             .map(|(path, mut contract)| {
                 let factory_dependencies = contract
                     .ir
@@ -106,17 +107,14 @@ impl Project {
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
                 let input = ProcessInput::new(
                     contract,
-                    self.solc_version.clone(),
-                    self.identifier_paths.clone(),
+                    metadata_hash.clone(),
+                    optimizer_settings.clone(),
+                    debug_config.clone(),
+                    llvm_arguments.to_owned(),
+                    memory_config.clone(),
                     missing_libraries,
                     factory_dependencies,
-                    enable_eravm_extensions,
-                    metadata_hash_type,
-                    append_cbor,
-                    optimizer_settings.clone(),
-                    llvm_options.clone(),
-                    output_assembly,
-                    debug_config.clone(),
+                    self.identifier_paths.clone(),
                 );
                 let result: Result<ProcessOutput, SolcStandardJsonOutputError> = {
                     #[cfg(target_os = "emscripten")]
@@ -136,79 +134,89 @@ impl Project {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> MissingLibraries {
-        let deployed_libraries = self
-            .libraries
-            .inner
+    pub fn get_missing_libraries(&self, deployed_libraries: &BTreeSet<String>) -> MissingLibraries {
+        let missing_libraries = self
+            .contracts
             .iter()
-            .flat_map(|(file, names)| {
-                names
-                    .keys()
-                    .map(|name| format!("{file}:{name}"))
-                    .collect::<HashSet<String>>()
+            .map(|(path, contract)| {
+                (
+                    path.to_owned(),
+                    contract.get_missing_libraries(deployed_libraries),
+                )
             })
-            .collect::<HashSet<String>>();
-
-        let mut missing_deployable_libraries = BTreeMap::new();
-        for (contract_path, contract) in self.contracts.iter() {
-            let missing_libraries = contract
-                .get_missing_libraries()
-                .into_iter()
-                .filter(|library| !deployed_libraries.contains(library))
-                .collect::<HashSet<String>>();
-            missing_deployable_libraries.insert(contract_path.to_owned(), missing_libraries);
-        }
-        MissingLibraries::new(missing_deployable_libraries)
+            .collect();
+        MissingLibraries::new(missing_libraries)
     }
 
     /// Parses the Yul source code file and returns the source data.
-    pub fn try_from_yul_path<T: Compiler>(
-        path: &Path,
-        solc_validator: Option<&T>,
+    pub fn try_from_yul_paths(
+        paths: &[PathBuf],
+        solc_output: Option<&mut SolcStandardJsonOutput>,
         libraries: SolcStandardJsonInputSettingsLibraries,
+        debug_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
-        let source_code = std::fs::read_to_string(path)
-            .map_err(|error| anyhow::anyhow!("Yul file {:?} reading error: {}", path, error))?;
-        Self::try_from_yul_string(path, source_code.as_str(), solc_validator, libraries)
+        let sources = paths
+            .iter()
+            .map(|path| {
+                let source = SolcStandardJsonInputSource::from(path.as_path());
+                (path.to_string_lossy().to_string(), source)
+            })
+            .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
+        Self::try_from_yul_sources(sources, libraries, solc_output, debug_config)
     }
 
     /// Parses the test Yul source code string and returns the source data.
     /// Only for integration testing purposes.
-    pub fn try_from_yul_string<T: Compiler>(
-        path: &Path,
-        source_code: &str,
-        solc_validator: Option<&T>,
+    pub fn try_from_yul_sources(
+        sources: BTreeMap<String, SolcStandardJsonInputSource>,
         libraries: SolcStandardJsonInputSettingsLibraries,
+        mut solc_output: Option<&mut SolcStandardJsonOutput>,
+        debug_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
-        if let Some(solc) = solc_validator {
-            solc.validate_yul(path)?;
+        #[cfg(feature = "parallel")]
+        let iter = sources.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = sources.into_iter();
+
+        let results = iter
+            .filter_map(|(path, mut source)| {
+                let source_code = match source.try_resolve() {
+                    Ok(()) => source.take_content().expect("Always exists"),
+                    Err(error) => return Some((path, Err(error))),
+                };
+                let ir =
+                    match Yul::try_from_source(path.as_str(), source_code.as_str(), debug_config) {
+                        Ok(ir) => ir?,
+                        Err(error) => return Some((path, Err(error))),
+                    };
+
+                let source_hash = Keccak256::from_slice(source_code.as_bytes());
+                let source_metadata = serde_json::json!({
+                    "source_hash": source_hash.to_string(),
+                });
+
+                let name =
+                    ContractIdentifier::new(path.clone(), Some(ir.object.identifier.clone()));
+                let full_path = name.full_path.clone();
+                let contract = Contract::new(name, ir.into(), source_metadata);
+                Some((full_path, Ok(contract)))
+            })
+            .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
+
+        let mut contracts = BTreeMap::new();
+        for (path, result) in results.into_iter() {
+            match result {
+                Ok(contract) => {
+                    contracts.insert(path, contract);
+                }
+                Err(error) => match solc_output {
+                    Some(ref mut solc_output) => solc_output.push_error(Some(path), error),
+                    None => anyhow::bail!(error),
+                },
+            }
         }
-
-        let source_version = SolcVersion::new_simple(crate::solc::LAST_SUPPORTED_VERSION);
-        let path = path.to_string_lossy().to_string();
-        let source_hash = sha3::Keccak256::digest(source_code.as_bytes()).into();
-
-        let mut lexer = Lexer::new(source_code.to_owned());
-        let object = Object::parse(&mut lexer, None)
-            .map_err(|error| anyhow::anyhow!("Yul object `{}` parsing error: {}", path, error))?;
-
-        let mut project_contracts = BTreeMap::new();
-        project_contracts.insert(
-            path.to_owned(),
-            Contract::new(
-                path,
-                source_hash,
-                source_version.clone(),
-                IR::new_yul(source_code.to_owned(), object),
-                None,
-            ),
-        );
-
-        Ok(Self::new(
-            Some(source_version),
-            project_contracts,
-            libraries,
-        ))
+        Ok(Self::new(None, contracts, libraries))
+        // SolcStandardJsonInputLanguage::Yul,
     }
 
     /// Parses the LLVM IR source code file and returns the source data.
@@ -295,7 +303,7 @@ impl Project {
                 let ir = match Yul::try_from_source(
                     name.full_path.as_str(),
                     contract.ir_optimized.as_str(),
-                    Some(debug_config),
+                    debug_config,
                 )
                 .map(|yul| yul.map(IR::from))
                 {

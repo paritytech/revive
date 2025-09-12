@@ -10,18 +10,12 @@ pub struct Version {
     pub long: String,
     /// The short `semver`.
     pub default: semver::Version,
-    /// The L2 revision additional versioning.
-    pub l2_revision: semver::Version,
 }
 
 impl Version {
     /// A shortcut constructor.
-    pub fn new(long: String, default: semver::Version, l2_revision: semver::Version) -> Self {
-        Self {
-            long,
-            default,
-            l2_revision,
-        }
+    pub fn new(long: String, default: semver::Version) -> Self {
+        Self { long, default }
     }
 
     // pub fn validate(self, include_paths: &[String]) -> anyhow::Result<Self> {

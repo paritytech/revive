@@ -63,10 +63,10 @@ impl Input {
         evm_version: Option<revive_common::EVMVersion>,
         paths: &[PathBuf],
         libraries: &[String],
-        remappings: Option<BTreeSet<String>>,
+        remappings: BTreeSet<String>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
-        metadata: Option<SolcStandardJsonInputSettingsMetadata>,
+        metadata: SolcStandardJsonInputSettingsMetadata,
         #[cfg(feature = "resolc")] suppressed_warnings: Vec<Warning>,
         polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
         detect_missing_libraries: bool,
@@ -112,10 +112,10 @@ impl Input {
         evm_version: Option<revive_common::EVMVersion>,
         sources: BTreeMap<String, Source>,
         libraries: SolcStandardJsonInputSettingsLibraries,
-        remappings: Option<BTreeSet<String>>,
+        remappings: BTreeSet<String>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
-        metadata: Option<SolcStandardJsonInputSettingsMetadata>,
+        metadata: SolcStandardJsonInputSettingsMetadata,
         suppressed_warnings: Vec<Warning>,
         polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
         detect_missing_libraries: bool,
@@ -139,6 +139,7 @@ impl Input {
     }
 
     /// Sets the necessary defaults.
+    /// TODO: Consider if still needed.
     pub fn normalize(&mut self) {
         self.settings.normalize();
     }

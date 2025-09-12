@@ -13,6 +13,8 @@ use serde::Serialize;
 use crate::standard_json::input::settings::warning::Warning;
 use crate::standard_json::output::error::error_handler::ErrorHandler;
 #[cfg(feature = "resolc")]
+use crate::SolcStandardJsonInputSettingsSelection;
+#[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSource;
 
 use self::contract::Contract;
@@ -44,6 +46,53 @@ pub struct Output {
 
 #[cfg(feature = "resolc")]
 impl Output {
+    /// Prunes the output JSON and prints it to stdout.
+    pub fn write_and_exit(
+        mut self,
+        selection_to_prune: SolcStandardJsonInputSettingsSelection,
+    ) -> ! {
+        let sources = self.sources.values_mut().collect::<Vec<&mut Source>>();
+        for source in sources.into_iter() {
+            if selection_to_prune
+                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::AST)
+            {
+                source.ast = None;
+            }
+        }
+
+        let contracts = self
+            .contracts
+            .values_mut()
+            .flat_map(|contracts| contracts.values_mut())
+            .collect::<Vec<&mut Contract>>();
+        for contract in contracts.into_iter() {
+            if selection_to_prune
+                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata)
+            {
+                contract.metadata = serde_json::Value::Null;
+            }
+            if selection_to_prune
+                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::Yul)
+            {
+                contract.ir_optimized = String::new();
+            }
+            if let Some(ref mut evm) = contract.evm {
+                if selection_to_prune.contains(
+                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::MethodIdentifiers,
+                ) {
+                    evm.method_identifiers.clear();
+                }
+            }
+        }
+
+        self.contracts.retain(|_, contracts| {
+            contracts.retain(|_, contract| !contract.is_empty());
+            !contracts.is_empty()
+        });
+
+        serde_json::to_writer(std::io::stdout(), &self).expect("Stdout writing error");
+        std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+    }
     /// Traverses the AST and returns the list of additional errors and warnings.
     pub fn preprocess_ast(
         &mut self,

@@ -9,7 +9,6 @@ pub mod selection;
 #[cfg(feature = "resolc")]
 pub mod warning;
 
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
@@ -31,14 +30,14 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evm_version: Option<revive_common::EVMVersion>,
     /// The linker library addresses.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub libraries: Option<Libraries>,
+    #[serde(default, skip_serializing_if = "Libraries::is_empty")]
+    pub libraries: Libraries,
     /// The sorted list of remappings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub remappings: Option<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub remappings: BTreeSet<String>,
     /// The output selection filters.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_selection: Option<Selection>,
+    #[serde(default)]
+    pub output_selection: Selection,
     /// Whether to compile via IR. Only for testing with solc >=0.8.13.
     #[serde(
         rename = "viaIR",
@@ -49,8 +48,8 @@ pub struct Settings {
     /// The optimizer settings.
     pub optimizer: Optimizer,
     /// The metadata settings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Metadata>,
+    #[serde(default)]
+    pub metadata: Metadata,
     /// The resolc custom PolkaVM settings.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub polkavm: Option<PolkaVM>,
@@ -72,19 +71,19 @@ impl Settings {
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
         libraries: Libraries,
-        remappings: Option<BTreeSet<String>>,
+        remappings: BTreeSet<String>,
         output_selection: Selection,
         optimizer: Optimizer,
-        metadata: Option<Metadata>,
+        metadata: Metadata,
         polkavm: Option<PolkaVM>,
         suppressed_warnings: Vec<Warning>,
         detect_missing_libraries: bool,
     ) -> Self {
         Self {
             evm_version,
-            libraries: Some(libraries),
+            libraries,
             remappings,
-            output_selection: Some(output_selection),
+            output_selection,
             optimizer,
             metadata,
             via_ir: Some(true),
@@ -92,6 +91,19 @@ impl Settings {
             suppressed_warnings,
             detect_missing_libraries,
         }
+    }
+
+    /// Extends the output selection with another one.
+    pub fn extend_selection(&mut self, selection: Selection) {
+        self.output_selection.extend(selection);
+    }
+
+    /// Returns flags that are going to be automatically added by the compiler,
+    /// but were not explicitly requested by the user.
+    ///
+    /// Afterwards, the flags are used to prune JSON output before returning it.
+    pub fn selection_to_prune(&self) -> Selection {
+        self.output_selection.selection_to_prune()
     }
 
     /// Sets the necessary defaults.

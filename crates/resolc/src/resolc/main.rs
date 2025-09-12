@@ -2,10 +2,11 @@
 
 pub mod arguments;
 
-use std::io::Write;
 use std::str::FromStr;
+use std::{io::Write, path::PathBuf};
 
 use resolc::Process;
+use revive_common::MetadataHash;
 use revive_solc_json_interface::{
     SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutputError,
 };
@@ -154,15 +155,9 @@ fn main_inner(
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
-    let include_metadata_hash = match arguments.metadata_hash {
-        Some(metadata_hash) => {
-            let metadata =
-                revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash::from_str(
-                    metadata_hash.as_str(),
-                )?;
-            metadata != revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash::None
-        }
-        None => true,
+    let metadata_hash_type = match arguments.metadata_hash {
+        Some(ref hash_type) => MetadataHash::from_str(hash_type.as_str())?,
+        None => MetadataHash::IPFS,
     };
 
     let memory_config = revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::new(
@@ -174,9 +169,10 @@ fn main_inner(
         resolc::yul(
             input_files.as_slice(),
             arguments.libraries.as_slice(),
+            metadata_hash_type,
+            &mut messages,
             &mut solc,
             optimizer_settings,
-            include_metadata_hash,
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
@@ -185,17 +181,19 @@ fn main_inner(
         resolc::llvm_ir(
             input_files.as_slice(),
             arguments.libraries.as_slice(),
+            metadata_hash_type,
+            &mut messages,
             optimizer_settings,
-            include_metadata_hash,
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
         )
-    } else if arguments.standard_json {
+    } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &mut solc,
             arguments.detect_missing_libraries,
             &mut messages,
+            standard_json.map(PathBuf::from),
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
@@ -212,7 +210,6 @@ fn main_inner(
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
-            include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,

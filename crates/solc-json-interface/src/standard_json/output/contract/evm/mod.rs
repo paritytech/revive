@@ -28,8 +28,8 @@ pub struct EVM {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub method_identifiers: Option<BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub method_identifiers: BTreeMap<String, String>,
 }
 
 impl EVM {

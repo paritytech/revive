@@ -113,10 +113,10 @@ pub struct Arguments {
     #[arg(long = "llvm-ir")]
     pub llvm_ir: bool,
 
-    /// Set metadata hash mode.
-    /// The only supported value is `none` that disables appending the metadata hash.
-    /// Is enabled by default.
-    #[arg(long = "metadata-hash")]
+    /// Set the metadata hash type.
+    /// Available types: `none`, `ipfs`, `keccak256`.
+    /// The default is `ipfs`.
+    #[arg(long)]
     pub metadata_hash: Option<String>,
 
     /// Output PolkaVM assembly of the contracts.

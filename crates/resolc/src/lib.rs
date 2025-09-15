@@ -39,7 +39,6 @@ use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
 
-use revive_common::Keccak256;
 use revive_common::MetadataHash;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::ResolcWarning;
@@ -94,7 +93,7 @@ pub fn yul<T: Compiler>(
 pub fn llvm_ir(
     input_files: &[PathBuf],
     libraries: &[String],
-    metadata_hash: Keccak256,
+    metadata_hash: MetadataHash,
     messages: &mut Vec<SolcStandardJsonOutputError>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     debug_config: revive_llvm_context::DebugConfig,
@@ -129,7 +128,7 @@ pub fn standard_output<T: Compiler>(
     input_files: &[PathBuf],
     libraries: &[String],
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    metadata_hash: Keccak256,
+    metadata_hash: MetadataHash,
     solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
@@ -137,32 +136,26 @@ pub fn standard_output<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: Option<BTreeSet<String>>,
+    remappings: BTreeSet<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
-
-    let solc_input = SolcStandardJsonInput::try_from_solidity_paths(
+    let mut solc_input = SolcStandardJsonInput::try_from_solidity_paths(
         evm_version,
         input_files,
         libraries,
         remappings,
         SolcStandardJsonInputSettingsSelection::new_required(),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            solc_optimizer_enabled,
-            None,
-            &solc_version.default,
-            optimizer_settings.is_fallback_to_size_enabled(),
-        ),
-        None,
+        SolcStandardJsonInputSettingsOptimizer::default(),
+        Default::default(),
         suppressed_warnings,
-        Some(SolcStandardJsonInputSettingsPolkaVM::new(
+        SolcStandardJsonInputSettingsPolkaVM::new(
             Some(memory_config),
             debug_config.emit_debug_info,
-        )),
+        ),
         false,
     )?;
     let mut solc_output = solc.standard_json(
@@ -178,9 +171,9 @@ pub fn standard_output<T: Compiler>(
     let linker_symbols = solc_input.settings.libraries.as_linker_symbols()?;
 
     let project = Project::try_from_standard_json_output(
-        solc_output,
+        &mut solc_output,
         solc_input.settings.libraries,
-        solc_version,
+        &solc_version,
         &debug_config,
     )?;
     solc_output.take_and_write_warnings();
@@ -210,14 +203,16 @@ pub fn standard_json<T: Compiler>(
     solc: &mut T,
     detect_missing_libraries: bool,
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    metadata_hash: Keccak256,
+    metadata_hash: MetadataHash,
     json_path: Option<PathBuf>,
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    mut debug_config: revive_llvm_context::DebugConfig,
+    debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<()> {
+    let solc_version = solc.version()?;
     let mut solc_input = SolcStandardJsonInput::try_from(json_path.as_deref())?;
     let language = solc_input.language;
     let prune_output = solc_input.settings.selection_to_prune();
@@ -247,9 +242,9 @@ pub fn standard_json<T: Compiler>(
     )?;
 
     let project = Project::try_from_standard_json_output(
-        solc_output,
+        &mut solc_output,
         solc_input.settings.libraries,
-        solc.version(),
+        &solc_version,
         &debug_config,
     )?;
     if solc_output.has_errors() {
@@ -258,7 +253,7 @@ pub fn standard_json<T: Compiler>(
 
     if detect_missing_libraries {
         let missing_libraries = project.get_missing_libraries(&deployed_libraries);
-        missing_libraries.write_to_standard_json(&mut solc_output, solc_version.as_ref());
+        missing_libraries.write_to_standard_json(&mut solc_output, &solc_version);
         solc_output.write_and_exit(prune_output);
     }
 
@@ -271,12 +266,12 @@ pub fn standard_json<T: Compiler>(
         memory_config,
     )?;
     if build.has_errors() {
-        build.write_to_standard_json(&mut solc_output, solc.version().as_ref())?;
+        build.write_to_standard_json(&mut solc_output, &solc_version)?;
         solc_output.write_and_exit(prune_output);
     }
 
     let build = build.link(linker_symbols);
-    build.write_to_standard_json(&mut solc_output, solc.version().as_ref())?;
+    build.write_to_standard_json(&mut solc_output, &solc_version)?;
     solc_output.write_and_exit(prune_output);
 }
 
@@ -286,7 +281,8 @@ pub fn combined_json<T: Compiler>(
     format: String,
     input_files: &[PathBuf],
     libraries: &[String],
-    metadata_hash: Keccak256,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
+    metadata_hash: MetadataHash,
     solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
@@ -294,7 +290,7 @@ pub fn combined_json<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: Option<BTreeSet<String>>,
+    remappings: BTreeSet<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
@@ -305,11 +301,12 @@ pub fn combined_json<T: Compiler>(
     let build = standard_output(
         input_files,
         libraries,
+        messages,
+        metadata_hash,
         solc,
         evm_version,
         solc_optimizer_enabled,
         optimizer_settings,
-        include_metadata_hash,
         base_path,
         include_paths,
         allow_paths,

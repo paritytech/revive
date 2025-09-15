@@ -136,7 +136,7 @@ impl Contract {
         self,
         standard_json_contract: &mut SolcStandardJsonOutputContract,
     ) -> anyhow::Result<()> {
-        standard_json_contract.metadata = Some(self.metadata_json);
+        standard_json_contract.metadata = self.metadata_json;
 
         let assembly_text = self.build.assembly_text;
         let bytecode = hex::encode(self.build.bytecode.as_slice());
@@ -144,7 +144,7 @@ impl Contract {
             evm.modify(assembly_text, bytecode);
         }
 
-        standard_json_contract.factory_dependencies = Some(self.build.factory_dependencies);
+        standard_json_contract.factory_dependencies = self.build.factory_dependencies;
         standard_json_contract.hash = self.build.bytecode_hash.map(hex::encode);
 
         Ok(())

@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::standard_json::input::settings::optimizer::yul_details::YulDetails;
 
 /// The `solc --standard-json` input settings optimizer details.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     /// Whether the pass is enabled.

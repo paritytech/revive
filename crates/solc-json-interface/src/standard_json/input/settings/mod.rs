@@ -51,8 +51,8 @@ pub struct Settings {
     #[serde(default)]
     pub metadata: Metadata,
     /// The resolc custom PolkaVM settings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub polkavm: Option<PolkaVM>,
+    #[serde(default, skip_serializing)]
+    pub polkavm: PolkaVM,
 
     /// The suppressed warnings.
     #[cfg(feature = "resolc")]
@@ -75,7 +75,7 @@ impl Settings {
         output_selection: Selection,
         optimizer: Optimizer,
         metadata: Metadata,
-        polkavm: Option<PolkaVM>,
+        polkavm: PolkaVM,
         suppressed_warnings: Vec<Warning>,
         detect_missing_libraries: bool,
     ) -> Self {
@@ -104,11 +104,5 @@ impl Settings {
     /// Afterwards, the flags are used to prune JSON output before returning it.
     pub fn selection_to_prune(&self) -> Selection {
         self.output_selection.selection_to_prune()
-    }
-
-    /// Sets the necessary defaults.
-    pub fn normalize(&mut self) {
-        self.polkavm = None;
-        self.optimizer.normalize();
     }
 }

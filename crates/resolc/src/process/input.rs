@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use revive_common::Keccak256;
+use revive_common::MetadataHash;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,7 +17,7 @@ pub struct Input {
     /// The contract representation.
     pub contract: Contract,
     /// Whether to append the metadata hash.
-    pub metadata_hash: Keccak256,
+    pub metadata_hash: MetadataHash,
     /// The optimizer settings.
     pub optimizer_settings: revive_llvm_context::OptimizerSettings,
     /// The debug output config.
@@ -38,7 +38,7 @@ impl Input {
     /// A shortcut constructor.
     pub fn new(
         contract: Contract,
-        metadata_hash: Keccak256,
+        metadata_hash: MetadataHash,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: Vec<String>,

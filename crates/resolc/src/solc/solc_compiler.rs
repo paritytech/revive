@@ -65,8 +65,6 @@ impl Compiler for SolcCompiler {
             command.arg(allow_paths);
         }
 
-        input.normalize();
-
         let input_json = serde_json::to_vec(&input).expect("Always valid");
 
         let process = command.spawn().map_err(|error| {

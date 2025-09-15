@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use revive_common::Keccak256;
+use revive_common::MetadataHash;
 use revive_llvm_context::Optimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
@@ -61,11 +62,10 @@ impl Contract {
     /// Compiles the specified contract, setting its build artifacts.
     pub fn compile(
         mut self,
-        project: Project,
         solc_version: Option<SolcVersion>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
-        include_metadata_hash: bool,
-        mut debug_config: revive_llvm_context::DebugConfig,
+        metadata_hash: MetadataHash,
+        debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,
@@ -87,7 +87,11 @@ impl Contract {
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
         let metadata_json_bytes = serde_json::to_vec(&metadata_json).expect("Always valid");
-        let metadata_bytes = Keccak256::from_slice(&metadata_json_bytes).into();
+        let metadata_bytes = match metadata_hash {
+            MetadataHash::Keccak256 => Keccak256::from_slice(&metadata_json_bytes).into(),
+            MetadataHash::IPFS => todo!("IPFS hash isn't supported yet"),
+            MetadataHash::None => None,
+        };
 
         let build = match self.ir {
             IR::Yul(mut yul) => {

@@ -12,6 +12,7 @@ use std::path::PathBuf;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use revive_common::Keccak256;
+use revive_common::MetadataHash;
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -79,7 +80,7 @@ impl Project {
         self,
         messages: &mut Vec<SolcStandardJsonOutputError>,
         optimizer_settings: OptimizerSettings,
-        metadata_hash: Keccak256,
+        metadata_hash: MetadataHash,
         debug_config: DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,

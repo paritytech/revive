@@ -46,6 +46,29 @@ pub struct Output {
 
 #[cfg(feature = "resolc")]
 impl Output {
+    /// Initializes a standard JSON output.
+    ///
+    /// Is used for projects compiled without `solc`.
+    pub fn new(
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
+    ) -> Self {
+        let sources = sources
+            .keys()
+            .enumerate()
+            .map(|(index, path)| (path.to_owned(), Source::new(index)))
+            .collect::<BTreeMap<String, Source>>();
+
+        Self {
+            contracts: BTreeMap::new(),
+            sources,
+            errors: std::mem::take(messages),
+
+            version: None,
+            long_version: None,
+            revive_version: None,
+        }
+    }
     /// Prunes the output JSON and prints it to stdout.
     pub fn write_and_exit(
         mut self,

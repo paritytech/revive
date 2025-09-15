@@ -25,7 +25,7 @@ pub trait Process {
         let input: Input = revive_common::deserialize_from_str(input_json.as_str())
             .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
 
-        let source_location = SourceLocation::new(input.contract.identifier.path);
+        let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
 
         let result = std::thread::Builder::new()
             .stack_size(64 * 1024 * 1024)
@@ -33,15 +33,15 @@ pub trait Process {
                 input
                     .contract
                     .compile(
-                        input.identifier_paths,
+                        None,
+                        input.optimizer_settings,
+                        input.metadata_hash,
+                        input.debug_config,
+                        &input.llvm_arguments,
+                        input.memory_config,
                         input.missing_libraries,
                         input.factory_dependencies,
-                        input.metadata_hash_type,
-                        input.append_cbor,
-                        input.optimizer_settings,
-                        input.llvm_options,
-                        input.output_assembly,
-                        input.debug_config,
+                        input.identifier_paths,
                     )
                     .map(Output::new)
                     .map_err(|error| {

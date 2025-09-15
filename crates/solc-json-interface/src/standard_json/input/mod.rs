@@ -58,6 +58,7 @@ impl Input {
     }
 
     /// A shortcut constructor from paths.
+    #[cfg(feature = "resolc")]
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_solidity_paths(
         evm_version: Option<revive_common::EVMVersion>,
@@ -67,8 +68,8 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
-        #[cfg(feature = "resolc")] suppressed_warnings: Vec<Warning>,
-        polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
+        suppressed_warnings: Vec<Warning>,
+        polkavm: SolcStandardJsonInputSettingsPolkaVM,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
@@ -117,7 +118,7 @@ impl Input {
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
         suppressed_warnings: Vec<Warning>,
-        polkavm: Option<SolcStandardJsonInputSettingsPolkaVM>,
+        polkavm: SolcStandardJsonInputSettingsPolkaVM,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -136,11 +137,5 @@ impl Input {
             ),
             suppressed_warnings,
         })
-    }
-
-    /// Sets the necessary defaults.
-    /// TODO: Consider if still needed.
-    pub fn normalize(&mut self) {
-        self.settings.normalize();
     }
 }

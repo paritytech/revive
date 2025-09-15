@@ -8,7 +8,7 @@ use std::{io::Write, path::PathBuf};
 use resolc::Process;
 use revive_common::MetadataHash;
 use revive_solc_json_interface::{
-    SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutputError,
+    SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutput, SolcStandardJsonOutputError,
 };
 
 use self::arguments::Arguments;
@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     if is_standard_json {
-        let output = SolcStandardJsonOutputError::new_with_messages(messages);
+        let output = SolcStandardJsonOutput::new_with_messages(messages);
         output.write_and_exit(SolcStandardJsonInputSettingsSelection::default());
     }
 
@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn main_inner(
-    mut arguments: Arguments,
+    arguments: Arguments,
     messages: &mut Vec<SolcStandardJsonOutputError>,
 ) -> anyhow::Result<()> {
     if arguments.version {
@@ -155,9 +155,9 @@ fn main_inner(
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
-    let metadata_hash_type = match arguments.metadata_hash {
+    let metadata_hash = match arguments.metadata_hash {
         Some(ref hash_type) => MetadataHash::from_str(hash_type.as_str())?,
-        None => MetadataHash::IPFS,
+        None => MetadataHash::Keccak256,
     };
 
     let memory_config = revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::new(
@@ -169,8 +169,8 @@ fn main_inner(
         resolc::yul(
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash_type,
-            &mut messages,
+            metadata_hash,
+            messages,
             &mut solc,
             optimizer_settings,
             debug_config,
@@ -181,8 +181,8 @@ fn main_inner(
         resolc::llvm_ir(
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash_type,
-            &mut messages,
+            metadata_hash,
+            messages,
             optimizer_settings,
             debug_config,
             &arguments.llvm_arguments,
@@ -192,13 +192,15 @@ fn main_inner(
         resolc::standard_json(
             &mut solc,
             arguments.detect_missing_libraries,
-            &mut messages,
+            messages,
+            metadata_hash,
             standard_json.map(PathBuf::from),
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
             debug_config,
             &arguments.llvm_arguments,
+            memory_config,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
@@ -206,6 +208,8 @@ fn main_inner(
             format,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
+            messages,
+            metadata_hash,
             &mut solc,
             evm_version,
             !arguments.disable_solc_optimizer,
@@ -226,12 +230,12 @@ fn main_inner(
         resolc::standard_output(
             input_files.as_slice(),
             arguments.libraries.as_slice(),
+            messages,
+            metadata_hash,
             &mut solc,
-            &mut messages,
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
-            include_metadata_hash,
             arguments.base_path,
             arguments.include_paths,
             arguments.allow_paths,
@@ -244,42 +248,18 @@ fn main_inner(
     }?;
 
     if let Some(output_directory) = arguments.output_directory {
-        std::fs::create_dir_all(&output_directory)?;
-
         build.write_to_directory(
             &output_directory,
+            arguments.output_metadata,
             arguments.output_assembly,
             arguments.output_binary,
             arguments.overwrite,
         )?;
-
-        writeln!(
-            std::io::stderr(),
-            "Compiler run successful. Artifact(s) can be found in directory {output_directory:?}."
-        )?;
-    } else if arguments.output_assembly || arguments.output_binary {
-        for (path, contract) in build.contracts.into_iter() {
-            if arguments.output_assembly {
-                let assembly_text = contract.build.assembly_text;
-
-                writeln!(
-                    std::io::stdout(),
-                    "Contract `{path}` assembly:\n\n{assembly_text}"
-                )?;
-            }
-            if arguments.output_binary {
-                writeln!(
-                    std::io::stdout(),
-                    "Contract `{}` bytecode: 0x{}",
-                    path,
-                    hex::encode(contract.build.bytecode)
-                )?;
-            }
-        }
     } else {
-        writeln!(
-            std::io::stderr(),
-            "Compiler run successful. No output requested. Use --asm and --bin flags."
+        build.write_to_terminal(
+            arguments.output_metadata,
+            arguments.output_assembly,
+            arguments.output_binary,
         )?;
     }
 

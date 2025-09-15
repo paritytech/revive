@@ -69,6 +69,23 @@ impl Output {
             revive_version: None,
         }
     }
+
+    /// Initializes a standard JSON output with messages.
+    ///
+    /// Is used to emit errors in standard JSON mode.
+    ///
+    pub fn new_with_messages(messages: Vec<SolcStandardJsonOutputError>) -> Self {
+        Self {
+            contracts: BTreeMap::new(),
+            sources: BTreeMap::new(),
+            errors: messages,
+
+            version: None,
+            long_version: None,
+            revive_version: None,
+        }
+    }
+
     /// Prunes the output JSON and prints it to stdout.
     pub fn write_and_exit(
         mut self,

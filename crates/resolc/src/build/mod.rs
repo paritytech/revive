@@ -55,10 +55,41 @@ impl Build {
         todo!()
     }
 
+    /// Writes all contracts to the terminal.
+    pub fn write_to_terminal(
+        mut self,
+        output_metadata: bool,
+        output_assembly: bool,
+        output_binary: bool,
+    ) -> anyhow::Result<()> {
+        self.take_and_write_warnings();
+        self.exit_on_error();
+
+        if !output_metadata && !output_assembly && !output_binary {
+            writeln!(
+                std::io::stderr(),
+                "Compiler run successful. No output requested. Use flags --metadata, --asm, --bin."
+            )?;
+            return Ok(());
+        }
+
+        for (path, build) in self.results.into_iter() {
+            build.expect("Always valid").write_to_terminal(
+                path,
+                output_metadata,
+                output_assembly,
+                output_binary,
+            )?;
+        }
+
+        Ok(())
+    }
+
     /// Writes all contracts to the specified directory.
     pub fn write_to_directory(
         mut self,
         output_directory: &Path,
+        output_metadata: bool,
         output_assembly: bool,
         output_binary: bool,
         overwrite: bool,
@@ -71,6 +102,7 @@ impl Build {
         for build in self.results.into_values() {
             build.expect("Always valid").write_to_directory(
                 output_directory,
+                output_metadata,
                 output_assembly,
                 output_binary,
                 overwrite,

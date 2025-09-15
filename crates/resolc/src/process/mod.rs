@@ -7,8 +7,7 @@ pub mod output;
 #[cfg(target_os = "emscripten")]
 pub mod worker_process;
 
-use std::io::{Read, Write};
-
+use revive_llvm_context::{initialize_llvm, Target};
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use serde::de::DeserializeOwned;
@@ -26,6 +25,12 @@ pub trait Process {
             .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
 
         let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
+
+        initialize_llvm(
+            Target::PVM,
+            crate::DEFAULT_EXECUTABLE_NAME,
+            &input.llvm_arguments,
+        );
 
         let result = std::thread::Builder::new()
             .stack_size(64 * 1024 * 1024)

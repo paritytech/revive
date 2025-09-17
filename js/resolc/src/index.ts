@@ -98,7 +98,6 @@ export async function compile(
   const {
     optimizer = {
       mode: 'z',
-      fallback_to_optimizing_for_size: true,
       enabled: true,
       runs: 200,
     },

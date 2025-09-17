@@ -221,13 +221,6 @@ pub fn standard_json<T: Compiler>(
 
     let mut optimizer_settings =
         OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
-    if solc_input
-        .settings
-        .optimizer
-        .fallback_to_optimizing_for_size
-    {
-        optimizer_settings.enable_fallback_to_size();
-    }
     //let llvm_options = solc_input.settings.llvm_options.clone();
 
     let detect_missing_libraries =

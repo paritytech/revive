@@ -321,30 +321,17 @@ impl<'ctx> Context<'ctx> {
         self.debug_config
             .dump_object(contract_path, &shared_object)?;
 
-        let polkavm_bytecode =
-            revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
+        //let polkavm_bytecode =
+        //    revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
-        let build = match crate::polkavm::build(
+        crate::polkavm::build(
             contract_path,
-            &polkavm_bytecode,
+            &shared_object,
             metadata_hash
                 .as_ref()
                 .map(|hash| hash.as_bytes().try_into().unwrap()),
             self.debug_config(),
-        ) {
-            Ok(build) => build,
-            Err(_error)
-                if self.optimizer.settings() != &OptimizerSettings::size()
-                    && self.optimizer.settings().is_fallback_to_size_enabled() =>
-            {
-                self.optimizer = Optimizer::new(OptimizerSettings::size());
-                self.module = module_clone;
-                self.build(contract_path, metadata_hash)?
-            }
-            Err(error) => Err(error)?,
-        };
-
-        Ok(build)
+        )
     }
 
     /// Verifies the current LLVM IR module.

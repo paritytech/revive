@@ -20,30 +20,21 @@ pub struct Optimizer {
     /// The `solc` optimizer details.
     #[serde(default)]
     pub details: Details,
-    /// Whether to try to recompile with -Oz if the bytecode is too large.
-    #[serde(default, skip_serializing)]
-    pub fallback_to_optimizing_for_size: bool,
 }
 
 impl Default for Optimizer {
     fn default() -> Self {
-        Self::new(true, Self::default_mode(), Details::default(), false)
+        Self::new(true, Self::default_mode(), Details::default())
     }
 }
 
 impl Optimizer {
     /// A shortcut constructor.
-    pub fn new(
-        enabled: bool,
-        mode: char,
-        details: Details,
-        fallback_to_optimizing_for_size: bool,
-    ) -> Self {
+    pub fn new(enabled: bool, mode: char, details: Details) -> Self {
         Self {
             enabled,
             mode,
             details,
-            fallback_to_optimizing_for_size,
         }
     }
 

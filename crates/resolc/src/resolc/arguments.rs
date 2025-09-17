@@ -60,10 +60,6 @@ pub struct Arguments {
     #[arg(short = 'O', long = "optimization")]
     pub optimization: Option<char>,
 
-    /// Try to recompile with -Oz if the bytecode is too large.
-    #[arg(long = "fallback-Oz")]
-    pub fallback_to_optimizing_for_size: bool,
-
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
     /// Beware that it will prevent libraries from being inlined.
@@ -365,13 +361,6 @@ impl Arguments {
             if self.optimization.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "LLVM optimizations must specified in standard JSON input settings.",
-                    None,
-                    None,
-                ));
-            }
-            if self.fallback_to_optimizing_for_size {
-                messages.push(SolcStandardJsonOutputError::new_error(
-                    "Falling back to -Oz must specified in standard JSON input settings.",
                     None,
                     None,
                 ));

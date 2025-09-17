@@ -14,6 +14,7 @@ use crate::optimizer::settings::Settings as OptimizerSettings;
 use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
+use revive_common::Keccak256;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use sha3::Digest;
 
@@ -54,6 +55,15 @@ pub fn build(
     ))
 }
 
+/// Computes the PVM bytecode hash.
+pub fn hash(
+    bytecode_buffer: &inkwell::memory_buffer::MemoryBuffer,
+) -> [u8; revive_common::BYTE_LENGTH_WORD] {
+    Keccak256::from_slice(bytecode_buffer.as_slice())
+        .as_bytes()
+        .try_into()
+        .expect("the bytecode hash should be word sized")
+}
 /// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
 pub fn link(
     bytecode: inkwell::memory_buffer::MemoryBuffer,

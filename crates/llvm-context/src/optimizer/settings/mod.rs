@@ -20,9 +20,6 @@ pub struct Settings {
     /// The back-end optimization level.
     pub level_back_end: inkwell::OptimizationLevel,
 
-    /// Fallback to optimizing for size if the bytecode is too large.
-    pub is_fallback_to_size_enabled: bool,
-
     /// Whether the LLVM `verify each` option is enabled.
     pub is_verify_each_enabled: bool,
     /// Whether the LLVM `debug logging` option is enabled.
@@ -40,8 +37,6 @@ impl Settings {
             level_middle_end,
             level_middle_end_size,
             level_back_end,
-
-            is_fallback_to_size_enabled: false,
 
             is_verify_each_enabled: false,
             is_debug_logging_enabled: false,
@@ -61,8 +56,6 @@ impl Settings {
             level_middle_end,
             level_middle_end_size,
             level_back_end,
-
-            is_fallback_to_size_enabled: false,
 
             is_verify_each_enabled,
             is_debug_logging_enabled,
@@ -196,16 +189,6 @@ impl Settings {
         combinations.extend(size_combinations);
 
         combinations
-    }
-
-    /// Sets the fallback to optimizing for size if the bytecode is too large.
-    pub fn enable_fallback_to_size(&mut self) {
-        self.is_fallback_to_size_enabled = true;
-    }
-
-    /// Whether the fallback to optimizing for size is enabled.
-    pub fn is_fallback_to_size_enabled(&self) -> bool {
-        self.is_fallback_to_size_enabled
     }
 }
 

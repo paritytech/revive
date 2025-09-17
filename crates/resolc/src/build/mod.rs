@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use normpath::PathExt;
 
+use revive_common::ObjectFormat;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutput;
@@ -52,7 +53,87 @@ impl Build {
             .into_iter()
             .map(|(path, result)| (path, result.expect("Cannot link a project with errors")))
             .collect();
-        todo!()
+
+        loop {
+            let mut linkage_data = BTreeMap::new();
+            for (path, contract) in contracts
+                .iter()
+                .filter(|(_path, contract)| contract.object_format == ObjectFormat::ELF)
+            {
+                let factory_dependencies: BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]> =
+                    contract
+                        .factory_dependencies
+                        .iter()
+                        .filter_map(|dependency| {
+                            let bytecode_hash = contracts
+                                .get(dependency)
+                                .as_ref()?
+                                .build
+                                .bytecode_hash
+                                .as_ref()?
+                                .to_owned();
+                            Some((dependency.to_owned(), bytecode_hash))
+                        })
+                        .collect();
+
+                let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
+                    contract.build.bytecode.as_slice(),
+                    path.as_str(),
+                );
+                match revive_llvm_context::polkavm_link(
+                    memory_buffer,
+                    &linker_symbols,
+                    &factory_dependencies,
+                ) {
+                    Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
+                        let bytecode_hash =
+                            revive_llvm_context::polkavm_hash(&memory_buffer_linked);
+                        linkage_data.insert(path.to_owned(), (memory_buffer_linked, bytecode_hash));
+                    }
+                    Ok((_memory_buffer_linked, ObjectFormat::ELF)) => {}
+                    Err(error) => self
+                        .messages
+                        .push(SolcStandardJsonOutputError::new_error(error, None, None)),
+                }
+            }
+            if linkage_data.is_empty() {
+                break;
+            }
+
+            for (path, (memory_buffer_linked, bytecode_hash)) in linkage_data.into_iter() {
+                let contract = contracts.get(path.as_str()).expect("Always exists");
+                let factory_dependencies_resolved = contract
+                    .factory_dependencies
+                    .iter()
+                    .filter_map(|dependency| {
+                        Some((
+                            contracts
+                                .get(dependency)
+                                .as_ref()?
+                                .build
+                                .bytecode_hash
+                                .as_ref()?
+                                .to_owned(),
+                            dependency.to_owned(),
+                        ))
+                    })
+                    .collect();
+
+                let contract = contracts.get_mut(path.as_str()).expect("Always exists");
+                contract.build.bytecode = memory_buffer_linked.as_slice().to_vec();
+                contract.build.bytecode_hash = Some(bytecode_hash);
+                contract.factory_dependencies_resolved = factory_dependencies_resolved;
+                contract.object_format = revive_common::ObjectFormat::PVM;
+            }
+        }
+
+        Self::new(
+            contracts
+                .into_iter()
+                .map(|(path, contract)| (path, Ok(contract)))
+                .collect(),
+            &mut self.messages,
+        )
     }
 
     /// Writes all contracts to the terminal.

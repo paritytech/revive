@@ -10,11 +10,13 @@ pub use self::r#const::*;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
+use crate::{Target, TargetMachine};
 
 use anyhow::Context as AnyhowContext;
+use inkwell::memory_buffer::MemoryBuffer;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
-use revive_common::Keccak256;
+use revive_common::{Keccak256, ObjectFormat};
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use sha3::Digest;
 
@@ -73,9 +75,59 @@ pub fn link(
     inkwell::memory_buffer::MemoryBuffer,
     revive_common::ObjectFormat,
 )> {
-    todo!()
+    match ObjectFormat::try_from(bytecode.as_slice()) {
+        Ok(value @ ObjectFormat::PVM) => Ok((bytecode, value)),
+        Ok(ObjectFormat::ELF) => {
+            let symbols = build_symbols(linker_symbols, factory_dependencies)?;
+            let bytecode_linked = revive_linker::Linker::setup(false)?
+                .link(bytecode.as_slice(), Some(symbols.as_slice()))?;
+            Ok((
+                MemoryBuffer::create_from_memory_range(&bytecode_linked, "bytecode_linked"),
+                ObjectFormat::try_from(bytecode_linked.as_slice())
+                    .unwrap_or_else(|error| panic!("ICE: linker: {error}")),
+            ))
+        }
+        Err(error) => panic!("ICE: linker: {error}"),
+    }
 }
 
+pub fn build_symbols(
+    linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
+) -> anyhow::Result<inkwell::memory_buffer::MemoryBuffer> {
+    let context = inkwell::context::Context::create();
+    let module = context.create_module("symbols");
+    let word_type = context.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
+    let address_type = context.custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32);
+
+    for (name, value) in linker_symbols {
+        let global_value = module.add_global(address_type, Default::default(), name);
+        global_value.set_initializer(
+            &address_type
+                .const_int_from_string(
+                    hex::encode(value).as_str(),
+                    inkwell::types::StringRadix::Hexadecimal,
+                )
+                .expect("should be valid"),
+        );
+    }
+
+    for (name, value) in factory_dependencies {
+        let global_value = module.add_global(word_type, Default::default(), name);
+        global_value.set_initializer(
+            &word_type
+                .const_int_from_string(
+                    hex::encode(value).as_str(),
+                    inkwell::types::StringRadix::Hexadecimal,
+                )
+                .expect("should be valid"),
+        );
+    }
+
+    Ok(TargetMachine::new(Target::PVM, &OptimizerSettings::none())?
+        .write_to_memory_buffer(&module)
+        .expect("ICE: the symbols module should be valid"))
+}
 /// Implemented by items which are translated into LLVM IR.
 pub trait WriteLLVM {
     /// Declares the entity in the LLVM IR.

@@ -15,6 +15,11 @@ pub enum ObjectFormat {
     PVM,
 }
 
+impl ObjectFormat {
+    pub const PVM_MAGIC: [u8; 4] = [b'P', b'V', b'M', b'\0'];
+    pub const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+}
+
 impl FromStr for ObjectFormat {
     type Err = anyhow::Error;
 
@@ -28,6 +33,20 @@ impl FromStr for ObjectFormat {
                 Self::PVM.to_string()
             ),
         }
+    }
+}
+
+impl TryFrom<&[u8]> for ObjectFormat {
+    type Error = &'static str;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.starts_with(&Self::PVM_MAGIC) {
+            return Ok(Self::PVM);
+        }
+        if value.starts_with(&Self::ELF_MAGIC) {
+            return Ok(Self::ELF);
+        }
+        Err("expected a contract object")
     }
 }
 

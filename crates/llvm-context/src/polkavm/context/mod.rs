@@ -316,17 +316,16 @@ impl<'ctx> Context<'ctx> {
                 )
             })?;
 
-        let shared_object = revive_linker::link(buffer.as_slice())?;
+        let object = revive_linker::Linker::setup(true)?.link(buffer.as_slice(), None)?;
 
-        self.debug_config
-            .dump_object(contract_path, &shared_object)?;
+        self.debug_config.dump_object(contract_path, &object)?;
 
         //let polkavm_bytecode =
         //    revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
         crate::polkavm::build(
             contract_path,
-            &shared_object,
+            &object,
             metadata_hash
                 .as_ref()
                 .map(|hash| hash.as_bytes().try_into().unwrap()),

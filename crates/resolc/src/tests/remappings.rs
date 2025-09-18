@@ -1,11 +1,8 @@
 //! The Solidity compiler unit tests for remappings.
 
-#![cfg(test)]
-
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-
-pub const CALLEE_TEST_SOURCE: &str = r#"
+#[test]
+fn default() {
+    let callee_code = r#"
 // SPDX-License-Identifier: MIT
 
 pragma solidity >=0.4.16;
@@ -17,7 +14,7 @@ contract Callable {
 }
 "#;
 
-pub const CALLER_TEST_SOURCE: &str = r#"
+    let caller_code = r#"
 // SPDX-License-Identifier: MIT
 
 pragma solidity >=0.4.16;
@@ -31,19 +28,10 @@ contract Main {
 }
 "#;
 
-#[test]
-fn default() {
-    let mut sources = BTreeMap::new();
-    sources.insert("./test.sol".to_owned(), CALLER_TEST_SOURCE.to_owned());
-    sources.insert("./callable.sol".to_owned(), CALLEE_TEST_SOURCE.to_owned());
-
-    let mut remappings = BTreeSet::new();
-    remappings.insert("libraries/default/=./".to_owned());
-
     super::build_solidity(
-        sources,
+        super::sources(&[("./test.sol", caller_code), ("./callable.sol", callee_code)]),
         Default::default(),
-        Some(remappings),
+        ["libraries/default/=./".to_owned()].into(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");

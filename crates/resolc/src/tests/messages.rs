@@ -1,8 +1,6 @@
 //! The Solidity compiler unit tests for messages.
 
-#![cfg(test)]
-
-use revive_solc_json_interface::warning::Warning;
+use revive_solc_json_interface::{warning::Warning, ResolcWarning};
 
 pub const ECRECOVER_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT
@@ -39,7 +37,7 @@ fn ecrecover_suppressed() {
             ECRECOVER_TEST_SOURCE,
             "Warning: It looks like you are using 'ecrecover' to validate a signature of a user account.",
             Default::default(),
-            Some(vec![Warning::EcRecover]),
+            Some(vec![ResolcWarning::EcRecover]),
         ).expect("Test failure")
     );
 }
@@ -82,7 +80,7 @@ fn send_suppressed() {
         SEND_TEST_SOURCE,
         BALANCE_CALLS_MESSAGE,
         Default::default(),
-        Some(vec![Warning::SendTransfer]),
+        Some(vec![ResolcWarning::SendTransfer]),
     )
     .expect("Test failure"));
 }
@@ -191,7 +189,7 @@ fn tx_origin_suppressed() {
         TX_ORIGIN_TEST_SOURCE,
         "Warning: You are checking for 'tx.origin' in your code, which might lead to",
         Default::default(),
-        Some(vec![Warning::TxOrigin]),
+        Some(vec![ResolcWarning::TxOrigin]),
     )
     .expect("Test failure"));
 }

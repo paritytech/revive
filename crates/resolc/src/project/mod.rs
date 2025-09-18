@@ -159,7 +159,7 @@ impl Project {
         let sources = paths
             .iter()
             .map(|path| {
-                let source = SolcStandardJsonInputSource::from(path.as_path());
+                let source = SolcStandardJsonInputSource::from(path.display());
                 (path.to_string_lossy().to_string(), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
@@ -229,7 +229,7 @@ impl Project {
         let sources = paths
             .iter()
             .map(|path| {
-                let source = SolcStandardJsonInputSource::from(path.as_path());
+                let source = SolcStandardJsonInputSource::from(path.display());
                 (path.to_string_lossy().to_string(), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();

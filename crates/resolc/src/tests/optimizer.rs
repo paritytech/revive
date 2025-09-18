@@ -1,10 +1,10 @@
 //! The Solidity compiler unit tests for the optimizer.
 
-#![cfg(test)]
-
-use std::collections::BTreeMap;
-
-pub const SOURCE_CODE: &str = r#"
+#[test]
+fn optimizer() {
+    let sources = &[(
+        "test.sol",
+        r#"
 // SPDX-License-Identifier: MIT
 
 pragma solidity >=0.5.0;
@@ -40,40 +40,33 @@ contract Test {
         }
         return h;
     }
-}
-"#;
-
-#[test]
-fn optimizer() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), SOURCE_CODE.to_owned());
+}"#,
+    )];
 
     let build_unoptimized = super::build_solidity(
-        sources.clone(),
+        super::sources(sources),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::none(),
     )
     .expect("Build failure");
     let build_optimized_for_cycles = super::build_solidity(
-        sources.clone(),
+        super::sources(sources),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Build failure");
     let build_optimized_for_size = super::build_solidity(
-        sources,
+        super::sources(sources),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::size(),
     )
     .expect("Build failure");
 
     let size_when_unoptimized = build_unoptimized
         .contracts
-        .as_ref()
-        .expect("Missing field `contracts`")
         .get("test.sol")
         .expect("Missing file `test.sol`")
         .get("Test")
@@ -88,8 +81,6 @@ fn optimizer() {
         .len();
     let size_when_optimized_for_cycles = build_optimized_for_cycles
         .contracts
-        .as_ref()
-        .expect("Missing field `contracts`")
         .get("test.sol")
         .expect("Missing file `test.sol`")
         .get("Test")
@@ -104,8 +95,6 @@ fn optimizer() {
         .len();
     let size_when_optimized_for_size = build_optimized_for_size
         .contracts
-        .as_ref()
-        .expect("Missing field `contracts`")
         .get("test.sol")
         .expect("Missing file `test.sol`")
         .get("Test")

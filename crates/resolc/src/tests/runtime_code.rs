@@ -1,13 +1,9 @@
 //! The Solidity compiler unit tests for runtime code.
 
-#![cfg(test)]
-
-use std::collections::BTreeMap;
-
 #[test]
 #[should_panic(expected = "runtimeCode is not supported")]
 fn default() {
-    let source_code = r#"
+    let code = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -20,13 +16,10 @@ contract Test {
 }
     "#;
 
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), source_code.to_owned());
-
     super::build_solidity(
-        sources,
+        super::sources(&[("test.sol", code)]),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");

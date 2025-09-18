@@ -1,13 +1,9 @@
 //! The Solidity compiler unit tests for unsupported opcodes.
 
-#![cfg(test)]
-
-use std::collections::BTreeMap;
-
 #[test]
 #[should_panic(expected = "The `CODECOPY` instruction is not supported")]
 fn codecopy_yul_runtime() {
-    let source_code = r#"
+    let code = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -25,19 +21,19 @@ contract FixedCodeCopy {
 }
     "#;
 
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), source_code.to_owned());
-
     super::build_solidity(
-        sources,
+        super::sources(&[("test.sol", code)]),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");
 }
 
-pub const CALLCODE_TEST_SOURCE: &str = r#"
+#[test]
+#[should_panic(expected = "The `CALLCODE` instruction is not supported")]
+fn callcode_yul() {
+    let solidity = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -57,19 +53,12 @@ contract CallcodeTest {
 
         return success;
     }
-}
-    "#;
-
-#[test]
-#[should_panic(expected = "The `CALLCODE` instruction is not supported")]
-fn callcode_yul() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), CALLCODE_TEST_SOURCE.to_owned());
+}"#;
 
     super::build_solidity(
-        sources,
+        super::sources(&[("test.sol", solidity)]),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");
@@ -78,7 +67,7 @@ fn callcode_yul() {
 #[test]
 #[should_panic(expected = "The `PC` instruction is not supported")]
 fn pc_yul() {
-    let source_code = r#"
+    let code = r#"
 object "ProgramCounter" {
     code {
         datacopy(0, dataoffset("ProgramCounter_deployed"), datasize("ProgramCounter_deployed"))
@@ -97,10 +86,13 @@ object "ProgramCounter" {
 }
     "#;
 
-    super::build_yul(source_code).expect("Test failure");
+    super::build_yul(&[("test.sol", code)]).expect("Test failure");
 }
 
-pub const EXTCODECOPY_TEST_SOURCE: &str = r#"
+#[test]
+#[should_panic(expected = "The `EXTCODECOPY` instruction is not supported")]
+fn extcodecopy_yul() {
+    let code = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -114,25 +106,21 @@ contract ExternalCodeCopy {
 
         return code;
     }
-}
-    "#;
-
-#[test]
-#[should_panic(expected = "The `EXTCODECOPY` instruction is not supported")]
-fn extcodecopy_yul() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), EXTCODECOPY_TEST_SOURCE.to_owned());
+}"#;
 
     super::build_solidity(
-        sources,
+        super::sources(&[("test.sol", code)]),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");
 }
 
-pub const SELFDESTRUCT_TEST_SOURCE: &str = r#"
+#[test]
+#[should_panic(expected = "The `SELFDESTRUCT` instruction is not supported")]
+fn selfdestruct_yul() {
+    let solidity = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -147,19 +135,12 @@ contract MinimalDestructible {
         require(msg.sender == owner, "Only the owner can call this function.");
         selfdestruct(owner);
     }
-}
-    "#;
-
-#[test]
-#[should_panic(expected = "The `SELFDESTRUCT` instruction is not supported")]
-fn selfdestruct_yul() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), SELFDESTRUCT_TEST_SOURCE.to_owned());
+}"#;
 
     super::build_solidity(
-        sources,
+        super::sources(&[("test.sol", solidity)]),
         Default::default(),
-        None,
+        Default::default(),
         revive_llvm_context::OptimizerSettings::cycles(),
     )
     .expect("Test failure");

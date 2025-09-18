@@ -2,6 +2,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -193,11 +194,17 @@ pub fn build_solidity_with_options_evm(
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
-pub fn build_solidity_and_detect_missing_libraries(
-    sources: BTreeMap<String, SolcStandardJsonInputSource>,
+pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
+    sources: &[(T, T)],
     libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
+
+    let sources = BTreeMap::from_iter(
+        sources
+            .iter()
+            .map(|(path, code)| (path.to_string(), code.to_string().into())),
+    );
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     revive_llvm_context::initialize_llvm(
@@ -239,7 +246,7 @@ pub fn build_solidity_and_detect_missing_libraries(
 }
 
 /// Checks if the Yul project can be built without errors.
-pub fn build_yul(sources: BTreeMap<String, String>) -> anyhow::Result<()> {
+pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()> {
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
@@ -252,7 +259,7 @@ pub fn build_yul(sources: BTreeMap<String, String>) -> anyhow::Result<()> {
 
     let sources = sources
         .into_iter()
-        .map(|(path, source)| (path, SolcStandardJsonInputSource::from(source)))
+        .map(|(path, source)| (path.to_string(), SolcStandardJsonInputSource::from(source)))
         .collect();
     let mut solc_output = SolcStandardJsonOutput::new(&sources, &mut vec![]);
 

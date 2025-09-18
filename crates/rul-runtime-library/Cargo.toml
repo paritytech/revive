@@ -7,3 +7,5 @@ repository.workspace = true
 authors.workspace = true
 description = "revive compiler rust backend runtime library"
 
+[dependencies]
+alloy-core = { workspace = true, default-features = false }

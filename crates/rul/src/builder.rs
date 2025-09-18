@@ -20,7 +20,7 @@ hex-literal = { version = "0.4.1", default-features = false }
 polkavm-derive = { version = "0.27.0" }
 
 [profile.release]
-opt-level = 3
+opt-level = z
 lto = true
 codegen-units = 1
 "#;
@@ -51,8 +51,7 @@ pub const MEMORY: [u8; MEMORY_SIZE] = [0; MEMORY_SIZE];
 const EXPORT_FUNCTION: &str = r#"
 #[no_mangle]
 #[polkavm_derive::polkavm_export]
-pub extern "C" fn 
-"#;
+pub extern "C" fn "#;
 
 fn emit(constructor_code: &str, runtime_code: &str) -> String {
     let mut buffer = String::from(HEADER);

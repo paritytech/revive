@@ -26,12 +26,6 @@ pub trait Process {
 
         let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
 
-        initialize_llvm(
-            Target::PVM,
-            crate::DEFAULT_EXECUTABLE_NAME,
-            &input.llvm_arguments,
-        );
-
         let result = std::thread::Builder::new()
             .stack_size(64 * 1024 * 1024)
             .spawn(move || {

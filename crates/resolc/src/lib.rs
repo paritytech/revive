@@ -226,6 +226,7 @@ pub fn standard_json<T: Compiler>(
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
 
+    solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
     let mut solc_output = solc.standard_json(
         &mut solc_input,
         messages,

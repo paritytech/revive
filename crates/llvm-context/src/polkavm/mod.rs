@@ -30,23 +30,24 @@ pub fn build(
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: &DebugConfig,
 ) -> anyhow::Result<Build> {
-    let program_blob = ProgramBlob::parse(bytecode.into())
-        .map_err(anyhow::Error::msg)
-        .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
+    //let program_blob = ProgramBlob::parse(bytecode.into())
+    //    .map_err(anyhow::Error::msg)
+    //    .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
 
-    let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
-        .map_err(anyhow::Error::msg)
-        .with_context(|| format!("Failed to create disassembler for contract: {contract_path}"))?;
-    disassembler.display_gas()?;
+    //let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+    //    .map_err(anyhow::Error::msg)
+    //    .with_context(|| format!("Failed to create disassembler for contract: {contract_path}"))?;
+    //disassembler.display_gas()?;
 
-    let mut disassembled_code = Vec::new();
-    disassembler
-        .disassemble_into(&mut disassembled_code)
-        .with_context(|| format!("Failed to disassemble contract: {contract_path}"))?;
+    //let mut disassembled_code = Vec::new();
+    //disassembler
+    //    .disassemble_into(&mut disassembled_code)
+    //    .with_context(|| format!("Failed to disassemble contract: {contract_path}"))?;
 
-    let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
-        format!("Failed to convert disassembled code to string for contract: {contract_path}")
-    })?;
+    //let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
+    //    format!("Failed to convert disassembled code to string for contract: {contract_path}")
+    //})?;
+    let assembly_text = "";
 
     debug_config.dump_assembly(contract_path, &assembly_text)?;
 
@@ -79,8 +80,11 @@ pub fn link(
         Ok(value @ ObjectFormat::PVM) => Ok((bytecode, value)),
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
-            let bytecode_linked = revive_linker::Linker::setup(false)?
+            let mut bytecode_linked = revive_linker::Linker::setup(true)?
                 .link(bytecode.as_slice(), Some(symbols.as_slice()))?;
+            if let Ok(pvm) = revive_linker::polkavm_linker(&bytecode_linked, true) {
+                bytecode_linked = pvm;
+            }
             Ok((
                 MemoryBuffer::create_from_memory_range(&bytecode_linked, "bytecode_linked"),
                 ObjectFormat::try_from(bytecode_linked.as_slice())
@@ -102,6 +106,7 @@ pub fn build_symbols(
 
     for (name, value) in linker_symbols {
         let global_value = module.add_global(address_type, Default::default(), name);
+        global_value.set_linkage(inkwell::module::Linkage::External);
         global_value.set_initializer(
             &address_type
                 .const_int_from_string(
@@ -114,6 +119,7 @@ pub fn build_symbols(
 
     for (name, value) in factory_dependencies {
         let global_value = module.add_global(word_type, Default::default(), name);
+        global_value.set_linkage(inkwell::module::Linkage::External);
         global_value.set_initializer(
             &word_type
                 .const_int_from_string(

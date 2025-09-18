@@ -316,7 +316,8 @@ impl<'ctx> Context<'ctx> {
                 )
             })?;
 
-        let object = revive_linker::Linker::setup(true)?.link(buffer.as_slice(), None)?;
+        //let object = revive_linker::Linker::setup(true)?.link(buffer.as_slice(), None)?;
+        let object = buffer.as_slice().to_vec();
 
         self.debug_config.dump_object(contract_path, &object)?;
 

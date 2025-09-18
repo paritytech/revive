@@ -198,7 +198,7 @@ pub fn linker_symbol<'ctx>(
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.declare_global(
         &path,
-        context.integer_type(revive_common::BYTE_LENGTH_ETH_ADDRESS),
+        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
         Default::default(),
     );
     context.build_load_address(context.get_global(path)?.into())

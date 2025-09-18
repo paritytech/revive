@@ -7,6 +7,7 @@ use std::{io::Write, path::PathBuf};
 
 use resolc::Process;
 use revive_common::MetadataHash;
+use revive_llvm_context::initialize_llvm;
 use revive_solc_json_interface::{
     SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutput, SolcStandardJsonOutputError,
 };
@@ -89,6 +90,12 @@ fn main_inner(
         )?;
         return Ok(());
     }
+
+    initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        resolc::DEFAULT_EXECUTABLE_NAME,
+        &arguments.llvm_arguments,
+    );
 
     #[cfg(feature = "parallel")]
     rayon::ThreadPoolBuilder::new()

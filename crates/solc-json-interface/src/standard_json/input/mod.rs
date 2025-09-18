@@ -138,4 +138,9 @@ impl Input {
             suppressed_warnings,
         })
     }
+
+    /// Extends the output selection with another one.
+    pub fn extend_selection(&mut self, selection: SolcStandardJsonInputSettingsSelection) {
+        self.settings.extend_selection(selection);
+    }
 }

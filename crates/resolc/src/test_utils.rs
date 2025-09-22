@@ -265,7 +265,12 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
 
     let sources = sources
         .into_iter()
-        .map(|(path, source)| (path.to_string(), SolcStandardJsonInputSource::from(source)))
+        .map(|(path, source)| {
+            (
+                path.to_string(),
+                SolcStandardJsonInputSource::from(source.to_string()),
+            )
+        })
         .collect();
     let mut solc_output = SolcStandardJsonOutput::new(&sources, &mut vec![]);
 

@@ -52,6 +52,7 @@ fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    dbg!((command, arguments, &stdin_file_path));
     let stdin_config = match stdin_file_path {
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),

@@ -175,7 +175,6 @@ fn main_inner(
             arguments.libraries.as_slice(),
             metadata_hash,
             messages,
-            &mut solc,
             optimizer_settings,
             debug_config,
             &arguments.llvm_arguments,

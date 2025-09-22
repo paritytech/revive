@@ -159,7 +159,7 @@ impl Project {
         let sources = paths
             .iter()
             .map(|path| {
-                let source = SolcStandardJsonInputSource::from(path.display());
+                let source = SolcStandardJsonInputSource::from(path.as_path());
                 (path.to_string_lossy().to_string(), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
@@ -217,7 +217,6 @@ impl Project {
             }
         }
         Ok(Self::new(None, contracts, libraries))
-        // SolcStandardJsonInputLanguage::Yul,
     }
 
     /// Parses the LLVM IR source code file and returns the source data.
@@ -229,7 +228,7 @@ impl Project {
         let sources = paths
             .iter()
             .map(|path| {
-                let source = SolcStandardJsonInputSource::from(path.display());
+                let source = SolcStandardJsonInputSource::from(path.as_path());
                 (path.to_string_lossy().to_string(), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();

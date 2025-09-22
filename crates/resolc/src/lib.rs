@@ -54,12 +54,11 @@ use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 /// Runs the Yul mode.
 #[allow(clippy::too_many_arguments)]
-pub fn yul<T: Compiler>(
+pub fn yul(
     input_files: &[PathBuf],
     libraries: &[String],
     metadata_hash: MetadataHash,
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    solc: &mut T,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
@@ -67,11 +66,7 @@ pub fn yul<T: Compiler>(
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
     let linker_symbols = libraries.as_linker_symbols()?;
-
-    // solc.validate_yul_paths(paths, libraries.clone(), messages)?;
-
     let project = Project::try_from_yul_paths(input_files, None, libraries, &debug_config)?;
-
     let mut build = project.compile(
         messages,
         optimizer_settings,

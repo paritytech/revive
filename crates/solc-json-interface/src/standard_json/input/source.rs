@@ -81,11 +81,20 @@ impl Source {
     }
 }
 
-impl<T: ToString> From<T> for Source {
-    fn from(content: T) -> Self {
+impl From<String> for Source {
+    fn from(content: String) -> Self {
         Self {
-            content: Some(content.to_string()),
+            content: Some(content),
             urls: None,
+        }
+    }
+}
+
+impl From<&Path> for Source {
+    fn from(path: &Path) -> Self {
+        Self {
+            content: None,
+            urls: Some(vec![path.to_string_lossy().to_string()]),
         }
     }
 }

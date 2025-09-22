@@ -1,9 +1,11 @@
-use std::{env, ffi::CString, fs, path::PathBuf};
+use std::{ffi::CString, fs, path::PathBuf, sync::Mutex};
 
 use lld_sys::LLDELFLink;
 use tempfile::TempDir;
 
 use revive_builtins::COMPILER_RT;
+
+static GUARD: Mutex<()> = Mutex::new(());
 
 pub struct Linker {
     temporary_directory: TempDir,
@@ -61,7 +63,11 @@ SECTIONS {
         //if env::var("PVM_LINKER_DUMP_OBJ").is_ok() {
         //    fs::copy(&object_path, "/tmp/out.o")?;
         //}
-        let arguments = self.create_arguments(symbols.is_some()).into_iter();
+        let arguments = self
+            .create_arguments(symbols.is_some())
+            .into_iter()
+            .map(|v| v.to_string())
+            .collect();
         if invoke_lld(arguments) {
             return Err(anyhow::anyhow!("ld.lld failed"));
         }
@@ -104,13 +110,15 @@ SECTIONS {
     }
 }
 
-fn invoke_lld<T: Into<Vec<u8>>>(arguments: impl Iterator<Item = T>) -> bool {
+fn invoke_lld(arguments: Vec<String>) -> bool {
     let c_strings = arguments
+        .into_iter()
         .map(|arg| CString::new(arg).expect("ld.lld args should not contain null bytes"))
         .collect::<Vec<_>>();
 
     let args: Vec<*const libc::c_char> = c_strings.iter().map(|arg| arg.as_ptr()).collect();
 
+    let _lock = GUARD.lock().expect("ICE: linker mutex should not poison");
     unsafe { LLDELFLink(args.as_ptr(), args.len()) == 0 }
 }
 

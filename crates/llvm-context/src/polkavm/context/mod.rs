@@ -408,11 +408,15 @@ impl<'ctx> Context<'ctx> {
         }
     }
 
-    /// Declare an external global.
+    /// Declare an external global. This is an idempotent method.
     pub fn declare_global<T>(&mut self, name: &str, r#type: T, address_space: AddressSpace)
     where
         T: BasicType<'ctx> + Clone + Copy,
     {
+        if self.globals.contains_key(name) {
+            return;
+        }
+
         let global = Global::declare(self, r#type, address_space, name);
         self.globals.insert(name.to_owned(), global);
     }

@@ -59,37 +59,28 @@ pub fn build(
 }
 
 /// Computes the PVM bytecode hash.
-pub fn hash(
-    bytecode_buffer: &inkwell::memory_buffer::MemoryBuffer,
-) -> [u8; revive_common::BYTE_LENGTH_WORD] {
-    Keccak256::from_slice(bytecode_buffer.as_slice())
+pub fn hash(bytecode_buffer: &[u8]) -> [u8; revive_common::BYTE_LENGTH_WORD] {
+    Keccak256::from_slice(bytecode_buffer)
         .as_bytes()
         .try_into()
         .expect("the bytecode hash should be word sized")
 }
+
 /// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
 pub fn link(
-    bytecode: inkwell::memory_buffer::MemoryBuffer,
+    bytecode: &[u8],
     linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
     factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
-) -> anyhow::Result<(
-    inkwell::memory_buffer::MemoryBuffer,
-    revive_common::ObjectFormat,
-)> {
-    match ObjectFormat::try_from(bytecode.as_slice()) {
-        Ok(value @ ObjectFormat::PVM) => Ok((bytecode, value)),
+) -> anyhow::Result<(Vec<u8>, revive_common::ObjectFormat)> {
+    match ObjectFormat::try_from(bytecode) {
+        Ok(value @ ObjectFormat::PVM) => Ok((bytecode.to_vec(), value)),
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
-            let mut bytecode_linked = revive_linker::Linker::setup(true)?
-                .link(bytecode.as_slice(), Some(symbols.as_slice()))?;
-            if let Ok(pvm) = revive_linker::polkavm_linker(&bytecode_linked, true) {
-                bytecode_linked = pvm;
-            }
-            Ok((
-                MemoryBuffer::create_from_memory_range(&bytecode_linked, "bytecode_linked"),
-                ObjectFormat::try_from(bytecode_linked.as_slice())
-                    .unwrap_or_else(|error| panic!("ICE: linker: {error}")),
-            ))
+            let bytecode_linked =
+                revive_linker::Linker::setup(true)?.link(bytecode, Some(symbols.as_slice()))?;
+            Ok(revive_linker::polkavm_linker(&bytecode_linked, true)
+                .map(|pvm| (pvm, ObjectFormat::PVM))
+                .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF)))
         }
         Err(error) => panic!("ICE: linker: {error}"),
     }

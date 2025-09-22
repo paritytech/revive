@@ -12,7 +12,7 @@ use self::bytecode::DeployedBytecode;
 
 /// The `solc --standard-json` output contract EVM data.
 /// It is replaced by PolkaVM data after compiling.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
     /// The contract PolkaVM assembly code.

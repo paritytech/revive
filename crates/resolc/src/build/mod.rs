@@ -60,8 +60,10 @@ impl Build {
                 .iter()
                 .filter(|(_path, contract)| contract.object_format == ObjectFormat::ELF)
             {
-                let factory_dependencies: BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]> =
-                    contract
+                match revive_llvm_context::polkavm_link(
+                    &contract.build.bytecode,
+                    &linker_symbols,
+                    &contract
                         .factory_dependencies
                         .iter()
                         .filter_map(|dependency| {
@@ -74,16 +76,7 @@ impl Build {
                                 .to_owned();
                             Some((dependency.to_owned(), bytecode_hash))
                         })
-                        .collect();
-
-                let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
-                    contract.build.bytecode.as_slice(),
-                    path.as_str(),
-                );
-                match revive_llvm_context::polkavm_link(
-                    memory_buffer,
-                    &linker_symbols,
-                    &factory_dependencies,
+                        .collect(),
                 ) {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
                         let bytecode_hash =
@@ -118,7 +111,6 @@ impl Build {
                         ))
                     })
                     .collect();
-
                 let contract = contracts.get_mut(path.as_str()).expect("Always exists");
                 contract.build.bytecode = memory_buffer_linked.as_slice().to_vec();
                 contract.build.bytecode_hash = Some(bytecode_hash);

@@ -1,4 +1,5 @@
 //! Common utility used for in frontend and integration tests.
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -18,6 +19,7 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
@@ -115,6 +117,7 @@ pub fn build_solidity_with_options(
         None,
         optimizer_settings.middle_end_as_string() != "z",
     );
+    let linker_symbols = libraries.as_linker_symbols()?;
 
     let project = Project::try_from_standard_json_output(
         &mut output,
@@ -131,6 +134,9 @@ pub fn build_solidity_with_options(
         Default::default(),
         Default::default(),
     )?;
+    build.check_errors()?;
+
+    let build = build.link(linker_symbols);
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
@@ -269,7 +275,7 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
         Some(&mut solc_output),
         &Default::default(),
     )?;
-    let _build = project.compile(
+    let build = project.compile(
         &mut vec![],
         optimizer_settings,
         revive_common::MetadataHash::None,
@@ -277,7 +283,14 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
         Default::default(),
         Default::default(),
     )?;
+    build.check_errors()?;
 
+    let build = build.link(BTreeMap::new());
+    build.check_errors()?;
+
+    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    build.write_to_standard_json(&mut solc_output, &solc.version()?)?;
+    solc_output.check_errors()?;
     Ok(())
 }
 
@@ -371,11 +384,10 @@ fn compile_evm(
 
     let file_name = "contract.sol";
     let contracts = build_solidity_with_options_evm(
-        [(
+        BTreeMap::from([(
             file_name.into(),
             SolcStandardJsonInputSource::from(source_code.to_owned()),
-        )]
-        .into(),
+        )]),
         Default::default(),
         Default::default(),
         solc_optimizer_enabled,
@@ -416,11 +428,10 @@ pub fn compile_blob_with_options(
 
     let file_name = "contract.sol";
     let contracts = build_solidity_with_options(
-        [(
+        BTreeMap::from([(
             file_name.to_owned(),
             SolcStandardJsonInputSource::from(source_code.to_owned()),
-        )]
-        .into(),
+        )]),
         Default::default(),
         Default::default(),
         optimizer_settings,

@@ -53,6 +53,9 @@ pub struct Contract {
     /// Missing linkable libraries.
     #[serde(default, skip_deserializing)]
     pub missing_libraries: BTreeSet<String>,
+    /// Binary object format.
+    #[serde(default, skip_deserializing)]
+    pub object_format: Option<revive_common::ObjectFormat>,
 }
 
 impl Contract {

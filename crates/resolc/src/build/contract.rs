@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
+use revive_solc_json_interface::SolcStandardJsonOutputContractEVM;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -164,20 +165,30 @@ impl Contract {
         self,
         combined_json_contract: &mut CombinedJsonContract,
     ) -> anyhow::Result<()> {
-        if let Some(metadata) = combined_json_contract.metadata.as_mut() {
-            *metadata = self.metadata_json.to_string();
-        }
+        //let hexadecimal_bytecode = hex::encode(self.build.bytecode);
 
-        if let Some(asm) = combined_json_contract.asm.as_mut() {
-            *asm = serde_json::Value::String(self.build.assembly_text);
-        }
-        let hexadecimal_bytecode = hex::encode(self.build.bytecode);
-        combined_json_contract.bin = Some(hexadecimal_bytecode);
-        combined_json_contract
-            .bin_runtime
-            .clone_from(&combined_json_contract.bin);
+        //if let Some(metadata) = combined_json_contract.metadata.as_mut() {
+        //    *metadata = self.metadata_json.to_string();
+        //}
 
-        combined_json_contract.factory_deps = Some(self.build.factory_dependencies);
+        //combined_json_contract.assembly = self.build.assembly;
+        //combined_json_contract.bin = Some(hexadecimal_bytecode);
+        //combined_json_contract
+        //    .bin_runtime
+        //    .clone_from(&combined_json_contract.bin);
+
+        //combined_json_contract
+        //    .missing_libraries
+        //    .extend(self.missing_libraries);
+        //combined_json_contract
+        //    .factory_deps_unlinked
+        //    .extend(self.factory_dependencies);
+        //combined_json_contract.factory_deps.extend(
+        //    self.factory_dependencies_resolved
+        //        .into_iter()
+        //        .map(|(hash, path)| (hex::encode(hash), path)),
+        //);
+        //combined_json_contract.object_format = Some(self.object_format);
 
         Ok(())
     }
@@ -187,16 +198,27 @@ impl Contract {
         self,
         standard_json_contract: &mut SolcStandardJsonOutputContract,
     ) -> anyhow::Result<()> {
-        standard_json_contract.metadata = self.metadata_json;
-
-        let assembly_text = self.build.assembly_text;
         let bytecode = hex::encode(self.build.bytecode.as_slice());
-        if let Some(evm) = standard_json_contract.evm.as_mut() {
-            evm.modify(assembly_text, bytecode);
-        }
+        let assembly_text = self.build.assembly_text;
 
-        standard_json_contract.factory_dependencies = self.build.factory_dependencies;
+        standard_json_contract.metadata = self.metadata_json;
+        standard_json_contract
+            .evm
+            .get_or_insert_with(Default::default)
+            .modify(assembly_text, bytecode);
         standard_json_contract.hash = self.build.bytecode_hash.map(hex::encode);
+        standard_json_contract
+            .missing_libraries
+            .extend(self.missing_libraries);
+        standard_json_contract
+            .factory_dependencies_unlinked
+            .extend(self.factory_dependencies);
+        standard_json_contract.factory_dependencies.extend(
+            self.factory_dependencies_resolved
+                .into_iter()
+                .map(|(hash, path)| (hex::encode(hash), path)),
+        );
+        standard_json_contract.object_format = Some(self.object_format);
 
         Ok(())
     }

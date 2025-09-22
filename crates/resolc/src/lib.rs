@@ -97,9 +97,7 @@ pub fn llvm_ir(
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
     let linker_symbols = libraries.as_linker_symbols()?;
-
     let project = Project::try_from_llvm_ir_paths(input_files, libraries, None)?;
-
     let mut build = project.compile(
         messages,
         optimizer_settings,

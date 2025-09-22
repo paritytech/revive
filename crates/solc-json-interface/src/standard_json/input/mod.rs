@@ -10,6 +10,8 @@ use std::path::Path;
 use std::path::PathBuf;
 
 #[cfg(all(feature = "parallel", feature = "resolc"))]
+use rayon::iter::IntoParallelRefMutIterator;
+#[cfg(all(feature = "parallel", feature = "resolc"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
@@ -42,6 +44,7 @@ pub struct Input {
     pub suppressed_warnings: Vec<Warning>,
 }
 
+#[cfg(feature = "resolc")]
 impl Input {
     /// A shortcut constructor.
     ///
@@ -58,7 +61,6 @@ impl Input {
     }
 
     /// A shortcut constructor from paths.
-    #[cfg(feature = "resolc")]
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_solidity_paths(
         evm_version: Option<revive_common::EVMVersion>,
@@ -107,7 +109,6 @@ impl Input {
 
     /// A shortcut constructor from source code.
     /// Only for the integration test purposes.
-    #[cfg(feature = "resolc")]
     #[allow(clippy::too_many_arguments)]
     pub fn try_from_solidity_sources(
         evm_version: Option<revive_common::EVMVersion>,
@@ -142,5 +143,18 @@ impl Input {
     /// Extends the output selection with another one.
     pub fn extend_selection(&mut self, selection: SolcStandardJsonInputSettingsSelection) {
         self.settings.extend_selection(selection);
+    }
+
+    /// Tries to resolve all sources.
+    pub fn resolve_sources(&mut self) {
+        #[cfg(not(feature = "parallel"))]
+        let iter = self.sources.iter_mut();
+        #[cfg(feature = "parallel")]
+        let iter = self.sources.par_iter_mut();
+
+        iter.map(|(_path, source)| {
+            let _ = source.try_resolve();
+        })
+        .collect::<Vec<()>>();
     }
 }

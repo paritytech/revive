@@ -105,6 +105,9 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
+        output.errors.append(messages);
+
+        input.resolve_sources();
         output.preprocess_ast(&input.sources, &input.suppressed_warnings)?;
 
         Ok(output)

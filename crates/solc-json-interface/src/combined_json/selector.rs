@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+/// The solc `--combind-json` invalid selector message.
 pub const MESSAGE_SELECTOR_INVALID: &str = "Invalid option to --combined-json";
 
 /// The `solc --combined-json` expected output selection flag.

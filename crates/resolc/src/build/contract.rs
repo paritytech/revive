@@ -63,7 +63,11 @@ impl Contract {
     ) -> anyhow::Result<()> {
         writeln!(std::io::stdout(), "\n======= {path} =======")?;
         if output_assembly {
-            writeln!(std::io::stdout(), "Assembly:\n{}", self.build.assembly_text)?;
+            writeln!(
+                std::io::stdout(),
+                "Assembly:\n{}",
+                self.build.assembly_text.unwrap_or_default(),
+            )?;
         }
         if output_metadata {
             writeln!(std::io::stdout(), "Metadata:\n{}", self.metadata_json)?;
@@ -131,7 +135,7 @@ impl Contract {
             } else {
                 File::create(&file_path)
                     .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
-                    .write_all(self.build.assembly_text.as_bytes())
+                    .write_all(self.build.assembly_text.unwrap_or_default().as_bytes())
                     .map_err(|error| {
                         anyhow::anyhow!("File {file_path:?} writing error: {error}")
                     })?;
@@ -171,7 +175,7 @@ impl Contract {
             *metadata = self.metadata_json.to_string();
         }
 
-        combined_json_contract.assembly = Some(self.build.assembly_text);
+        combined_json_contract.assembly = self.build.assembly_text;
         combined_json_contract.bin = Some(hexadecimal_bytecode);
         combined_json_contract
             .bin_runtime
@@ -199,7 +203,7 @@ impl Contract {
         standard_json_contract: &mut SolcStandardJsonOutputContract,
     ) -> anyhow::Result<()> {
         let bytecode = hex::encode(self.build.bytecode.as_slice());
-        let assembly_text = self.build.assembly_text;
+        let assembly_text = self.build.assembly_text.unwrap_or_default();
 
         standard_json_contract.metadata = self.metadata_json;
         standard_json_contract

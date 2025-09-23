@@ -30,32 +30,36 @@ pub fn build(
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: &DebugConfig,
 ) -> anyhow::Result<Build> {
-    //let program_blob = ProgramBlob::parse(bytecode.into())
-    //    .map_err(anyhow::Error::msg)
-    //    .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
+    Ok(Build::new(None, metadata_hash, bytecode.to_owned()))
+}
 
-    //let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
-    //    .map_err(anyhow::Error::msg)
-    //    .with_context(|| format!("Failed to create disassembler for contract: {contract_path}"))?;
-    //disassembler.display_gas()?;
+/// Disassembles the PolkaVM blob into assembly text representation.
+pub fn disassemble(
+    contract_path: &str,
+    bytecode: &[u8],
+    debug_config: &DebugConfig,
+) -> anyhow::Result<String> {
+    let program_blob = ProgramBlob::parse(bytecode.into())
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
 
-    //let mut disassembled_code = Vec::new();
-    //disassembler
-    //    .disassemble_into(&mut disassembled_code)
-    //    .with_context(|| format!("Failed to disassemble contract: {contract_path}"))?;
+    let mut disassembler = Disassembler::new(&program_blob, DisassemblyFormat::Guest)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("Failed to create disassembler for contract: {contract_path}"))?;
+    disassembler.display_gas()?;
 
-    //let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
-    //    format!("Failed to convert disassembled code to string for contract: {contract_path}")
-    //})?;
-    let assembly_text = "";
+    let mut disassembled_code = Vec::new();
+    disassembler
+        .disassemble_into(&mut disassembled_code)
+        .with_context(|| format!("Failed to disassemble contract: {contract_path}"))?;
+
+    let assembly_text = String::from_utf8(disassembled_code).with_context(|| {
+        format!("Failed to convert disassembled code to string for contract: {contract_path}")
+    })?;
 
     debug_config.dump_assembly(contract_path, &assembly_text)?;
 
-    Ok(Build::new(
-        assembly_text.to_owned(),
-        metadata_hash,
-        bytecode.to_owned(),
-    ))
+    Ok(assembly_text)
 }
 
 /// Computes the PVM bytecode hash.

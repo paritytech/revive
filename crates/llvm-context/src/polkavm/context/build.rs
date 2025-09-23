@@ -9,7 +9,7 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Build {
     /// The PolkaVM text assembly.
-    pub assembly_text: String,
+    pub assembly_text: Option<String>,
     /// The metadata hash.
     pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     /// The PolkaVM binary bytecode.
@@ -23,7 +23,7 @@ pub struct Build {
 impl Build {
     /// A shortcut constructor.
     pub fn new(
-        assembly_text: String,
+        assembly_text: Option<String>,
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
         bytecode: Vec<u8>,
     ) -> Self {

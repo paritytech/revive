@@ -81,7 +81,7 @@ impl Project {
         messages: &mut Vec<SolcStandardJsonOutputError>,
         optimizer_settings: OptimizerSettings,
         metadata_hash: MetadataHash,
-        debug_config: DebugConfig,
+        debug_config: &DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {

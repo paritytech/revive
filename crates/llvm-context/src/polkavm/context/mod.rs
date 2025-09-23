@@ -316,13 +316,9 @@ impl<'ctx> Context<'ctx> {
                 )
             })?;
 
-        //let object = revive_linker::Linker::setup(true)?.link(buffer.as_slice(), None)?;
         let object = buffer.as_slice().to_vec();
 
         self.debug_config.dump_object(contract_path, &object)?;
-
-        //let polkavm_bytecode =
-        //    revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
 
         crate::polkavm::build(
             contract_path,

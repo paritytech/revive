@@ -46,6 +46,7 @@ pub use self::polkavm::context::r#loop::Loop as PolkaVMLoop;
 pub use self::polkavm::context::solidity_data::SolidityData as PolkaVMContextSolidityData;
 pub use self::polkavm::context::yul_data::YulData as PolkaVMContextYulData;
 pub use self::polkavm::context::Context as PolkaVMContext;
+pub use self::polkavm::disassemble as polkavm_disassemble;
 pub use self::polkavm::evm::arithmetic as polkavm_evm_arithmetic;
 pub use self::polkavm::evm::bitwise as polkavm_evm_bitwise;
 pub use self::polkavm::evm::call as polkavm_evm_call;

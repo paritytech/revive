@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use normpath::PathExt;
 
 use revive_common::ObjectFormat;
+use revive_llvm_context::DebugConfig;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutput;
@@ -47,6 +48,7 @@ impl Build {
     pub fn link(
         mut self,
         linker_symbols: BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
+        debug_config: &DebugConfig,
     ) -> Self {
         let mut contracts: BTreeMap<String, Contract> = self
             .results
@@ -81,7 +83,18 @@ impl Build {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
                         let bytecode_hash =
                             revive_llvm_context::polkavm_hash(&memory_buffer_linked);
-                        linkage_data.insert(path.to_owned(), (memory_buffer_linked, bytecode_hash));
+                        let assembly_text = revive_llvm_context::polkavm_disassemble(
+                            path,
+                            &memory_buffer_linked,
+                            debug_config,
+                        )
+                        .unwrap_or_else(|error| {
+                            panic!("ICE: The PVM disassembler failed: {error}")
+                        });
+                        linkage_data.insert(
+                            path.to_owned(),
+                            (memory_buffer_linked, bytecode_hash, assembly_text),
+                        );
                     }
                     Ok((_memory_buffer_linked, ObjectFormat::ELF)) => {}
                     Err(error) => self
@@ -93,7 +106,9 @@ impl Build {
                 break;
             }
 
-            for (path, (memory_buffer_linked, bytecode_hash)) in linkage_data.into_iter() {
+            for (path, (memory_buffer_linked, bytecode_hash, assembly_text)) in
+                linkage_data.into_iter()
+            {
                 let contract = contracts.get(path.as_str()).expect("Always exists");
                 let factory_dependencies_resolved = contract
                     .factory_dependencies
@@ -114,6 +129,7 @@ impl Build {
                 let contract = contracts.get_mut(path.as_str()).expect("Always exists");
                 contract.build.bytecode = memory_buffer_linked.as_slice().to_vec();
                 contract.build.bytecode_hash = Some(bytecode_hash);
+                contract.build.assembly_text = Some(assembly_text);
                 contract.factory_dependencies_resolved = factory_dependencies_resolved;
                 contract.object_format = revive_common::ObjectFormat::PVM;
             }

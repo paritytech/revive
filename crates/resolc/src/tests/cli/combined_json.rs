@@ -56,7 +56,7 @@ fn fails_with_invalid_json_argument() {
 
     assert!(resolc_result
         .stderr
-        .contains(CombinedJsonInvalidSelectorMessage),);
+        .contains(CombinedJsonInvalidSelectorMessage));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
@@ -89,7 +89,7 @@ fn fails_without_json_argument() {
 
     assert!(resolc_result.stderr.contains(
         "a value is required for '--combined-json <COMBINED_JSON>' but none was supplied"
-    ),);
+    ));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);

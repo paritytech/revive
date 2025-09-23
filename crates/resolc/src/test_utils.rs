@@ -130,13 +130,13 @@ pub fn build_solidity_with_options(
         &mut vec![],
         optimizer_settings,
         revive_common::MetadataHash::Keccak256,
-        debug_config,
+        &debug_config,
         Default::default(),
         Default::default(),
     )?;
     build.check_errors()?;
 
-    let build = build.link(linker_symbols);
+    let build = build.link(linker_symbols, &debug_config);
     build.write_to_standard_json(&mut output, &solc_version)?;
 
     Ok(output)
@@ -285,13 +285,13 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
         &mut vec![],
         optimizer_settings,
         revive_common::MetadataHash::None,
-        DEBUG_CONFIG,
+        &DEBUG_CONFIG,
         Default::default(),
         Default::default(),
     )?;
     build.check_errors()?;
 
-    let build = build.link(BTreeMap::new());
+    let build = build.link(BTreeMap::new(), &DEBUG_CONFIG);
     build.check_errors()?;
 
     let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;

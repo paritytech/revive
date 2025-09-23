@@ -73,14 +73,14 @@ pub fn yul(
         messages,
         optimizer_settings,
         metadata_hash,
-        debug_config,
+        &debug_config,
         llvm_arguments,
         memory_config,
     )?;
     build.take_and_write_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(linker_symbols);
+    let mut build = build.link(linker_symbols, &debug_config);
     build.take_and_write_warnings();
     build.check_errors()?;
     Ok(build)
@@ -104,14 +104,14 @@ pub fn llvm_ir(
         messages,
         optimizer_settings,
         metadata_hash,
-        debug_config,
+        &debug_config,
         llvm_arguments,
         memory_config,
     )?;
     build.take_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(linker_symbols);
+    let mut build = build.link(linker_symbols, &debug_config);
     build.take_and_write_warnings();
     build.check_errors()?;
     Ok(build)
@@ -178,14 +178,14 @@ pub fn standard_output<T: Compiler>(
         messages,
         optimizer_settings,
         metadata_hash,
-        debug_config,
+        &debug_config,
         llvm_arguments,
         memory_config,
     )?;
     build.take_and_write_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(linker_symbols);
+    let mut build = build.link(linker_symbols, &debug_config);
     build.take_and_write_warnings();
     build.check_errors()?;
 
@@ -250,7 +250,7 @@ pub fn standard_json<T: Compiler>(
         messages,
         optimizer_settings,
         metadata_hash,
-        debug_config,
+        &debug_config,
         llvm_arguments,
         memory_config,
     )?;
@@ -259,7 +259,7 @@ pub fn standard_json<T: Compiler>(
         solc_output.write_and_exit(prune_output);
     }
 
-    let build = build.link(linker_symbols);
+    let build = build.link(linker_symbols, &debug_config);
     build.write_to_standard_json(&mut solc_output, &solc_version)?;
     solc_output.write_and_exit(prune_output);
 }

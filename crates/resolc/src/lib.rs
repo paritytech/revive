@@ -56,7 +56,8 @@ use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 /// Runs the Yul mode.
 #[allow(clippy::too_many_arguments)]
-pub fn yul(
+pub fn yul<T: Compiler>(
+    solc: &T,
     input_files: &[PathBuf],
     libraries: &[String],
     metadata_hash: MetadataHash,
@@ -67,6 +68,8 @@ pub fn yul(
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+    solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
+
     let linker_symbols = libraries.as_linker_symbols()?;
     let project = Project::try_from_yul_paths(input_files, None, libraries, &debug_config)?;
     let mut build = project.compile(
@@ -120,11 +123,11 @@ pub fn llvm_ir(
 /// Runs the standard output mode.
 #[allow(clippy::too_many_arguments)]
 pub fn standard_output<T: Compiler>(
+    solc: &T,
     input_files: &[PathBuf],
     libraries: &[String],
     messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
-    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -195,7 +198,7 @@ pub fn standard_output<T: Compiler>(
 /// Runs the standard JSON mode.
 #[allow(clippy::too_many_arguments)]
 pub fn standard_json<T: Compiler>(
-    solc: &mut T,
+    solc: &T,
     detect_missing_libraries: bool,
     messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
@@ -267,12 +270,12 @@ pub fn standard_json<T: Compiler>(
 /// Runs the combined JSON mode.
 #[allow(clippy::too_many_arguments)]
 pub fn combined_json<T: Compiler>(
+    solc: &T,
     format: String,
     paths: &[PathBuf],
     libraries: &[String],
     messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
-    solc: &mut T,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -321,11 +324,11 @@ pub fn combined_json<T: Compiler>(
     let mut combined_json = solc.combined_json(paths, selectors)?;
 
     let build = standard_output(
+        solc,
         paths,
         libraries,
         messages,
         metadata_hash,
-        solc,
         evm_version,
         solc_optimizer_enabled,
         optimizer_settings,

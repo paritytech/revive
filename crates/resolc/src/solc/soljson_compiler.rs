@@ -26,7 +26,7 @@ pub struct SoljsonCompiler;
 impl Compiler for SoljsonCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
+        &self,
         input: &mut SolcStandardJsonInput,
         messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
@@ -67,10 +67,6 @@ impl Compiler for SoljsonCompiler {
         _paths: &[PathBuf],
         _selector: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson> {
-        unimplemented!();
-    }
-
-    fn validate_yul(&self, _path: &Path) -> anyhow::Result<()> {
         unimplemented!();
     }
 

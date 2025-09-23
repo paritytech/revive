@@ -30,9 +30,7 @@ fn fails_without_input_file() {
     utils::assert_command_failure(&resolc_result, "Omitting an input file");
 
     let output = resolc_result.stderr.to_lowercase();
-    assert!(
-        output.contains("no input sources specified") || output.contains("compilation aborted"),
-    );
+    assert!(output.contains("no input sources specified"));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);

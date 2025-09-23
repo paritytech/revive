@@ -4,7 +4,7 @@
 
 use revive_common;
 
-use crate::tests::cli::{utils, yul};
+use crate::tests::cli::utils::{self, RESOLC_YUL_FLAG};
 
 const LEVELS: &[char] = &['0', '1', '2', '3', 's', 'z'];
 
@@ -14,7 +14,7 @@ fn runs_with_valid_level() {
         let optimization_argument = format!("-O{level}");
         let arguments = &[
             utils::YUL_MEMSET_CONTRACT_PATH,
-            yul::YUL_OPTION,
+            "--yul",
             &optimization_argument,
         ];
         let resolc_result = utils::execute_resolc(arguments);
@@ -37,7 +37,7 @@ fn runs_with_valid_level() {
 
 #[test]
 fn fails_with_invalid_level() {
-    let arguments = &[utils::YUL_MEMSET_CONTRACT_PATH, yul::YUL_OPTION, "-O9"];
+    let arguments = &[utils::YUL_MEMSET_CONTRACT_PATH, RESOLC_YUL_FLAG, "-O9"];
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Providing an invalid optimization level");
 

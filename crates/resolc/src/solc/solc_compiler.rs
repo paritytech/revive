@@ -42,7 +42,7 @@ impl SolcCompiler {
 impl Compiler for SolcCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
+        &self,
         input: &mut SolcStandardJsonInput,
         messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
@@ -107,6 +107,12 @@ impl Compiler for SolcCompiler {
                     ),
                 )
             })?;
+        output
+            .errors
+            .retain(|error| match error.error_code.as_deref() {
+                Some(code) => !SolcStandardJsonOutputError::IGNORED_WARNING_CODES.contains(&code),
+                None => true,
+            });
         output.errors.append(messages);
 
         input.resolve_sources();
@@ -169,26 +175,6 @@ impl Compiler for SolcCompiler {
                 )
             },
         )
-    }
-
-    /// The `solc` Yul validator.
-    fn validate_yul(&self, path: &Path) -> anyhow::Result<()> {
-        let mut command = std::process::Command::new(self.executable.as_str());
-        command.arg("--strict-assembly");
-        command.arg(path);
-
-        let output = command.output().map_err(|error| {
-            anyhow::anyhow!("{} subprocess error: {:?}", self.executable, error)
-        })?;
-        if !output.status.success() {
-            anyhow::bail!(
-                "{} error: {}",
-                self.executable,
-                String::from_utf8_lossy(output.stderr.as_slice()).to_string()
-            );
-        }
-
-        Ok(())
     }
 
     /// The `solc --version` mini-parser.

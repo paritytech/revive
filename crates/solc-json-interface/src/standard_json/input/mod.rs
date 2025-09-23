@@ -140,6 +140,52 @@ impl Input {
         })
     }
 
+    /// A shortcut constructor from paths to Yul source files.
+    pub fn from_yul_paths(
+        paths: &[PathBuf],
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        optimizer: SolcStandardJsonInputSettingsOptimizer,
+        llvm_options: Vec<String>,
+    ) -> Self {
+        let sources = paths
+            .iter()
+            .map(|path| {
+                (
+                    path.to_string_lossy().to_string(),
+                    Source::from(path.as_path()),
+                )
+            })
+            .collect();
+        Self::from_yul_sources(sources, libraries, optimizer, llvm_options)
+    }
+
+    /// A shortcut constructor from Yul source code.
+    pub fn from_yul_sources(
+        sources: BTreeMap<String, Source>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        optimizer: SolcStandardJsonInputSettingsOptimizer,
+        llvm_arguments: Vec<String>,
+    ) -> Self {
+        let output_selection = SolcStandardJsonInputSettingsSelection::new_yul_validation();
+
+        Self {
+            language: Language::Yul,
+            sources,
+            settings: Settings::new(
+                None,
+                libraries,
+                Default::default(),
+                output_selection,
+                optimizer,
+                Default::default(),
+                Default::default(),
+                vec![],
+                false,
+            ),
+            suppressed_warnings: vec![],
+        }
+    }
+
     /// Extends the output selection with another one.
     pub fn extend_selection(&mut self, selection: SolcStandardJsonInputSettingsSelection) {
         self.settings.extend_selection(selection);

@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn main_inner(
-    arguments: Arguments,
+    mut arguments: Arguments,
     messages: &mut Vec<SolcStandardJsonOutputError>,
 ) -> anyhow::Result<()> {
     if arguments.version {
@@ -171,6 +171,7 @@ fn main_inner(
 
     let build = if arguments.yul {
         resolc::yul(
+            &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
             metadata_hash,
@@ -208,12 +209,12 @@ fn main_inner(
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
         resolc::combined_json(
+            &solc,
             format,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
             messages,
             metadata_hash,
-            &mut solc,
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
@@ -231,11 +232,11 @@ fn main_inner(
         return Ok(());
     } else {
         resolc::standard_output(
+            &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
             messages,
             metadata_hash,
-            &mut solc,
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,

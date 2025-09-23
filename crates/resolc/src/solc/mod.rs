@@ -13,6 +13,8 @@ use std::path::PathBuf;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
@@ -31,7 +33,7 @@ pub const FIRST_INCLUDE_PATH_VERSION: semver::Version = semver::Version::new(0, 
 pub trait Compiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
+        &self,
         input: &mut SolcStandardJsonInput,
         messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
@@ -46,9 +48,28 @@ pub trait Compiler {
         selectors: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson>;
 
-    /// The `solc` Yul validator.
-    fn validate_yul(&self, path: &Path) -> anyhow::Result<()>;
+    /// Validates the Yul project as paths and libraries.
+    fn validate_yul_paths(
+        &self,
+        paths: &[PathBuf],
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
+        let mut solc_input =
+            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![]);
+        self.validate_yul_standard_json(&mut solc_input, messages)
+    }
 
+    /// Validates the Yul project as standard JSON input.
+    fn validate_yul_standard_json(
+        &self,
+        solc_input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
+        solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_yul_validation());
+        let solc_output = self.standard_json(solc_input, messages, None, vec![], None)?;
+        Ok(solc_output)
+    }
     /// The `solc --version` mini-parser.
     fn version(&self) -> anyhow::Result<Version>;
 }

@@ -151,7 +151,7 @@ pub fn header_size<'ctx>(
                     .strip_suffix("_deployed")
                     .unwrap_or(identifier.as_str()),
             )
-            .expect("Always exists"),
+            .unwrap_or_else(|| panic!("ICE: {identifier} not found {yul_data:?}")),
         None => identifier.as_str(),
     };
 

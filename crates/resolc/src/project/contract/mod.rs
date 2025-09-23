@@ -61,7 +61,7 @@ impl Contract {
 
     /// Compiles the specified contract, setting its build artifacts.
     pub fn compile(
-        mut self,
+        self,
         solc_version: Option<SolcVersion>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         metadata_hash: MetadataHash,

@@ -207,6 +207,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
+    let deployed_libraries = libraries.as_paths();
     let sources = BTreeMap::from_iter(
         sources
             .iter()
@@ -222,7 +223,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
     let mut input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
@@ -246,7 +247,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
         &DEBUG_CONFIG,
     )?;
 
-    let missing_libraries = project.get_missing_libraries(&Default::default());
+    let missing_libraries = project.get_missing_libraries(&deployed_libraries);
     missing_libraries.write_to_standard_json(&mut output, &solc.version()?);
 
     Ok(output)

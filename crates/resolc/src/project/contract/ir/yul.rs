@@ -35,6 +35,14 @@ impl Yul {
         Ok(Some(Self { object }))
     }
 
+    /// Get the list of EVM dependencies.
+    pub fn get_evm_dependencies(
+        &self,
+        runtime_code: Option<&Object>,
+    ) -> revive_yul::dependencies::Dependencies {
+        self.object.get_evm_dependencies(runtime_code)
+    }
+
     /// Get the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.object.get_missing_libraries()

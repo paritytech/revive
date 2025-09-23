@@ -194,7 +194,7 @@ fn main_inner(
         )
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
-            &mut solc,
+            &solc,
             arguments.detect_missing_libraries,
             messages,
             metadata_hash,

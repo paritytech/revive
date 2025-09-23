@@ -112,6 +112,9 @@ pub fn build_solidity_with_options(
     )?;
 
     let mut output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
+    if output.has_errors() {
+        return Ok(output);
+    }
 
     let debug_config = revive_llvm_context::DebugConfig::new(
         None,
@@ -239,6 +242,9 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
     )?;
 
     let mut output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
+    if output.has_errors() {
+        return Ok(output);
+    }
 
     let project = Project::try_from_standard_json_output(
         &mut output,

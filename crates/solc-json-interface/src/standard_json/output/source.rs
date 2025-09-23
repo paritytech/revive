@@ -59,6 +59,32 @@ impl Source {
         ))
     }
 
+    /// Checks the AST node for the usage of runtime code.
+    pub fn check_runtime_code(
+        ast: &serde_json::Value,
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+    ) -> Option<SolcStandardJsonOutputError> {
+        let ast = ast.as_object()?;
+
+        (ast.get("nodeType")?.as_str()? == "MemberAccess").then_some(())?;
+        (ast.get("memberName")?.as_str()? == "runtimeCode").then_some(())?;
+
+        let expression = ast.get("expression")?.as_object()?;
+        let type_descriptions = expression.get("typeDescriptions")?.as_object()?;
+        type_descriptions
+            .get("typeIdentifier")?
+            .as_str()?
+            .starts_with("t_magic_meta_type")
+            .then_some(())?;
+
+        Some(SolcStandardJsonOutputError::error_runtime_code(
+            ast.get("src")?.as_str(),
+            id_paths,
+            sources,
+        ))
+    }
+
     /// Checks the AST node for the `tx.origin` value usage.
     pub fn check_tx_origin(
         ast: &serde_json::Value,
@@ -94,6 +120,9 @@ impl Source {
             if let Some(message) = Self::check_tx_origin(ast, id_paths, sources) {
                 messages.push(message);
             }
+        }
+        if let Some(message) = Self::check_runtime_code(ast, id_paths, sources) {
+            messages.push(message);
         }
 
         match ast {

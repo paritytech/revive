@@ -180,10 +180,11 @@ pub fn build_solidity_with_options_evm(
         false,
     )?;
 
-    let mut output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
-
     let mut contracts = BTreeMap::new();
-    for files in output.contracts {
+    for files in solc
+        .standard_json(&mut input, &mut vec![], None, vec![], None)?
+        .contracts
+    {
         for (name, contract) in files.1 {
             if let Some(evm) = contract.evm {
                 let (Some(bytecode), Some(deployed_bytecode)) =

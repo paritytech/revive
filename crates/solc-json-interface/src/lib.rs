@@ -4,6 +4,8 @@
 //! [0]: https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description
 
 pub use self::combined_json::contract::Contract as CombinedJsonContract;
+pub use self::combined_json::selector::Selector as CombinedJsonSelector;
+pub use self::combined_json::selector::MESSAGE_SELECTOR_INVALID as CombinedJsonInvalidSelectorMessage;
 pub use self::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
 pub use self::standard_json::input::settings::libraries::Libraries as SolcStandardJsonInputSettingsLibraries;
 pub use self::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;

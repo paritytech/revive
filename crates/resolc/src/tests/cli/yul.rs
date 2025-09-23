@@ -15,12 +15,9 @@ fn runs_with_valid_input_file() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_success(&resolc_result, "Providing a valid input file");
 
-    assert!(
-        resolc_result
-            .stderr
-            .contains("Compiler run successful. No output requested"),
-        "Expected the output to contain a success message."
-    );
+    assert!(resolc_result
+        .stderr
+        .contains("Compiler run successful. No output requested"));
 
     let solc_arguments = &[utils::YUL_CONTRACT_PATH, SOLC_YUL_OPTION];
     let solc_result = utils::execute_solc(solc_arguments);
@@ -33,10 +30,7 @@ fn fails_without_input_file() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting an input file");
 
-    assert!(
-        resolc_result.stderr.contains("The input file is missing"),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result.stderr.contains("The input file is missing"));
 
     let solc_arguments = &[SOLC_YUL_OPTION];
     let solc_result = utils::execute_solc(solc_arguments);

@@ -165,30 +165,30 @@ impl Contract {
         self,
         combined_json_contract: &mut CombinedJsonContract,
     ) -> anyhow::Result<()> {
-        //let hexadecimal_bytecode = hex::encode(self.build.bytecode);
+        let hexadecimal_bytecode = hex::encode(self.build.bytecode);
 
-        //if let Some(metadata) = combined_json_contract.metadata.as_mut() {
-        //    *metadata = self.metadata_json.to_string();
-        //}
+        if let Some(metadata) = combined_json_contract.metadata.as_mut() {
+            *metadata = self.metadata_json.to_string();
+        }
 
-        //combined_json_contract.assembly = self.build.assembly;
-        //combined_json_contract.bin = Some(hexadecimal_bytecode);
-        //combined_json_contract
-        //    .bin_runtime
-        //    .clone_from(&combined_json_contract.bin);
+        combined_json_contract.assembly = Some(self.build.assembly_text);
+        combined_json_contract.bin = Some(hexadecimal_bytecode);
+        combined_json_contract
+            .bin_runtime
+            .clone_from(&combined_json_contract.bin);
 
-        //combined_json_contract
-        //    .missing_libraries
-        //    .extend(self.missing_libraries);
-        //combined_json_contract
-        //    .factory_deps_unlinked
-        //    .extend(self.factory_dependencies);
-        //combined_json_contract.factory_deps.extend(
-        //    self.factory_dependencies_resolved
-        //        .into_iter()
-        //        .map(|(hash, path)| (hex::encode(hash), path)),
-        //);
-        //combined_json_contract.object_format = Some(self.object_format);
+        combined_json_contract
+            .missing_libraries
+            .extend(self.missing_libraries);
+        combined_json_contract
+            .factory_deps_unlinked
+            .extend(self.factory_dependencies);
+        combined_json_contract.factory_deps.extend(
+            self.factory_dependencies_resolved
+                .into_iter()
+                .map(|(hash, path)| (hex::encode(hash), path)),
+        );
+        combined_json_contract.object_format = Some(self.object_format);
 
         Ok(())
     }

@@ -1,9 +1,11 @@
 //! The Solidity compiler solJson interface.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 
@@ -63,7 +65,7 @@ impl Compiler for SoljsonCompiler {
     fn combined_json(
         &self,
         _paths: &[PathBuf],
-        _combined_json_argument: &str,
+        _selector: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson> {
         unimplemented!();
     }
@@ -72,7 +74,7 @@ impl Compiler for SoljsonCompiler {
         unimplemented!();
     }
 
-    fn version(&mut self) -> anyhow::Result<Version> {
+    fn version(&self) -> anyhow::Result<Version> {
         let version = Self::get_soljson_version()?;
         let long = version.clone();
         let default: semver::Version = version

@@ -6,10 +6,12 @@ pub mod solc_compiler;
 pub mod soljson_compiler;
 pub mod version;
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
@@ -41,12 +43,12 @@ pub trait Compiler {
     fn combined_json(
         &self,
         paths: &[PathBuf],
-        combined_json_argument: &str,
+        selectors: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson>;
 
     /// The `solc` Yul validator.
     fn validate_yul(&self, path: &Path) -> anyhow::Result<()>;
 
     /// The `solc --version` mini-parser.
-    fn version(&mut self) -> anyhow::Result<Version>;
+    fn version(&self) -> anyhow::Result<Version>;
 }

@@ -32,7 +32,6 @@ fn fails_without_input_file() {
     let output = resolc_result.stderr.to_lowercase();
     assert!(
         output.contains("no input sources specified") || output.contains("compilation aborted"),
-        "Expected the output to contain a specific error message."
     );
 
     let solc_result = utils::execute_solc(arguments);

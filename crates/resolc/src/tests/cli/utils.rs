@@ -74,10 +74,7 @@ fn execute_command(
 }
 
 pub fn assert_equal_exit_codes(solc_result: &CommandResult, resolc_result: &CommandResult) {
-    assert_eq!(
-        solc_result.code, resolc_result.code,
-        "Expected solc and resolc to have the same exit code."
-    );
+    assert_eq!(solc_result.code, resolc_result.code,);
 }
 
 pub fn assert_command_success(result: &CommandResult, error_message_prefix: &str) {

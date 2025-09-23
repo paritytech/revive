@@ -36,11 +36,13 @@ pub mod test_utils;
 pub mod tests;
 
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
 use revive_common::MetadataHash;
 use revive_llvm_context::OptimizerSettings;
+use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
@@ -266,7 +268,7 @@ pub fn standard_json<T: Compiler>(
 #[allow(clippy::too_many_arguments)]
 pub fn combined_json<T: Compiler>(
     format: String,
-    input_files: &[PathBuf],
+    paths: &[PathBuf],
     libraries: &[String],
     messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
@@ -285,8 +287,41 @@ pub fn combined_json<T: Compiler>(
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<()> {
+    let selectors = CombinedJsonSelector::from_cli(format.as_str())
+        .into_iter()
+        .filter_map(|result| match result {
+            Ok(selector) => Some(selector),
+            Err(error) => {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    error.to_string(),
+                    None,
+                    None,
+                ));
+                None
+            }
+        })
+        .collect::<HashSet<_>>();
+    if !selectors.contains(&CombinedJsonSelector::Bytecode) {
+        messages.push(SolcStandardJsonOutputError::new_warning(
+            format!("Bytecode is always emitted even if the selector is not provided."),
+            None,
+            None,
+        ));
+    }
+    if selectors.contains(&CombinedJsonSelector::BytecodeRuntime) {
+        messages.push(SolcStandardJsonOutputError::new_warning(
+            format!("The `{}` selector does not make sense for the PVM target, since there is only one bytecode segment.", CombinedJsonSelector::BytecodeRuntime),
+            None,
+            None,
+        ));
+    }
+
+    let output_assembly = selectors.contains(&CombinedJsonSelector::Assembly);
+
+    let mut combined_json = solc.combined_json(paths, selectors)?;
+
     let build = standard_output(
-        input_files,
+        paths,
         libraries,
         messages,
         metadata_hash,
@@ -303,23 +338,21 @@ pub fn combined_json<T: Compiler>(
         llvm_arguments,
         memory_config,
     )?;
-
-    let mut combined_json = solc.combined_json(input_files, format.as_str())?;
     build.write_to_combined_json(&mut combined_json)?;
 
     match output_directory {
         Some(output_directory) => {
             std::fs::create_dir_all(output_directory.as_path())?;
-
             combined_json.write_to_directory(output_directory.as_path(), overwrite)?;
-        }
-        None => {
+
             writeln!(
-                std::io::stdout(),
-                "{}",
-                serde_json::to_string(&combined_json).expect("Always valid")
+                std::io::stderr(),
+                "Compiler run successful. Artifact(s) can be found in directory {output_directory:?}."
             )?;
         }
+        None => {
+            serde_json::to_writer(std::io::stdout(), &combined_json)?;
+        }
     }
-    std::process::exit(0);
+    std::process::exit(revive_common::EXIT_CODE_SUCCESS);
 }

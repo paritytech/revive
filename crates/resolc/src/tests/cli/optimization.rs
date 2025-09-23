@@ -41,12 +41,9 @@ fn fails_with_invalid_level() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Providing an invalid optimization level");
 
-    assert!(
-        resolc_result
-            .stderr
-            .contains("Unexpected optimization option"),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result
+        .stderr
+        .contains("Unexpected optimization option"));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);

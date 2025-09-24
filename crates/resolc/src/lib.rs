@@ -54,6 +54,9 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
+/// The rayon worker stack size.
+pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
+
 /// Runs the Yul mode.
 #[allow(clippy::too_many_arguments)]
 pub fn yul<T: Compiler>(
@@ -137,7 +140,7 @@ pub fn standard_output<T: Compiler>(
     remappings: BTreeSet<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: &[String],
+    llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
@@ -154,6 +157,7 @@ pub fn standard_output<T: Compiler>(
             Some(memory_config),
             debug_config.emit_debug_info,
         ),
+        llvm_arguments,
         false,
     )?;
     let mut solc_output = solc.standard_json(
@@ -182,7 +186,7 @@ pub fn standard_output<T: Compiler>(
         optimizer_settings,
         metadata_hash,
         &debug_config,
-        llvm_arguments,
+        &solc_input.settings.llvm_arguments,
         memory_config,
     )?;
     build.take_and_write_warnings();
@@ -216,14 +220,11 @@ pub fn standard_json<T: Compiler>(
     let prune_output = solc_input.settings.selection_to_prune();
     let deployed_libraries = solc_input.settings.libraries.as_paths();
     let linker_symbols = solc_input.settings.libraries.as_linker_symbols()?;
-
-    let mut optimizer_settings =
-        OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
-    //let llvm_options = solc_input.settings.llvm_options.clone();
-
+    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
 
+    solc_input.settings.llvm_arguments = llvm_arguments.to_owned();
     solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
     let mut solc_output = solc.standard_json(
         &mut solc_input,
@@ -254,7 +255,7 @@ pub fn standard_json<T: Compiler>(
         optimizer_settings,
         metadata_hash,
         &debug_config,
-        llvm_arguments,
+        &solc_input.settings.llvm_arguments,
         memory_config,
     )?;
     if build.has_errors() {
@@ -287,7 +288,7 @@ pub fn combined_json<T: Compiler>(
     debug_config: revive_llvm_context::DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,
-    llvm_arguments: &[String],
+    llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<()> {
     let selectors = CombinedJsonSelector::from_cli(format.as_str())

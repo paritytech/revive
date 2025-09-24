@@ -43,25 +43,22 @@ contract Test {
 }"#,
     )];
 
-    let build_unoptimized = super::build_solidity(
+    let build_unoptimized = super::build_solidity_with_options(
         super::sources(sources),
         Default::default(),
         Default::default(),
         revive_llvm_context::OptimizerSettings::none(),
+        true,
     )
     .expect("Build failure");
-    let build_optimized_for_cycles = super::build_solidity(
-        super::sources(sources),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Build failure");
-    let build_optimized_for_size = super::build_solidity(
+    let build_optimized_for_cycles =
+        super::build_solidity(super::sources(sources)).expect("Build failure");
+    let build_optimized_for_size = super::build_solidity_with_options(
         super::sources(sources),
         Default::default(),
         Default::default(),
         revive_llvm_context::OptimizerSettings::size(),
+        true,
     )
     .expect("Build failure");
 

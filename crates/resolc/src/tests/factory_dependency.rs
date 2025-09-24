@@ -35,12 +35,10 @@ contract Callable {
     }
 }"#;
 
-    let output = super::build_solidity(
-        super::sources(&[("main.sol", caller_code), ("callable.sol", callee_code)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
+    let output = super::build_solidity(super::sources(&[
+        ("main.sol", caller_code),
+        ("callable.sol", callee_code),
+    ]))
     .expect("Build failure");
 
     assert_eq!(

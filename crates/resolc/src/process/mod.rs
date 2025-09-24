@@ -7,7 +7,7 @@ pub mod output;
 #[cfg(target_os = "emscripten")]
 pub mod worker_process;
 
-use revive_llvm_context::{initialize_llvm, Target};
+use revive_llvm_context::Target;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use serde::de::DeserializeOwned;
@@ -18,16 +18,11 @@ use self::output::Output;
 
 pub trait Process {
     /// Read input from `stdin`, compile a contract, and write the output to `stdout`.
-    fn run() -> anyhow::Result<()> {
-        let input_json = std::io::read_to_string(std::io::stdin())
-            .map_err(|error| anyhow::anyhow!("Stdin reading error: {error}"))?;
-        let input: Input = revive_common::deserialize_from_str(input_json.as_str())
-            .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
-
+    fn run(input: Input) -> anyhow::Result<()> {
         let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
 
         let result = std::thread::Builder::new()
-            .stack_size(64 * 1024 * 1024)
+            .stack_size(crate::RAYON_WORKER_STACK_SIZE)
             .spawn(move || {
                 input
                     .contract
@@ -54,7 +49,6 @@ pub trait Process {
         serde_json::to_writer(std::io::stdout(), &result)
             .map_err(|error| anyhow::anyhow!("Stdout writing error: {error}"))?;
 
-        unsafe { inkwell::support::shutdown_llvm() };
         Ok(())
     }
 

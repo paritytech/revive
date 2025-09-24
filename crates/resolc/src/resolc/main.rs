@@ -14,10 +14,6 @@ use revive_solc_json_interface::{
 
 use self::arguments::Arguments;
 
-#[cfg(feature = "parallel")]
-/// The rayon worker stack size.
-const RAYON_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
-
 #[cfg(target_env = "musl")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -68,7 +64,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn main_inner(
-    mut arguments: Arguments,
+    arguments: Arguments,
     messages: &mut Vec<SolcStandardJsonOutputError>,
 ) -> anyhow::Result<()> {
     if arguments.version {
@@ -91,28 +87,39 @@ fn main_inner(
         return Ok(());
     }
 
+    #[cfg(feature = "parallel")]
+    rayon::ThreadPoolBuilder::new()
+        .stack_size(resolc::RAYON_WORKER_STACK_SIZE)
+        .build_global()
+        .expect("Thread pool configuration failure");
+
+    if arguments.recursive_process {
+        let input_json = std::io::read_to_string(std::io::stdin())
+            .map_err(|error| anyhow::anyhow!("Stdin reading error: {error}"))?;
+        let input: resolc::ProcessInput = revive_common::deserialize_from_str(input_json.as_str())
+            .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
+
+        initialize_llvm(
+            revive_llvm_context::Target::PVM,
+            resolc::DEFAULT_EXECUTABLE_NAME,
+            &input.llvm_arguments,
+        );
+
+        #[cfg(target_os = "emscripten")]
+        {
+            return resolc::WorkerProcess::run(input);
+        }
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            return resolc::NativeProcess::run(input);
+        }
+    }
+
     initialize_llvm(
         revive_llvm_context::Target::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
         &arguments.llvm_arguments,
     );
-
-    #[cfg(feature = "parallel")]
-    rayon::ThreadPoolBuilder::new()
-        .stack_size(RAYON_WORKER_STACK_SIZE)
-        .build_global()
-        .expect("Thread pool configuration failure");
-
-    if arguments.recursive_process {
-        #[cfg(target_os = "emscripten")]
-        {
-            return resolc::WorkerProcess::run();
-        }
-        #[cfg(not(target_os = "emscripten"))]
-        {
-            return resolc::NativeProcess::run();
-        }
-    }
 
     let debug_config = match arguments.debug_output_directory {
         Some(ref debug_output_directory) => {
@@ -226,7 +233,7 @@ fn main_inner(
             debug_config,
             arguments.output_directory,
             arguments.overwrite,
-            &arguments.llvm_arguments,
+            arguments.llvm_arguments,
             memory_config,
         )?;
         return Ok(());
@@ -246,7 +253,7 @@ fn main_inner(
             remappings,
             suppressed_warnings,
             debug_config,
-            &arguments.llvm_arguments,
+            arguments.llvm_arguments,
             memory_config,
         )
     }?;

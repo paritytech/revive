@@ -59,11 +59,14 @@ fn check_dependencies() {
 /// Builds the Solidity project and returns the standard JSON output.
 pub fn build_solidity(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
-    libraries: SolcStandardJsonInputSettingsLibraries,
-    remappings: BTreeSet<String>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
-    build_solidity_with_options(sources, libraries, remappings, optimizer_settings, true)
+    build_solidity_with_options(
+        sources,
+        Default::default(),
+        Default::default(),
+        OptimizerSettings::cycles(),
+        true,
+    )
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
@@ -106,6 +109,7 @@ pub fn build_solidity_with_options(
             Default::default(),
         ),
         SolcStandardJsonInputSettingsMetadata::default(),
+        Default::default(),
         Default::default(),
         Default::default(),
         false,
@@ -180,6 +184,7 @@ pub fn build_solidity_with_options_evm(
         SolcStandardJsonInputSettingsMetadata::default(),
         Default::default(),
         Default::default(),
+        Default::default(),
         false,
     )?;
 
@@ -236,6 +241,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
         SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
         SolcStandardJsonInputSettingsOptimizer::default(),
         SolcStandardJsonInputSettingsMetadata::default(),
+        Default::default(),
         Default::default(),
         Default::default(),
         true,
@@ -333,6 +339,7 @@ pub fn check_solidity_warning(
         SolcStandardJsonInputSettingsOptimizer::default(),
         SolcStandardJsonInputSettingsMetadata::default(),
         suppressed_warnings.unwrap_or_default(),
+        Default::default(),
         Default::default(),
         false,
     )?;

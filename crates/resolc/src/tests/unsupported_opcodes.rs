@@ -21,13 +21,7 @@ contract FixedCodeCopy {
 }
     "#;
 
-    super::build_solidity(
-        super::sources(&[("test.sol", code)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure");
+    super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
 }
 
 #[test]
@@ -55,13 +49,7 @@ contract CallcodeTest {
     }
 }"#;
 
-    super::build_solidity(
-        super::sources(&[("test.sol", solidity)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure");
+    super::build_solidity(super::sources(&[("test.sol", solidity)])).expect("Test failure");
 }
 
 #[test]
@@ -108,13 +96,7 @@ contract ExternalCodeCopy {
     }
 }"#;
 
-    super::build_solidity(
-        super::sources(&[("test.sol", code)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure");
+    super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
 }
 
 #[test]
@@ -137,11 +119,5 @@ contract MinimalDestructible {
     }
 }"#;
 
-    super::build_solidity(
-        super::sources(&[("test.sol", solidity)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure");
+    super::build_solidity(super::sources(&[("test.sol", solidity)])).expect("Test failure");
 }

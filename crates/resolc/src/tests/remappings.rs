@@ -28,11 +28,12 @@ contract Main {
 }
 "#;
 
-    super::build_solidity(
+    super::build_solidity_with_options(
         super::sources(&[("./test.sol", caller_code), ("./callable.sol", callee_code)]),
         Default::default(),
         ["libraries/default/=./".to_owned()].into(),
         revive_llvm_context::OptimizerSettings::cycles(),
+        true,
     )
     .expect("Test failure");
 }

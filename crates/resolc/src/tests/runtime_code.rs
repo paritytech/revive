@@ -15,19 +15,14 @@ contract Test {
 }
     "#;
 
-    super::build_solidity(
-        super::sources(&[("test.sol", code)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure")
-    .errors
-    .iter()
-    .find(|error| {
-        error
-            .to_string()
-            .contains("Error: Deploy and runtime code are merged in PVM")
-    })
-    .unwrap();
+    super::build_solidity(super::sources(&[("test.sol", code)]))
+        .expect("Test failure")
+        .errors
+        .iter()
+        .find(|error| {
+            error
+                .to_string()
+                .contains("Error: Deploy and runtime code are merged in PVM")
+        })
+        .unwrap();
 }

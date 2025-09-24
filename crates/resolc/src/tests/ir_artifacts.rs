@@ -14,13 +14,7 @@ contract Test {
 }
     "#;
 
-    let build = super::build_solidity(
-        super::sources(&[("test.sol", code)]),
-        Default::default(),
-        Default::default(),
-        revive_llvm_context::OptimizerSettings::cycles(),
-    )
-    .expect("Test failure");
+    let build = super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
 
     assert!(
         !build

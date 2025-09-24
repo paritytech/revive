@@ -72,6 +72,7 @@ impl Input {
         metadata: SolcStandardJsonInputSettingsMetadata,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
+        llvm_arguments: Vec<String>,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
@@ -103,6 +104,7 @@ impl Input {
             metadata,
             suppressed_warnings,
             polkavm,
+            llvm_arguments,
             detect_missing_libraries,
         )
     }
@@ -120,6 +122,7 @@ impl Input {
         metadata: SolcStandardJsonInputSettingsMetadata,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
+        llvm_arguments: Vec<String>,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -134,6 +137,7 @@ impl Input {
                 metadata,
                 polkavm,
                 suppressed_warnings.clone(),
+                llvm_arguments,
                 detect_missing_libraries,
             ),
             suppressed_warnings,
@@ -180,6 +184,7 @@ impl Input {
                 Default::default(),
                 Default::default(),
                 vec![],
+                llvm_arguments,
                 false,
             ),
             suppressed_warnings: vec![],

@@ -59,6 +59,11 @@ pub struct Settings {
     #[serde(default, skip_serializing)]
     pub suppressed_warnings: Vec<self::warning::Warning>,
 
+    /// The extra LLVM arguments.
+    #[cfg(feature = "resolc")]
+    #[serde(default, alias = "LLVMOptions", skip_serializing)]
+    pub llvm_arguments: Vec<String>,
+
     /// Whether to enable the missing libraries detection mode.
     /// Deprecated in favor of post-compile-time linking.
     #[serde(default, rename = "detectMissingLibraries", skip_serializing)]
@@ -77,6 +82,7 @@ impl Settings {
         metadata: Metadata,
         polkavm: PolkaVM,
         suppressed_warnings: Vec<Warning>,
+        llvm_arguments: Vec<String>,
         detect_missing_libraries: bool,
     ) -> Self {
         Self {
@@ -89,6 +95,7 @@ impl Settings {
             via_ir: Some(true),
             polkavm,
             suppressed_warnings,
+            llvm_arguments,
             detect_missing_libraries,
         }
     }

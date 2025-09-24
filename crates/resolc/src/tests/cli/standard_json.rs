@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use crate::tests::cli::utils;
+use revive_solc_json_interface::SolcStandardJsonInput;
 
 const JSON_OPTION: &str = "--standard-json";
 

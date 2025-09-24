@@ -105,7 +105,7 @@ impl Error {
     }
 
     /// Returns the `<address payable>`'s `send` and `transfer` methods usage error.
-    pub fn error_send_and_transfer(
+    pub fn warning_send_and_transfer(
         node: Option<&str>,
         id_paths: &BTreeMap<usize, &String>,
         sources: &BTreeMap<String, SolcStandardJsonInputSource>,
@@ -122,25 +122,7 @@ and https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from
 "#
         .to_owned();
 
-        Self::new_error(
-            message,
-            node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
-            Some(sources),
-        )
-    }
-
-    /// Returns the `runtimeCode` code usage error.
-    pub fn error_runtime_code(
-        node: Option<&str>,
-        id_paths: &BTreeMap<usize, &String>,
-        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
-    ) -> Self {
-        let message = r#"
-Deploy and runtime code are merged in PVM, accessing `type(T).runtimeCode` is not possible.
-Please consider changing the functionality relying on reading runtime code to a different approach.
-"#;
-
-        Self::new_error(
+        Self::new_warning(
             message,
             node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
             Some(sources),
@@ -162,6 +144,23 @@ to rely on tx.origin, but use msg.sender instead.
         .to_owned();
 
         Self::new_warning(
+            message,
+            node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
+            Some(sources),
+        )
+    }
+    /// Returns the `runtimeCode` code usage error.
+    pub fn error_runtime_code(
+        node: Option<&str>,
+        id_paths: &BTreeMap<usize, &String>,
+        sources: &BTreeMap<String, SolcStandardJsonInputSource>,
+    ) -> Self {
+        let message = r#"
+Deploy and runtime code are merged in PVM, accessing `type(T).runtimeCode` is not possible.
+Please consider changing the functionality relying on reading runtime code to a different approach.
+"#;
+
+        Self::new_error(
             message,
             node.and_then(|node| SourceLocation::try_from_ast(node, id_paths)),
             Some(sources),

@@ -11,8 +11,7 @@ contract Callable {
     function f(uint a) public pure returns(uint) {
         return a * 2;
     }
-}
-"#;
+}"#;
 
     let caller_code = r#"
 // SPDX-License-Identifier: MIT
@@ -25,8 +24,7 @@ contract Main {
     function main(Callable callable) public returns(uint) {
         return callable.f(5);
     }
-}
-"#;
+}"#;
 
     super::build_solidity_with_options(
         super::sources(&[("./test.sol", caller_code), ("./callable.sol", callee_code)]),
@@ -34,6 +32,7 @@ contract Main {
         ["libraries/default/=./".to_owned()].into(),
         revive_llvm_context::OptimizerSettings::cycles(),
         true,
+        Default::default(),
     )
     .expect("Test failure");
 }

@@ -66,6 +66,7 @@ pub fn build_solidity(
         Default::default(),
         OptimizerSettings::cycles(),
         true,
+        Default::default(),
     )
 }
 
@@ -78,6 +79,7 @@ pub fn build_solidity_with_options(
     remappings: BTreeSet<String>,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     solc_optimizer_enabled: bool,
+    suppressed_warnings: Vec<ResolcWarning>,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
 
@@ -109,7 +111,7 @@ pub fn build_solidity_with_options(
             Default::default(),
         ),
         SolcStandardJsonInputSettingsMetadata::default(),
-        Default::default(),
+        suppressed_warnings,
         Default::default(),
         Default::default(),
         false,
@@ -313,46 +315,6 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
     Ok(())
 }
 
-/// Checks if the built Solidity project contains the given warning.
-pub fn check_solidity_warning(
-    source_code: &str,
-    warning_substring: &str,
-    libraries: SolcStandardJsonInputSettingsLibraries,
-    suppressed_warnings: Option<Vec<ResolcWarning>>,
-) -> anyhow::Result<bool> {
-    check_dependencies();
-
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let solc_version = solc.version()?;
-
-    let mut sources = BTreeMap::new();
-    sources.insert(
-        "test.sol".to_owned(),
-        SolcStandardJsonInputSource::from(source_code.to_string()),
-    );
-    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
-        None,
-        sources.clone(),
-        libraries.clone(),
-        Default::default(),
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::default(),
-        SolcStandardJsonInputSettingsMetadata::default(),
-        suppressed_warnings.unwrap_or_default(),
-        Default::default(),
-        Default::default(),
-        false,
-    )?;
-
-    let contains_warning = solc
-        .standard_json(&mut input, &mut vec![], None, vec![], None)?
-        .errors
-        .iter()
-        .any(|error| error.formatted_message.contains(warning_substring));
-
-    Ok(contains_warning)
-}
-
 /// Compile the blob of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
@@ -456,6 +418,7 @@ pub fn compile_blob_with_options(
         Default::default(),
         optimizer_settings,
         solc_optimizer_enabled,
+        Default::default(),
     )
     .expect("source should compile")
     .contracts;

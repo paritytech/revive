@@ -115,8 +115,11 @@ impl Compiler for SolcCompiler {
             });
         output.errors.append(messages);
 
+        let mut suppressed_warnings = input.suppressed_warnings.clone();
+        suppressed_warnings.extend_from_slice(input.settings.suppressed_warnings.as_slice());
+
         input.resolve_sources();
-        output.preprocess_ast(&input.sources, &input.suppressed_warnings)?;
+        output.preprocess_ast(&input.sources, &suppressed_warnings)?;
 
         Ok(output)
     }

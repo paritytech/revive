@@ -31,7 +31,6 @@ impl Source {
         Self { id, ast: None }
     }
 
-    /// Checks the AST node for the usage of `<address payable>`'s `send` and `transfer` methods.
     pub fn check_send_and_transfer(
         ast: &serde_json::Value,
         id_paths: &BTreeMap<usize, &String>,
@@ -52,11 +51,7 @@ impl Source {
         let affected_types = vec!["t_address_payable"];
         affected_types.contains(&type_identifier).then_some(())?;
 
-        Some(SolcStandardJsonOutputError::error_send_and_transfer(
-            ast.get("src")?.as_str(),
-            id_paths,
-            sources,
-        ))
+        Some(Warning::SendAndTransfer.as_error(ast.get("src")?.as_str(), id_paths, sources))
     }
 
     /// Checks the AST node for the usage of runtime code.
@@ -100,11 +95,7 @@ impl Source {
         (expression.get("nodeType")?.as_str()? == "Identifier").then_some(())?;
         (expression.get("name")?.as_str()? == "tx").then_some(())?;
 
-        Some(SolcStandardJsonOutputError::warning_tx_origin(
-            ast.get("src")?.as_str(),
-            id_paths,
-            sources,
-        ))
+        Some(Warning::TxOrigin.as_error(ast.get("src")?.as_str(), id_paths, sources))
     }
 
     /// Returns the list of messages for some specific parts of the AST.
@@ -116,6 +107,11 @@ impl Source {
         suppressed_warnings: &[Warning],
     ) -> Vec<SolcStandardJsonOutputError> {
         let mut messages = Vec::new();
+        if !suppressed_warnings.contains(&Warning::SendAndTransfer) {
+            if let Some(message) = Self::check_send_and_transfer(ast, id_paths, sources) {
+                messages.push(message);
+            }
+        }
         if !suppressed_warnings.contains(&Warning::TxOrigin) {
             if let Some(message) = Self::check_tx_origin(ast, id_paths, sources) {
                 messages.push(message);

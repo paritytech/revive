@@ -18,8 +18,7 @@ contract FixedCodeCopy {
 
         return code;
     }
-}
-    "#;
+}"#;
 
     super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
 }
@@ -71,8 +70,7 @@ object "ProgramCounter" {
             sstore(0, pcValue)
         }
     }
-}
-    "#;
+}"#;
 
     super::build_yul(&[("test.sol", code)]).expect("Test failure");
 }

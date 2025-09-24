@@ -49,6 +49,7 @@ contract Test {
         Default::default(),
         revive_llvm_context::OptimizerSettings::none(),
         true,
+        Default::default(),
     )
     .expect("Build failure");
     let build_optimized_for_cycles =
@@ -59,6 +60,7 @@ contract Test {
         Default::default(),
         revive_llvm_context::OptimizerSettings::size(),
         true,
+        Default::default(),
     )
     .expect("Build failure");
 

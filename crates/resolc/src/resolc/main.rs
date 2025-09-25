@@ -145,7 +145,7 @@ fn main_inner(
         arguments.suppress_warnings.unwrap_or_default().as_slice(),
     )?;
 
-    let mut solc = {
+    let solc = {
         #[cfg(target_os = "emscripten")]
         {
             resolc::SoljsonCompiler

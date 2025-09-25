@@ -4,7 +4,10 @@
 
 use revive_common;
 
-use crate::tests::cli::utils::{self, RESOLC_YUL_FLAG};
+use crate::tests::cli::utils::{
+    self, assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
+    execute_solc, RESOLC_YUL_FLAG, SOLIDITY_CONTRACT_PATH, YUL_MEMSET_CONTRACT_PATH,
+};
 
 const LEVELS: &[char] = &['0', '1', '2', '3', 's', 'z'];
 
@@ -12,11 +15,7 @@ const LEVELS: &[char] = &['0', '1', '2', '3', 's', 'z'];
 fn runs_with_valid_level() {
     for level in LEVELS {
         let optimization_argument = format!("-O{level}");
-        let arguments = &[
-            utils::YUL_MEMSET_CONTRACT_PATH,
-            "--yul",
-            &optimization_argument,
-        ];
+        let arguments = &[YUL_MEMSET_CONTRACT_PATH, "--yul", &optimization_argument];
         let resolc_result = utils::execute_resolc(arguments);
         assert!(
             resolc_result.success,
@@ -37,14 +36,27 @@ fn runs_with_valid_level() {
 
 #[test]
 fn fails_with_invalid_level() {
-    let arguments = &[utils::YUL_MEMSET_CONTRACT_PATH, RESOLC_YUL_FLAG, "-O9"];
-    let resolc_result = utils::execute_resolc(arguments);
-    utils::assert_command_failure(&resolc_result, "Providing an invalid optimization level");
+    let arguments = &[YUL_MEMSET_CONTRACT_PATH, RESOLC_YUL_FLAG, "-O9"];
+    let resolc_result = execute_resolc(arguments);
+    assert_command_failure(&resolc_result, "Providing an invalid optimization level");
 
     assert!(resolc_result
         .stderr
         .contains("Unexpected optimization option"));
 
-    let solc_result = utils::execute_solc(arguments);
-    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+    let solc_result = execute_solc(arguments);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn disable_solc_optimzer() {
+    let arguments = &[SOLIDITY_CONTRACT_PATH, "--bin", "--disable-solc-optimizer"];
+    let disabled = execute_resolc(arguments);
+    assert_command_success(&disabled, "Disabling the solc optimizer");
+
+    let arguments = &[SOLIDITY_CONTRACT_PATH, "--bin"];
+    let enabled = execute_resolc(arguments);
+    assert_command_success(&disabled, "Enabling the solc optimizer");
+
+    assert_ne!(enabled.stdout, disabled.stdout);
 }

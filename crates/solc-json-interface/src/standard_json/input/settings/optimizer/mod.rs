@@ -22,12 +22,6 @@ pub struct Optimizer {
     pub details: Details,
 }
 
-impl Default for Optimizer {
-    fn default() -> Self {
-        Self::new(true, Self::default_mode(), Details::default())
-    }
-}
-
 impl Optimizer {
     /// A shortcut constructor.
     pub fn new(enabled: bool, mode: char, details: Details) -> Self {
@@ -39,7 +33,13 @@ impl Optimizer {
     }
 
     /// The default optimization mode.
-    fn default_mode() -> char {
+    pub fn default_mode() -> char {
         'z'
+    }
+}
+
+impl Default for Optimizer {
+    fn default() -> Self {
+        Self::new(true, Self::default_mode(), Details::default())
     }
 }

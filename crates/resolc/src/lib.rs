@@ -150,7 +150,11 @@ pub fn standard_output<T: Compiler>(
         libraries,
         remappings,
         SolcStandardJsonInputSettingsSelection::new_required(),
-        SolcStandardJsonInputSettingsOptimizer::default(),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            SolcStandardJsonInputSettingsOptimizer::default_mode(),
+            Default::default(),
+        ),
         Default::default(),
         suppressed_warnings,
         SolcStandardJsonInputSettingsPolkaVM::new(

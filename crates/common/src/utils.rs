@@ -3,7 +3,6 @@
 /// Deserializes a `serde_json` object from slice with the recursion limit disabled.
 ///
 /// Must be used for all JSON I/O to avoid crashes due to the aforementioned limit.
-///
 pub fn deserialize_from_slice<O>(input: &[u8]) -> anyhow::Result<O>
 where
     O: serde::de::DeserializeOwned,

@@ -327,11 +327,7 @@ impl revive_solc_json_interface::SolcStandardJsonOutputErrorHandler for Build {
             .values()
             .filter_map(|build| build.as_ref().err())
             .collect();
-        errors.extend(
-            self.messages
-                .iter()
-                .filter(|message| message.severity == "error"),
-        );
+        errors.extend(self.messages.iter().filter(|message| message.is_error()));
         errors
     }
 
@@ -339,11 +335,10 @@ impl revive_solc_json_interface::SolcStandardJsonOutputErrorHandler for Build {
         let warnings = self
             .messages
             .iter()
-            .filter(|message| message.severity == "warning")
+            .filter(|message| message.is_warning())
             .cloned()
             .collect();
-        self.messages
-            .retain(|message| message.severity != "warning");
+        self.messages.retain(|message| message.is_warning());
         warnings
     }
 }

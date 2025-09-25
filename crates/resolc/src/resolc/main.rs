@@ -52,22 +52,24 @@ fn main() -> anyhow::Result<()> {
         output.write_and_exit(SolcStandardJsonInputSettingsSelection::default());
     }
 
-    let exit_code = if messages.iter().any(|error| error.severity == "error") {
-        revive_common::EXIT_CODE_FAILURE
-    } else {
-        revive_common::EXIT_CODE_SUCCESS
-    };
     std::io::stderr()
         .write_all(
             messages
-                .into_iter()
+                .iter()
                 .map(|error| error.to_string())
                 .collect::<Vec<String>>()
                 .join("\n")
                 .as_bytes(),
         )
         .expect("Stderr writing error");
-    std::process::exit(exit_code);
+
+    std::process::exit(
+        if messages.iter().any(SolcStandardJsonOutputError::is_error) {
+            revive_common::EXIT_CODE_FAILURE
+        } else {
+            revive_common::EXIT_CODE_SUCCESS
+        },
+    );
 }
 
 fn main_inner(

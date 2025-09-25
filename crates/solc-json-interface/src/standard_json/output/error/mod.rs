@@ -172,6 +172,16 @@ Please consider changing the functionality relying on reading runtime code to a 
         self.formatted_message
             .push_str(format!("\n--> {path}\n").as_str());
     }
+
+    /// Returns true if this is an error.
+    pub fn is_error(&self) -> bool {
+        self.severity == "error"
+    }
+
+    /// Returns true if this is a warning.
+    pub fn is_warning(&self) -> bool {
+        self.severity == "warning"
+    }
 }
 
 impl std::fmt::Display for Error {

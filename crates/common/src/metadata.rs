@@ -8,10 +8,10 @@ pub enum MetadataHash {
     /// Do not include bytecode hash.
     #[serde(rename = "none")]
     None,
-    /// The `ipfs` hash.
+    /// Include the `ipfs` hash.
     #[serde(rename = "ipfs")]
     IPFS,
-    /// The `keccak256`` hash type.
+    /// Include the `keccak256`` hash.
     #[serde(rename = "keccak256")]
     Keccak256,
 }

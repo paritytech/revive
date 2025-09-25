@@ -75,7 +75,6 @@ impl Output {
     /// Initializes a standard JSON output with messages.
     ///
     /// Is used to emit errors in standard JSON mode.
-    ///
     pub fn new_with_messages(messages: Vec<SolcStandardJsonOutputError>) -> Self {
         Self {
             contracts: BTreeMap::new(),
@@ -135,6 +134,7 @@ impl Output {
         serde_json::to_writer(std::io::stdout(), &self).expect("Stdout writing error");
         std::process::exit(revive_common::EXIT_CODE_SUCCESS);
     }
+
     /// Traverses the AST and returns the list of additional errors and warnings.
     pub fn preprocess_ast(
         &mut self,
@@ -184,7 +184,7 @@ impl ErrorHandler for Output {
     fn errors(&self) -> Vec<&SolcStandardJsonOutputError> {
         self.errors
             .iter()
-            .filter(|error| error.severity == "error")
+            .filter(|error| error.is_error())
             .collect()
     }
 
@@ -192,10 +192,10 @@ impl ErrorHandler for Output {
         let warnings = self
             .errors
             .iter()
-            .filter(|message| message.severity == "warning")
+            .filter(|message| message.is_warning())
             .cloned()
             .collect();
-        self.errors.retain(|message| message.severity != "warning");
+        self.errors.retain(|message| message.is_warning());
         warnings
     }
 }

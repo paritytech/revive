@@ -28,11 +28,11 @@ impl Source {
     /// Initializes a standard JSON source.
     ///
     /// Is used for projects compiled without `solc`.
-    ///
     pub fn new(id: usize) -> Self {
         Self { id, ast: None }
     }
 
+    /// Checks the AST node for the usage of send or transfer address methods.
     pub fn check_send_and_transfer(
         ast: &serde_json::Value,
         id_paths: &BTreeMap<usize, &String>,

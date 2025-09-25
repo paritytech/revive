@@ -403,7 +403,6 @@ pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8
 }
 
 /// Compile the EVM bin of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
 pub fn compile_evm_deploy_code(
     contract_name: &str,
     source_code: &str,

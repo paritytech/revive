@@ -8,10 +8,9 @@ use std::str::FromStr;
 /// than final (linked) contract blobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ObjectFormat {
-    /// The unlinked ELF object.
+    /// The unlinked ELF object format.
     ELF,
-
-    /// The fully linked PVM blob.
+    /// The fully linked PVM format.
     PVM,
 }
 

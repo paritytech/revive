@@ -7,6 +7,20 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
+use revive_common::MetadataHash;
+use revive_llvm_context::OptimizerSettings;
+use revive_solc_json_interface::CombinedJsonSelector;
+use revive_solc_json_interface::ResolcWarning;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputLanguage;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
+
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
 pub use self::missing_libraries::MissingLibraries;
@@ -29,20 +43,6 @@ pub use self::solc::Compiler;
 pub use self::solc::FIRST_SUPPORTED_VERSION as SolcFirstSupportedVersion;
 pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
-
-use revive_common::MetadataHash;
-use revive_llvm_context::OptimizerSettings;
-use revive_solc_json_interface::CombinedJsonSelector;
-use revive_solc_json_interface::ResolcWarning;
-use revive_solc_json_interface::SolcStandardJsonInput;
-use revive_solc_json_interface::SolcStandardJsonInputLanguage;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
-use revive_solc_json_interface::SolcStandardJsonOutputError;
-use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 pub(crate) mod build;
 pub(crate) mod r#const;

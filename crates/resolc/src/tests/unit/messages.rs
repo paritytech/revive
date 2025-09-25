@@ -52,7 +52,7 @@ fn contains_warning(build: SolcStandardJsonOutput, warning: ResolcWarning) -> bo
     build
         .errors
         .iter()
-        .any(|error| error.severity == "warning" && error.message.contains(warning.as_message()))
+        .any(|error| error.is_warning() && error.message.contains(warning.as_message()))
 }
 
 #[test]

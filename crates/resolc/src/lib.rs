@@ -93,37 +93,6 @@ pub fn yul<T: Compiler>(
     Ok(build)
 }
 
-/// Runs the LLVM IR mode.
-pub fn llvm_ir(
-    input_files: &[PathBuf],
-    libraries: &[String],
-    metadata_hash: MetadataHash,
-    messages: &mut Vec<SolcStandardJsonOutputError>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
-    debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: &[String],
-    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-) -> anyhow::Result<Build> {
-    let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
-    let linker_symbols = libraries.as_linker_symbols()?;
-    let project = Project::try_from_llvm_ir_paths(input_files, libraries, None)?;
-    let mut build = project.compile(
-        messages,
-        optimizer_settings,
-        metadata_hash,
-        &debug_config,
-        llvm_arguments,
-        memory_config,
-    )?;
-    build.take_warnings();
-    build.check_errors()?;
-
-    let mut build = build.link(linker_symbols, &debug_config);
-    build.take_and_write_warnings();
-    build.check_errors()?;
-    Ok(build)
-}
-
 /// Runs the standard output mode.
 pub fn standard_output<T: Compiler>(
     solc: &T,

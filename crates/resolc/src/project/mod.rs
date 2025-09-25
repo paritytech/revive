@@ -27,7 +27,6 @@ use crate::build::Build;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
-use crate::project::contract::ir::llvm_ir::LLVMIR;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
@@ -194,69 +193,6 @@ impl Project {
                 let full_path = name.full_path.clone();
                 let contract = Contract::new(name, ir.into(), source_metadata);
                 Some((full_path, Ok(contract)))
-            })
-            .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
-
-        let mut contracts = BTreeMap::new();
-        for (path, result) in results.into_iter() {
-            match result {
-                Ok(contract) => {
-                    contracts.insert(path, contract);
-                }
-                Err(error) => match solc_output {
-                    Some(ref mut solc_output) => solc_output.push_error(Some(path), error),
-                    None => anyhow::bail!(error),
-                },
-            }
-        }
-        Ok(Self::new(None, contracts, libraries))
-    }
-
-    /// Parses the LLVM IR source code file and returns the source data.
-    pub fn try_from_llvm_ir_paths(
-        paths: &[PathBuf],
-        libraries: SolcStandardJsonInputSettingsLibraries,
-        solc_output: Option<&mut SolcStandardJsonOutput>,
-    ) -> anyhow::Result<Self> {
-        let sources = paths
-            .iter()
-            .map(|path| {
-                let source = SolcStandardJsonInputSource::from(path.as_path());
-                (path.to_string_lossy().to_string(), source)
-            })
-            .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
-        Self::try_from_llvm_ir_sources(sources, libraries, solc_output)
-    }
-
-    /// Parses the LLVM IR `sources` and returns an LLVM IR project.
-    pub fn try_from_llvm_ir_sources(
-        sources: BTreeMap<String, SolcStandardJsonInputSource>,
-        libraries: SolcStandardJsonInputSettingsLibraries,
-        mut solc_output: Option<&mut SolcStandardJsonOutput>,
-    ) -> anyhow::Result<Self> {
-        #[cfg(feature = "parallel")]
-        let iter = sources.into_par_iter();
-        #[cfg(not(feature = "parallel"))]
-        let iter = sources.into_iter();
-
-        let results = iter
-            .map(|(path, mut source)| {
-                let source_code = match source.try_resolve() {
-                    Ok(()) => source.take_content().expect("Always exists"),
-                    Err(error) => return (path, Err(error)),
-                };
-
-                let source_hash = revive_common::Keccak256::from_slice(source_code.as_bytes());
-
-                let contract = Contract::new(
-                    ContractIdentifier::new(path.clone(), None),
-                    LLVMIR::new(path.clone(), source_code).into(),
-                    serde_json::json!({
-                        "source_hash": source_hash.to_string(),
-                    }),
-                );
-
-                (path, Ok(contract))
             })
             .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
 

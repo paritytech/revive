@@ -52,7 +52,6 @@ impl Contract {
     pub fn object_identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
-            IR::LLVMIR(ref llvm_ir) => llvm_ir.path.as_str(),
         }
     }
 
@@ -109,27 +108,6 @@ impl Contract {
                 yul.declare(&mut context)?;
                 yul.into_llvm(&mut context)
                     .map_err(|error| anyhow::anyhow!("LLVM IR generator: {error}"))?;
-
-                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
-            }
-            IR::LLVMIR(mut llvm_ir) => {
-                llvm_ir.source.push(char::from(0));
-                let memory_buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(
-                    &llvm_ir.source.as_bytes()[..llvm_ir.source.len() - 1],
-                    self.identifier.full_path.as_str(),
-                );
-
-                let module = llvm
-                    .create_module_from_ir(memory_buffer)
-                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-                let context: revive_llvm_context::PolkaVMContext =
-                    revive_llvm_context::PolkaVMContext::new(
-                        &llvm,
-                        module,
-                        optimizer,
-                        debug_config,
-                        memory_config,
-                    );
 
                 context.build(self.identifier.full_path.as_str(), metadata_bytes)?
             }

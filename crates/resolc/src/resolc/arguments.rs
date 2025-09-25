@@ -104,13 +104,6 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
-    /// Switch to LLVM IR mode.
-    /// Only one input LLVM IR file is allowed.
-    /// Cannot be used with combined and standard JSON modes.
-    /// Use this mode at your own risk, as LLVM IR input validation is not implemented.
-    #[arg(long = "llvm-ir")]
-    pub llvm_ir: bool,
-
     /// Set the metadata hash type.
     /// Available types: `none`, `ipfs`, `keccak256`.
     /// The default is `keccak256`.
@@ -233,7 +226,6 @@ impl Arguments {
 
         let argument_count = [
             self.yul,
-            self.llvm_ir,
             self.combined_json.is_some(),
             self.standard_json.is_some(),
         ]
@@ -246,7 +238,7 @@ impl Arguments {
             "Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.",None,None));
         }
 
-        if self.yul || self.llvm_ir {
+        if self.yul {
             if self.base_path.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes.",
@@ -288,14 +280,6 @@ impl Arguments {
                 messages.push(SolcStandardJsonOutputError::new_error(
                 "Disabling the solc optimizer is not supported in Yul, LLVM IR and PolkaVM assembly modes.",None,None));
             }
-        }
-
-        if self.llvm_ir && self.solc.is_some() {
-            messages.push(SolcStandardJsonOutputError::new_error(
-                "`solc` is not used in LLVM IR and PolkaVM assembly modes.",
-                None,
-                None,
-            ));
         }
 
         if self.combined_json.is_some() && (self.output_assembly || self.output_binary) {

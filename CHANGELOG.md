@@ -12,6 +12,10 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+### Changed
+
+- Removed the (broken) `--llvm-ir` mode.
+
 ### Added
 - Line debug information per YUL builtin and for `if` statements.
 - Column numbers in debug information.

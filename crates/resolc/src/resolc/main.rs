@@ -195,17 +195,6 @@ fn main_inner(
             &arguments.llvm_arguments,
             memory_config,
         )
-    } else if arguments.llvm_ir {
-        resolc::llvm_ir(
-            input_files.as_slice(),
-            arguments.libraries.as_slice(),
-            metadata_hash,
-            messages,
-            optimizer_settings,
-            debug_config,
-            &arguments.llvm_arguments,
-            memory_config,
-        )
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &solc,

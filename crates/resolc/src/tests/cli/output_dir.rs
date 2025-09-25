@@ -4,46 +4,41 @@
 
 use std::path::Path;
 
+use tempfile::tempdir;
+
 use crate::tests::cli::utils;
 
-const OUTPUT_DIRECTORY: &str = "src/tests/cli/artifacts";
-const OUTPUT_BIN_FILE_PATH: &str = "src/tests/cli/artifacts/contract.sol:C.pvm";
-const OUTPUT_ASM_FILE_PATH: &str = "src/tests/cli/artifacts/contract.sol:C.pvmasm";
+const OUTPUT_BIN_FILE_PATH: &str = "contract.sol.pvm";
+const OUTPUT_ASM_FILE_PATH: &str = "contract.sol.pvmasm";
 const OUTPUT_LLVM_OPTIMIZED_FILE_PATH: &str =
-    "src/tests/cli/artifacts/src_tests_cli_contracts_solidity_contract.sol.C.optimized.ll";
+    "src_tests_cli_contracts_solidity_contract.sol.C.optimized.ll";
 const OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH: &str =
-    "src/tests/cli/artifacts/src_tests_cli_contracts_solidity_contract.sol.C.unoptimized.ll";
-
-fn file_exists(path: &str) -> bool {
-    Path::new(path).try_exists().unwrap()
-}
-
-fn file_is_empty(path: &str) -> bool {
-    Path::new(path).metadata().unwrap().len() == 0
-}
+    "src_tests_cli_contracts_solidity_contract.sol.C.unoptimized.ll";
 
 fn assert_valid_output_file(
     result: &utils::CommandResult,
-    output_file_type: &str,
-    output_file_path: &str,
+    debug_output_directory: &Path,
+    output_file_name: &str,
 ) {
     utils::assert_command_success(result, "Providing an output directory");
 
     assert!(result.stderr.contains("Compiler run successful"),);
 
-    assert!(
-        file_exists(output_file_path),
-        "Expected the {output_file_type} output file `{output_file_path}` to exist."
-    );
+    let file = debug_output_directory.to_path_buf().join(output_file_name);
 
-    assert!(
-        !file_is_empty(output_file_path),
-        "Expected the {output_file_type} output file `{output_file_path}` to not be empty."
+    assert!(file.exists(), "Artifact should exist: {}", file.display());
+
+    assert_ne!(
+        file.metadata().unwrap().len(),
+        0,
+        "Artifact shouldn't be empty: {}",
+        file.display()
     );
 }
 
 #[test]
 fn writes_to_file() {
+    let temp_dir = tempdir().unwrap();
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "--overwrite",
@@ -51,15 +46,16 @@ fn writes_to_file() {
         "--bin",
         "--asm",
         "--output-dir",
-        OUTPUT_DIRECTORY,
+        temp_dir.path().to_str().unwrap(),
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
-    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_ASM_FILE_PATH);
 }
 
 #[test]
 fn writes_debug_info_to_file_unoptimized() {
+    let temp_dir = tempdir().unwrap();
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
@@ -68,15 +64,16 @@ fn writes_debug_info_to_file_unoptimized() {
         "--bin",
         "--asm",
         "--output-dir",
-        OUTPUT_DIRECTORY,
+        temp_dir.path().to_str().unwrap(),
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
-    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_ASM_FILE_PATH);
 }
 
 #[test]
 fn writes_debug_info_to_file_optimized() {
+    let temp_dir = tempdir().unwrap();
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
@@ -84,36 +81,38 @@ fn writes_debug_info_to_file_optimized() {
         "--bin",
         "--asm",
         "--output-dir",
-        OUTPUT_DIRECTORY,
+        temp_dir.path().to_str().unwrap(),
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, "--bin", OUTPUT_BIN_FILE_PATH);
-    assert_valid_output_file(&result, "--asm", OUTPUT_ASM_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_BIN_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_ASM_FILE_PATH);
 }
 
 #[test]
 fn writes_llvm_debug_info_to_file_unoptimized() {
+    let temp_dir = tempdir().unwrap();
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--disable-solc-optimizer",
         "--overwrite",
         "--debug-output-dir",
-        OUTPUT_DIRECTORY,
+        temp_dir.path().to_str().unwrap(),
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, "llvm", OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH);
 }
 
 #[test]
 fn writes_llvm_debug_info_to_file_optimized() {
+    let temp_dir = tempdir().unwrap();
     let arguments = &[
         utils::SOLIDITY_CONTRACT_PATH,
         "-g",
         "--overwrite",
         "--debug-output-dir",
-        OUTPUT_DIRECTORY,
+        temp_dir.path().to_str().unwrap(),
     ];
     let result = utils::execute_resolc(arguments);
-    assert_valid_output_file(&result, "llvm", OUTPUT_LLVM_OPTIMIZED_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_LLVM_OPTIMIZED_FILE_PATH);
 }

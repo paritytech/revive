@@ -47,6 +47,10 @@ inkwell = { workspace = true, features = ["target-riscv", "llvm18-1-no-llvm-link
 [build-dependencies]
 git2 = { workspace = true, default-features = false }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
+
 [features]
 parallel = ["rayon"]
 default = ["parallel"]

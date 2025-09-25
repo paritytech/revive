@@ -22,6 +22,32 @@ contract SendExample {
     }
 }"#;
 
+pub const TRANSFER_TEST_SOURCE: &str = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract TransferExample {
+    address payable public recipient;
+
+    constructor(address payable _recipient) {
+        recipient = _recipient;
+    }
+
+    function forwardEther() external payable {
+        recipient.transfer(msg.value);
+    }
+}"#;
+
+pub const TX_ORIGIN_TEST_SOURCE: &str = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract TxOriginExample {
+    function isOriginSender() public view returns (bool) {
+        return tx.origin == msg.sender;
+    }
+}"#;
+
 fn contains_warning(build: SolcStandardJsonOutput, warning: ResolcWarning) -> bool {
     build
         .errors
@@ -49,22 +75,6 @@ fn send_suppressed() {
     assert!(!contains_warning(build, ResolcWarning::SendAndTransfer));
 }
 
-pub const TRANSFER_TEST_SOURCE: &str = r#"
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract TransferExample {
-    address payable public recipient;
-
-    constructor(address payable _recipient) {
-        recipient = _recipient;
-    }
-
-    function forwardEther() external payable {
-        recipient.transfer(msg.value);
-    }
-}"#;
-
 #[test]
 fn transfer() {
     let build = build_solidity(sources(&[("test.sol", TRANSFER_TEST_SOURCE)])).unwrap();
@@ -84,16 +94,6 @@ fn transfer_suppressed() {
     .unwrap();
     assert!(!contains_warning(build, ResolcWarning::SendAndTransfer))
 }
-
-pub const TX_ORIGIN_TEST_SOURCE: &str = r#"
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract TxOriginExample {
-    function isOriginSender() public view returns (bool) {
-        return tx.origin == msg.sender;
-    }
-}"#;
 
 #[test]
 fn tx_origin() {

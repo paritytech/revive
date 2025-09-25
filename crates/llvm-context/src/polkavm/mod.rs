@@ -76,7 +76,7 @@ pub fn link(
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
             let bytecode_linked =
-                revive_linker::Linker::setup(true)?.link(bytecode, Some(symbols.as_slice()))?;
+                revive_linker::Linker::setup()?.link(bytecode, symbols.as_slice())?;
             Ok(revive_linker::polkavm_linker(&bytecode_linked, true)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
                 .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF)))

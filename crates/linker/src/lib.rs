@@ -13,7 +13,6 @@ pub struct Linker {
     object_path: PathBuf,
     symbols_path: PathBuf,
     linker_script_path: PathBuf,
-    link_compiler_rt: bool,
 }
 
 impl Linker {
@@ -25,7 +24,7 @@ SECTIONS {
     const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
     const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv64";
 
-    pub fn setup(link_compiler_rt: bool) -> anyhow::Result<Self> {
+    pub fn setup() -> anyhow::Result<Self> {
         let temporary_directory = TempDir::new()?;
         let output_path = temporary_directory.path().join("out.so");
         let object_path = temporary_directory.path().join("out.o");
@@ -35,11 +34,9 @@ SECTIONS {
         fs::write(&linker_script_path, Self::LINKER_SCRIPT)
             .map_err(|message| anyhow::anyhow!("{message} {linker_script_path:?}",))?;
 
-        if link_compiler_rt {
-            let compiler_rt_path = temporary_directory.path().join(Self::BUILTINS_ARCHIVE_FILE);
-            fs::write(&compiler_rt_path, COMPILER_RT)
-                .map_err(|message| anyhow::anyhow!("{message} {compiler_rt_path:?}"))?;
-        }
+        let compiler_rt_path = temporary_directory.path().join(Self::BUILTINS_ARCHIVE_FILE);
+        fs::write(&compiler_rt_path, COMPILER_RT)
+            .map_err(|message| anyhow::anyhow!("{message} {compiler_rt_path:?}"))?;
 
         Ok(Self {
             temporary_directory,
@@ -47,24 +44,18 @@ SECTIONS {
             object_path,
             symbols_path,
             linker_script_path,
-            link_compiler_rt,
         })
     }
 
-    pub fn link<T: AsRef<[u8]>>(self, input: T, symbols: Option<T>) -> anyhow::Result<Vec<u8>> {
+    pub fn link<T: AsRef<[u8]>>(self, input: T, symbols: T) -> anyhow::Result<Vec<u8>> {
         fs::write(&self.object_path, input)
             .map_err(|message| anyhow::anyhow!("{message} {:?}", self.object_path))?;
 
-        if let Some(symbols) = symbols.as_ref() {
-            fs::write(&self.symbols_path, symbols)
-                .map_err(|message| anyhow::anyhow!("{message} {:?}", self.symbols_path))?;
-        }
+        fs::write(&self.symbols_path, symbols)
+            .map_err(|message| anyhow::anyhow!("{message} {:?}", self.symbols_path))?;
 
-        //if env::var("PVM_LINKER_DUMP_OBJ").is_ok() {
-        //    fs::copy(&object_path, "/tmp/out.o")?;
-        //}
         let arguments = self
-            .create_arguments(symbols.is_some())
+            .create_arguments()
             .into_iter()
             .map(|v| v.to_string())
             .collect();
@@ -75,8 +66,8 @@ SECTIONS {
         Ok(fs::read(&self.output_path)?)
     }
 
-    fn create_arguments(&self, link_symbols: bool) -> Vec<String> {
-        let mut arguments = vec![
+    fn create_arguments(&self) -> Vec<String> {
+        [
             "ld.lld",
             "--error-limit=0",
             "--relocatable",
@@ -88,25 +79,18 @@ SECTIONS {
             "-o",
             self.output_path.to_str().expect("should be utf8"),
             self.object_path.to_str().expect("should be utf8"),
-        ];
-
-        if link_symbols {
-            arguments.push(self.symbols_path.to_str().expect("should be utf8"));
-        }
-
-        if self.link_compiler_rt {
-            arguments.extend(&[
-                "--library-path",
-                self.temporary_directory
-                    .path()
-                    .to_str()
-                    .expect("should be utf8"),
-                "--library",
-                Self::BUILTINS_LIB_NAME,
-            ]);
-        }
-
-        arguments.iter().map(ToString::to_string).collect()
+            self.symbols_path.to_str().expect("should be utf8"),
+            "--library-path",
+            self.temporary_directory
+                .path()
+                .to_str()
+                .expect("should be utf8"),
+            "--library",
+            Self::BUILTINS_LIB_NAME,
+        ]
+        .iter()
+        .map(ToString::to_string)
+        .collect()
     }
 }
 

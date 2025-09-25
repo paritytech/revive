@@ -5,7 +5,6 @@
 use crate::tests::cli::utils;
 
 #[test]
-#[ignore = "Fix: 'resolc --help' should exit with success exit code"]
 fn shows_usage_with_help() {
     let arguments = &["--help"];
     let resolc_result = utils::execute_resolc(arguments);

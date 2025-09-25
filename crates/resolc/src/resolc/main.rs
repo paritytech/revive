@@ -5,6 +5,7 @@ pub mod arguments;
 use std::str::FromStr;
 use std::{io::Write, path::PathBuf};
 
+use clap::error::ErrorKind;
 use resolc::Process;
 use revive_common::MetadataHash;
 use revive_llvm_context::initialize_llvm;
@@ -19,7 +20,13 @@ use self::arguments::Arguments;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() -> anyhow::Result<()> {
-    let arguments = <Arguments as clap::Parser>::try_parse()?;
+    let arguments = <Arguments as clap::Parser>::try_parse().inspect_err(|error| {
+        if let ErrorKind::DisplayHelp = error.kind() {
+            let _ = error.print();
+            std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+        }
+    })?;
+
     let is_standard_json = arguments.standard_json.is_some();
     let mut messages = arguments.validate();
     if messages.iter().all(|error| error.severity != "error") {

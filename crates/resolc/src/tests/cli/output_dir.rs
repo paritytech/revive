@@ -10,10 +10,9 @@ use crate::tests::cli::utils;
 
 const OUTPUT_BIN_FILE_PATH: &str = "contract.sol.pvm";
 const OUTPUT_ASM_FILE_PATH: &str = "contract.sol.pvmasm";
-const OUTPUT_LLVM_OPTIMIZED_FILE_PATH: &str =
-    "src_tests_cli_contracts_solidity_contract.sol.C.optimized.ll";
+const OUTPUT_LLVM_OPTIMIZED_FILE_PATH: &str = "src_tests_data_solidity_contract.sol.C.optimized.ll";
 const OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH: &str =
-    "src_tests_cli_contracts_solidity_contract.sol.C.unoptimized.ll";
+    "src_tests_data_solidity_contract.sol.C.unoptimized.ll";
 
 fn assert_valid_output_file(
     result: &utils::CommandResult,

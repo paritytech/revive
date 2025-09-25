@@ -8,6 +8,7 @@ use serde::Serialize;
 
 #[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::warning::Warning;
+#[cfg(feature = "resolc")]
 use crate::standard_json::output::error::Error as SolcStandardJsonOutputError;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSource;
@@ -22,6 +23,7 @@ pub struct Source {
     pub ast: Option<serde_json::Value>,
 }
 
+#[cfg(feature = "resolc")]
 impl Source {
     /// Initializes a standard JSON source.
     ///

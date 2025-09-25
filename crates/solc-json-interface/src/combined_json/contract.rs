@@ -1,7 +1,6 @@
 //! The `solc --combined-json` contract.
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -49,7 +48,7 @@ pub struct Contract {
     /// The unlinked factory dependencies.
     #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
-    pub factory_deps_unlinked: BTreeSet<String>,
+    pub factory_deps_unlinked: std::collections::BTreeSet<String>,
     /// The factory dependencies.
     #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
@@ -57,7 +56,7 @@ pub struct Contract {
     /// The missing libraries.
     #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
-    pub missing_libraries: BTreeSet<String>,
+    pub missing_libraries: std::collections::BTreeSet<String>,
     /// The binary object format.
     #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]

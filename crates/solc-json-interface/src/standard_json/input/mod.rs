@@ -5,8 +5,11 @@ pub mod settings;
 pub mod source;
 
 use std::collections::BTreeMap;
+#[cfg(feature = "resolc")]
 use std::collections::BTreeSet;
+#[cfg(feature = "resolc")]
 use std::path::Path;
+#[cfg(feature = "resolc")]
 use std::path::PathBuf;
 
 #[cfg(all(feature = "parallel", feature = "resolc"))]
@@ -14,10 +17,15 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIter
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
+#[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJsonInputSettingsOptimizer;
+#[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+#[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsLibraries;
+#[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsPolkaVM;
 
 use self::language::Language;

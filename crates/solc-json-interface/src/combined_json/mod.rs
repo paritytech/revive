@@ -4,7 +4,6 @@ pub mod contract;
 pub mod selector;
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -46,7 +45,7 @@ impl CombinedJson {
     /// Writes the JSON to the specified directory.
     pub fn write_to_directory(
         self,
-        output_directory: &Path,
+        output_directory: &std::path::Path,
         overwrite: bool,
     ) -> anyhow::Result<()> {
         let mut file_path = output_directory.to_owned();

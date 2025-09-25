@@ -315,6 +315,46 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
     Ok(())
 }
 
+/// Builds the Yul standard JSON and returns the standard JSON output.
+pub fn build_yul_standard_json(
+    mut solc_input: SolcStandardJsonInput,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    revive_llvm_context::initialize_llvm(
+        revive_llvm_context::Target::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        &[],
+    );
+
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
+    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
+    let project = Project::try_from_yul_sources(
+        solc_input.sources,
+        Default::default(),
+        Some(&mut output),
+        &Default::default(),
+    )?;
+    let build = project.compile(
+        &mut vec![],
+        optimizer_settings,
+        revive_common::MetadataHash::Keccak256,
+        &DEBUG_CONFIG,
+        Default::default(),
+        Default::default(),
+    )?;
+    build.check_errors()?;
+
+    let build = build.link(Default::default(), &Default::default());
+    build.check_errors()?;
+    build.write_to_standard_json(&mut output, &solc.version()?)?;
+
+    output.check_errors()?;
+    Ok(output)
+}
+
 /// Compile the blob of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
 pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {

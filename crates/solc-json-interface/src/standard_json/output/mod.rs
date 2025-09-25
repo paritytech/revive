@@ -195,7 +195,7 @@ impl ErrorHandler for Output {
             .filter(|message| message.is_warning())
             .cloned()
             .collect();
-        self.errors.retain(|message| message.is_warning());
+        self.errors.retain(|message| !message.is_warning());
         warnings
     }
 }

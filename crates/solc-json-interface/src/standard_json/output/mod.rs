@@ -16,6 +16,8 @@ use crate::standard_json::output::error::error_handler::ErrorHandler;
 use crate::SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSource;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
@@ -145,8 +147,6 @@ impl Output {
             .map(|(path, source)| (source.id, path))
             .collect();
 
-        #[cfg(feature = "parallel")]
-        use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
         #[cfg(feature = "parallel")]
         let iter = self.sources.par_iter();
         #[cfg(not(feature = "parallel"))]

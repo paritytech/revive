@@ -8,6 +8,8 @@ use once_cell::sync::OnceCell;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
+use super::Input;
+use super::Output;
 use super::Process;
 
 /// The overriden executable name used when the compiler is run as a library.
@@ -16,6 +18,40 @@ pub static EXECUTABLE: OnceCell<PathBuf> = OnceCell::new();
 pub struct NativeProcess;
 
 impl Process for NativeProcess {
+    fn run(input: Input) -> anyhow::Result<()> {
+        let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
+
+        let result = std::thread::Builder::new()
+            .stack_size(crate::RAYON_WORKER_STACK_SIZE)
+            .spawn(move || {
+                input
+                    .contract
+                    .compile(
+                        None,
+                        input.optimizer_settings,
+                        input.metadata_hash,
+                        input.debug_config,
+                        &input.llvm_arguments,
+                        input.memory_config,
+                        input.missing_libraries,
+                        input.factory_dependencies,
+                        input.identifier_paths,
+                    )
+                    .map(Output::new)
+                    .map_err(|error| {
+                        SolcStandardJsonOutputError::new_error(error, Some(source_location), None)
+                    })
+            })
+            .expect("Threading error")
+            .join()
+            .expect("Threading error");
+
+        serde_json::to_writer(std::io::stdout(), &result)
+            .map_err(|error| anyhow::anyhow!("Stdout writing error: {error}"))?;
+
+        Ok(())
+    }
+
     fn call<I, O>(path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
     where
         I: serde::Serialize,

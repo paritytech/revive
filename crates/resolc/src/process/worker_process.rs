@@ -2,13 +2,14 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 
+use serde::Deserialize;
+
+use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+
 use super::Input;
 use super::Output;
 use super::Process;
-
-use revive_solc_json_interface::SolcStandardJsonOutputError;
-
-use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Error {
@@ -30,6 +31,33 @@ enum Response {
 pub struct WorkerProcess;
 
 impl Process for WorkerProcess {
+    fn run(input: Input) -> anyhow::Result<()> {
+        let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
+
+        let result = input
+            .contract
+            .compile(
+                None,
+                input.optimizer_settings,
+                input.metadata_hash,
+                input.debug_config,
+                &input.llvm_arguments,
+                input.memory_config,
+                input.missing_libraries,
+                input.factory_dependencies,
+                input.identifier_paths,
+            )
+            .map(Output::new)
+            .map_err(|error| {
+                SolcStandardJsonOutputError::new_error(error, Some(source_location), None)
+            });
+
+        serde_json::to_writer(std::io::stdout(), &result)
+            .map_err(|error| anyhow::anyhow!("Stdout writing error: {error}"))?;
+
+        Ok(())
+    }
+
     fn call<I, O>(path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
     where
         I: serde::Serialize,

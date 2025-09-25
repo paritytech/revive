@@ -13,24 +13,19 @@ use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::{Target, TargetMachine};
 
 use anyhow::Context as AnyhowContext;
-use inkwell::memory_buffer::MemoryBuffer;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
 use revive_common::{Keccak256, ObjectFormat};
-use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
-use sha3::Digest;
 
 use self::context::build::Build;
 use self::context::Context;
 
 /// Get a [Build] from contract bytecode and its auxilliary data.
 pub fn build(
-    contract_path: &str,
     bytecode: &[u8],
     metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
-    debug_config: &DebugConfig,
 ) -> anyhow::Result<Build> {
-    Ok(Build::new(None, metadata_hash, bytecode.to_owned()))
+    Ok(Build::new(metadata_hash, bytecode.to_owned()))
 }
 
 /// Disassembles the PolkaVM blob into assembly text representation.

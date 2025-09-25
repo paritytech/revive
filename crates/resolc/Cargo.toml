@@ -34,7 +34,7 @@ normpath = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
-revive-solc-json-interface = { workspace = true, features = ["resolc"] }
+revive-solc-json-interface = { workspace = true, default-features = false, features = ["resolc"] }
 revive-yul = { workspace = true }
 
 [target.'cfg(target_env = "musl")'.dependencies]
@@ -50,7 +50,7 @@ git2 = { workspace = true, default-features = false }
 [dev-dependencies]
 tempfile = { workspace = true }
 
-
 [features]
-parallel = ["rayon"]
+parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
+

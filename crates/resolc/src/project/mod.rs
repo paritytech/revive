@@ -241,8 +241,12 @@ impl Project {
         libraries: SolcStandardJsonInputSettingsLibraries,
         mut solc_output: Option<&mut SolcStandardJsonOutput>,
     ) -> anyhow::Result<Self> {
-        let results = sources
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let iter = sources.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = sources.into_iter();
+
+        let results = iter
             .map(|(path, mut source)| {
                 let source_code = match source.try_resolve() {
                     Ok(()) => source.take_content().expect("Always exists"),

@@ -20,7 +20,6 @@ pub fn create_context(
         optimizer,
         Default::default(),
         Default::default(),
-        Default::default(),
     )
 }
 

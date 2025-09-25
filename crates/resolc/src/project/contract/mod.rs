@@ -102,7 +102,6 @@ impl Contract {
                         module,
                         optimizer,
                         debug_config,
-                        llvm_arguments,
                         memory_config,
                     );
                 context
@@ -132,7 +131,6 @@ impl Contract {
                         module,
                         optimizer,
                         debug_config,
-                        llvm_arguments,
                         memory_config,
                     );
 

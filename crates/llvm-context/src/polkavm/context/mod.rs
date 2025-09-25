@@ -83,8 +83,6 @@ pub struct Context<'ctx> {
     current_function: Option<Rc<RefCell<Function<'ctx>>>>,
     /// The loop context stack.
     loop_stack: Vec<Loop<'ctx>>,
-    /// The extra LLVM arguments that were used during target initialization.
-    llvm_arguments: &'ctx [String],
     /// The PVM memory configuration.
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
@@ -208,13 +206,11 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Initializes a new LLVM context.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
         optimizer: Optimizer,
         debug_config: DebugConfig,
-        llvm_arguments: &'ctx [String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> Self {
         Self::set_data_layout(llvm, &module);
@@ -249,7 +245,6 @@ impl<'ctx> Context<'ctx> {
             functions: HashMap::with_capacity(Self::FUNCTIONS_HASHMAP_INITIAL_CAPACITY),
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
-            llvm_arguments,
             memory_config,
 
             debug_info,
@@ -262,12 +257,10 @@ impl<'ctx> Context<'ctx> {
 
     /// Builds the LLVM IR module, returning the build artifacts.
     pub fn build(
-        mut self,
+        self,
         contract_path: &str,
         metadata_hash: Option<revive_common::Keccak256>,
     ) -> anyhow::Result<Build> {
-        let module_clone = self.module.clone();
-
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
 
@@ -321,12 +314,10 @@ impl<'ctx> Context<'ctx> {
         self.debug_config.dump_object(contract_path, &object)?;
 
         crate::polkavm::build(
-            contract_path,
             &object,
             metadata_hash
                 .as_ref()
                 .map(|hash| hash.as_bytes().try_into().unwrap()),
-            self.debug_config(),
         )
     }
 

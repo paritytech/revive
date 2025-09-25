@@ -23,12 +23,11 @@ pub struct Build {
 impl Build {
     /// A shortcut constructor.
     pub fn new(
-        assembly_text: Option<String>,
         metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
         bytecode: Vec<u8>,
     ) -> Self {
         Self {
-            assembly_text,
+            assembly_text: None,
             metadata_hash,
             bytecode,
             bytecode_hash: None,

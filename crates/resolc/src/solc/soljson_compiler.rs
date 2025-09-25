@@ -8,6 +8,7 @@ use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
 
 use crate::solc::version::Version;
 use anyhow::Context;
@@ -43,8 +44,6 @@ impl Compiler for SoljsonCompiler {
             anyhow::bail!("configuring allow paths is not supported with solJson")
         }
 
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
-
         let input_json = serde_json::to_string(&input).expect("Always valid");
         let out = Self::compile_standard_json(input_json)?;
         let mut output: SolcStandardJsonOutput =
@@ -57,7 +56,12 @@ impl Compiler for SoljsonCompiler {
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
-        output.preprocess_ast(suppressed_warnings.as_slice())?;
+
+        let mut suppressed_warnings = input.suppressed_warnings.clone();
+        suppressed_warnings.extend_from_slice(input.settings.suppressed_warnings.as_slice());
+
+        input.resolve_sources();
+        output.preprocess_ast(&input.sources, &suppressed_warnings)?;
 
         Ok(output)
     }

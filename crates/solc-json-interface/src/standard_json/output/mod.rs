@@ -139,15 +139,14 @@ impl Output {
         sources: &BTreeMap<String, SolcStandardJsonInputSource>,
         suppressed_warnings: &[Warning],
     ) -> anyhow::Result<()> {
-        #[cfg(feature = "parallel")]
-        use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
         let id_paths: BTreeMap<usize, &String> = self
             .sources
             .iter()
             .map(|(path, source)| (source.id, path))
             .collect();
 
+        #[cfg(feature = "parallel")]
+        use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
         #[cfg(feature = "parallel")]
         let iter = self.sources.par_iter();
         #[cfg(not(feature = "parallel"))]

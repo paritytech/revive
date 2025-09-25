@@ -10,9 +10,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 #[cfg(all(feature = "parallel", feature = "resolc"))]
-use rayon::iter::IntoParallelRefMutIterator;
-#[cfg(all(feature = "parallel", feature = "resolc"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -83,7 +81,6 @@ impl Input {
 
         #[cfg(feature = "parallel")]
         let iter = paths.into_par_iter(); // Parallel iterator
-
         #[cfg(not(feature = "parallel"))]
         let iter = paths.into_iter(); // Sequential iterator
 
@@ -198,10 +195,10 @@ impl Input {
 
     /// Tries to resolve all sources.
     pub fn resolve_sources(&mut self) {
-        #[cfg(not(feature = "parallel"))]
-        let iter = self.sources.iter_mut();
         #[cfg(feature = "parallel")]
         let iter = self.sources.par_iter_mut();
+        #[cfg(not(feature = "parallel"))]
+        let iter = self.sources.iter_mut();
 
         iter.map(|(_path, source)| {
             let _ = source.try_resolve();

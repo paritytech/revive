@@ -148,7 +148,7 @@ fn main_inner(
     let solc = {
         #[cfg(target_os = "emscripten")]
         {
-            resolc::SoljsonCompiler
+            resolc::SoljsonCompiler {}
         }
 
         #[cfg(not(target_os = "emscripten"))]

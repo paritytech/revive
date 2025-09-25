@@ -58,7 +58,7 @@ impl Process for WorkerProcess {
         Ok(())
     }
 
-    fn call<I, O>(path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
+    fn call<I, O>(_path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
     where
         I: serde::Serialize,
         O: serde::de::DeserializeOwned,

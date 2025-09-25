@@ -59,7 +59,6 @@ impl Input {
     }
 
     /// A shortcut constructor from paths.
-    #[allow(clippy::too_many_arguments)]
     pub fn try_from_solidity_paths(
         evm_version: Option<revive_common::EVMVersion>,
         paths: &[PathBuf],
@@ -108,7 +107,6 @@ impl Input {
 
     /// A shortcut constructor from source code.
     /// Only for the integration test purposes.
-    #[allow(clippy::too_many_arguments)]
     pub fn try_from_solidity_sources(
         evm_version: Option<revive_common::EVMVersion>,
         sources: BTreeMap<String, Source>,
@@ -200,9 +198,8 @@ impl Input {
         #[cfg(not(feature = "parallel"))]
         let iter = self.sources.iter_mut();
 
-        iter.map(|(_path, source)| {
+        iter.for_each(|(_path, source)| {
             let _ = source.try_resolve();
-        })
-        .collect::<Vec<()>>();
+        });
     }
 }

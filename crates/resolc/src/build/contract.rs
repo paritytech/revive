@@ -9,7 +9,6 @@ use std::path::PathBuf;
 
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
-use revive_solc_json_interface::SolcStandardJsonOutputContractEVM;
 use serde::Deserialize;
 use serde::Serialize;
 

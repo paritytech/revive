@@ -264,7 +264,7 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
     let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
 
     let sources = sources
-        .into_iter()
+        .iter()
         .map(|(path, source)| {
             (
                 path.to_string(),

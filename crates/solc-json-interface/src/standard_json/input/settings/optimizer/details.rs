@@ -40,7 +40,6 @@ pub struct Details {
 
 impl Details {
     /// A shortcut constructor.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         peephole: Option<bool>,
         inliner: Option<bool>,

@@ -20,7 +20,6 @@ itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 num = { workspace = true }
 hex = { workspace = true }
-sha3 = { workspace = true }
 inkwell = { workspace = true }
 libc = { workspace = true }
 polkavm-disassembler = { workspace = true }

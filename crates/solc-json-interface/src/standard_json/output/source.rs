@@ -48,8 +48,9 @@ impl Source {
         let expression = expression.get("expression")?.as_object()?;
         let type_descriptions = expression.get("typeDescriptions")?.as_object()?;
         let type_identifier = type_descriptions.get("typeIdentifier")?.as_str()?;
-        let affected_types = vec!["t_address_payable"];
-        affected_types.contains(&type_identifier).then_some(())?;
+        ["t_address_payable"]
+            .contains(&type_identifier)
+            .then_some(())?;
 
         Some(Warning::SendAndTransfer.as_error(ast.get("src")?.as_str(), id_paths, sources))
     }

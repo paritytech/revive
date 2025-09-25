@@ -2,7 +2,6 @@
 
 use inkwell::values::BasicValue;
 
-use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::Context;
 
 const STATIC_CALL_FLAG: u32 = 0b0001_0000;
@@ -10,7 +9,6 @@ const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
 const SOLIDITY_TRANSFER_GAS_STIPEND_THRESHOLD: u64 = 2300;
 
 /// Translates a contract call.
-#[allow(clippy::too_many_arguments)]
 pub fn call<'ctx>(
     context: &mut Context<'ctx>,
     gas: inkwell::values::IntValue<'ctx>,
@@ -111,7 +109,6 @@ pub fn call<'ctx>(
         .as_basic_value_enum())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn delegate_call<'ctx>(
     context: &mut Context<'ctx>,
     _gas: inkwell::values::IntValue<'ctx>,
@@ -197,7 +194,7 @@ pub fn linker_symbol<'ctx>(
     path: &str,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     context.declare_global(
-        &path,
+        path,
         context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
         Default::default(),
     );

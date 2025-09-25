@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 use std::io::Write;
-use std::path::Path;
 use std::path::PathBuf;
 
 use revive_solc_json_interface::combined_json::CombinedJson;
@@ -220,6 +219,6 @@ impl Compiler for SolcCompiler {
             .parse()
             .map_err(|error| anyhow::anyhow!("{} version parsing: {}", self.executable, error))?;
 
-        Ok(Version::new(long, default))
+        Version::new(long, default).validate()
     }
 }

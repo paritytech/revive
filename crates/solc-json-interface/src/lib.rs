@@ -3,6 +3,8 @@
 //!
 //! [0]: https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description
 
+#![allow(clippy::too_many_arguments)]
+
 pub use self::combined_json::contract::Contract as CombinedJsonContract;
 pub use self::combined_json::selector::Selector as CombinedJsonSelector;
 pub use self::combined_json::selector::MESSAGE_SELECTOR_INVALID as CombinedJsonInvalidSelectorMessage;

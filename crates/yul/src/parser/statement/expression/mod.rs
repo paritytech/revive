@@ -1,10 +1,6 @@
 //! The expression statement.
 
-pub mod function_call;
-pub mod literal;
-
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,6 +18,9 @@ use crate::visitor::AstVisitor;
 
 use self::function_call::FunctionCall;
 use self::literal::Literal;
+
+pub mod function_call;
+pub mod literal;
 
 /// The Yul expression statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

@@ -1,7 +1,6 @@
 //! The Solidity compiler solJson interface.
 
 use std::collections::HashSet;
-use std::path::Path;
 use std::path::PathBuf;
 
 use revive_solc_json_interface::combined_json::CombinedJson;
@@ -90,7 +89,7 @@ impl Compiler for SoljsonCompiler {
             .ok_or_else(|| anyhow::anyhow!("Soljson version parsing: metadata dropping"))?
             .parse()
             .map_err(|error| anyhow::anyhow!("Soljson version parsing: {}", error))?;
-        Ok(Version::new(long, default))
+        Version::new(long, default).validate()
     }
 }
 

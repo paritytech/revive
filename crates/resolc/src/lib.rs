@@ -1,5 +1,7 @@
 //! Solidity to PolkaVM compiler library.
 
+#![allow(clippy::too_many_arguments)]
+
 pub(crate) mod build;
 pub(crate) mod r#const;
 pub(crate) mod missing_libraries;
@@ -58,7 +60,6 @@ use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
 /// Runs the Yul mode.
-#[allow(clippy::too_many_arguments)]
 pub fn yul<T: Compiler>(
     solc: &T,
     input_files: &[PathBuf],
@@ -124,7 +125,6 @@ pub fn llvm_ir(
 }
 
 /// Runs the standard output mode.
-#[allow(clippy::too_many_arguments)]
 pub fn standard_output<T: Compiler>(
     solc: &T,
     input_files: &[PathBuf],
@@ -204,7 +204,6 @@ pub fn standard_output<T: Compiler>(
 }
 
 /// Runs the standard JSON mode.
-#[allow(clippy::too_many_arguments)]
 pub fn standard_json<T: Compiler>(
     solc: &T,
     detect_missing_libraries: bool,
@@ -293,7 +292,6 @@ pub fn standard_json<T: Compiler>(
 }
 
 /// Runs the combined JSON mode.
-#[allow(clippy::too_many_arguments)]
 pub fn combined_json<T: Compiler>(
     solc: &T,
     format: String,
@@ -331,7 +329,7 @@ pub fn combined_json<T: Compiler>(
         .collect::<HashSet<_>>();
     if !selectors.contains(&CombinedJsonSelector::Bytecode) {
         messages.push(SolcStandardJsonOutputError::new_warning(
-            format!("Bytecode is always emitted even if the selector is not provided."),
+            "Bytecode is always emitted even if the selector is not provided.".to_string(),
             None,
             None,
         ));
@@ -344,11 +342,8 @@ pub fn combined_json<T: Compiler>(
         ));
     }
 
-    let output_assembly = selectors.contains(&CombinedJsonSelector::Assembly);
-
     let mut combined_json = solc.combined_json(paths, selectors)?;
-
-    let build = standard_output(
+    standard_output(
         solc,
         paths,
         libraries,
@@ -365,8 +360,8 @@ pub fn combined_json<T: Compiler>(
         debug_config,
         llvm_arguments,
         memory_config,
-    )?;
-    build.write_to_combined_json(&mut combined_json)?;
+    )?
+    .write_to_combined_json(&mut combined_json)?;
 
     match output_directory {
         Some(output_directory) => {

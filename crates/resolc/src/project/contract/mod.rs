@@ -1,11 +1,7 @@
 //! The contract data.
 
-pub mod ir;
-pub mod metadata;
-
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 
 use revive_common::Keccak256;
 use revive_common::MetadataHash;
@@ -13,16 +9,17 @@ use revive_llvm_context::Optimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
-use sha3::Digest;
 
 use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::build::contract::Contract as ContractBuild;
-use crate::project::Project;
 use crate::solc::version::Version as SolcVersion;
 
 use self::ir::IR;
 use self::metadata::Metadata;
+
+pub mod ir;
+pub mod metadata;
 
 /// The contract data.
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -4,9 +4,6 @@ pub mod contract;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::path::Path;
 use std::path::PathBuf;
 
 #[cfg(feature = "parallel")]
@@ -20,13 +17,10 @@ use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use serde::Deserialize;
 use serde::Serialize;
-use sha3::Digest;
 
 use revive_common::ContractIdentifier;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonOutput;
-use revive_yul::lexer::Lexer;
-use revive_yul::parser::statement::object::Object;
 
 use crate::build::contract::Contract as ContractBuild;
 use crate::build::Build;
@@ -37,7 +31,6 @@ use crate::project::contract::ir::llvm_ir::LLVMIR;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::solc::version::Version as SolcVersion;
-use crate::solc::Compiler;
 use crate::ProcessOutput;
 
 use self::contract::Contract;
@@ -108,11 +101,11 @@ impl Project {
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
                 let input = ProcessInput::new(
                     contract,
-                    metadata_hash.clone(),
+                    metadata_hash,
                     optimizer_settings.clone(),
                     debug_config.clone(),
                     llvm_arguments.to_owned(),
-                    memory_config.clone(),
+                    memory_config,
                     missing_libraries,
                     factory_dependencies,
                     self.identifier_paths.clone(),

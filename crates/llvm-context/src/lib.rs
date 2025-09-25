@@ -1,5 +1,7 @@
 //! The LLVM context library.
 
+#![allow(clippy::too_many_arguments)]
+
 use std::ffi::CString;
 use std::sync::OnceLock;
 

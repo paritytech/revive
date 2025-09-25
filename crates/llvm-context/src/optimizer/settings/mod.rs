@@ -2,7 +2,6 @@
 
 pub mod size_level;
 
-use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use serde::Deserialize;
 use serde::Serialize;
 

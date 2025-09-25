@@ -3,7 +3,7 @@
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::{ResolcWarning, SolcStandardJsonOutput};
 
-use crate::tests::{build_solidity, build_solidity_with_options, sources};
+use crate::test_utils::{build_solidity, build_solidity_with_options, sources};
 
 pub const SEND_TEST_SOURCE: &str = r#"
 // SPDX-License-Identifier: MIT

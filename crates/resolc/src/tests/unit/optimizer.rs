@@ -1,8 +1,10 @@
 //! The Solidity compiler unit tests for the optimizer.
 
+use crate::test_utils::{build_solidity, build_solidity_with_options, sources};
+
 #[test]
 fn optimizer() {
-    let sources = &[(
+    let source = &[(
         "test.sol",
         r#"
 // SPDX-License-Identifier: MIT
@@ -43,26 +45,25 @@ contract Test {
 }"#,
     )];
 
-    let build_unoptimized = super::build_solidity_with_options(
-        super::sources(sources),
+    let build_unoptimized = build_solidity_with_options(
+        sources(source),
         Default::default(),
         Default::default(),
         revive_llvm_context::OptimizerSettings::none(),
         true,
         Default::default(),
     )
-    .expect("Build failure");
-    let build_optimized_for_cycles =
-        super::build_solidity(super::sources(sources)).expect("Build failure");
-    let build_optimized_for_size = super::build_solidity_with_options(
-        super::sources(sources),
+    .unwrap();
+    let build_optimized_for_cycles = build_solidity(sources(source)).unwrap();
+    let build_optimized_for_size = build_solidity_with_options(
+        sources(source),
         Default::default(),
         Default::default(),
         revive_llvm_context::OptimizerSettings::size(),
         true,
         Default::default(),
     )
-    .expect("Build failure");
+    .unwrap();
 
     let size_when_unoptimized = build_unoptimized
         .contracts

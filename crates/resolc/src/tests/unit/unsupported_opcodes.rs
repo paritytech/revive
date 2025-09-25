@@ -1,5 +1,7 @@
 //! The Solidity compiler unit tests for unsupported opcodes.
 
+use crate::test_utils::{build_solidity, build_yul, sources};
+
 #[test]
 #[should_panic(expected = "The `CODECOPY` instruction is not supported")]
 fn codecopy_yul_runtime() {
@@ -20,7 +22,7 @@ contract FixedCodeCopy {
     }
 }"#;
 
-    super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
+    build_solidity(sources(&[("test.sol", code)])).unwrap();
 }
 
 #[test]
@@ -48,7 +50,7 @@ contract CallcodeTest {
     }
 }"#;
 
-    super::build_solidity(super::sources(&[("test.sol", solidity)])).expect("Test failure");
+    build_solidity(sources(&[("test.sol", solidity)])).unwrap();
 }
 
 #[test]
@@ -72,7 +74,7 @@ object "ProgramCounter" {
     }
 }"#;
 
-    super::build_yul(&[("test.sol", code)]).expect("Test failure");
+    build_yul(&[("test.sol", code)]).unwrap();
 }
 
 #[test]
@@ -94,7 +96,7 @@ contract ExternalCodeCopy {
     }
 }"#;
 
-    super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
+    build_solidity(sources(&[("test.sol", code)])).unwrap();
 }
 
 #[test]
@@ -117,5 +119,5 @@ contract MinimalDestructible {
     }
 }"#;
 
-    super::build_solidity(super::sources(&[("test.sol", solidity)])).expect("Test failure");
+    build_solidity(sources(&[("test.sol", solidity)])).unwrap();
 }

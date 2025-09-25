@@ -1,5 +1,7 @@
 //! The Solidity compiler unit tests for factory dependencies.
 
+use crate::test_utils::{build_solidity, sources};
+
 #[test]
 fn default() {
     let caller_code = r#"
@@ -35,11 +37,11 @@ contract Callable {
     }
 }"#;
 
-    let output = super::build_solidity(super::sources(&[
+    let output = build_solidity(sources(&[
         ("main.sol", caller_code),
         ("callable.sol", callee_code),
     ]))
-    .expect("Build failure");
+    .unwrap();
 
     assert_eq!(
         output

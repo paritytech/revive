@@ -437,3 +437,12 @@ pub fn compile_blob_with_options(
 
     blob
 }
+
+/// Convert `(path, solidity)` tuples to a standard JSON input source.
+pub fn sources<T: ToString>(sources: &[(T, T)]) -> BTreeMap<String, SolcStandardJsonInputSource> {
+    BTreeMap::from_iter(
+        sources
+            .iter()
+            .map(|(path, code)| (path.to_string(), code.to_string().into())),
+    )
+}

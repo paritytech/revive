@@ -1,5 +1,7 @@
 //! The Solidity compiler unit tests for runtime code.
 
+use crate::test_utils::{build_solidity, sources};
+
 #[test]
 fn default() {
     let code = r#"
@@ -15,8 +17,8 @@ contract Test {
 }
     "#;
 
-    super::build_solidity(super::sources(&[("test.sol", code)]))
-        .expect("Test failure")
+    build_solidity(sources(&[("test.sol", code)]))
+        .unwrap()
         .errors
         .iter()
         .find(|error| {

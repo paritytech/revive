@@ -1,5 +1,7 @@
 //! The Solidity compiler unit tests for remappings.
 
+use crate::test_utils::{build_solidity_with_options, sources};
+
 #[test]
 fn default() {
     let callee_code = r#"
@@ -26,13 +28,13 @@ contract Main {
     }
 }"#;
 
-    super::build_solidity_with_options(
-        super::sources(&[("./test.sol", caller_code), ("./callable.sol", callee_code)]),
+    build_solidity_with_options(
+        sources(&[("./test.sol", caller_code), ("./callable.sol", callee_code)]),
         Default::default(),
         ["libraries/default/=./".to_owned()].into(),
         revive_llvm_context::OptimizerSettings::cycles(),
         true,
         Default::default(),
     )
-    .expect("Test failure");
+    .unwrap();
 }

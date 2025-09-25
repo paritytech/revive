@@ -1,6 +1,4 @@
-//! The CLI tests.
-
-#![cfg(test)]
+//! The `resolc` CLI tests.
 
 mod asm;
 mod combined_json;

@@ -2,6 +2,8 @@
 
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 
+use crate::test_utils::build_solidity_and_detect_missing_libraries;
+
 pub const CODE: &str = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -30,11 +32,9 @@ contract SimpleContract {
 
 #[test]
 fn not_specified() {
-    let output = super::build_solidity_and_detect_missing_libraries(
-        &[("test.sol", CODE)],
-        Default::default(),
-    )
-    .expect("Test failure");
+    let output =
+        build_solidity_and_detect_missing_libraries(&[("test.sol", CODE)], Default::default())
+            .unwrap();
     assert!(
         output
             .contracts
@@ -58,11 +58,9 @@ fn specified() {
         .entry("SimpleLibrary".to_string())
         .or_insert("0x00000000000000000000000000000000DEADBEEF".to_string());
 
-    let output = super::build_solidity_and_detect_missing_libraries(
-        &[("test.sol", CODE)],
-        libraries.clone(),
-    )
-    .expect("Test failure");
+    let output =
+        build_solidity_and_detect_missing_libraries(&[("test.sol", CODE)], libraries.clone())
+            .unwrap();
     assert!(
         output
             .contracts

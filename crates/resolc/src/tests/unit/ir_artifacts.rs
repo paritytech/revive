@@ -1,6 +1,8 @@
 //! The Solidity compiler unit tests for IR artifacts.
 //! The tests check if the IR artifacts are kept in the final output.
 
+use crate::test_utils::{build_solidity, sources};
+
 #[test]
 fn yul() {
     let code = r#"
@@ -14,7 +16,7 @@ contract Test {
 }
     "#;
 
-    let build = super::build_solidity(super::sources(&[("test.sol", code)])).expect("Test failure");
+    let build = build_solidity(sources(&[("test.sol", code)])).expect("Test failure");
 
     assert!(
         !build

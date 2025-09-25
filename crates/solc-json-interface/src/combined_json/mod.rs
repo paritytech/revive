@@ -1,14 +1,14 @@
 //! The `solc --combined-json` output.
 
-pub mod contract;
-pub mod selector;
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde::Serialize;
 
 use self::contract::Contract;
+
+pub mod contract;
+pub mod selector;
 
 /// The `solc --combined-json` output.
 #[derive(Debug, Serialize, Deserialize)]

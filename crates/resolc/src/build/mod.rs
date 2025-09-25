@@ -1,7 +1,5 @@
 //! The Solidity project build.
 
-pub mod contract;
-
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
@@ -20,6 +18,8 @@ use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 use crate::build::contract::Contract;
 use crate::solc::version::Version as SolcVersion;
+
+pub mod contract;
 
 /// The Solidity project PVM build.
 #[derive(Debug, Default)]

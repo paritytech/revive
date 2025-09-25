@@ -1,9 +1,5 @@
 //! The `solc --standard-json` input.
 
-pub mod language;
-pub mod settings;
-pub mod source;
-
 use std::collections::BTreeMap;
 #[cfg(feature = "resolc")]
 use std::collections::BTreeSet;
@@ -33,6 +29,10 @@ use self::language::Language;
 use self::settings::warning::Warning;
 use self::settings::Settings;
 use self::source::Source;
+
+pub mod language;
+pub mod settings;
+pub mod source;
 
 /// The `solc --standard-json` input.
 #[derive(Clone, Debug, Serialize, Deserialize)]

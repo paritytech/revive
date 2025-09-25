@@ -1,7 +1,5 @@
 //! Solidity to PolkaVM compiler binary.
 
-pub mod arguments;
-
 use std::str::FromStr;
 use std::{io::Write, path::PathBuf};
 
@@ -14,6 +12,8 @@ use revive_solc_json_interface::{
 };
 
 use self::arguments::Arguments;
+
+pub mod arguments;
 
 #[cfg(target_env = "musl")]
 #[global_allocator]
@@ -150,7 +150,6 @@ fn main_inner(
         {
             resolc::SoljsonCompiler {}
         }
-
         #[cfg(not(target_os = "emscripten"))]
         {
             resolc::SolcCompiler::new(
@@ -198,9 +197,8 @@ fn main_inner(
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &solc,
-            arguments.detect_missing_libraries,
-            messages,
             metadata_hash,
+            messages,
             standard_json.map(PathBuf::from),
             arguments.base_path,
             arguments.include_paths,
@@ -208,17 +206,18 @@ fn main_inner(
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
+            arguments.detect_missing_libraries,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
         resolc::combined_json(
             &solc,
-            format,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            messages,
             metadata_hash,
+            messages,
             evm_version,
+            format,
             !arguments.disable_solc_optimizer,
             optimizer_settings,
             arguments.base_path,
@@ -238,8 +237,8 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            messages,
             metadata_hash,
+            messages,
             evm_version,
             !arguments.disable_solc_optimizer,
             optimizer_settings,

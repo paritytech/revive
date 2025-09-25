@@ -1,12 +1,6 @@
 //! The LLVM context library.
 
-pub mod r#const;
-pub mod context;
-pub mod evm;
-
 use std::collections::BTreeMap;
-
-pub use self::r#const::*;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
@@ -19,6 +13,11 @@ use revive_common::{Keccak256, ObjectFormat};
 
 use self::context::build::Build;
 use self::context::Context;
+pub use self::r#const::*;
+
+pub mod r#const;
+pub mod context;
+pub mod evm;
 
 /// Get a [Build] from contract bytecode and its auxilliary data.
 pub fn build(

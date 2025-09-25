@@ -1,12 +1,5 @@
 //! The LLVM IR generator function.
 
-pub mod declaration;
-pub mod intrinsics;
-pub mod llvm_runtime;
-pub mod r#return;
-pub mod runtime;
-pub mod yul_data;
-
 use std::collections::HashMap;
 
 use inkwell::debug_info::AsDIScope;
@@ -19,6 +12,13 @@ use crate::polkavm::context::pointer::Pointer;
 use self::declaration::Declaration;
 use self::r#return::Return;
 use self::yul_data::YulData;
+
+pub mod declaration;
+pub mod intrinsics;
+pub mod llvm_runtime;
+pub mod r#return;
+pub mod runtime;
+pub mod yul_data;
 
 /// The LLVM IR generator function.
 #[derive(Debug)]

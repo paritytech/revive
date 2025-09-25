@@ -1,22 +1,5 @@
 //! The LLVM IR generator context.
 
-pub mod address_space;
-pub mod argument;
-pub mod attribute;
-pub mod build;
-pub mod code_type;
-pub mod debug_info;
-pub mod function;
-pub mod global;
-pub mod r#loop;
-pub mod pointer;
-pub mod runtime;
-pub mod solidity_data;
-pub mod yul_data;
-
-#[cfg(test)]
-mod tests;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -56,6 +39,23 @@ use self::r#loop::Loop;
 use self::runtime::RuntimeFunction;
 use self::solidity_data::SolidityData;
 use self::yul_data::YulData;
+
+pub mod address_space;
+pub mod argument;
+pub mod attribute;
+pub mod build;
+pub mod code_type;
+pub mod debug_info;
+pub mod function;
+pub mod global;
+pub mod r#loop;
+pub mod pointer;
+pub mod runtime;
+pub mod solidity_data;
+pub mod yul_data;
+
+#[cfg(test)]
+mod tests;
 
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter

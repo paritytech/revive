@@ -1,9 +1,5 @@
 //! The `solc --standard-json` output.
 
-pub mod contract;
-pub mod error;
-pub mod source;
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
@@ -22,6 +18,10 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use self::contract::Contract;
 use self::error::Error as SolcStandardJsonOutputError;
 use self::source::Source;
+
+pub mod contract;
+pub mod error;
+pub mod source;
 
 /// The `solc --standard-json` output.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

@@ -1,16 +1,5 @@
 //! The block statement.
 
-pub mod assignment;
-pub mod block;
-pub mod code;
-pub mod expression;
-pub mod for_loop;
-pub mod function_definition;
-pub mod if_conditional;
-pub mod object;
-pub mod switch;
-pub mod variable_declaration;
-
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
@@ -36,6 +25,17 @@ use self::if_conditional::IfConditional;
 use self::object::Object;
 use self::switch::Switch;
 use self::variable_declaration::VariableDeclaration;
+
+pub mod assignment;
+pub mod block;
+pub mod code;
+pub mod expression;
+pub mod for_loop;
+pub mod function_definition;
+pub mod if_conditional;
+pub mod object;
+pub mod switch;
+pub mod variable_declaration;
 
 /// The Yul block statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

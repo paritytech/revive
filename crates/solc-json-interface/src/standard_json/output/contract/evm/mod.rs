@@ -1,7 +1,5 @@
 //! The `solc --standard-json` output contract EVM data.
 
-pub mod bytecode;
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
@@ -9,6 +7,8 @@ use serde::Serialize;
 
 use self::bytecode::Bytecode;
 use self::bytecode::DeployedBytecode;
+
+pub mod bytecode;
 
 /// The `solc --standard-json` output contract EVM data.
 /// It is replaced by PolkaVM data after compiling.

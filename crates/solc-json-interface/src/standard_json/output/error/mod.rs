@@ -1,9 +1,5 @@
 //! The `solc --standard-json` output error.
 
-pub mod error_handler;
-pub mod mapped_location;
-pub mod source_location;
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
@@ -13,6 +9,10 @@ use crate::SolcStandardJsonInputSource;
 
 use self::mapped_location::MappedLocation;
 use self::source_location::SourceLocation;
+
+pub mod error_handler;
+pub mod mapped_location;
+pub mod source_location;
 
 /// The `solc --standard-json` output error.
 #[derive(Debug, Serialize, Deserialize, Clone)]

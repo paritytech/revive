@@ -1,7 +1,5 @@
 //! The debug configuration.
 
-pub mod ir_type;
-
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -9,6 +7,8 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use self::ir_type::IRType;
+
+pub mod ir_type;
 
 /// The debug configuration.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]

@@ -1,13 +1,13 @@
 //! The LLVM optimizer settings.
 
-pub mod size_level;
-
 use serde::Deserialize;
 use serde::Serialize;
 
 use itertools::Itertools;
 
 use self::size_level::SizeLevel;
+
+pub mod size_level;
 
 /// The LLVM optimizer and code-gen settings.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]

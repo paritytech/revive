@@ -1,7 +1,5 @@
 //! The switch statement.
 
-pub mod case;
-
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
@@ -20,6 +18,8 @@ use crate::visitor::AstNode;
 use crate::visitor::AstVisitor;
 
 use self::case::Case;
+
+pub mod case;
 
 /// The Yul switch statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

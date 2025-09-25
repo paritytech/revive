@@ -2,13 +2,10 @@
 
 #![allow(clippy::too_many_arguments)]
 
-pub(crate) mod build;
-pub(crate) mod r#const;
-pub(crate) mod missing_libraries;
-pub(crate) mod process;
-pub(crate) mod project;
-pub(crate) mod solc;
-pub(crate) mod version;
+use std::collections::BTreeSet;
+use std::collections::HashSet;
+use std::io::Write;
+use std::path::PathBuf;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
@@ -33,15 +30,6 @@ pub use self::solc::FIRST_SUPPORTED_VERSION as SolcFirstSupportedVersion;
 pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
 
-#[cfg(not(target_os = "emscripten"))]
-pub mod test_utils;
-pub mod tests;
-
-use std::collections::BTreeSet;
-use std::collections::HashSet;
-use std::io::Write;
-use std::path::PathBuf;
-
 use revive_common::MetadataHash;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::CombinedJsonSelector;
@@ -55,6 +43,17 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
+
+pub(crate) mod build;
+pub(crate) mod r#const;
+pub(crate) mod missing_libraries;
+pub(crate) mod process;
+pub(crate) mod project;
+pub(crate) mod solc;
+#[cfg(not(target_os = "emscripten"))]
+pub mod test_utils;
+pub mod tests;
+pub(crate) mod version;
 
 /// The rayon worker stack size.
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
@@ -98,8 +97,8 @@ pub fn standard_output<T: Compiler>(
     solc: &T,
     input_files: &[PathBuf],
     libraries: &[String],
-    messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
     evm_version: Option<revive_common::EVMVersion>,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
@@ -175,9 +174,8 @@ pub fn standard_output<T: Compiler>(
 /// Runs the standard JSON mode.
 pub fn standard_json<T: Compiler>(
     solc: &T,
-    detect_missing_libraries: bool,
-    messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
     json_path: Option<PathBuf>,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -185,6 +183,7 @@ pub fn standard_json<T: Compiler>(
     debug_config: revive_llvm_context::DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    detect_missing_libraries: bool,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let mut solc_input = SolcStandardJsonInput::try_from(json_path.as_deref())?;
@@ -263,12 +262,12 @@ pub fn standard_json<T: Compiler>(
 /// Runs the combined JSON mode.
 pub fn combined_json<T: Compiler>(
     solc: &T,
-    format: String,
     paths: &[PathBuf],
     libraries: &[String],
-    messages: &mut Vec<SolcStandardJsonOutputError>,
     metadata_hash: MetadataHash,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
     evm_version: Option<revive_common::EVMVersion>,
+    format: String,
     solc_optimizer_enabled: bool,
     optimizer_settings: revive_llvm_context::OptimizerSettings,
     base_path: Option<String>,
@@ -316,8 +315,8 @@ pub fn combined_json<T: Compiler>(
         solc,
         paths,
         libraries,
-        messages,
         metadata_hash,
+        messages,
         evm_version,
         solc_optimizer_enabled,
         optimizer_settings,

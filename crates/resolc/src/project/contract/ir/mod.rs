@@ -1,13 +1,13 @@
 //! The contract source code.
 
-pub mod yul;
-
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
 
 use self::yul::Yul;
+
+pub mod yul;
 
 /// The contract source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -1,8 +1,5 @@
 //! The compiler lexer.
 
-pub mod error;
-pub mod token;
-
 #[cfg(test)]
 mod tests;
 
@@ -15,6 +12,9 @@ use self::token::lexeme::symbol::Symbol;
 use self::token::lexeme::Lexeme;
 use self::token::location::Location;
 use self::token::Token;
+
+pub mod error;
+pub mod token;
 
 /// The compiler lexer.
 pub struct Lexer {

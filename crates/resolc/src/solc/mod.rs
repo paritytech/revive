@@ -70,6 +70,7 @@ pub trait Compiler {
         let solc_output = self.standard_json(solc_input, messages, None, vec![], None)?;
         Ok(solc_output)
     }
+
     /// The `solc --version` mini-parser.
     fn version(&self) -> anyhow::Result<Version>;
 }

@@ -56,6 +56,13 @@ impl Compiler for SoljsonCompiler {
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
+        output
+            .errors
+            .retain(|error| match error.error_code.as_deref() {
+                Some(code) => !SolcStandardJsonOutputError::IGNORED_WARNING_CODES.contains(&code),
+                None => true,
+            });
+        output.errors.append(messages);
 
         let mut suppressed_warnings = input.suppressed_warnings.clone();
         suppressed_warnings.extend_from_slice(input.settings.suppressed_warnings.as_slice());

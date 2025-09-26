@@ -26,6 +26,7 @@ jobs:
         with:
           # without this it will override our rust flags
           rustflags: ""
+          components: rustfmt
 
       - name: Install Solc
         uses: ./.github/actions/get-solc

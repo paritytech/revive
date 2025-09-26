@@ -2,6 +2,7 @@
 
 mod asm;
 mod combined_json;
+mod linker;
 mod llvm_arguments;
 mod optimization;
 mod output_dir;

@@ -1,9 +1,5 @@
 //! The tests for running resolc with explicit optimization.
 
-#![cfg(test)]
-
-use revive_common;
-
 use crate::tests::cli::utils::{
     self, assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
     execute_solc, RESOLC_YUL_FLAG, SOLIDITY_CONTRACT_PATH, YUL_MEMSET_CONTRACT_PATH,

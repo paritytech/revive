@@ -1,7 +1,5 @@
 //! The tests for running resolc when expecting usage output.
 
-#![cfg(test)]
-
 use crate::tests::cli::utils;
 
 #[test]

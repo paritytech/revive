@@ -79,6 +79,7 @@ impl Build {
                             Some((dependency.to_owned(), bytecode_hash))
                         })
                         .collect(),
+                    !debug_config.emit_debug_info,
                 ) {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
                         let bytecode_hash =

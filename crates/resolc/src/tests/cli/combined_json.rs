@@ -1,8 +1,5 @@
 //! The tests for running resolc with combined JSON option.
 
-#![cfg(test)]
-
-use revive_common;
 use revive_solc_json_interface::CombinedJsonInvalidSelectorMessage;
 
 use crate::tests::cli::utils;

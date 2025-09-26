@@ -24,6 +24,7 @@ SECTIONS {
     const BUILTINS_ARCHIVE_FILE: &str = "libclang_rt.builtins-riscv64.a";
     const BUILTINS_LIB_NAME: &str = "clang_rt.builtins-riscv64";
 
+    /// The setup routine.
     pub fn setup() -> anyhow::Result<Self> {
         let temporary_directory = TempDir::new()?;
         let output_path = temporary_directory.path().join("out.so");
@@ -47,6 +48,7 @@ SECTIONS {
         })
     }
 
+    /// The linking routine.
     pub fn link<T: AsRef<[u8]>>(self, input: T, symbols: T) -> anyhow::Result<Vec<u8>> {
         fs::write(&self.object_path, input)
             .map_err(|message| anyhow::anyhow!("{message} {:?}", self.object_path))?;
@@ -66,6 +68,7 @@ SECTIONS {
         Ok(fs::read(&self.output_path)?)
     }
 
+    /// The argument creation helper function.
     fn create_arguments(&self) -> Vec<String> {
         [
             "ld.lld",
@@ -94,6 +97,7 @@ SECTIONS {
     }
 }
 
+/// The LLD invoking helper function.
 fn invoke_lld(arguments: Vec<String>) -> bool {
     let c_strings = arguments
         .into_iter()

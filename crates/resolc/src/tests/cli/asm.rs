@@ -1,7 +1,5 @@
 //! The tests for running resolc with asm option.
 
-#![cfg(test)]
-
 use crate::tests::cli::utils;
 
 const ASM_OPTION: &str = "--asm";

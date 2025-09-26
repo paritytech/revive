@@ -104,9 +104,9 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
-    /// Specify the bytecode file to link.
-    /// In default mode, input bytecode files and `--libraries` are required, and the input files are modified in place.
-    /// In standard JSON mode, the result of linking is returned via stdout in a JSON.
+    /// Switch to linker mode, ignoring all options apart from `--libraries` and modify binaries in place.
+    /// NOTE: Contracts must be present in the input files with the EXACT SAME directory structure as their source code,
+    /// otherwise this may fail.
     #[arg(long)]
     pub link: bool,
 
@@ -383,20 +383,6 @@ impl Arguments {
             if self.emit_source_debug_info {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Debug info must be requested in standard JSON input polkavm settings.",
-                    None,
-                    None,
-                ));
-            }
-        }
-
-        if self.link {
-            let linker_default_arguments_count = 2
-                + self.inputs.len()
-                + ((!self.libraries.is_empty()) as usize)
-                + self.libraries.len();
-            if std::env::args().count() > linker_default_arguments_count {
-                messages.push(SolcStandardJsonOutputError::new_error(
-                    "Error: Only input files and `--libraries` are allowed in linker mode.",
                     None,
                     None,
                 ));

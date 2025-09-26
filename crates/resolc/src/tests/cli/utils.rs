@@ -5,19 +5,23 @@ use std::{
     process::{Command, Stdio},
 };
 
-use revive_common;
-
 use crate::SolcCompiler;
 
 /// The simple Solidity contract test fixture path.
 pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/data/solidity/contract.sol";
+/// The dependency Solidity contract test fixture path.
+pub const DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dependency.sol";
+
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
+
 /// The memeset YUL contract test fixture path.
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
 /// The standard JSON contracts test fixture path.
+///
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
+
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.

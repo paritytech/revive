@@ -69,17 +69,18 @@ pub fn link(
     bytecode: &[u8],
     linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
     factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
+    strip_binary: bool,
 ) -> anyhow::Result<(Vec<u8>, revive_common::ObjectFormat)> {
     match ObjectFormat::try_from(bytecode) {
-        Ok(value @ ObjectFormat::PVM) => Ok((bytecode.to_vec(), value)),
-        Ok(ObjectFormat::ELF) => {
+        Ok(format @ ObjectFormat::PVM) => Ok((bytecode.to_vec(), format)),
+        Ok(ObjectFormat::ELF) => Ok({
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
             let bytecode_linked =
                 revive_linker::Linker::setup()?.link(bytecode, symbols.as_slice())?;
-            Ok(revive_linker::polkavm_linker(&bytecode_linked, true)
+            revive_linker::polkavm_linker(&bytecode_linked, strip_binary)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
-                .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF)))
-        }
+                .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF))
+        }),
         Err(error) => panic!("ICE: linker: {error}"),
     }
 }

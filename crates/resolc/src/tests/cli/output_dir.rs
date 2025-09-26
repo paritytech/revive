@@ -1,7 +1,5 @@
 //! The tests for running resolc with output directory option.
 
-#![cfg(test)]
-
 use std::path::Path;
 
 use tempfile::tempdir;

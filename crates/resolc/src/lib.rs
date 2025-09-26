@@ -26,7 +26,7 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
-use crate::linker::Linker;
+use crate::linker::Output;
 
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
@@ -370,7 +370,7 @@ pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
         })
         .collect::<anyhow::Result<BTreeMap<String, Vec<u8>>>>()?;
 
-    let output = Linker::try_link(&bytecodes, &libraries)?;
+    let output = Output::try_from(&bytecodes, &libraries)?;
 
     #[cfg(feature = "parallel")]
     let iter = output.linked.into_par_iter();

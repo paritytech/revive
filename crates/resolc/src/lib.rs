@@ -2,11 +2,16 @@
 
 #![allow(clippy::too_many_arguments)]
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
+#[cfg(feature = "parallel")]
+use rayon::iter::IntoParallelIterator;
+#[cfg(feature = "parallel")]
+use rayon::iter::ParallelIterator;
 use revive_common::MetadataHash;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::CombinedJsonSelector;
@@ -46,6 +51,7 @@ pub use self::version::Version as ResolcVersion;
 
 pub(crate) mod build;
 pub(crate) mod r#const;
+pub(crate) mod linker;
 pub(crate) mod missing_libraries;
 pub(crate) mod process;
 pub(crate) mod project;
@@ -345,5 +351,25 @@ pub fn combined_json<T: Compiler>(
             serde_json::to_writer(std::io::stdout(), &combined_json)?;
         }
     }
+    std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+}
+
+/// Links unlinked bytecode files.
+pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
+    #[cfg(feature = "parallel")]
+    let iter = paths.into_par_iter();
+    #[cfg(not(feature = "parallel"))]
+    let iter = paths.into_iter();
+
+    let bytecodes = iter
+        .map(|path| {
+            let bytecode = std::fs::read_to_string(path.as_str())?;
+            Ok((path, bytecode))
+        })
+        .collect::<anyhow::Result<BTreeMap<String, String>>>()?;
+
+    let output = linker::link(&bytecodes, &libraries)?;
+
+    serde_json::to_writer(std::io::stdout(), &output)?;
     std::process::exit(revive_common::EXIT_CODE_SUCCESS);
 }

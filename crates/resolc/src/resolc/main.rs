@@ -234,6 +234,8 @@ fn main_inner(
             memory_config,
         )?;
         return Ok(());
+    } else if arguments.link {
+        return resolc::link(arguments.inputs, arguments.libraries);
     } else {
         resolc::standard_output(
             &solc,

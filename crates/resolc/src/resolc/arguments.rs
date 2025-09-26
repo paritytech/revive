@@ -104,6 +104,12 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
+    /// Specify the bytecode file to link.
+    /// In default mode, input bytecode files and `--libraries` are required, and the input files are modified in place.
+    /// In standard JSON mode, the result of linking is returned via stdout in a JSON.
+    #[arg(long)]
+    pub link: bool,
+
     /// Set the metadata hash type.
     /// Available types: `none`, `ipfs`, `keccak256`.
     /// The default is `keccak256`.
@@ -224,61 +230,64 @@ impl Arguments {
             ));
         }
 
-        let argument_count = [
+        let modes = [
             self.yul,
             self.combined_json.is_some(),
             self.standard_json.is_some(),
+            self.link,
         ]
         .iter()
         .filter(|&&x| x)
         .count();
         let acceptable_count = 1 + self.standard_json.is_some() as usize;
-        if argument_count > acceptable_count {
+        if modes > acceptable_count {
             messages.push(SolcStandardJsonOutputError::new_error(
             "Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.",None,None));
         }
 
-        if self.yul {
+        if self.yul && !self.libraries.is_empty() {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "Libraries are not supported in Yul and linker modes.",
+                None,
+                None,
+            ));
+        }
+
+        if self.yul || self.link {
             if self.base_path.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes.",
+                    "`base-path` is not used in Yul and linker modes.",
                     None,
                     None,
                 ));
             }
             if !self.include_paths.is_empty() {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "`include-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes.",
+                    "`include-paths` is not used in Yul and linker modes.",
                     None,
                     None,
                 ));
             }
             if self.allow_paths.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "`allow-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes.",
+                    "`allow-paths` is not used in Yul and linker modes.",
                     None,
                     None,
                 ));
             }
-            if !self.libraries.is_empty() {
-                messages.push(SolcStandardJsonOutputError::new_error(
-                    "Libraries are not supported in Yul, LLVM IR and PolkaVM assembly modes.",
-                    None,
-                    None,
-                ));
-            }
-
             if self.evm_version.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "`evm-version` is not used in Yul, LLVM IR and PolkaVM assembly modes.",
+                    "`evm-version` is not used in Yul and linker modes.",
                     None,
                     None,
                 ));
             }
-
             if self.disable_solc_optimizer {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                "Disabling the solc optimizer is not supported in Yul, LLVM IR and PolkaVM assembly modes.",None,None));
+                    "Disabling the solc optimizer is not supported in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
         }
 
@@ -374,6 +383,20 @@ impl Arguments {
             if self.emit_source_debug_info {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Debug info must be requested in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
+            }
+        }
+
+        if self.link {
+            let linker_default_arguments_count = 2
+                + self.inputs.len()
+                + ((!self.libraries.is_empty()) as usize)
+                + self.libraries.len();
+            if std::env::args().count() > linker_default_arguments_count {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Error: Only input files and `--libraries` are allowed in linker mode.",
                     None,
                     None,
                 ));

@@ -26,6 +26,8 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
+use crate::linker::Linker;
+
 pub use self::build::contract::Contract as ContractBuild;
 pub use self::build::Build;
 pub use self::missing_libraries::MissingLibraries;
@@ -363,13 +365,27 @@ pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
 
     let bytecodes = iter
         .map(|path| {
-            let bytecode = std::fs::read_to_string(path.as_str())?;
+            let bytecode = std::fs::read(path.as_str())?;
             Ok((path, bytecode))
         })
-        .collect::<anyhow::Result<BTreeMap<String, String>>>()?;
+        .collect::<anyhow::Result<BTreeMap<String, Vec<u8>>>>()?;
 
-    let output = linker::link(&bytecodes, &libraries)?;
+    let output = Linker::try_link(&bytecodes, &libraries)?;
 
-    serde_json::to_writer(std::io::stdout(), &output)?;
+    #[cfg(feature = "parallel")]
+    let iter = output.linked.into_par_iter();
+    #[cfg(not(feature = "parallel"))]
+    let iter = output.linked.into_iter();
+
+    iter.map(|(path, bytecode)| {
+        std::fs::write(path, bytecode)?;
+        Ok(())
+    })
+    .collect::<anyhow::Result<()>>()?;
+
+    for (path, _) in output.unlinked {
+        println!("Warning: file '{path}' still unresolved");
+    }
+
     std::process::exit(revive_common::EXIT_CODE_SUCCESS);
 }

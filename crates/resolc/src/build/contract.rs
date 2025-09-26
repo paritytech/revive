@@ -81,6 +81,7 @@ impl Contract {
 
         Ok(())
     }
+
     /// Writes the contract text assembly and bytecode to files.
     pub fn write_to_directory(
         self,
@@ -96,68 +97,58 @@ impl Contract {
             .expect("Always exists")
             .to_str()
             .expect("Always valid");
-
-        let mut output_path = path.to_owned();
-        output_path.push(file_name);
+        let output_path = path.to_owned();
         std::fs::create_dir_all(output_path.as_path())?;
 
         if output_metadata {
-            let output_name = format!(
-                "{}_meta.{}",
+            let file_path = output_path.join(format!(
+                "{file_name}:{}.{}",
                 self.identifier.name.as_deref().unwrap_or(file_name),
-                revive_common::EXTENSION_JSON,
-            );
-            let mut output_path = output_path.clone();
-            output_path.push(output_name.as_str());
-
-            if output_path.exists() && !overwrite {
-                anyhow::bail!(
-                    "Refusing to overwrite an existing file {output_path:?} (use --overwrite to force)."
-                );
-            } else {
-                std::fs::write(
-                    output_path.as_path(),
-                    self.metadata_json.to_string().as_bytes(),
-                )
-                .map_err(|error| anyhow::anyhow!("File {output_path:?} writing: {error}"))?;
-            }
-        }
-        if output_assembly {
-            let file_name = format!("{file_name}.{}", revive_common::EXTENSION_POLKAVM_ASSEMBLY);
-            let mut file_path = path.to_owned();
-            file_path.push(file_name);
-
+                revive_common::EXTENSION_JSON
+            ));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
                 );
-            } else {
-                File::create(&file_path)
-                    .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
-                    .write_all(self.build.assembly_text.unwrap_or_default().as_bytes())
-                    .map_err(|error| {
-                        anyhow::anyhow!("File {file_path:?} writing error: {error}")
-                    })?;
             }
+            std::fs::write(
+                file_path.as_path(),
+                self.metadata_json.to_string().as_bytes(),
+            )
+            .map_err(|error| anyhow::anyhow!("File {file_path:?} writing: {error}"))?;
+        }
+        if output_assembly {
+            let file_path = output_path.join(format!(
+                "{file_name}:{}.{}",
+                self.identifier.name.as_deref().unwrap_or(file_name),
+                revive_common::EXTENSION_POLKAVM_ASSEMBLY
+            ));
+            if file_path.exists() && !overwrite {
+                anyhow::bail!(
+                    "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
+                );
+            }
+            File::create(&file_path)
+                .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
+                .write_all(self.build.assembly_text.unwrap_or_default().as_bytes())
+                .map_err(|error| anyhow::anyhow!("File {file_path:?} writing error: {error}"))?;
         }
 
         if output_binary {
-            let file_name = format!("{file_name}.{}", revive_common::EXTENSION_POLKAVM_BINARY);
-            let mut file_path = path.to_owned();
-            file_path.push(file_name);
-
+            let file_path = output_path.join(format!(
+                "{file_name}:{}.{}",
+                self.identifier.name.as_deref().unwrap_or(file_name),
+                revive_common::EXTENSION_POLKAVM_BINARY
+            ));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
                 );
-            } else {
-                File::create(&file_path)
-                    .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
-                    .write_all(self.build.bytecode.as_slice())
-                    .map_err(|error| {
-                        anyhow::anyhow!("File {file_path:?} writing error: {error}")
-                    })?;
             }
+            File::create(&file_path)
+                .map_err(|error| anyhow::anyhow!("File {file_path:?} creating error: {error}"))?
+                .write_all(self.build.bytecode.as_slice())
+                .map_err(|error| anyhow::anyhow!("File {file_path:?} writing error: {error}"))?;
         }
 
         Ok(())

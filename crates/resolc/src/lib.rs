@@ -386,6 +386,7 @@ pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
     for (path, _) in output.unlinked {
         println!("Warning: file '{path}' still unresolved");
     }
+    println!("Linking completed");
 
     std::process::exit(revive_common::EXIT_CODE_SUCCESS);
 }

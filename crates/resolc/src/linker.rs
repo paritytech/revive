@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use revive_common::ObjectFormat;
 use revive_llvm_context::{polkavm_hash, polkavm_link};
@@ -34,7 +34,12 @@ impl Linker {
             }
 
             let hash = polkavm_hash(bytecode);
-            factory_dependencies.insert(path.clone(), hash);
+            let mut path = PathBuf::from(path);
+            path.set_extension("");
+            factory_dependencies.insert(
+                path.file_name().unwrap().to_str().unwrap().to_string(),
+                hash,
+            );
         }
 
         loop {

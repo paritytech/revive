@@ -8,8 +8,8 @@ use tempfile::tempdir;
 
 use crate::tests::cli::utils;
 
-const OUTPUT_BIN_FILE_PATH: &str = "contract.sol.pvm";
-const OUTPUT_ASM_FILE_PATH: &str = "contract.sol.pvmasm";
+const OUTPUT_BIN_FILE_PATH: &str = "contract.sol:C.pvm";
+const OUTPUT_ASM_FILE_PATH: &str = "contract.sol:C.pvmasm";
 const OUTPUT_LLVM_OPTIMIZED_FILE_PATH: &str = "src_tests_data_solidity_contract.sol.C.optimized.ll";
 const OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH: &str =
     "src_tests_data_solidity_contract.sol.C.unoptimized.ll";

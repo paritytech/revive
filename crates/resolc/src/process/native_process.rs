@@ -9,6 +9,8 @@ use revive_common::deserialize_from_slice;
 use revive_common::EXIT_CODE_SUCCESS;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use super::Input;
 use super::Output;
@@ -56,8 +58,8 @@ impl Process for NativeProcess {
 
     fn call<I, O>(path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
     where
-        I: serde::Serialize,
-        O: serde::de::DeserializeOwned,
+        I: Serialize,
+        O: DeserializeOwned,
     {
         let executable = EXECUTABLE
             .get()

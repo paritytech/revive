@@ -2,11 +2,13 @@
 
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 /// The binary object format.
 ///
 /// Unlinked contracts are stored in a different object format
 /// than final (linked) contract blobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ObjectFormat {
     /// The unlinked ELF object format.
     ELF,

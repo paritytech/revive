@@ -2,8 +2,10 @@
 
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 /// The metadata hash type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MetadataHash {
     /// Do not include bytecode hash.
     #[serde(rename = "none")]

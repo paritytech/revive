@@ -2,7 +2,9 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use serde::Serialize;
 
 use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
@@ -61,8 +63,8 @@ impl Process for WorkerProcess {
 
     fn call<I, O>(_path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
     where
-        I: serde::Serialize,
-        O: serde::de::DeserializeOwned,
+        I: Serialize,
+        O: DeserializeOwned,
     {
         let input_json = serde_json::to_vec(&input).expect("Always valid");
         let input_str = String::from_utf8(input_json).expect("Input shall be valid");

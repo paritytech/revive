@@ -3,8 +3,11 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use serde::Deserialize;
+use serde::Serialize;
+
 /// The Solidity libraries.
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Libraries {
     /// The unified representation of libraries.
     #[serde(flatten)]

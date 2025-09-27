@@ -1,7 +1,9 @@
 //! The contract identifier helper library.
 
+use serde::{Deserialize, Serialize};
+
 /// This structure simplifies passing the contract identifiers through the compilation pipeline.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractIdentifier {
     /// The absolute file path.
     pub path: String,

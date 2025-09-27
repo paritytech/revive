@@ -2,11 +2,13 @@
 
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 /// The solc `--combind-json` invalid selector message.
 pub const MESSAGE_SELECTOR_INVALID: &str = "Invalid option to --combined-json";
 
 /// The `solc --combined-json` expected output selection flag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Selector {
     /// The ABI JSON.
     #[serde(rename = "abi")]

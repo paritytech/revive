@@ -1,12 +1,13 @@
 //! Keccak-256 hash utilities.
 
+use serde::{Deserialize, Serialize};
 use sha3::digest::FixedOutput;
 use sha3::Digest;
 
 pub const DIGEST_BYTES: usize = 32;
 
 /// Keccak-256 hash utilities.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keccak256 {
     /// Binary representation.
     bytes: [u8; DIGEST_BYTES],
@@ -38,7 +39,7 @@ impl Keccak256 {
         self.bytes.as_slice()
     }
 
-    /// Returns a reference to the hexadecimal string representation of the IPFS hash.
+    /// Returns a reference to the hexadecimal string representation.
     pub fn as_str(&self) -> &str {
         self.string.as_str()
     }

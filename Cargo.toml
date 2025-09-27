@@ -14,16 +14,16 @@ repository = "https://github.com/paritytech/revive"
 rust-version = "1.85.0"
 
 [workspace.dependencies]
-resolc = { version = "0.3.0", path = "crates/resolc", default-features = false }
+resolc = { version = "0.4.0", path = "crates/resolc", default-features = false }
 revive-benchmarks = { version = "0.1.0", path = "crates/benchmarks" }
 revive-builtins = { version = "0.1.0", path = "crates/builtins" }
-revive-common = { version = "0.1.0", path = "crates/common" }
+revive-common = { version = "0.2.0", path = "crates/common" }
 revive-differential = { version = "0.1.0", path = "crates/differential" }
 revive-explorer = { version = "0.1.0", path = "crates/explore" }
 revive-integration = { version = "0.1.1", path = "crates/integration" }
-revive-linker = { version = "0.1.0", path = "crates/linker" }
+revive-linker = { version = "0.2.0", path = "crates/linker" }
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
-revive-llvm-context = { version = "0.3.0", path = "crates/llvm-context" }
+revive-llvm-context = { version = "0.4.0", path = "crates/llvm-context" }
 revive-runtime-api = { version = "0.2.0", path = "crates/runtime-api" }
 revive-runner = { version = "0.1.0", path = "crates/runner" }
 revive-solc-json-interface = { version = "0.3.0", path = "crates/solc-json-interface", default-features = false }

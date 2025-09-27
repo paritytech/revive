@@ -186,9 +186,8 @@ impl Project {
                 if let Err(error) = debug_config.dump_yul(&name.full_path, &source_code) {
                     return Some((full_path.clone(), Err(error)));
                 }
-                let source_hash = Keccak256::from_slice(source_code.as_bytes());
                 let source_metadata = serde_json::json!({
-                    "source_hash": source_hash.to_string(),
+                    "source_hash": Keccak256::from_slice(source_code.as_bytes()).to_string()
                 });
                 let contract = Contract::new(name, ir.into(), source_metadata);
                 Some((full_path, Ok(contract)))

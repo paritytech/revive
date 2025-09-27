@@ -105,8 +105,12 @@ pub struct Arguments {
     pub yul: bool,
 
     /// Switch to linker mode, ignoring all options apart from `--libraries` and modify binaries in place.
+    ///
+    /// Unlinked contract binaries (caused by missing libraries or missing factory dependencies in turn)
+    /// are emitted as raw ELF objects. Use this mode to link them into PVM blobs.
+    ///
     /// NOTE: Contracts must be present in the input files with the EXACT SAME directory structure as their source code,
-    /// otherwise this may fail.
+    /// otherwise this may fail to resolve factory dependencies.
     #[arg(long)]
     pub link: bool,
 

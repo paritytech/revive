@@ -15,6 +15,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 ### Changed
 - Remove the broken `--llvm-ir` mode.
 - Remove the unused fallback for size optimization setting.
+- Unlinked contract binaries are emitted as raw ELF objects.
 
 ### Added
 - Line debug information per YUL builtin and for `if` statements.

@@ -6,7 +6,6 @@ fn deploy_time_linking_works() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_directory = temp_dir.path().to_path_buf();
     let source_path = temp_dir.path().to_path_buf().join("dependency.sol");
-
     std::fs::copy(DEPENDENCY_CONTRACT_PATH, &source_path).unwrap();
 
     assert_command_success(
@@ -44,7 +43,6 @@ fn deploy_time_linking_works() {
         "{}:AssertNe=0x0000000000000000000000000000000000000002",
         source_path.to_str().unwrap()
     );
-
     let output = execute_resolc(&[
         "--link",
         "--libraries",
@@ -56,4 +54,11 @@ fn deploy_time_linking_works() {
     ]);
     assert_command_success(&output, "The linker mode with all library should work");
     assert!(!output.stdout.contains("still unresolved"));
+}
+
+#[test]
+fn emits_unlinked_binary_warning() {
+    let output = execute_resolc(&[DEPENDENCY_CONTRACT_PATH, "--bin"]);
+    assert_command_success(&output, "Missing libraries should compile fine");
+    assert!(output.stderr.contains("is unlinked"));
 }

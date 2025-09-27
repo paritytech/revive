@@ -8,6 +8,10 @@ use std::path::PathBuf;
 use normpath::PathExt;
 
 use revive_common::ObjectFormat;
+use revive_common::BYTE_LENGTH_ETH_ADDRESS;
+use revive_llvm_context::polkavm_disassemble;
+use revive_llvm_context::polkavm_hash;
+use revive_llvm_context::polkavm_link;
 use revive_llvm_context::DebugConfig;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonContract;
@@ -27,7 +31,7 @@ pub struct Build {
     /// The contract data,
     pub results: BTreeMap<String, Result<Contract, SolcStandardJsonOutputError>>,
     /// The additional message to output (added by the revive compiler).
-    pub messages: Vec<revive_solc_json_interface::SolcStandardJsonOutputError>,
+    pub messages: Vec<SolcStandardJsonOutputError>,
 }
 
 impl Build {
@@ -36,7 +40,7 @@ impl Build {
     /// Note: Takes the supplied `messages`, leaving an empty vec.
     pub fn new(
         results: BTreeMap<String, Result<Contract, SolcStandardJsonOutputError>>,
-        messages: &mut Vec<revive_solc_json_interface::SolcStandardJsonOutputError>,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
     ) -> Self {
         Self {
             results,
@@ -47,7 +51,7 @@ impl Build {
     /// Links the PVM build.
     pub fn link(
         mut self,
-        linker_symbols: BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
+        linker_symbols: BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
         debug_config: &DebugConfig,
     ) -> Self {
         let mut contracts: BTreeMap<String, Contract> = self
@@ -62,7 +66,7 @@ impl Build {
                 .iter()
                 .filter(|(_path, contract)| contract.object_format == ObjectFormat::ELF)
             {
-                match revive_llvm_context::polkavm_link(
+                match polkavm_link(
                     &contract.build.bytecode,
                     &linker_symbols,
                     &contract
@@ -82,16 +86,12 @@ impl Build {
                     !debug_config.emit_debug_info,
                 ) {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
-                        let bytecode_hash =
-                            revive_llvm_context::polkavm_hash(&memory_buffer_linked);
-                        let assembly_text = revive_llvm_context::polkavm_disassemble(
-                            path,
-                            &memory_buffer_linked,
-                            debug_config,
-                        )
-                        .unwrap_or_else(|error| {
-                            panic!("ICE: The PVM disassembler failed: {error}")
-                        });
+                        let bytecode_hash = polkavm_hash(&memory_buffer_linked);
+                        let assembly_text =
+                            polkavm_disassemble(path, &memory_buffer_linked, debug_config)
+                                .unwrap_or_else(|error| {
+                                    panic!("ICE: The PVM disassembler failed: {error}")
+                                });
                         linkage_data.insert(
                             path.to_owned(),
                             (memory_buffer_linked, bytecode_hash, assembly_text),
@@ -132,17 +132,24 @@ impl Build {
                 contract.build.bytecode_hash = Some(bytecode_hash);
                 contract.build.assembly_text = Some(assembly_text);
                 contract.factory_dependencies_resolved = factory_dependencies_resolved;
-                contract.object_format = revive_common::ObjectFormat::PVM;
+                contract.object_format = ObjectFormat::PVM;
             }
         }
 
-        Self::new(
-            contracts
-                .into_iter()
-                .map(|(path, contract)| (path, Ok(contract)))
-                .collect(),
-            &mut self.messages,
-        )
+        let results = contracts
+            .into_iter()
+            .map(|(path, contract)| {
+                if contract.object_format == ObjectFormat::ELF {
+                    self.messages.push(SolcStandardJsonOutputError::new_warning(
+                        format!("{path} is unlinked. Consider providing missing libraries."),
+                        None,
+                        None,
+                    ));
+                }
+                (path, Ok(contract))
+            })
+            .collect();
+        Self::new(results, &mut self.messages)
     }
 
     /// Writes all contracts to the terminal.
@@ -321,9 +328,9 @@ impl Build {
     }
 }
 
-impl revive_solc_json_interface::SolcStandardJsonOutputErrorHandler for Build {
-    fn errors(&self) -> Vec<&revive_solc_json_interface::SolcStandardJsonOutputError> {
-        let mut errors: Vec<&revive_solc_json_interface::SolcStandardJsonOutputError> = self
+impl SolcStandardJsonOutputErrorHandler for Build {
+    fn errors(&self) -> Vec<&SolcStandardJsonOutputError> {
+        let mut errors: Vec<&SolcStandardJsonOutputError> = self
             .results
             .values()
             .filter_map(|build| build.as_ref().err())
@@ -332,14 +339,14 @@ impl revive_solc_json_interface::SolcStandardJsonOutputErrorHandler for Build {
         errors
     }
 
-    fn take_warnings(&mut self) -> Vec<revive_solc_json_interface::SolcStandardJsonOutputError> {
+    fn take_warnings(&mut self) -> Vec<SolcStandardJsonOutputError> {
         let warnings = self
             .messages
             .iter()
             .filter(|message| message.is_warning())
             .cloned()
             .collect();
-        self.messages.retain(|message| message.is_warning());
+        self.messages.retain(|message| !message.is_warning());
         warnings
     }
 }

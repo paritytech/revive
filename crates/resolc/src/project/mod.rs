@@ -29,10 +29,9 @@ use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
+use crate::project::contract::Contract;
 use crate::solc::version::Version as SolcVersion;
 use crate::ProcessOutput;
-
-use self::contract::Contract;
 
 /// The processes input data.
 #[derive(Debug, Serialize, Deserialize, Clone)]

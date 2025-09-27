@@ -11,10 +11,7 @@ pub enum IRType {
     /// Whether to dump the assembly code.
     Assembly,
     /// Whether to dump the ELF shared object
-    SO,
-    /// Whether to jump JSON
-    #[cfg(debug_assertions)]
-    JSON,
+    Object,
 }
 
 impl IRType {
@@ -24,9 +21,7 @@ impl IRType {
             Self::Yul => revive_common::EXTENSION_YUL,
             Self::LLVM => revive_common::EXTENSION_LLVM_SOURCE,
             Self::Assembly => revive_common::EXTENSION_POLKAVM_ASSEMBLY,
-            #[cfg(debug_assertions)]
-            Self::JSON => revive_common::EXTENSION_JSON,
-            Self::SO => revive_common::EXTENSION_SHARED_OBJECT,
+            Self::Object => revive_common::EXTENSION_OBJECT,
         }
     }
 }

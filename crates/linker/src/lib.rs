@@ -27,8 +27,8 @@ SECTIONS {
     /// The setup routine.
     pub fn setup() -> anyhow::Result<Self> {
         let temporary_directory = TempDir::new()?;
-        let output_path = temporary_directory.path().join("out.so");
-        let object_path = temporary_directory.path().join("out.o");
+        let object_path = temporary_directory.path().join("obj.o");
+        let output_path = temporary_directory.path().join("out.o");
         let symbols_path = temporary_directory.path().join("sym.o");
         let linker_script_path = temporary_directory.path().join("linker.ld");
 

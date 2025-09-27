@@ -10,12 +10,15 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::project::contract::Contract;
+use crate::SolcVersion;
 
 /// The input data.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Input {
     /// The contract representation.
     pub contract: Contract,
+    /// The `solc` compiler version.
+    pub solc_version: Option<SolcVersion>,
     /// Whether to append the metadata hash.
     pub metadata_hash: MetadataHash,
     /// The optimizer settings.
@@ -38,6 +41,7 @@ impl Input {
     /// A shortcut constructor.
     pub fn new(
         contract: Contract,
+        solc_version: Option<SolcVersion>,
         metadata_hash: MetadataHash,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         debug_config: revive_llvm_context::DebugConfig,
@@ -49,6 +53,7 @@ impl Input {
     ) -> Self {
         Self {
             contract,
+            solc_version,
             metadata_hash,
             optimizer_settings,
             debug_config,

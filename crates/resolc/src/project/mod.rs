@@ -100,6 +100,7 @@ impl Project {
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
                 let input = ProcessInput::new(
                     contract,
+                    self.version.clone(),
                     metadata_hash,
                     optimizer_settings.clone(),
                     debug_config.clone(),

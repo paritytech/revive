@@ -27,7 +27,7 @@ impl Process for NativeProcess {
                 input
                     .contract
                     .compile(
-                        None,
+                        input.solc_version,
                         input.optimizer_settings,
                         input.metadata_hash,
                         input.debug_config,

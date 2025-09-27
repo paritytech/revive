@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use revive_common::MetadataHash;
+use revive_llvm_context::DebugConfig;
+use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,9 +24,9 @@ pub struct Input {
     /// Whether to append the metadata hash.
     pub metadata_hash: MetadataHash,
     /// The optimizer settings.
-    pub optimizer_settings: revive_llvm_context::OptimizerSettings,
+    pub optimizer_settings: OptimizerSettings,
     /// The debug output config.
-    pub debug_config: revive_llvm_context::DebugConfig,
+    pub debug_config: DebugConfig,
     /// The extra LLVM arguments give used for manual control.
     pub llvm_arguments: Vec<String>,
     /// The PVM memory configuration.
@@ -43,8 +45,8 @@ impl Input {
         contract: Contract,
         solc_version: Option<SolcVersion>,
         metadata_hash: MetadataHash,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
-        debug_config: revive_llvm_context::DebugConfig,
+        optimizer_settings: OptimizerSettings,
+        debug_config: DebugConfig,
         llvm_arguments: Vec<String>,
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,

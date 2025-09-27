@@ -159,7 +159,6 @@ impl Project {
     }
 
     /// Parses the test Yul source code string and returns the source data.
-    /// Only for integration testing purposes.
     pub fn try_from_yul_sources(
         sources: BTreeMap<String, SolcStandardJsonInputSource>,
         libraries: SolcStandardJsonInputSettingsLibraries,
@@ -177,20 +176,20 @@ impl Project {
                     Ok(()) => source.take_content().expect("Always exists"),
                     Err(error) => return Some((path, Err(error))),
                 };
-                let ir =
-                    match Yul::try_from_source(path.as_str(), source_code.as_str(), debug_config) {
-                        Ok(ir) => ir?,
-                        Err(error) => return Some((path, Err(error))),
-                    };
-
+                let ir = match Yul::try_from_source(&source_code) {
+                    Ok(ir) => ir?,
+                    Err(error) => return Some((path, Err(error))),
+                };
+                let object_identifier = ir.object.identifier.clone();
+                let name = ContractIdentifier::new(path.clone(), Some(object_identifier));
+                let full_path = name.full_path.clone();
+                if let Err(error) = debug_config.dump_yul(&name.full_path, &source_code) {
+                    return Some((full_path.clone(), Err(error)));
+                }
                 let source_hash = Keccak256::from_slice(source_code.as_bytes());
                 let source_metadata = serde_json::json!({
                     "source_hash": source_hash.to_string(),
                 });
-
-                let name =
-                    ContractIdentifier::new(path.clone(), Some(ir.object.identifier.clone()));
-                let full_path = name.full_path.clone();
                 let contract = Contract::new(name, ir.into(), source_metadata);
                 Some((full_path, Ok(contract)))
             })
@@ -233,16 +232,15 @@ impl Project {
 
         let results = iter
             .filter_map(|(name, contract)| {
-                let ir = match Yul::try_from_source(
-                    name.full_path.as_str(),
-                    contract.ir_optimized.as_str(),
-                    debug_config,
-                )
-                .map(|yul| yul.map(IR::from))
+                let ir = match Yul::try_from_source(&contract.ir_optimized)
+                    .map(|yul| yul.map(IR::from))
                 {
                     Ok(ir) => ir?,
                     Err(error) => return Some((name.full_path, Err(error))),
                 };
+                if let Err(error) = debug_config.dump_yul(&name.full_path, &contract.ir_optimized) {
+                    return Some((name.full_path, Err(error)));
+                }
                 let contract = Contract::new(name.clone(), ir, contract.metadata.clone());
                 Some((name.full_path, Ok(contract)))
             })

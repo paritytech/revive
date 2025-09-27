@@ -387,6 +387,13 @@ impl Arguments {
                     None,
                 ));
             }
+            if !self.llvm_arguments.is_empty() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "LLVM arguments must be configured in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
+            }
         }
 
         messages

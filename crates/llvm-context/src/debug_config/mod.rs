@@ -1,6 +1,5 @@
 //! The debug configuration.
 
-use std::path::Path;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -39,8 +38,8 @@ impl DebugConfig {
     }
 
     /// Set the current YUL path.
-    pub fn set_yul_path(&mut self, yul_path: &Path) {
-        self.yul_path = yul_path.to_path_buf().into();
+    pub fn set_yul_path(&mut self, yul_path: &str) {
+        self.yul_path = PathBuf::from(yul_path).into();
     }
 
     /// Set the current contract path.
@@ -131,24 +130,6 @@ impl DebugConfig {
             let full_file_name = Self::full_file_name(contract_path, None, IRType::SO);
             file_path.push(full_file_name);
             std::fs::write(file_path, code)?;
-        }
-
-        Ok(())
-    }
-
-    /// Dumps the stage output as a json file suitable for use with --recursive-process
-    #[cfg(debug_assertions)]
-    pub fn dump_stage_output(
-        &self,
-        contract_path: &str,
-        contract_suffix: Option<&str>,
-        stage_json: &Vec<u8>,
-    ) -> anyhow::Result<()> {
-        if let Some(output_directory) = self.output_directory.as_ref() {
-            let mut file_path = output_directory.to_owned();
-            let full_file_name = Self::full_file_name(contract_path, contract_suffix, IRType::JSON);
-            file_path.push(full_file_name);
-            std::fs::write(file_path, stage_json)?;
         }
 
         Ok(())

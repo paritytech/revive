@@ -206,8 +206,6 @@ fn main_inner(
             arguments.include_paths,
             arguments.allow_paths,
             debug_config,
-            &arguments.llvm_arguments,
-            memory_config,
             arguments.detect_missing_libraries,
         )?;
         return Ok(());

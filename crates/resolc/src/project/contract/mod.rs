@@ -61,7 +61,7 @@ impl Contract {
         solc_version: Option<SolcVersion>,
         optimizer_settings: revive_llvm_context::OptimizerSettings,
         metadata_hash: MetadataHash,
-        debug_config: revive_llvm_context::DebugConfig,
+        mut debug_config: revive_llvm_context::DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,
@@ -72,7 +72,6 @@ impl Contract {
 
         let llvm = inkwell::context::Context::create();
         let optimizer = Optimizer::new(optimizer_settings);
-
         let metadata = Metadata::new(
             self.metadata_json,
             solc_version
@@ -88,6 +87,7 @@ impl Contract {
             MetadataHash::IPFS => todo!("IPFS hash isn't supported yet"),
             MetadataHash::None => None,
         };
+        debug_config.set_contract_path(&self.identifier.full_path);
 
         let build = match self.ir {
             IR::Yul(mut yul) => {

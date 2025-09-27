@@ -15,6 +15,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 ### Changed
 
 - Removed the (broken) `--llvm-ir` mode.
+- Remove the unused fallback for size optimization setting.
 
 ### Added
 - Line debug information per YUL builtin and for `if` statements.
@@ -25,6 +26,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 
 ### Fixed
 - The debug info source file matches the YUL path in `--debug-output-dir`, allowing tools to display the source line. 
+- Fixes some incosistent type forwarding in JSON output (empty string vs. null object).
 
 ## v0.3.0
 

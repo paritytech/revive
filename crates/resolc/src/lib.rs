@@ -12,7 +12,10 @@ use std::path::PathBuf;
 use rayon::iter::IntoParallelIterator;
 #[cfg(feature = "parallel")]
 use rayon::iter::ParallelIterator;
+use revive_common::EVMVersion;
 use revive_common::MetadataHash;
+use revive_common::EXIT_CODE_SUCCESS;
+use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::ResolcWarning;
@@ -73,8 +76,8 @@ pub fn yul<T: Compiler>(
     libraries: &[String],
     metadata_hash: MetadataHash,
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
-    debug_config: revive_llvm_context::DebugConfig,
+    optimizer_settings: OptimizerSettings,
+    debug_config: DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
@@ -107,15 +110,15 @@ pub fn standard_output<T: Compiler>(
     libraries: &[String],
     metadata_hash: MetadataHash,
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    evm_version: Option<revive_common::EVMVersion>,
+    evm_version: Option<EVMVersion>,
     solc_optimizer_enabled: bool,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
+    optimizer_settings: OptimizerSettings,
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     remappings: BTreeSet<String>,
     suppressed_warnings: Vec<ResolcWarning>,
-    debug_config: revive_llvm_context::DebugConfig,
+    debug_config: DebugConfig,
     llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
@@ -188,9 +191,7 @@ pub fn standard_json<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    debug_config: revive_llvm_context::DebugConfig,
-    llvm_arguments: &[String],
-    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    mut debug_config: DebugConfig,
     detect_missing_libraries: bool,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
@@ -202,8 +203,11 @@ pub fn standard_json<T: Compiler>(
     let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
-
-    solc_input.settings.llvm_arguments = llvm_arguments.to_owned();
+    debug_config.emit_debug_info = solc_input
+        .settings
+        .polkavm
+        .debug_information
+        .unwrap_or(false);
     solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
     let mut solc_output = solc.standard_json(
         &mut solc_input,
@@ -255,7 +259,11 @@ pub fn standard_json<T: Compiler>(
         metadata_hash,
         &debug_config,
         &solc_input.settings.llvm_arguments,
-        memory_config,
+        solc_input
+            .settings
+            .polkavm
+            .memory_config
+            .unwrap_or_default(),
     )?;
     if build.has_errors() {
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
@@ -274,16 +282,16 @@ pub fn combined_json<T: Compiler>(
     libraries: &[String],
     metadata_hash: MetadataHash,
     messages: &mut Vec<SolcStandardJsonOutputError>,
-    evm_version: Option<revive_common::EVMVersion>,
+    evm_version: Option<EVMVersion>,
     format: String,
     solc_optimizer_enabled: bool,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
+    optimizer_settings: OptimizerSettings,
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
     remappings: BTreeSet<String>,
     suppressed_warnings: Vec<ResolcWarning>,
-    debug_config: revive_llvm_context::DebugConfig,
+    debug_config: DebugConfig,
     output_directory: Option<PathBuf>,
     overwrite: bool,
     llvm_arguments: Vec<String>,
@@ -353,7 +361,7 @@ pub fn combined_json<T: Compiler>(
             serde_json::to_writer(std::io::stdout(), &combined_json)?;
         }
     }
-    std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+    std::process::exit(EXIT_CODE_SUCCESS);
 }
 
 /// Links unlinked bytecode files.
@@ -388,5 +396,5 @@ pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
     }
     println!("Linking completed");
 
-    std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+    std::process::exit(EXIT_CODE_SUCCESS);
 }

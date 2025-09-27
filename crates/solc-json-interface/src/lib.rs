@@ -3,8 +3,13 @@
 //!
 //! [0]: https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description
 
+#![allow(clippy::too_many_arguments)]
+
 pub use self::combined_json::contract::Contract as CombinedJsonContract;
+pub use self::combined_json::selector::Selector as CombinedJsonSelector;
+pub use self::combined_json::selector::MESSAGE_SELECTOR_INVALID as CombinedJsonInvalidSelectorMessage;
 pub use self::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
+pub use self::standard_json::input::settings::libraries::Libraries as SolcStandardJsonInputSettingsLibraries;
 pub use self::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 pub use self::standard_json::input::settings::metadata_hash::MetadataHash as SolcStandardJsonInputSettingsMetadataHash;
 pub use self::standard_json::input::settings::optimizer::yul_details::YulDetails as SolcStandardJsonInputSettingsYulOptimizerDetails;
@@ -16,17 +21,19 @@ pub use self::standard_json::input::settings::polkavm::PolkaVM as SolcStandardJs
 pub use self::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
 pub use self::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
 pub use self::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
+#[cfg(feature = "resolc")]
+pub use self::standard_json::input::settings::warning::Warning as ResolcWarning;
 pub use self::standard_json::input::settings::Settings as SolcStandardJsonInputSettings;
 pub use self::standard_json::input::source::Source as SolcStandardJsonInputSource;
 pub use self::standard_json::input::Input as SolcStandardJsonInput;
 pub use self::standard_json::output::contract::evm::bytecode::Bytecode as SolcStandardJsonOutputContractEVMBytecode;
 pub use self::standard_json::output::contract::evm::EVM as SolcStandardJsonOutputContractEVM;
 pub use self::standard_json::output::contract::Contract as SolcStandardJsonOutputContract;
-pub use self::standard_json::output::Output as SolcStandardJsonOutput;
 #[cfg(feature = "resolc")]
-pub use self::warning::Warning as ResolcWarning;
+pub use self::standard_json::output::error::error_handler::ErrorHandler as SolcStandardJsonOutputErrorHandler;
+pub use self::standard_json::output::error::mapped_location::MappedLocation as SolcStandardJsonOutputErrorMappedLocation;
+pub use self::standard_json::output::error::Error as SolcStandardJsonOutputError;
+pub use self::standard_json::output::Output as SolcStandardJsonOutput;
 
 pub mod combined_json;
 pub mod standard_json;
-#[cfg(feature = "resolc")]
-pub mod warning;

@@ -1,17 +1,6 @@
 //! The block statement.
 
-pub mod assignment;
-pub mod block;
-pub mod code;
-pub mod expression;
-pub mod for_loop;
-pub mod function_definition;
-pub mod if_conditional;
-pub mod object;
-pub mod switch;
-pub mod variable_declaration;
-
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -36,6 +25,17 @@ use self::if_conditional::IfConditional;
 use self::object::Object;
 use self::switch::Switch;
 use self::variable_declaration::VariableDeclaration;
+
+pub mod assignment;
+pub mod block;
+pub mod code;
+pub mod expression;
+pub mod for_loop;
+pub mod function_definition;
+pub mod if_conditional;
+pub mod object;
+pub mod switch;
+pub mod variable_declaration;
 
 /// The Yul block statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -142,7 +142,7 @@ impl Statement {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         match self {
             Self::Object(inner) => inner.get_missing_libraries(),
             Self::Code(inner) => inner.get_missing_libraries(),
@@ -154,9 +154,9 @@ impl Statement {
             Self::IfConditional(inner) => inner.get_missing_libraries(),
             Self::Switch(inner) => inner.get_missing_libraries(),
             Self::ForLoop(inner) => inner.get_missing_libraries(),
-            Self::Continue(_) => HashSet::new(),
-            Self::Break(_) => HashSet::new(),
-            Self::Leave(_) => HashSet::new(),
+            Self::Continue(_) => BTreeSet::new(),
+            Self::Break(_) => BTreeSet::new(),
+            Self::Leave(_) => BTreeSet::new(),
         }
     }
 

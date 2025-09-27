@@ -1,17 +1,15 @@
 //! Translates the external code operations.
 
+use revive_common::BIT_LENGTH_ETH_ADDRESS;
+
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the `extcodesize` instruction if `address` is `Some`.
 /// Otherwise, translates the `codesize` instruction.
-pub fn size<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn size<'ctx>(
+    context: &mut Context<'ctx>,
     address: Option<inkwell::values::IntValue<'ctx>>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let address = match address {
         Some(address) => address,
         None => super::context::address(context)?.into_int_value(),
@@ -33,14 +31,11 @@ where
 }
 
 /// Translates the `extcodehash` instruction.
-pub fn hash<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn hash<'ctx>(
+    context: &mut Context<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
-    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let address_type = context.integer_type(BIT_LENGTH_ETH_ADDRESS);
     let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
     let address_truncated =
         context

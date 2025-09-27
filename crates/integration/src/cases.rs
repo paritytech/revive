@@ -12,6 +12,26 @@ pub struct Contract {
     pub calldata: Vec<u8>,
 }
 
+impl Contract {
+    pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+        Self {
+            name,
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob(name, code),
+            calldata,
+        }
+    }
+
+    pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+        Self {
+            name,
+            evm_runtime: compile_evm_bin_runtime(name, code),
+            pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
+            calldata,
+        }
+    }
+}
+
 macro_rules! case {
     // Arguments:
     //     1. The file name, expect to live under "../contracts/"
@@ -260,26 +280,6 @@ sol!(
 );
 case!("AddressPredictor.sol", Predicted, constructorCall, predicted_constructor, salt: U256);
 case!("AddressPredictor.sol", AddressPredictor, constructorCall, address_predictor_constructor, salt: U256, bytecode: Bytes);
-
-impl Contract {
-    pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata,
-        }
-    }
-
-    pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
-            calldata,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

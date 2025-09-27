@@ -1,16 +1,12 @@
 //! Translates the calldata instructions.
 
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the calldata load.
-pub fn load<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn load<'ctx>(
+    context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let output_pointer = context.build_alloca_at_entry(context.word_type(), "call_data_output");
     let offset = context.safe_truncate_int_to_xlen(offset)?;
 
@@ -23,12 +19,9 @@ where
 }
 
 /// Translates the calldata size.
-pub fn size<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn size<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let value = context.get_global_value(crate::polkavm::GLOBAL_CALLDATA_SIZE)?;
     Ok(context
         .builder()
@@ -41,15 +34,12 @@ where
 }
 
 /// Translates the calldata copy.
-pub fn copy<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn copy<'ctx>(
+    context: &mut Context<'ctx>,
     destination_offset: inkwell::values::IntValue<'ctx>,
     source_offset: inkwell::values::IntValue<'ctx>,
     size: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     let source_offset = context.safe_truncate_int_to_xlen(source_offset)?;
     let size = context.safe_truncate_int_to_xlen(size)?;
     let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;

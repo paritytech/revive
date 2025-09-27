@@ -1,19 +1,23 @@
 //! The Solidity compiler.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
+
+use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonSelector;
+use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
+use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+
+use self::version::Version;
+
 #[cfg(not(target_os = "emscripten"))]
 pub mod solc_compiler;
 #[cfg(target_os = "emscripten")]
 pub mod soljson_compiler;
 pub mod version;
-
-use std::path::Path;
-use std::path::PathBuf;
-
-use revive_solc_json_interface::combined_json::CombinedJson;
-use revive_solc_json_interface::SolcStandardJsonInput;
-use revive_solc_json_interface::SolcStandardJsonOutput;
-
-use self::version::Version;
 
 /// The first version of `solc` with the support of standard JSON interface.
 pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
@@ -21,15 +25,13 @@ pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 
 /// The last supported version of `solc`.
 pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 30);
 
-/// `--include-path` was introduced in solc `0.8.8` <https://github.com/ethereum/solidity/releases/tag/v0.8.8>
-pub const FIRST_INCLUDE_PATH_VERSION: semver::Version = semver::Version::new(0, 8, 8);
-
 /// The Solidity compiler.
 pub trait Compiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
-        input: SolcStandardJsonInput,
+        &self,
+        input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
@@ -39,12 +41,32 @@ pub trait Compiler {
     fn combined_json(
         &self,
         paths: &[PathBuf],
-        combined_json_argument: &str,
+        selectors: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson>;
 
-    /// The `solc` Yul validator.
-    fn validate_yul(&self, path: &Path) -> anyhow::Result<()>;
+    /// Validates the Yul project as paths and libraries.
+    fn validate_yul_paths(
+        &self,
+        paths: &[PathBuf],
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
+        let mut solc_input =
+            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![]);
+        self.validate_yul_standard_json(&mut solc_input, messages)
+    }
+
+    /// Validates the Yul project as standard JSON input.
+    fn validate_yul_standard_json(
+        &self,
+        solc_input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
+    ) -> anyhow::Result<SolcStandardJsonOutput> {
+        solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_yul_validation());
+        let solc_output = self.standard_json(solc_input, messages, None, vec![], None)?;
+        Ok(solc_output)
+    }
 
     /// The `solc --version` mini-parser.
-    fn version(&mut self) -> anyhow::Result<Version>;
+    fn version(&self) -> anyhow::Result<Version>;
 }

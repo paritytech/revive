@@ -1,12 +1,15 @@
 //! The Solidity compiler solc interface.
 
+use std::collections::HashSet;
 use std::io::Write;
-use std::path::Path;
 use std::path::PathBuf;
 
+use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
 
 use crate::solc::version::Version;
 
@@ -39,8 +42,9 @@ impl SolcCompiler {
 impl Compiler for SolcCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
-        mut input: SolcStandardJsonInput,
+        &self,
+        input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
@@ -62,10 +66,6 @@ impl Compiler for SolcCompiler {
             command.arg("--allow-paths");
             command.arg(allow_paths);
         }
-
-        input.normalize();
-
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
 
         let input_json = serde_json::to_vec(&input).expect("Always valid");
 
@@ -92,22 +92,32 @@ impl Compiler for SolcCompiler {
             );
         }
 
-        let mut output: SolcStandardJsonOutput =
-            revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
-                anyhow::anyhow!(
-                    "{} subprocess output parsing error: {}\n{}",
-                    self.executable,
-                    error,
-                    revive_common::deserialize_from_slice::<serde_json::Value>(
-                        output.stdout.as_slice()
-                    )
+        let mut output: SolcStandardJsonOutput = deserialize_from_slice(output.stdout.as_slice())
+            .map_err(|error| {
+            anyhow::anyhow!(
+                "{} subprocess output parsing error: {}\n{}",
+                self.executable,
+                error,
+                deserialize_from_slice::<serde_json::Value>(output.stdout.as_slice())
                     .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
                     .unwrap_or_else(
                         |_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()
                     ),
-                )
-            })?;
-        output.preprocess_ast(suppressed_warnings.as_slice())?;
+            )
+        })?;
+        output
+            .errors
+            .retain(|error| match error.error_code.as_deref() {
+                Some(code) => !SolcStandardJsonOutputError::IGNORED_WARNING_CODES.contains(&code),
+                None => true,
+            });
+        output.errors.append(messages);
+
+        let mut suppressed_warnings = input.suppressed_warnings.clone();
+        suppressed_warnings.extend_from_slice(input.settings.suppressed_warnings.as_slice());
+
+        input.resolve_sources();
+        output.preprocess_ast(&input.sources, &suppressed_warnings)?;
 
         Ok(output)
     }
@@ -116,104 +126,58 @@ impl Compiler for SolcCompiler {
     fn combined_json(
         &self,
         paths: &[PathBuf],
-        combined_json_argument: &str,
+        mut selectors: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson> {
-        let mut command = std::process::Command::new(self.executable.as_str());
+        selectors.retain(|selector| selector.is_source_solc());
+        if selectors.is_empty() {
+            let version = &self.version()?.default;
+            return Ok(CombinedJson::new(version.to_owned(), None));
+        }
+
+        let executable = self.executable.to_owned();
+
+        let mut command = std::process::Command::new(executable.as_str());
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
         command.args(paths);
-
-        let mut combined_json_flags = Vec::new();
-        let mut combined_json_fake_flag_pushed = false;
-        let mut filtered_flags = Vec::with_capacity(3);
-        for flag in combined_json_argument.split(',') {
-            match flag {
-                flag @ "asm" | flag @ "bin" | flag @ "bin-runtime" => filtered_flags.push(flag),
-                flag => combined_json_flags.push(flag),
-            }
-        }
-        if combined_json_flags.is_empty() {
-            combined_json_flags.push("ast");
-            combined_json_fake_flag_pushed = true;
-        }
         command.arg("--combined-json");
-        command.arg(combined_json_flags.join(","));
+        command.arg(
+            selectors
+                .into_iter()
+                .map(|selector| selector.to_string())
+                .collect::<Vec<String>>()
+                .join(","),
+        );
 
-        let output = command.output().map_err(|error| {
-            anyhow::anyhow!("{} subprocess error: {:?}", self.executable, error)
+        let process = command
+            .spawn()
+            .map_err(|error| anyhow::anyhow!("{executable} subprocess spawning: {error:?}"))?;
+
+        let result = process.wait_with_output().map_err(|error| {
+            anyhow::anyhow!("{} subprocess output reading: {error:?}", self.executable)
         })?;
-        if !output.status.success() {
-            writeln!(
-                std::io::stdout(),
-                "{}",
-                String::from_utf8_lossy(output.stdout.as_slice())
-            )?;
-            writeln!(
-                std::io::stdout(),
-                "{}",
-                String::from_utf8_lossy(output.stderr.as_slice())
-            )?;
+
+        if !result.status.success() {
             anyhow::bail!(
-                "{} error: {}",
+                "{} subprocess failed with exit code {:?}:\n{}\n{}",
                 self.executable,
-                String::from_utf8_lossy(output.stdout.as_slice()).to_string()
+                result.status.code(),
+                String::from_utf8_lossy(result.stdout.as_slice()),
+                String::from_utf8_lossy(result.stderr.as_slice()),
             );
         }
 
-        let mut combined_json: CombinedJson =
-            revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
-                anyhow::anyhow!(
-                    "{} subprocess output parsing error: {}\n{}",
-                    self.executable,
-                    error,
-                    revive_common::deserialize_from_slice::<serde_json::Value>(
-                        output.stdout.as_slice()
-                    )
-                    .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
-                    .unwrap_or_else(
-                        |_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()
-                    ),
-                )
-            })?;
-        for filtered_flag in filtered_flags.into_iter() {
-            for (_path, contract) in combined_json.contracts.iter_mut() {
-                match filtered_flag {
-                    "asm" => contract.asm = Some(serde_json::Value::Null),
-                    "bin" => contract.bin = Some("".to_owned()),
-                    "bin-runtime" => contract.bin_runtime = Some("".to_owned()),
-                    _ => continue,
-                }
-            }
-        }
-        if combined_json_fake_flag_pushed {
-            combined_json.source_list = None;
-            combined_json.sources = None;
-        }
-        combined_json.remove_evm();
-
-        Ok(combined_json)
-    }
-
-    /// The `solc` Yul validator.
-    fn validate_yul(&self, path: &Path) -> anyhow::Result<()> {
-        let mut command = std::process::Command::new(self.executable.as_str());
-        command.arg("--strict-assembly");
-        command.arg(path);
-
-        let output = command.output().map_err(|error| {
-            anyhow::anyhow!("{} subprocess error: {:?}", self.executable, error)
-        })?;
-        if !output.status.success() {
-            anyhow::bail!(
-                "{} error: {}",
+        deserialize_from_slice::<CombinedJson>(result.stdout.as_slice()).map_err(|error| {
+            anyhow::anyhow!(
+                "{} subprocess stdout parsing: {error:?} (stderr: {})",
                 self.executable,
-                String::from_utf8_lossy(output.stderr.as_slice()).to_string()
-            );
-        }
-
-        Ok(())
+                String::from_utf8_lossy(result.stderr.as_slice()),
+            )
+        })
     }
 
     /// The `solc --version` mini-parser.
-    fn version(&mut self) -> anyhow::Result<Version> {
+    fn version(&self) -> anyhow::Result<Version> {
         let mut command = std::process::Command::new(self.executable.as_str());
         command.arg("--version");
         let output = command.output().map_err(|error| {
@@ -252,13 +216,6 @@ impl Compiler for SolcCompiler {
             .parse()
             .map_err(|error| anyhow::anyhow!("{} version parsing: {}", self.executable, error))?;
 
-        let l2_revision: Option<semver::Version> = stdout
-            .lines()
-            .nth(2)
-            .and_then(|line| line.split(' ').nth(1))
-            .and_then(|line| line.split('-').nth(1))
-            .and_then(|version| version.parse().ok());
-
-        Ok(Version::new(long, default, l2_revision))
+        Version::new(long, default).validate()
     }
 }

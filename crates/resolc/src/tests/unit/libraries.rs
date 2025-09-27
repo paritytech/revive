@@ -1,10 +1,10 @@
 //! The Solidity compiler unit tests for libraries.
 
-#![cfg(test)]
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 
-use std::collections::BTreeMap;
+use crate::test_utils::build_solidity_and_detect_missing_libraries;
 
-pub const LIBRARY_TEST_SOURCE: &str = r#"
+pub const CODE: &str = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -28,29 +28,21 @@ contract SimpleContract {
         }
         return sum;
     }
-}
-    "#;
+}"#;
 
 #[test]
 fn not_specified() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), LIBRARY_TEST_SOURCE.to_owned());
-
     let output =
-        super::build_solidity_and_detect_missing_libraries(sources.clone(), BTreeMap::new())
-            .expect("Test failure");
+        build_solidity_and_detect_missing_libraries(&[("test.sol", CODE)], Default::default())
+            .unwrap();
     assert!(
         output
             .contracts
-            .as_ref()
-            .expect("Always exists")
             .get("test.sol")
             .expect("Always exists")
             .get("SimpleContract")
             .expect("Always exists")
             .missing_libraries
-            .as_ref()
-            .expect("Always exists")
             .contains("test.sol:SimpleLibrary"),
         "Missing library not detected"
     );
@@ -58,32 +50,25 @@ fn not_specified() {
 
 #[test]
 fn specified() {
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_owned(), LIBRARY_TEST_SOURCE.to_owned());
-
-    let mut libraries = BTreeMap::new();
+    let mut libraries = SolcStandardJsonInputSettingsLibraries::default();
     libraries
+        .as_inner_mut()
         .entry("test.sol".to_string())
-        .or_insert_with(BTreeMap::new)
+        .or_default()
         .entry("SimpleLibrary".to_string())
         .or_insert("0x00000000000000000000000000000000DEADBEEF".to_string());
 
     let output =
-        super::build_solidity_and_detect_missing_libraries(sources.clone(), libraries.clone())
-            .expect("Test failure");
+        build_solidity_and_detect_missing_libraries(&[("test.sol", CODE)], libraries.clone())
+            .unwrap();
     assert!(
         output
             .contracts
-            .as_ref()
-            .expect("Always exists")
             .get("test.sol")
             .expect("Always exists")
             .get("SimpleContract")
             .expect("Always exists")
             .missing_libraries
-            .as_ref()
-            .cloned()
-            .unwrap_or_default()
             .is_empty(),
         "The list of missing libraries must be empty"
     );

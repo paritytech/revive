@@ -1,12 +1,19 @@
 //! The function definition statement.
 
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 
 use inkwell::types::BasicType;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_common::BIT_LENGTH_X32;
+use revive_llvm_context::PolkaVMAttribute;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMFunction;
+use revive_llvm_context::PolkaVMFunctionReturn;
+use revive_llvm_context::PolkaVMFunctionYulData;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -38,7 +45,7 @@ pub struct FunctionDefinition {
     /// The function body block.
     pub body: Block,
     /// The function LLVM attributes encoded in the identifier.
-    pub attributes: BTreeSet<revive_llvm_context::PolkaVMAttribute>,
+    pub attributes: BTreeSet<PolkaVMAttribute>,
 }
 
 impl FunctionDefinition {
@@ -148,14 +155,14 @@ impl FunctionDefinition {
     }
 
     /// Gets the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.body.get_missing_libraries()
     }
 
     /// Gets the list of LLVM attributes provided in the function name.
     pub fn get_llvm_attributes(
         identifier: &Identifier,
-    ) -> Result<BTreeSet<revive_llvm_context::PolkaVMAttribute>, Error> {
+    ) -> Result<BTreeSet<PolkaVMAttribute>, Error> {
         let mut valid_attributes = BTreeSet::new();
 
         let llvm_begin = identifier.inner.find(Self::LLVM_ATTRIBUTE_PREFIX);
@@ -172,7 +179,7 @@ impl FunctionDefinition {
 
         let mut invalid_attributes = BTreeSet::new();
         for value in attribute_string.split('_') {
-            match revive_llvm_context::PolkaVMAttribute::try_from(value) {
+            match PolkaVMAttribute::try_from(value) {
                 Ok(attribute) => valid_attributes.insert(attribute),
                 Err(value) => invalid_attributes.insert(value),
             };
@@ -190,14 +197,8 @@ impl FunctionDefinition {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for FunctionDefinition
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for FunctionDefinition {
+    fn declare(&mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
         let argument_types: Vec<_> = self
             .arguments
@@ -217,7 +218,7 @@ where
             Some(inkwell::module::Linkage::External),
             Some((self.location.line, self.location.column)),
         )?;
-        revive_llvm_context::PolkaVMFunction::set_attributes(
+        PolkaVMFunction::set_attributes(
             context.llvm(),
             function.borrow().declaration(),
             &self.attributes.clone().into_iter().collect::<Vec<_>>(),
@@ -225,15 +226,12 @@ where
         );
         function
             .borrow_mut()
-            .set_yul_data(revive_llvm_context::PolkaVMFunctionYulData::default());
+            .set_yul_data(PolkaVMFunctionYulData::default());
 
         Ok(())
     }
 
-    fn into_llvm(
-        mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+    fn into_llvm(mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_current_function(
             self.identifier.as_str(),
             Some((self.location.line, self.location.column)),
@@ -242,8 +240,8 @@ where
 
         let r#return = context.current_function().borrow().r#return();
         match r#return {
-            revive_llvm_context::PolkaVMFunctionReturn::None => {}
-            revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+            PolkaVMFunctionReturn::None => {}
+            PolkaVMFunctionReturn::Primitive { pointer } => {
                 let identifier = self.result.pop().expect("Always exists");
 
                 let r#type = identifier.r#type.unwrap_or_default();
@@ -253,7 +251,7 @@ where
                     .borrow_mut()
                     .insert_stack_pointer(identifier.inner, pointer);
             }
-            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
+            PolkaVMFunctionReturn::Compound { pointer, .. } => {
                 for (index, identifier) in self.result.into_iter().enumerate() {
                     let r#type = identifier.r#type.unwrap_or_default().into_llvm(context);
                     let pointer = context.build_gep(
@@ -261,7 +259,7 @@ where
                         &[
                             context.word_const(0),
                             context
-                                .integer_type(revive_common::BIT_LENGTH_X32)
+                                .integer_type(BIT_LENGTH_X32)
                                 .const_int(index as u64, false),
                         ],
                         context.word_type(),
@@ -312,14 +310,14 @@ where
 
         context.set_basic_block(context.current_function().borrow().return_block());
         match context.current_function().borrow().r#return() {
-            revive_llvm_context::PolkaVMFunctionReturn::None => {
+            PolkaVMFunctionReturn::None => {
                 context.build_return(None);
             }
-            revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+            PolkaVMFunctionReturn::Primitive { pointer } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }
-            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
+            PolkaVMFunctionReturn::Compound { pointer, .. } => {
                 let return_value = context.build_load(pointer, "return_value")?;
                 context.build_return(Some(&return_value));
             }

@@ -1,16 +1,14 @@
 //! The `solc --combined-json` output.
 
-pub mod contract;
-
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
 
 use serde::Deserialize;
 use serde::Serialize;
 
 use self::contract::Contract;
+
+pub mod contract;
+pub mod selector;
 
 /// The `solc --combined-json` output.
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,62 +16,36 @@ pub struct CombinedJson {
     /// The contract entries.
     pub contracts: BTreeMap<String, Contract>,
     /// The list of source files.
-    #[serde(rename = "sourceList")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_list: Option<Vec<String>>,
+    #[serde(default, rename = "sourceList", skip_serializing_if = "Vec::is_empty")]
+    pub source_list: Vec<String>,
     /// The source code extra data, including the AST.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sources: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub sources: serde_json::Value,
     /// The `solc` compiler version.
     pub version: String,
     /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub revive_version: Option<String>,
+    #[cfg(feature = "resolc")]
+    pub resolc_version: Option<String>,
 }
 
+#[cfg(feature = "resolc")]
 impl CombinedJson {
-    /// Returns the signature hash of the specified contract and entry.
-    pub fn entry(&self, path: &str, entry: &str) -> u32 {
-        self.contracts
-            .iter()
-            .find_map(|(name, contract)| {
-                if name.starts_with(path) {
-                    Some(contract)
-                } else {
-                    None
-                }
-            })
-            .expect("Always exists")
-            .entry(entry)
-    }
-
-    /// Returns the full contract path which can be found in `combined-json` output.
-    pub fn get_full_path(&self, name: &str) -> Option<String> {
-        self.contracts.iter().find_map(|(path, _value)| {
-            if let Some(last_slash_position) = path.rfind('/') {
-                if let Some(colon_position) = path.rfind(':') {
-                    if &path[last_slash_position + 1..colon_position] == name {
-                        return Some(path.to_owned());
-                    }
-                }
-            }
-
-            None
-        })
-    }
-
-    /// Removes EVM artifacts to prevent their accidental usage.
-    pub fn remove_evm(&mut self) {
-        for (_, contract) in self.contracts.iter_mut() {
-            contract.bin = None;
-            contract.bin_runtime = None;
+    /// A shortcut constructor.
+    pub fn new(solc_version: semver::Version, resolc_version: Option<String>) -> Self {
+        Self {
+            contracts: BTreeMap::new(),
+            source_list: Vec::new(),
+            sources: serde_json::Value::Null,
+            version: solc_version.to_string(),
+            resolc_version,
         }
     }
 
     /// Writes the JSON to the specified directory.
     pub fn write_to_directory(
         self,
-        output_directory: &Path,
+        output_directory: &std::path::Path,
         overwrite: bool,
     ) -> anyhow::Result<()> {
         let mut file_path = output_directory.to_owned();
@@ -85,10 +57,11 @@ impl CombinedJson {
             );
         }
 
-        File::create(&file_path)
-            .map_err(|error| anyhow::anyhow!("File {:?} creating error: {}", file_path, error))?
-            .write_all(serde_json::to_vec(&self).expect("Always valid").as_slice())
-            .map_err(|error| anyhow::anyhow!("File {:?} writing error: {}", file_path, error))?;
+        std::fs::write(
+            file_path.as_path(),
+            serde_json::to_vec(&self).expect("Always valid").as_slice(),
+        )
+        .map_err(|error| anyhow::anyhow!("File {file_path:?} writing: {error}"))?;
 
         Ok(())
     }

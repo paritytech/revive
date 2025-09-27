@@ -1,21 +1,26 @@
 //! The `solc --standard-json` input settings.
 
+pub mod libraries;
 pub mod metadata;
 pub mod metadata_hash;
 pub mod optimizer;
 pub mod polkavm;
 pub mod selection;
+#[cfg(feature = "resolc")]
+pub mod warning;
 
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
 
+use self::libraries::Libraries;
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
 use self::polkavm::PolkaVM;
 use self::selection::Selection;
+#[cfg(feature = "resolc")]
+use self::warning::Warning;
 
 /// The `solc --standard-json` input settings.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -25,14 +30,14 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evm_version: Option<revive_common::EVMVersion>,
     /// The linker library addresses.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub libraries: Option<BTreeMap<String, BTreeMap<String, String>>>,
+    #[serde(default, skip_serializing_if = "Libraries::is_empty")]
+    pub libraries: Libraries,
     /// The sorted list of remappings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub remappings: Option<BTreeSet<String>>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub remappings: BTreeSet<String>,
     /// The output selection filters.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_selection: Option<Selection>,
+    #[serde(default)]
+    pub output_selection: Selection,
     /// Whether to compile via IR. Only for testing with solc >=0.8.13.
     #[serde(
         rename = "viaIR",
@@ -43,67 +48,68 @@ pub struct Settings {
     /// The optimizer settings.
     pub optimizer: Optimizer,
     /// The metadata settings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Metadata>,
+    #[serde(default)]
+    pub metadata: Metadata,
     /// The resolc custom PolkaVM settings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub polkavm: Option<PolkaVM>,
+    #[serde(default, skip_serializing)]
+    pub polkavm: PolkaVM,
+
+    /// The suppressed warnings.
+    #[cfg(feature = "resolc")]
+    #[serde(default, skip_serializing)]
+    pub suppressed_warnings: Vec<self::warning::Warning>,
+
+    /// The extra LLVM arguments.
+    #[cfg(feature = "resolc")]
+    #[serde(default, alias = "LLVMOptions", skip_serializing)]
+    pub llvm_arguments: Vec<String>,
+
+    /// Whether to enable the missing libraries detection mode.
+    /// Deprecated in favor of post-compile-time linking.
+    #[serde(default, rename = "detectMissingLibraries", skip_serializing)]
+    pub detect_missing_libraries: bool,
 }
 
+#[cfg(feature = "resolc")]
 impl Settings {
     /// A shortcut constructor.
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
-        libraries: BTreeMap<String, BTreeMap<String, String>>,
-        remappings: Option<BTreeSet<String>>,
+        libraries: Libraries,
+        remappings: BTreeSet<String>,
         output_selection: Selection,
         optimizer: Optimizer,
-        metadata: Option<Metadata>,
-        polkavm: Option<PolkaVM>,
+        metadata: Metadata,
+        polkavm: PolkaVM,
+        suppressed_warnings: Vec<Warning>,
+        llvm_arguments: Vec<String>,
+        detect_missing_libraries: bool,
     ) -> Self {
         Self {
             evm_version,
-            libraries: Some(libraries),
+            libraries,
             remappings,
-            output_selection: Some(output_selection),
+            output_selection,
             optimizer,
             metadata,
             via_ir: Some(true),
             polkavm,
+            suppressed_warnings,
+            llvm_arguments,
+            detect_missing_libraries,
         }
     }
 
-    /// Sets the necessary defaults.
-    pub fn normalize(&mut self) {
-        self.polkavm = None;
-        self.optimizer.normalize();
+    /// Extends the output selection with another one.
+    pub fn extend_selection(&mut self, selection: Selection) {
+        self.output_selection.extend(selection);
     }
 
-    /// Parses the library list and returns their double hashmap with path and name as keys.
-    pub fn parse_libraries(
-        input: Vec<String>,
-    ) -> anyhow::Result<BTreeMap<String, BTreeMap<String, String>>> {
-        let mut libraries = BTreeMap::new();
-        for (index, library) in input.into_iter().enumerate() {
-            let mut path_and_address = library.split('=');
-            let path = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library #{} path is missing", index))?;
-            let mut file_and_contract = path.split(':');
-            let file = file_and_contract
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library `{}` file name is missing", path))?;
-            let contract = file_and_contract.next().ok_or_else(|| {
-                anyhow::anyhow!("The library `{}` contract name is missing", path)
-            })?;
-            let address = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("The library `{}` address is missing", path))?;
-            libraries
-                .entry(file.to_owned())
-                .or_insert_with(BTreeMap::new)
-                .insert(contract.to_owned(), address.to_owned());
-        }
-        Ok(libraries)
+    /// Returns flags that are going to be automatically added by the compiler,
+    /// but were not explicitly requested by the user.
+    ///
+    /// Afterwards, the flags are used to prune JSON output before returning it.
+    pub fn selection_to_prune(&self) -> Selection {
+        self.output_selection.selection_to_prune()
     }
 }

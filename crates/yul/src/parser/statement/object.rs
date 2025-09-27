@@ -1,11 +1,14 @@
 //! The YUL object.
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use inkwell::debug_info::AsDIScope;
-
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
@@ -170,7 +173,7 @@ impl Object {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         let mut missing_libraries = self.code.get_missing_libraries();
         if let Some(inner_object) = &self.inner_object {
             missing_libraries.extend(inner_object.get_missing_libraries());
@@ -179,14 +182,8 @@ impl Object {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Object
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Object {
+    fn declare(&mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 
@@ -270,7 +267,7 @@ where
         Ok(())
     }
 
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();
             let object_name: &str = self.identifier.as_str();

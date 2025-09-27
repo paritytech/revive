@@ -1,30 +1,43 @@
 //! The LLVM context library.
 
-pub mod r#const;
-pub mod context;
-pub mod evm;
-
-pub use self::r#const::*;
+use std::collections::BTreeMap;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
+use crate::{PolkaVMTarget, PolkaVMTargetMachine};
 
 use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
-use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
-use sha3::Digest;
+use revive_common::{
+    Keccak256, ObjectFormat, BIT_LENGTH_ETH_ADDRESS, BIT_LENGTH_WORD, BYTE_LENGTH_ETH_ADDRESS,
+    BYTE_LENGTH_WORD,
+};
+use revive_linker::elf::ElfLinker;
+use revive_linker::pvm::polkavm_linker;
 
 use self::context::build::Build;
 use self::context::Context;
+pub use self::r#const::*;
 
-/// Builds PolkaVM assembly text.
-pub fn build_assembly_text(
+pub mod r#const;
+pub mod context;
+pub mod evm;
+
+/// Get a [Build] from contract bytecode and its auxilliary data.
+pub fn build(
+    bytecode: &[u8],
+    metadata_hash: Option<[u8; BYTE_LENGTH_WORD]>,
+) -> anyhow::Result<Build> {
+    Ok(Build::new(metadata_hash, bytecode.to_owned()))
+}
+
+/// Disassembles the PolkaVM blob into assembly text representation.
+pub fn disassemble(
     contract_path: &str,
     bytecode: &[u8],
-    metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
     debug_config: &DebugConfig,
-) -> anyhow::Result<Build> {
+) -> anyhow::Result<String> {
     let program_blob = ProgramBlob::parse(bytecode.into())
         .map_err(anyhow::Error::msg)
         .with_context(|| format!("Failed to parse program blob for contract: {contract_path}"))?;
@@ -45,86 +58,97 @@ pub fn build_assembly_text(
 
     debug_config.dump_assembly(contract_path, &assembly_text)?;
 
-    Ok(Build::new(
-        assembly_text.to_owned(),
-        metadata_hash,
-        bytecode.to_owned(),
-        hex::encode(sha3::Keccak256::digest(bytecode)),
-    ))
+    Ok(assembly_text)
 }
 
+/// Computes the PVM bytecode hash.
+pub fn hash(bytecode_buffer: &[u8]) -> [u8; BYTE_LENGTH_WORD] {
+    Keccak256::from_slice(bytecode_buffer)
+        .as_bytes()
+        .try_into()
+        .expect("the bytecode hash should be word sized")
+}
+
+/// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
+pub fn link(
+    bytecode: &[u8],
+    linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
+    strip_binary: bool,
+) -> anyhow::Result<(Vec<u8>, ObjectFormat)> {
+    Ok(match ObjectFormat::try_from(bytecode) {
+        Ok(format @ ObjectFormat::PVM) => (bytecode.to_vec(), format),
+        Ok(ObjectFormat::ELF) => {
+            let symbols = build_symbols(linker_symbols, factory_dependencies)?;
+            let bytecode_linked = ElfLinker::setup()?.link(bytecode, symbols.as_slice())?;
+            polkavm_linker(&bytecode_linked, strip_binary)
+                .map(|pvm| (pvm, ObjectFormat::PVM))
+                .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF))
+        }
+        Err(error) => panic!("ICE: linker: {error}"),
+    })
+}
+
+/// The returned module defines given `linker_symbols` and `factory_dependencies` global values.
+pub fn build_symbols(
+    linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
+) -> anyhow::Result<inkwell::memory_buffer::MemoryBuffer> {
+    let context = inkwell::context::Context::create();
+    let module = context.create_module("symbols");
+    let word_type = context.custom_width_int_type(BIT_LENGTH_WORD as u32);
+    let address_type = context.custom_width_int_type(BIT_LENGTH_ETH_ADDRESS as u32);
+
+    for (name, value) in linker_symbols {
+        let global_value = module.add_global(address_type, Default::default(), name);
+        global_value.set_linkage(inkwell::module::Linkage::External);
+        global_value.set_initializer(
+            &address_type
+                .const_int_from_string(
+                    hex::encode(value).as_str(),
+                    inkwell::types::StringRadix::Hexadecimal,
+                )
+                .expect("should be valid"),
+        );
+    }
+
+    for (name, value) in factory_dependencies {
+        let global_value = module.add_global(word_type, Default::default(), name);
+        global_value.set_linkage(inkwell::module::Linkage::External);
+        global_value.set_initializer(
+            &word_type
+                .const_int_from_string(
+                    hex::encode(value).as_str(),
+                    inkwell::types::StringRadix::Hexadecimal,
+                )
+                .expect("should be valid"),
+        );
+    }
+
+    Ok(
+        PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none())?
+            .write_to_memory_buffer(&module)
+            .expect("ICE: the symbols module should be valid"),
+    )
+}
 /// Implemented by items which are translated into LLVM IR.
-pub trait WriteLLVM<D>
-where
-    D: Dependency + Clone,
-{
+pub trait WriteLLVM {
     /// Declares the entity in the LLVM IR.
     /// Is usually performed in order to use the item before defining it.
-    fn declare(&mut self, _context: &mut Context<D>) -> anyhow::Result<()> {
+    fn declare(&mut self, _context: &mut Context) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// Translates the entity into LLVM IR.
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()>;
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()>;
 }
 
 /// The dummy LLVM writable entity.
 #[derive(Debug, Default, Clone)]
 pub struct DummyLLVMWritable {}
 
-impl<D> WriteLLVM<D> for DummyLLVMWritable
-where
-    D: Dependency + Clone,
-{
-    fn into_llvm(self, _context: &mut Context<D>) -> anyhow::Result<()> {
+impl WriteLLVM for DummyLLVMWritable {
+    fn into_llvm(self, _context: &mut Context) -> anyhow::Result<()> {
         Ok(())
-    }
-}
-
-/// Implemented by items managing project dependencies.
-pub trait Dependency {
-    /// Compiles a project dependency.
-    fn compile(
-        dependency: Self,
-        path: &str,
-        optimizer_settings: OptimizerSettings,
-        include_metadata_hash: bool,
-        debug_config: DebugConfig,
-        llvm_arguments: &[String],
-        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-    ) -> anyhow::Result<String>;
-
-    /// Resolves a full contract path.
-    fn resolve_path(&self, identifier: &str) -> anyhow::Result<String>;
-
-    /// Resolves a library address.
-    fn resolve_library(&self, path: &str) -> anyhow::Result<String>;
-}
-
-/// The dummy dependency entity.
-#[derive(Debug, Default, Clone)]
-pub struct DummyDependency {}
-
-impl Dependency for DummyDependency {
-    fn compile(
-        _dependency: Self,
-        _path: &str,
-        _optimizer_settings: OptimizerSettings,
-        _include_metadata_hash: bool,
-        _debug_config: DebugConfig,
-        _llvm_arguments: &[String],
-        _memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-    ) -> anyhow::Result<String> {
-        Ok(String::new())
-    }
-
-    /// Resolves a full contract path.
-    fn resolve_path(&self, _identifier: &str) -> anyhow::Result<String> {
-        Ok(String::new())
-    }
-
-    /// Resolves a library address.
-    fn resolve_library(&self, _path: &str) -> anyhow::Result<String> {
-        Ok(String::new())
     }
 }

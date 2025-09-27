@@ -1,15 +1,11 @@
 //! Translates the return data instructions.
 
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the return data size.
-pub fn size<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn size<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let return_data_size_value = context
         .build_runtime_call(revive_runtime_api::polkavm_imports::RETURNDATASIZE, &[])
         .expect("the return_data_size syscall method should return a value")
@@ -29,15 +25,12 @@ where
 /// - Destination, offset or size exceed the VM register size (XLEN)
 /// - `source_offset + size` overflows (in XLEN)
 /// - `source_offset + size` is beyond `RETURNDATASIZE`
-pub fn copy<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn copy<'ctx>(
+    context: &mut Context<'ctx>,
     destination_offset: inkwell::values::IntValue<'ctx>,
     source_offset: inkwell::values::IntValue<'ctx>,
     size: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     let source_offset = context.safe_truncate_int_to_xlen(source_offset)?;
     let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;
     let size = context.safe_truncate_int_to_xlen(size)?;

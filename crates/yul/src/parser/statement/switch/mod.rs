@@ -1,11 +1,12 @@
 //! The switch statement.
 
-pub mod case;
-
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
@@ -20,6 +21,8 @@ use crate::visitor::AstNode;
 use crate::visitor::AstVisitor;
 
 use self::case::Case;
+
+pub mod case;
 
 /// The Yul switch statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -108,8 +111,8 @@ impl Switch {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
         for case in self.cases.iter() {
             libraries.extend(case.get_missing_libraries());
         }
@@ -120,11 +123,8 @@ impl Switch {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Switch
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Switch {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
         let scrutinee = self.expression.into_llvm(context)?;
 

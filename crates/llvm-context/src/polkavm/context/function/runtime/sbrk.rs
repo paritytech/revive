@@ -1,11 +1,11 @@
 //! Emulates the linear EVM heap memory via a simulated `sbrk` system call.
 
 use inkwell::values::BasicValue;
+use revive_common::BYTE_LENGTH_WORD;
 
 use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Simulates the `sbrk` system call, reproducing the semantics of the EVM heap memory.
@@ -24,10 +24,7 @@ use crate::polkavm::WriteLLVM;
 /// - Maintains the total memory size (`msize`) in global heap size value.
 pub struct Sbrk;
 
-impl<D> RuntimeFunction<D> for Sbrk
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Sbrk {
     const NAME: &'static str = "__sbrk_internal";
 
     const ATTRIBUTES: &'static [Attribute] = &[
@@ -36,7 +33,7 @@ where
         Attribute::WillReturn,
     ];
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.llvm().ptr_type(Default::default()).fn_type(
             &[context.xlen_type().into(), context.xlen_type().into()],
             false,
@@ -45,7 +42,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let offset = Self::paramater(context, 0).into_int_value();
         let size = Self::paramater(context, 1).into_int_value();
@@ -71,7 +68,7 @@ where
         context.set_basic_block(offset_in_bounds_block);
         let mask = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64 - 1, false);
+            .const_int(BYTE_LENGTH_WORD as u64 - 1, false);
         let total_size = context
             .builder()
             .build_int_add(offset, size, "total_size")?;
@@ -130,15 +127,12 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Sbrk
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Sbrk {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }

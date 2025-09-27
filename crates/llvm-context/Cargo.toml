@@ -1,6 +1,6 @@
 [package]
 name = "revive-llvm-context"
-version = "0.3.0"
+version = "0.4.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -20,7 +20,6 @@ itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 num = { workspace = true }
 hex = { workspace = true }
-sha3 = { workspace = true }
 inkwell = { workspace = true }
 libc = { workspace = true }
 polkavm-disassembler = { workspace = true }

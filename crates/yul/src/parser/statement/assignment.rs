@@ -1,10 +1,14 @@
 //! The assignment expression statement.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use inkwell::types::BasicType;
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_common::BIT_LENGTH_X32;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -108,19 +112,13 @@ impl Assignment {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.initializer.get_missing_libraries()
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Assignment
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(
-        mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Assignment {
+    fn into_llvm(mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
 
         let value = match self.initializer.into_llvm(context)? {
@@ -158,7 +156,7 @@ where
                 &[
                     context.word_const(0),
                     context
-                        .integer_type(revive_common::BIT_LENGTH_X32)
+                        .integer_type(BIT_LENGTH_X32)
                         .const_int(index as u64, false),
                 ],
                 context.word_type().as_basic_type_enum(),

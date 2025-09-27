@@ -5,15 +5,28 @@ use std::{
     process::{Command, Stdio},
 };
 
-use revive_common;
-
 use crate::SolcCompiler;
 
-pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/cli/contracts/solidity/contract.sol";
-pub const YUL_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/contract.yul";
-pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/cli/contracts/yul/memset.yul";
+/// The simple Solidity contract test fixture path.
+pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/data/solidity/contract.sol";
+/// The dependency Solidity contract test fixture path.
+pub const DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dependency.sol";
+
+/// The simple YUL contract test fixture path.
+pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
+
+/// The memeset YUL contract test fixture path.
+pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
+/// The standard JSON contracts test fixture path.
+///
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
-    "src/tests/cli/contracts/standard_json/solidity_contracts.json";
+    "src/tests/data/standard_json/solidity_contracts.json";
+
+/// The `resolc` YUL mode flag.
+pub const RESOLC_YUL_FLAG: &str = "--yul";
+/// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
+/// See section `--strict-assembly vs. --yul` in https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/
+pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
 
 /// The result of executing a command.
 pub struct CommandResult {
@@ -52,6 +65,14 @@ fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    println!(
+        "executing command: '{command} {}{}'",
+        arguments.join(" "),
+        stdin_file_path
+            .map(|argument| format!("< {argument}"))
+            .unwrap_or_default()
+    );
+
     let stdin_config = match stdin_file_path {
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
@@ -73,10 +94,7 @@ fn execute_command(
 }
 
 pub fn assert_equal_exit_codes(solc_result: &CommandResult, resolc_result: &CommandResult) {
-    assert_eq!(
-        solc_result.code, resolc_result.code,
-        "Expected solc and resolc to have the same exit code."
-    );
+    assert_eq!(solc_result.code, resolc_result.code,);
 }
 
 pub fn assert_command_success(result: &CommandResult, error_message_prefix: &str) {

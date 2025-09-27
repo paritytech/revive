@@ -1,8 +1,6 @@
 //! The tests for running resolc with combined JSON option.
 
-#![cfg(test)]
-
-use revive_common;
+use revive_solc_json_interface::CombinedJsonInvalidSelectorMessage;
 
 use crate::tests::cli::utils;
 
@@ -53,10 +51,9 @@ fn fails_with_invalid_json_argument() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Providing an invalid json argument");
 
-    assert!(
-        resolc_result.stdout.contains("Invalid option"),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result
+        .stderr
+        .contains(CombinedJsonInvalidSelectorMessage));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
@@ -73,16 +70,12 @@ fn fails_with_multiple_json_arguments() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Providing multiple json arguments");
 
-    assert!(
-        resolc_result
-            .stderr
-            .contains("reading error: No such file or directory"),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result
+        .stderr
+        .contains(&format!("Error: \"{}\" is not found.", JSON_ARGUMENTS[1])),);
 
-    // FIX: Resolc exit code == 101
-    // let solc_result = utils::execute_solc(arguments);
-    // utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+    let solc_result = utils::execute_solc(arguments);
+    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]
@@ -91,12 +84,9 @@ fn fails_without_json_argument() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting a JSON argument");
 
-    assert!(
-        resolc_result.stderr.contains(
-            "a value is required for '--combined-json <COMBINED_JSON>' but none was supplied"
-        ),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result.stderr.contains(
+        "a value is required for '--combined-json <COMBINED_JSON>' but none was supplied"
+    ));
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
@@ -108,10 +98,7 @@ fn fails_without_solidity_input_file() {
     let resolc_result = utils::execute_resolc(arguments);
     utils::assert_command_failure(&resolc_result, "Omitting a Solidity input file");
 
-    assert!(
-        resolc_result.stderr.contains("No input sources specified"),
-        "Expected the output to contain a specific error message."
-    );
+    assert!(resolc_result.stderr.contains("Error: No input files given"),);
 
     let solc_result = utils::execute_solc(arguments);
     utils::assert_equal_exit_codes(&solc_result, &resolc_result);
@@ -124,12 +111,9 @@ fn fails_with_yul_input_file() {
         let resolc_result = utils::execute_resolc(arguments);
         utils::assert_command_failure(&resolc_result, "Providing a Yul input file");
 
-        assert!(
-            resolc_result
-                .stderr
-                .contains("ParserError: Expected identifier"),
-            "Expected the output to contain a specific error message."
-        );
+        assert!(resolc_result
+            .stderr
+            .contains("Error: Expected identifier but got 'StringLiteral'"));
 
         let solc_result = utils::execute_solc(arguments);
         utils::assert_equal_exit_codes(&solc_result, &resolc_result);

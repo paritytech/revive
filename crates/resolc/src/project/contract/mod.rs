@@ -1,29 +1,38 @@
 //! The contract data.
 
-pub mod ir;
-pub mod metadata;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
-use std::collections::HashSet;
-
+use revive_common::ContractIdentifier;
+use revive_common::Keccak256;
+use revive_common::MetadataHash;
+use revive_common::ObjectFormat;
+use revive_llvm_context::DebugConfig;
+use revive_llvm_context::Optimizer;
+use revive_llvm_context::OptimizerSettings;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMContextSolidityData;
+use revive_llvm_context::PolkaVMContextYulData;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
-use sha3::Digest;
 
 use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::build::contract::Contract as ContractBuild;
-use crate::project::Project;
 use crate::solc::version::Version as SolcVersion;
 
 use self::ir::IR;
 use self::metadata::Metadata;
 
+pub mod ir;
+pub mod metadata;
+
 /// The contract data.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contract {
     /// The absolute file path.
-    pub path: String,
+    pub identifier: ContractIdentifier,
     /// The IR source code data.
     pub ir: IR,
     /// The metadata JSON.
@@ -32,22 +41,9 @@ pub struct Contract {
 
 impl Contract {
     /// A shortcut constructor.
-    pub fn new(
-        path: String,
-        source_hash: [u8; revive_common::BYTE_LENGTH_WORD],
-        source_version: SolcVersion,
-        ir: IR,
-        metadata_json: Option<serde_json::Value>,
-    ) -> Self {
-        let metadata_json = metadata_json.unwrap_or_else(|| {
-            serde_json::json!({
-                "source_hash": hex::encode(source_hash.as_slice()),
-                "source_version": serde_json::to_value(&source_version).expect("Always valid"),
-            })
-        });
-
+    pub fn new(identifier: ContractIdentifier, ir: IR, metadata_json: serde_json::Value) -> Self {
         Self {
-            path,
+            identifier,
             ir,
             metadata_json,
         }
@@ -56,136 +52,77 @@ impl Contract {
     /// Returns the contract identifier, which is:
     /// - the Yul object identifier for Yul
     /// - the module name for LLVM IR
-    pub fn identifier(&self) -> &str {
+    pub fn object_identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
-            IR::LLVMIR(ref llvm_ir) => llvm_ir.path.as_str(),
-        }
-    }
-
-    /// Extract factory dependencies.
-    pub fn drain_factory_dependencies(&mut self) -> HashSet<String> {
-        match self.ir {
-            IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
-            IR::LLVMIR(_) => HashSet::new(),
         }
     }
 
     /// Compiles the specified contract, setting its build artifacts.
     pub fn compile(
-        mut self,
-        project: Project,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
-        include_metadata_hash: bool,
-        mut debug_config: revive_llvm_context::DebugConfig,
+        self,
+        solc_version: Option<SolcVersion>,
+        optimizer_settings: OptimizerSettings,
+        metadata_hash: MetadataHash,
+        mut debug_config: DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+        missing_libraries: BTreeSet<String>,
+        factory_dependencies: BTreeSet<String>,
+        identifier_paths: BTreeMap<String, String>,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
-        let optimizer = revive_llvm_context::Optimizer::new(optimizer_settings);
-
-        let version = project.version.clone();
-        let identifier = self.identifier().to_owned();
-
+        let optimizer = Optimizer::new(optimizer_settings);
         let metadata = Metadata::new(
-            self.metadata_json.take(),
-            version.long.clone(),
-            version.l2_revision.clone(),
+            self.metadata_json,
+            solc_version
+                .as_ref()
+                .map(|version| version.default.to_owned()),
             optimizer.settings().to_owned(),
-            llvm_arguments.to_vec(),
+            llvm_arguments.to_owned(),
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
-        let metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]> = if include_metadata_hash
-        {
-            let metadata_string = serde_json::to_string(&metadata).expect("Always valid");
-            Some(sha3::Keccak256::digest(metadata_string.as_bytes()).into())
-        } else {
-            None
+        let metadata_json_bytes = serde_json::to_vec(&metadata_json).expect("Always valid");
+        let metadata_bytes = match metadata_hash {
+            MetadataHash::Keccak256 => Keccak256::from_slice(&metadata_json_bytes).into(),
+            MetadataHash::IPFS => todo!("IPFS hash isn't supported yet"),
+            MetadataHash::None => None,
         };
+        debug_config.set_contract_path(&self.identifier.full_path);
 
-        let module = match self.ir {
-            IR::LLVMIR(ref llvm_ir) => {
-                // Create the output module
-                let memory_buffer =
-                    inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(
-                        llvm_ir.source.as_bytes(),
-                        self.path.as_str(),
-                    );
-                llvm.create_module_from_ir(memory_buffer)
-                    .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        let build = match self.ir {
+            IR::Yul(mut yul) => {
+                let module = llvm.create_module(self.identifier.full_path.as_str());
+                let mut context =
+                    PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);
+                context.set_solidity_data(PolkaVMContextSolidityData::default());
+                let yul_data = PolkaVMContextYulData::new(identifier_paths);
+                context.set_yul_data(yul_data);
+
+                yul.declare(&mut context)?;
+                yul.into_llvm(&mut context)
+                    .map_err(|error| anyhow::anyhow!("LLVM IR generator: {error}"))?;
+
+                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
             }
-            _ => llvm.create_module(self.path.as_str()),
         };
-
-        debug_config.set_contract_path(&self.path);
-        let mut context = revive_llvm_context::PolkaVMContext::new(
-            &llvm,
-            module,
-            optimizer,
-            Some(project),
-            include_metadata_hash,
-            debug_config,
-            llvm_arguments,
-            memory_config,
-        );
-        context.set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
-        match self.ir {
-            IR::Yul(_) => {
-                context.set_yul_data(Default::default());
-            }
-            IR::LLVMIR(_) => {}
-        }
-
-        let factory_dependencies = self.drain_factory_dependencies();
-
-        self.ir.declare(&mut context).map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` LLVM IR generator declaration pass error: {}",
-                self.path,
-                error
-            )
-        })?;
-        self.ir.into_llvm(&mut context).map_err(|error| {
-            anyhow::anyhow!(
-                "The contract `{}` LLVM IR generator definition pass error: {}",
-                self.path,
-                error
-            )
-        })?;
-
-        if let Some(debug_info) = context.debug_info() {
-            debug_info.finalize_module()
-        }
-
-        let build = context.build(self.path.as_str(), metadata_hash)?;
 
         Ok(ContractBuild::new(
-            self.path,
-            identifier,
+            self.identifier,
             build,
             metadata_json,
+            missing_libraries,
             factory_dependencies,
+            ObjectFormat::ELF,
         ))
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        self.ir.get_missing_libraries()
-    }
-}
-
-impl<D> PolkaVMWriteLLVM<D> for Contract
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn declare(
-        &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<D>,
-    ) -> anyhow::Result<()> {
-        self.ir.declare(context)
-    }
-
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
-        self.ir.into_llvm(context)
+    pub fn get_missing_libraries(&self, deployed_libraries: &BTreeSet<String>) -> BTreeSet<String> {
+        self.ir
+            .get_missing_libraries()
+            .into_iter()
+            .filter(|library| !deployed_libraries.contains(library))
+            .collect::<BTreeSet<String>>()
     }
 }

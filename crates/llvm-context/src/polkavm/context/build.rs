@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use revive_common::BYTE_LENGTH_WORD;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -9,30 +10,25 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Build {
     /// The PolkaVM text assembly.
-    pub assembly_text: String,
+    pub assembly_text: Option<String>,
     /// The metadata hash.
-    pub metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
+    pub metadata_hash: Option<[u8; BYTE_LENGTH_WORD]>,
     /// The PolkaVM binary bytecode.
     pub bytecode: Vec<u8>,
-    /// The PolkaVM bytecode hash.
-    pub bytecode_hash: String,
+    /// The PolkaVM bytecode hash. Unlinked builds don't have a hash yet.
+    pub bytecode_hash: Option<[u8; BYTE_LENGTH_WORD]>,
     /// The hash-to-full-path mapping of the contract factory dependencies.
     pub factory_dependencies: BTreeMap<String, String>,
 }
 
 impl Build {
     /// A shortcut constructor.
-    pub fn new(
-        assembly_text: String,
-        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
-        bytecode: Vec<u8>,
-        bytecode_hash: String,
-    ) -> Self {
+    pub fn new(metadata_hash: Option<[u8; BYTE_LENGTH_WORD]>, bytecode: Vec<u8>) -> Self {
         Self {
-            assembly_text,
+            assembly_text: None,
             metadata_hash,
             bytecode,
-            bytecode_hash,
+            bytecode_hash: None,
             factory_dependencies: BTreeMap::new(),
         }
     }

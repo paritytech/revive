@@ -3,7 +3,7 @@
 pub mod name;
 pub mod verbatim;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use inkwell::values::BasicValue;
 use serde::Deserialize;
@@ -95,8 +95,8 @@ impl FunctionCall {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
 
         if let Name::LinkerSymbol = self.name {
             let _argument = self.arguments.first().expect("Always exists");
@@ -117,13 +117,10 @@ impl FunctionCall {
     }
 
     /// Converts the function call into an LLVM value.
-    pub fn into_llvm<'ctx, D>(
+    pub fn into_llvm<'ctx>(
         mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let location = self.location;
         context.set_debug_location(location.line, location.column, None)?;
 
@@ -164,7 +161,7 @@ impl FunctionCall {
             }
 
             Name::Add => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::addition(
                     context,
                     arguments[0].into_int_value(),
@@ -173,7 +170,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Sub => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::subtraction(
                     context,
                     arguments[0].into_int_value(),
@@ -182,7 +179,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Mul => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::multiplication(
                     context,
                     arguments[0].into_int_value(),
@@ -191,7 +188,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Div => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::division(
                     context,
                     arguments[0].into_int_value(),
@@ -200,7 +197,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Mod => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::remainder(
                     context,
                     arguments[0].into_int_value(),
@@ -209,7 +206,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Sdiv => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::division_signed(
                     context,
                     arguments[0].into_int_value(),
@@ -218,7 +215,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Smod => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_arithmetic::remainder_signed(
                     context,
                     arguments[0].into_int_value(),
@@ -228,7 +225,7 @@ impl FunctionCall {
             }
 
             Name::Lt => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -238,7 +235,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Gt => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -248,7 +245,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Eq => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -258,7 +255,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::IsZero => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -268,7 +265,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Slt => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -278,7 +275,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Sgt => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_comparison::compare(
                     context,
                     arguments[0].into_int_value(),
@@ -289,7 +286,7 @@ impl FunctionCall {
             }
 
             Name::Or => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::or(
                     context,
                     arguments[0].into_int_value(),
@@ -298,7 +295,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Xor => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
@@ -307,7 +304,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Not => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::xor(
                     context,
                     arguments[0].into_int_value(),
@@ -316,7 +313,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::And => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::and(
                     context,
                     arguments[0].into_int_value(),
@@ -325,7 +322,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Shl => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_left(
                     context,
                     arguments[0].into_int_value(),
@@ -334,7 +331,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Shr => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_right(
                     context,
                     arguments[0].into_int_value(),
@@ -343,7 +340,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Sar => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(
                     context,
                     arguments[0].into_int_value(),
@@ -352,7 +349,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Byte => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::byte(
                     context,
                     arguments[0].into_int_value(),
@@ -361,12 +358,12 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Pop => {
-                let _arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let _arguments = self.pop_arguments_llvm::<1>(context)?;
                 Ok(None)
             }
 
             Name::AddMod => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_math::add_mod(
                     context,
                     arguments[0].into_int_value(),
@@ -376,7 +373,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::MulMod => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_math::mul_mod(
                     context,
                     arguments[0].into_int_value(),
@@ -386,7 +383,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Exp => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_math::exponent(
                     context,
                     arguments[0].into_int_value(),
@@ -395,7 +392,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::SignExtend => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_math::sign_extend(
                     context,
                     arguments[0].into_int_value(),
@@ -405,7 +402,7 @@ impl FunctionCall {
             }
 
             Name::Keccak256 => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_crypto::sha3(
                     context,
                     arguments[0].into_int_value(),
@@ -415,7 +412,7 @@ impl FunctionCall {
             }
 
             Name::MLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 revive_llvm_context::polkavm_evm_memory::load(
                     context,
                     arguments[0].into_int_value(),
@@ -423,7 +420,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::MStore => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_memory::store(
                     context,
                     arguments[0].into_int_value(),
@@ -432,7 +429,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::MStore8 => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_memory::store_byte(
                     context,
                     arguments[0].into_int_value(),
@@ -441,7 +438,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::MCopy => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 let destination = revive_llvm_context::PolkaVMPointer::new_with_offset(
                     context,
                     revive_llvm_context::PolkaVMAddressSpace::Heap,
@@ -467,11 +464,11 @@ impl FunctionCall {
             }
 
             Name::SLoad => {
-                let arguments = self.pop_arguments::<D, 1>(context)?;
+                let arguments = self.pop_arguments::<1>(context)?;
                 revive_llvm_context::polkavm_evm_storage::load(context, &arguments[0]).map(Some)
             }
             Name::SStore => {
-                let arguments = self.pop_arguments::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::store(
                     context,
                     &arguments[0],
@@ -480,12 +477,12 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::TLoad => {
-                let arguments = self.pop_arguments::<D, 1>(context)?;
+                let arguments = self.pop_arguments::<1>(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_load(context, &arguments[0])
                     .map(Some)
             }
             Name::TStore => {
-                let arguments = self.pop_arguments::<D, 2>(context)?;
+                let arguments = self.pop_arguments::<2>(context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_store(
                     context,
                     &arguments[0],
@@ -494,7 +491,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::LoadImmutable => {
-                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let mut arguments = self.pop_arguments::<1>(context)?;
                 let key = arguments[0].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `load_immutable` literal is missing", location)
                 })?;
@@ -506,7 +503,7 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
             }
             Name::SetImmutable => {
-                let mut arguments = self.pop_arguments::<D, 3>(context)?;
+                let mut arguments = self.pop_arguments::<3>(context)?;
                 let key = arguments[1].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `load_immutable` literal is missing", location)
                 })?;
@@ -518,7 +515,7 @@ impl FunctionCall {
                     .map(|_| None)
             }
             Name::CallDataLoad => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
 
                 match context
                     .code_type()
@@ -550,7 +547,7 @@ impl FunctionCall {
                 }
             }
             Name::CallDataCopy => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
 
                 match context
                     .code_type()
@@ -603,7 +600,7 @@ impl FunctionCall {
                     );
                 }
 
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_calldata::copy(
                     context,
                     arguments[0].into_int_value(),
@@ -616,7 +613,7 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_return_data::size(context).map(Some)
             }
             Name::ReturnDataCopy => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_return_data::copy(
                     context,
                     arguments[0].into_int_value(),
@@ -626,7 +623,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::ExtCodeSize => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 revive_llvm_context::polkavm_evm_ext_code::size(
                     context,
                     Some(arguments[0].into_int_value()),
@@ -634,7 +631,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::ExtCodeHash => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 revive_llvm_context::polkavm_evm_ext_code::hash(
                     context,
                     arguments[0].into_int_value(),
@@ -643,7 +640,7 @@ impl FunctionCall {
             }
 
             Name::Return => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_return::r#return(
                     context,
                     arguments[0].into_int_value(),
@@ -652,7 +649,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::Revert => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_return::revert(
                     context,
                     arguments[0].into_int_value(),
@@ -666,7 +663,7 @@ impl FunctionCall {
             }
 
             Name::Log0 => {
-                let arguments = self.pop_arguments_llvm::<D, 2>(context)?;
+                let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
@@ -676,7 +673,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::Log1 => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
@@ -686,7 +683,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::Log2 => {
-                let arguments = self.pop_arguments_llvm::<D, 4>(context)?;
+                let arguments = self.pop_arguments_llvm::<4>(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
@@ -696,7 +693,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::Log3 => {
-                let arguments = self.pop_arguments_llvm::<D, 5>(context)?;
+                let arguments = self.pop_arguments_llvm::<5>(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
@@ -706,7 +703,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::Log4 => {
-                let arguments = self.pop_arguments_llvm::<D, 6>(context)?;
+                let arguments = self.pop_arguments_llvm::<6>(context)?;
                 revive_llvm_context::polkavm_evm_event::log(
                     context,
                     arguments[0].into_int_value(),
@@ -717,7 +714,7 @@ impl FunctionCall {
             }
 
             Name::Call => {
-                let arguments = self.pop_arguments::<D, 7>(context)?;
+                let arguments = self.pop_arguments::<7>(context)?;
 
                 let gas = arguments[0].access(context)?.into_int_value();
                 let address = arguments[1].access(context)?.into_int_value();
@@ -747,7 +744,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::StaticCall => {
-                let arguments = self.pop_arguments::<D, 6>(context)?;
+                let arguments = self.pop_arguments::<6>(context)?;
 
                 let gas = arguments[0].access(context)?.into_int_value();
                 let address = arguments[1].access(context)?.into_int_value();
@@ -776,7 +773,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::DelegateCall => {
-                let arguments = self.pop_arguments::<D, 6>(context)?;
+                let arguments = self.pop_arguments::<6>(context)?;
 
                 let gas = arguments[0].access(context)?.into_int_value();
                 let address = arguments[1].access(context)?.into_int_value();
@@ -804,7 +801,7 @@ impl FunctionCall {
             }
 
             Name::Create => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
 
                 let value = arguments[0].into_int_value();
                 let input_offset = arguments[1].into_int_value();
@@ -820,7 +817,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::Create2 => {
-                let arguments = self.pop_arguments_llvm::<D, 4>(context)?;
+                let arguments = self.pop_arguments_llvm::<4>(context)?;
 
                 let value = arguments[0].into_int_value();
                 let input_offset = arguments[1].into_int_value();
@@ -837,7 +834,7 @@ impl FunctionCall {
                 .map(Some)
             }
             Name::DataOffset => {
-                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let mut arguments = self.pop_arguments::<1>(context)?;
 
                 let identifier = arguments[0].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `dataoffset` object identifier is missing", location)
@@ -848,7 +845,7 @@ impl FunctionCall {
                     .map(Some)
             }
             Name::DataSize => {
-                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let mut arguments = self.pop_arguments::<1>(context)?;
 
                 let identifier = arguments[0].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} `dataoffset` object identifier is missing", location)
@@ -859,7 +856,7 @@ impl FunctionCall {
                     .map(Some)
             }
             Name::DataCopy => {
-                let arguments = self.pop_arguments_llvm::<D, 3>(context)?;
+                let arguments = self.pop_arguments_llvm::<3>(context)?;
                 revive_llvm_context::polkavm_evm_memory::store(
                     context,
                     arguments[0].into_int_value(),
@@ -869,19 +866,14 @@ impl FunctionCall {
             }
 
             Name::LinkerSymbol => {
-                let mut arguments = self.pop_arguments::<D, 1>(context)?;
+                let mut arguments = self.pop_arguments::<1>(context)?;
                 let path = arguments[0].original.take().ok_or_else(|| {
                     anyhow::anyhow!("{} Linker symbol literal is missing", location)
                 })?;
-
-                Ok(Some(
-                    context
-                        .resolve_library(path.as_str())?
-                        .as_basic_value_enum(),
-                ))
+                revive_llvm_context::polkavm_evm_call::linker_symbol(context, &path).map(Some)
             }
             Name::MemoryGuard => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 Ok(Some(arguments[0]))
             }
 
@@ -894,7 +886,7 @@ impl FunctionCall {
             Name::CallValue => revive_llvm_context::polkavm_evm_ether_gas::value(context).map(Some),
             Name::Gas => revive_llvm_context::polkavm_evm_ether_gas::gas(context).map(Some),
             Name::Balance => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
 
                 let address = arguments[0].into_int_value();
                 revive_llvm_context::polkavm_evm_ether_gas::balance(context, address).map(Some)
@@ -923,14 +915,14 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_contract_context::block_number(context).map(Some)
             }
             Name::BlockHash => {
-                let arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
                 let index = arguments[0].into_int_value();
 
                 revive_llvm_context::polkavm_evm_contract_context::block_hash(context, index)
                     .map(Some)
             }
             Name::BlobHash => {
-                let _arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let _arguments = self.pop_arguments_llvm::<1>(context)?;
                 anyhow::bail!(
                     "{} The `BLOBHASH` instruction is not supported in revive",
                     location
@@ -959,19 +951,19 @@ impl FunctionCall {
             } => verbatim::verbatim(context, &mut self, input_size, output_size),
 
             Name::CallCode => {
-                let _arguments = self.pop_arguments_llvm::<D, 7>(context)?;
+                let _arguments = self.pop_arguments_llvm::<7>(context)?;
                 anyhow::bail!("{} The `CALLCODE` instruction is not supported", location)
             }
             Name::Pc => anyhow::bail!("{} The `PC` instruction is not supported", location),
             Name::ExtCodeCopy => {
-                let _arguments = self.pop_arguments_llvm::<D, 4>(context)?;
+                let _arguments = self.pop_arguments_llvm::<4>(context)?;
                 anyhow::bail!(
                     "{} The `EXTCODECOPY` instruction is not supported",
                     location
                 )
             }
             Name::SelfDestruct => {
-                let _arguments = self.pop_arguments_llvm::<D, 1>(context)?;
+                let _arguments = self.pop_arguments_llvm::<1>(context)?;
                 anyhow::bail!(
                     "{} The `SELFDESTRUCT` instruction is not supported",
                     location
@@ -981,13 +973,10 @@ impl FunctionCall {
     }
 
     /// Pops the specified number of arguments, converted into their LLVM values.
-    fn pop_arguments_llvm<'ctx, D, const N: usize>(
+    fn pop_arguments_llvm<'ctx, const N: usize>(
         &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<[inkwell::values::BasicValueEnum<'ctx>; N]>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<[inkwell::values::BasicValueEnum<'ctx>; N]> {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {
             arguments.push(
@@ -1005,13 +994,10 @@ impl FunctionCall {
     }
 
     /// Pops the specified number of arguments.
-    fn pop_arguments<'ctx, D, const N: usize>(
+    fn pop_arguments<'ctx, const N: usize>(
         &mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<[revive_llvm_context::PolkaVMArgument<'ctx>; N]>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<[revive_llvm_context::PolkaVMArgument<'ctx>; N]> {
         let mut arguments = Vec::with_capacity(N);
         for expression in self.arguments.drain(0..N).rev() {
             arguments.push(expression.into_llvm(context)?.expect("Always exists"));

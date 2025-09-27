@@ -1,19 +1,16 @@
 //! Translates the heap memory operations.
 
 use inkwell::values::BasicValue;
+use revive_common::BYTE_LENGTH_BYTE;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// Translates the `msize` instruction.
-pub fn msize<'ctx, D>(
-    context: &mut Context<'ctx, D>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+pub fn msize<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .builder()
         .build_int_z_extend(
@@ -26,13 +23,10 @@ where
 
 /// Translates the `mload` instruction.
 /// Uses the main heap.
-pub fn load<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn load<'ctx>(
+    context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
@@ -45,14 +39,11 @@ where
 
 /// Translates the `mstore` instruction.
 /// Uses the main heap.
-pub fn store<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn store<'ctx>(
+    context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     let pointer = Pointer::new_with_offset(
         context,
         AddressSpace::Heap,
@@ -66,14 +57,11 @@ where
 
 /// Translates the `mstore8` instruction.
 /// Uses the main heap.
-pub fn store_byte<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn store_byte<'ctx>(
+    context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     let byte_type = context.byte_type();
     let value = context
         .builder()
@@ -92,7 +80,7 @@ where
     context
         .builder()
         .build_store(pointer, value)?
-        .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
         .expect("Alignment is valid");
     Ok(())
 }

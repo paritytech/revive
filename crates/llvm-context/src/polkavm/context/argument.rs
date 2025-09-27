@@ -66,9 +66,9 @@ impl<'ctx> Argument<'ctx> {
     /// Access the underlying value.
     ///
     /// Will emit a stack load if `self` is a pointer argument.
-    pub fn access<D: crate::polkavm::Dependency + Clone>(
+    pub fn access(
         &self,
-        context: &crate::polkavm::context::Context<'ctx, D>,
+        context: &crate::polkavm::context::Context<'ctx>,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match &self.value {
             Value::Register(value) => Ok(*value),
@@ -79,9 +79,9 @@ impl<'ctx> Argument<'ctx> {
     /// Access the underlying value.
     ///
     /// Will emit a stack load if `self` is a pointer argument.
-    pub fn as_pointer<D: crate::polkavm::Dependency + Clone>(
+    pub fn as_pointer(
         &self,
-        context: &crate::polkavm::context::Context<'ctx, D>,
+        context: &crate::polkavm::context::Context<'ctx>,
     ) -> anyhow::Result<crate::polkavm::context::Pointer<'ctx>> {
         match &self.value {
             Value::Register(value) => {

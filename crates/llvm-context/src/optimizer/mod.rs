@@ -1,13 +1,13 @@
 //! The LLVM optimizing tools.
 
-pub mod settings;
-
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::target_machine::TargetMachine;
 
 use self::settings::Settings;
+
+pub mod settings;
 
 /// The LLVM optimizing tools.
 #[derive(Debug, Serialize, Deserialize)]

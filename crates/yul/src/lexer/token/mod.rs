@@ -1,10 +1,10 @@
 //! The token.
 
-pub mod lexeme;
-pub mod location;
-
 use self::lexeme::Lexeme;
 use self::location::Location;
+
+pub mod lexeme;
+pub mod location;
 
 /// The token.
 /// Contains a lexeme and its location.

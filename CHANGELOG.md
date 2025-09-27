@@ -12,15 +12,24 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+### Changed
+- Remove the broken `--llvm-ir` mode.
+- Remove the unused fallback for size optimization setting.
+- Unlinked contract binaries are emitted as raw ELF objects.
+
 ### Added
 - Line debug information per YUL builtin and for `if` statements.
 - Column numbers in debug information.
 - Support for the YUL optimizer details in the standard json input definition.
 - The `revive-explorer` compiler utility.
 - `revive-yul`: The AST visitor interface.
+- The `--link` deploy time linking mode.
 
 ### Fixed
 - The debug info source file matches the YUL path in `--debug-output-dir`, allowing tools to display the source line. 
+- Incosistent type forwarding in JSON output (empty string vs. null object).
+- The solc automatic import resolution.
+- Compiler panic on missing libraries definition.
 
 ## v0.3.0
 

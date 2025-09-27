@@ -1,14 +1,13 @@
 //! The LLVM optimizer settings.
 
-pub mod size_level;
-
-use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use serde::Deserialize;
 use serde::Serialize;
 
 use itertools::Itertools;
 
 use self::size_level::SizeLevel;
+
+pub mod size_level;
 
 /// The LLVM optimizer and code-gen settings.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq)]
@@ -19,9 +18,6 @@ pub struct Settings {
     pub level_middle_end_size: SizeLevel,
     /// The back-end optimization level.
     pub level_back_end: inkwell::OptimizationLevel,
-
-    /// Fallback to optimizing for size if the bytecode is too large.
-    pub is_fallback_to_size_enabled: bool,
 
     /// Whether the LLVM `verify each` option is enabled.
     pub is_verify_each_enabled: bool,
@@ -41,8 +37,6 @@ impl Settings {
             level_middle_end_size,
             level_back_end,
 
-            is_fallback_to_size_enabled: false,
-
             is_verify_each_enabled: false,
             is_debug_logging_enabled: false,
         }
@@ -61,8 +55,6 @@ impl Settings {
             level_middle_end,
             level_middle_end_size,
             level_back_end,
-
-            is_fallback_to_size_enabled: false,
 
             is_verify_each_enabled,
             is_debug_logging_enabled,
@@ -197,16 +189,6 @@ impl Settings {
 
         combinations
     }
-
-    /// Sets the fallback to optimizing for size if the bytecode is too large.
-    pub fn enable_fallback_to_size(&mut self) {
-        self.is_fallback_to_size_enabled = true;
-    }
-
-    /// Whether the fallback to optimizing for size is enabled.
-    pub fn is_fallback_to_size_enabled(&self) -> bool {
-        self.is_fallback_to_size_enabled
-    }
 }
 
 impl PartialEq for Settings {
@@ -225,20 +207,5 @@ impl std::fmt::Display for Settings {
             self.middle_end_as_string(),
             self.level_back_end as u8,
         )
-    }
-}
-
-impl TryFrom<&SolcStandardJsonInputSettingsOptimizer> for Settings {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &SolcStandardJsonInputSettingsOptimizer) -> Result<Self, Self::Error> {
-        let mut result = match value.mode {
-            Some(mode) => Self::try_from_cli(mode)?,
-            None => Self::size(),
-        };
-        if value.fallback_to_optimizing_for_size.unwrap_or_default() {
-            result.enable_fallback_to_size();
-        }
-        Ok(result)
     }
 }

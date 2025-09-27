@@ -4,19 +4,15 @@ use inkwell::values::BasicValueEnum;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Load a word size value from a storage pointer.
 pub struct LoadWord;
 
-impl<D> RuntimeFunction<D> for LoadWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for LoadWord {
     const NAME: &'static str = "__revive_load_storage_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
             .fn_type(&[context.llvm().ptr_type(Default::default()).into()], false)
@@ -24,7 +20,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         Ok(Some(emit_load(
             context,
@@ -34,29 +30,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for LoadWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for LoadWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Load a word size value from a transient storage pointer.
 pub struct LoadTransientWord;
 
-impl<D> RuntimeFunction<D> for LoadTransientWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for LoadTransientWord {
     const NAME: &'static str = "__revive_load_transient_storage_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
             .fn_type(&[context.llvm().ptr_type(Default::default()).into()], false)
@@ -64,35 +54,29 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         Ok(Some(emit_load(context, Self::paramater(context, 0), true)?))
     }
 }
 
-impl<D> WriteLLVM<D> for LoadTransientWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for LoadTransientWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Store a word size value through a storage pointer.
 pub struct StoreWord;
 
-impl<D> RuntimeFunction<D> for StoreWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for StoreWord {
     const NAME: &'static str = "__revive_store_storage_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
             &[
                 context.llvm().ptr_type(Default::default()).into(),
@@ -104,7 +88,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         emit_store(
             context,
@@ -117,29 +101,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for StoreWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for StoreWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Store a word size value through a transient storage pointer.
 pub struct StoreTransientWord;
 
-impl<D> RuntimeFunction<D> for StoreTransientWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for StoreTransientWord {
     const NAME: &'static str = "__revive_store_transient_storage_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
             &[
                 context.llvm().ptr_type(Default::default()).into(),
@@ -151,7 +129,7 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         emit_store(
             context,
@@ -164,21 +142,18 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for StoreTransientWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for StoreTransientWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
-fn emit_load<'ctx, D: Dependency + Clone>(
-    context: &mut Context<'ctx, D>,
+fn emit_load<'ctx>(
+    context: &mut Context<'ctx>,
     key: BasicValueEnum<'ctx>,
     transient: bool,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
@@ -229,8 +204,8 @@ fn emit_load<'ctx, D: Dependency + Clone>(
     })
 }
 
-fn emit_store<'ctx, D: Dependency + Clone>(
-    context: &mut Context<'ctx, D>,
+fn emit_store<'ctx>(
+    context: &mut Context<'ctx>,
     key: BasicValueEnum<'ctx>,
     value: BasicValueEnum<'ctx>,
     transient: bool,

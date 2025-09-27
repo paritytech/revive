@@ -1,11 +1,13 @@
 //! The source code block.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
+use inkwell::debug_info::AsDIScope;
 use serde::Deserialize;
 use serde::Serialize;
 
-use inkwell::debug_info::AsDIScope;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -123,8 +125,8 @@ impl Block {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
-        let mut libraries = HashSet::new();
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
+        let mut libraries = BTreeSet::new();
         for statement in self.statements.iter() {
             libraries.extend(statement.get_missing_libraries());
         }
@@ -132,11 +134,8 @@ impl Block {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Block
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Block {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         let current_function = context.current_function().borrow().name().to_owned();
         let current_block = context.basic_block();
 

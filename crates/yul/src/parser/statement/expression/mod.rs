@@ -1,12 +1,12 @@
 //! The expression statement.
 
-pub mod function_call;
-pub mod literal;
-
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMArgument;
+use revive_llvm_context::PolkaVMContext;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -21,6 +21,9 @@ use crate::visitor::AstVisitor;
 
 use self::function_call::FunctionCall;
 use self::literal::Literal;
+
+pub mod function_call;
+pub mod literal;
 
 /// The Yul expression statement.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -82,11 +85,11 @@ impl Expression {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         match self {
             Self::FunctionCall(inner) => inner.get_missing_libraries(),
-            Self::Identifier(_) => HashSet::new(),
-            Self::Literal(_) => HashSet::new(),
+            Self::Identifier(_) => BTreeSet::new(),
+            Self::Literal(_) => BTreeSet::new(),
         }
     }
 
@@ -100,13 +103,10 @@ impl Expression {
     }
 
     /// Converts the expression into an LLVM value.
-    pub fn into_llvm<'ctx, D>(
+    pub fn into_llvm<'ctx>(
         self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<Option<PolkaVMArgument<'ctx>>> {
         match self {
             Self::Literal(literal) => literal
                 .clone()
@@ -133,16 +133,14 @@ impl Expression {
 
                 let constant = context.current_function().borrow().yul().get_constant(&id);
 
-                let argument = revive_llvm_context::PolkaVMArgument::pointer(pointer, id);
+                let argument = PolkaVMArgument::pointer(pointer, id);
 
                 Ok(Some(match constant {
                     Some(constant) => argument.with_constant(constant),
                     _ => argument,
                 }))
             }
-            Self::FunctionCall(call) => Ok(call
-                .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::value)),
+            Self::FunctionCall(call) => Ok(call.into_llvm(context)?.map(PolkaVMArgument::value)),
         }
     }
 }

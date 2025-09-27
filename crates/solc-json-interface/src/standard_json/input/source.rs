@@ -1,7 +1,7 @@
 //! The `solc --standard-json` input source.
 
-use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,30 +11,90 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     /// The source code file content.
-    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// The source file URLs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub urls: Option<Vec<String>>,
+}
+
+impl Source {
+    /// Reads the source from the file system.
+    pub fn try_read(path: &Path) -> anyhow::Result<Self> {
+        let content = if path.to_string_lossy() == "-" {
+            std::io::read_to_string(std::io::stdin())
+                .map_err(|error| anyhow::anyhow!("<stdin> reading: {error}"))
+        } else {
+            std::fs::read_to_string(path)
+                .map_err(|error| anyhow::anyhow!("File {path:?} reading: {error}"))
+        }?;
+
+        Ok(Self {
+            content: Some(content),
+            urls: None,
+        })
+    }
+
+    /// Tries to resolve the source code.
+    ///
+    /// At the moment only one URL pointing to the file system is supported.
+    pub fn try_resolve(&mut self) -> anyhow::Result<()> {
+        match (self.content.as_ref(), self.urls.as_ref()) {
+            (Some(_), None) => Ok(()),
+            (None, Some(urls)) => {
+                let mut errors = Vec::with_capacity(urls.len());
+                for url in urls.iter() {
+                    let url_path = PathBuf::from(url);
+                    match Source::try_read(url_path.as_path()) {
+                        Ok(resolved) => {
+                            *self = resolved;
+                            break;
+                        }
+                        Err(error) => errors.push(error),
+                    }
+                }
+                if !errors.is_empty() {
+                    anyhow::bail!(
+                        "{}",
+                        errors
+                            .into_iter()
+                            .map(|error| error.to_string())
+                            .collect::<Vec<String>>()
+                            .join("\n")
+                    );
+                }
+                Ok(())
+            }
+            (Some(_), Some(_)) => anyhow::bail!("Both `content` and `urls` cannot be set."),
+            (None, None) => anyhow::bail!("Either `content` or `urls` must be set."),
+        }
+    }
+
+    /// Takes ownership of the source code and returns it.
+    pub fn take_content(&mut self) -> Option<String> {
+        self.content.take()
+    }
+
+    /// Returns the source code reference, if the source has been previously read or resolved.
+    pub fn content(&self) -> Option<&str> {
+        self.content.as_deref()
+    }
 }
 
 impl From<String> for Source {
     fn from(content: String) -> Self {
-        Self { content }
+        Self {
+            content: Some(content),
+            urls: None,
+        }
     }
 }
 
-impl TryFrom<&Path> for Source {
-    type Error = anyhow::Error;
-
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        let content = if path.to_string_lossy() == "-" {
-            let mut solidity_code = String::with_capacity(16384);
-            std::io::stdin()
-                .read_to_string(&mut solidity_code)
-                .map_err(|error| anyhow::anyhow!("<stdin> reading error: {}", error))?;
-            solidity_code
-        } else {
-            std::fs::read_to_string(path)
-                .map_err(|error| anyhow::anyhow!("File {:?} reading error: {}", path, error))?
-        };
-
-        Ok(Self { content })
+impl From<&Path> for Source {
+    fn from(path: &Path) -> Self {
+        Self {
+            content: None,
+            urls: Some(vec![path.to_string_lossy().to_string()]),
+        }
     }
 }

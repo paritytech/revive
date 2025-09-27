@@ -7,7 +7,6 @@ use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// A function for requesting the immutable data from the runtime.
@@ -20,19 +19,16 @@ use crate::polkavm::WriteLLVM;
 /// However, this is a one time assertion, hence worth it.
 pub struct Load;
 
-impl<D> RuntimeFunction<D> for Load
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Load {
     const NAME: &'static str = "__revive_load_immutable_data";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(Default::default(), false)
     }
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
@@ -109,35 +105,29 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Load
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Load {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Store the immutable data from the constructor code.
 pub struct Store;
 
-impl<D> RuntimeFunction<D> for Store
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for Store {
     const NAME: &'static str = "__revive_store_immutable_data";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(Default::default(), false)
     }
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let immutable_data_size_pointer = context
             .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE)?
@@ -192,16 +182,13 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for Store
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for Store {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
@@ -210,20 +197,17 @@ where
 /// In deploy code the values are read from the stack.
 ///
 /// In runtime code they are loaded lazily with the `get_immutable_data` syscall.
-pub fn load<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn load<'ctx>(
+    context: &mut Context<'ctx>,
     index: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     match context.code_type() {
         None => {
             anyhow::bail!("Immutables are not available if the contract part is undefined");
         }
         Some(CodeType::Deploy) => load_from_memory(context, index),
         Some(CodeType::Runtime) => {
-            let name = <Load as RuntimeFunction<D>>::NAME;
+            let name = <Load as RuntimeFunction>::NAME;
             context.build_call(
                 context
                     .get_function(name)
@@ -244,14 +228,11 @@ where
 /// being prepared for storing them using the `set_immutable_data` syscall.
 ///
 /// Ignored in the runtime code.
-pub fn store<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn store<'ctx>(
+    context: &mut Context<'ctx>,
     index: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<()> {
     match context.code_type() {
         None => {
             anyhow::bail!("Immutables are not available if the contract part is undefined");
@@ -279,13 +260,10 @@ where
     }
 }
 
-pub fn load_from_memory<'ctx, D>(
-    context: &mut Context<'ctx, D>,
+pub fn load_from_memory<'ctx>(
+    context: &mut Context<'ctx>,
     index: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-where
-    D: Dependency + Clone,
-{
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let immutable_data_pointer = context
         .get_global(revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER)?
         .value

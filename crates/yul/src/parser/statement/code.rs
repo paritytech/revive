@@ -1,9 +1,12 @@
 //! The YUL code.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
@@ -52,16 +55,13 @@ impl Code {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.block.get_missing_libraries()
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for Code
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Code {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         self.block.into_llvm(context)?;
 
         Ok(())

@@ -1,6 +1,6 @@
 [package]
 name = "resolc"
-version = "0.3.0"
+version = "0.4.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -28,8 +28,8 @@ rayon = { workspace = true, optional = true }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha3 = { workspace = true }
 which = { workspace = true }
+normpath = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
@@ -46,6 +46,10 @@ inkwell = { workspace = true, features = ["target-riscv", "llvm18-1-no-llvm-link
 [build-dependencies]
 git2 = { workspace = true, default-features = false }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
-parallel = ["rayon"]
+parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
+

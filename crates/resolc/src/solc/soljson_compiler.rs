@@ -1,11 +1,14 @@
 //! The Solidity compiler solJson interface.
 
-use std::path::Path;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
+use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
 
 use crate::solc::version::Version;
 use anyhow::Context;
@@ -24,8 +27,9 @@ pub struct SoljsonCompiler;
 impl Compiler for SoljsonCompiler {
     /// Compiles the Solidity `--standard-json` input into Yul IR.
     fn standard_json(
-        &mut self,
-        mut input: SolcStandardJsonInput,
+        &self,
+        input: &mut SolcStandardJsonInput,
+        messages: &mut Vec<SolcStandardJsonOutputError>,
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
@@ -40,23 +44,31 @@ impl Compiler for SoljsonCompiler {
             anyhow::bail!("configuring allow paths is not supported with solJson")
         }
 
-        input.normalize();
-
-        let suppressed_warnings = input.suppressed_warnings.take().unwrap_or_default();
-
         let input_json = serde_json::to_string(&input).expect("Always valid");
         let out = Self::compile_standard_json(input_json)?;
         let mut output: SolcStandardJsonOutput =
-            revive_common::deserialize_from_slice(out.as_bytes()).map_err(|error| {
+            deserialize_from_slice(out.as_bytes()).map_err(|error| {
                 anyhow::anyhow!(
                     "Soljson output parsing error: {}\n{}",
                     error,
-                    revive_common::deserialize_from_slice::<serde_json::Value>(out.as_bytes())
+                    deserialize_from_slice::<serde_json::Value>(out.as_bytes())
                         .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )
             })?;
-        output.preprocess_ast(suppressed_warnings.as_slice())?;
+        output
+            .errors
+            .retain(|error| match error.error_code.as_deref() {
+                Some(code) => !SolcStandardJsonOutputError::IGNORED_WARNING_CODES.contains(&code),
+                None => true,
+            });
+        output.errors.append(messages);
+
+        let mut suppressed_warnings = input.suppressed_warnings.clone();
+        suppressed_warnings.extend_from_slice(input.settings.suppressed_warnings.as_slice());
+
+        input.resolve_sources();
+        output.preprocess_ast(&input.sources, &suppressed_warnings)?;
 
         Ok(output)
     }
@@ -64,16 +76,12 @@ impl Compiler for SoljsonCompiler {
     fn combined_json(
         &self,
         _paths: &[PathBuf],
-        _combined_json_argument: &str,
+        _selector: HashSet<CombinedJsonSelector>,
     ) -> anyhow::Result<CombinedJson> {
         unimplemented!();
     }
 
-    fn validate_yul(&self, _path: &Path) -> anyhow::Result<()> {
-        unimplemented!();
-    }
-
-    fn version(&mut self) -> anyhow::Result<Version> {
+    fn version(&self) -> anyhow::Result<Version> {
         let version = Self::get_soljson_version()?;
         let long = version.clone();
         let default: semver::Version = version
@@ -82,11 +90,7 @@ impl Compiler for SoljsonCompiler {
             .ok_or_else(|| anyhow::anyhow!("Soljson version parsing: metadata dropping"))?
             .parse()
             .map_err(|error| anyhow::anyhow!("Soljson version parsing: {}", error))?;
-        let l2_revision: Option<semver::Version> = version
-            .split('-')
-            .nth(1)
-            .and_then(|version| version.parse().ok());
-        Ok(Version::new(long, default, l2_revision))
+        Version::new(long, default).validate()
     }
 }
 

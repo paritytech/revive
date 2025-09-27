@@ -1,5 +1,7 @@
 //! The LLVM context library.
 
+#![allow(clippy::too_many_arguments)]
+
 use std::ffi::CString;
 use std::sync::OnceLock;
 
@@ -8,7 +10,7 @@ pub use self::debug_config::DebugConfig;
 pub use self::optimizer::settings::size_level::SizeLevel as OptimizerSettingsSizeLevel;
 pub use self::optimizer::settings::Settings as OptimizerSettings;
 pub use self::optimizer::Optimizer;
-pub use self::polkavm::build_assembly_text as polkavm_build_assembly_text;
+pub use self::polkavm::build as polkavm_build;
 pub use self::polkavm::context::address_space::AddressSpace as PolkaVMAddressSpace;
 pub use self::polkavm::context::argument::Argument as PolkaVMArgument;
 pub use self::polkavm::context::attribute::Attribute as PolkaVMAttribute;
@@ -46,6 +48,7 @@ pub use self::polkavm::context::r#loop::Loop as PolkaVMLoop;
 pub use self::polkavm::context::solidity_data::SolidityData as PolkaVMContextSolidityData;
 pub use self::polkavm::context::yul_data::YulData as PolkaVMContextYulData;
 pub use self::polkavm::context::Context as PolkaVMContext;
+pub use self::polkavm::disassemble as polkavm_disassemble;
 pub use self::polkavm::evm::arithmetic as polkavm_evm_arithmetic;
 pub use self::polkavm::evm::bitwise as polkavm_evm_bitwise;
 pub use self::polkavm::evm::call as polkavm_evm_call;
@@ -66,13 +69,13 @@ pub use self::polkavm::evm::memory as polkavm_evm_memory;
 pub use self::polkavm::evm::r#return as polkavm_evm_return;
 pub use self::polkavm::evm::return_data as polkavm_evm_return_data;
 pub use self::polkavm::evm::storage as polkavm_evm_storage;
+pub use self::polkavm::hash as polkavm_hash;
+pub use self::polkavm::link as polkavm_link;
 pub use self::polkavm::r#const as polkavm_const;
-pub use self::polkavm::Dependency as PolkaVMDependency;
-pub use self::polkavm::DummyDependency as PolkaVMDummyDependency;
 pub use self::polkavm::DummyLLVMWritable as PolkaVMDummyLLVMWritable;
 pub use self::polkavm::WriteLLVM as PolkaVMWriteLLVM;
-pub use self::target_machine::target::Target;
-pub use self::target_machine::TargetMachine;
+pub use self::target_machine::target::Target as PolkaVMTarget;
+pub use self::target_machine::TargetMachine as PolkaVMTargetMachine;
 
 pub(crate) mod debug_config;
 pub(crate) mod optimizer;
@@ -86,7 +89,7 @@ static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 /// This is a no-op if called subsequentially.
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
-pub fn initialize_llvm(target: Target, name: &str, llvm_arguments: &[String]) {
+pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[String]) {
     let Ok(_) = DID_INITIALIZE.set(()) else {
         return; // Tests don't go through a recursive process
     };
@@ -109,6 +112,6 @@ pub fn initialize_llvm(target: Target, name: &str, llvm_arguments: &[String]) {
     inkwell::support::enable_llvm_pretty_stack_trace();
 
     match target {
-        Target::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
+        PolkaVMTarget::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
     }
 }

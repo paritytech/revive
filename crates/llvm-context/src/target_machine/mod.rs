@@ -1,11 +1,11 @@
 //! The LLVM target machine.
 
-pub mod target;
-
 use crate::optimizer::settings::size_level::SizeLevel as OptimizerSettingsSizeLevel;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 
 use self::target::Target;
+
+pub mod target;
 
 /// The LLVM target machine.
 #[derive(Debug)]

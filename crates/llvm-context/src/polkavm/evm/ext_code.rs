@@ -1,5 +1,7 @@
 //! Translates the external code operations.
 
+use revive_common::BIT_LENGTH_ETH_ADDRESS;
+
 use crate::polkavm::context::Context;
 
 /// Translates the `extcodesize` instruction if `address` is `Some`.
@@ -33,7 +35,7 @@ pub fn hash<'ctx>(
     context: &mut Context<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_type = context.integer_type(BIT_LENGTH_ETH_ADDRESS);
     let address_pointer = context.build_alloca_at_entry(address_type, "address_pointer");
     let address_truncated =
         context

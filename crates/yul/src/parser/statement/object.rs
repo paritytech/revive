@@ -4,9 +4,11 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use inkwell::debug_info::AsDIScope;
-
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
@@ -180,8 +182,8 @@ impl Object {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for Object {
-    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Object {
+    fn declare(&mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 

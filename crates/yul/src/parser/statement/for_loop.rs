@@ -5,6 +5,9 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
+
 use crate::error::Error;
 use crate::lexer::token::location::Location;
 use crate::lexer::token::Token;
@@ -62,8 +65,8 @@ impl ForLoop {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for ForLoop {
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for ForLoop {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         self.initializer.into_llvm(context)?;
 
         let condition_block = context.append_basic_block("for_condition");

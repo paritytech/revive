@@ -5,6 +5,9 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
 use crate::lexer::token::lexeme::Lexeme;
@@ -57,8 +60,8 @@ impl Code {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for Code {
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Code {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         self.block.into_llvm(context)?;
 
         Ok(())

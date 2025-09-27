@@ -5,9 +5,12 @@ use std::{io::Write, path::PathBuf};
 
 use clap::error::ErrorKind;
 use resolc::Process;
-use revive_common::MetadataHash;
-use revive_llvm_context::initialize_llvm;
+use revive_common::{
+    deserialize_from_str, EVMVersion, MetadataHash, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS,
+};
+use revive_llvm_context::{initialize_llvm, DebugConfig, OptimizerSettings, PolkaVMTarget};
 use revive_solc_json_interface::{
+    ResolcWarning, SolcStandardJsonInputSettingsPolkaVMMemory,
     SolcStandardJsonInputSettingsSelection, SolcStandardJsonOutput, SolcStandardJsonOutputError,
 };
 
@@ -23,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     let arguments = <Arguments as clap::Parser>::try_parse().inspect_err(|error| {
         if let ErrorKind::DisplayHelp = error.kind() {
             let _ = error.print();
-            std::process::exit(revive_common::EXIT_CODE_SUCCESS);
+            std::process::exit(EXIT_CODE_SUCCESS);
         }
     })?;
 
@@ -65,9 +68,9 @@ fn main() -> anyhow::Result<()> {
 
     std::process::exit(
         if messages.iter().any(SolcStandardJsonOutputError::is_error) {
-            revive_common::EXIT_CODE_FAILURE
+            EXIT_CODE_FAILURE
         } else {
-            revive_common::EXIT_CODE_SUCCESS
+            EXIT_CODE_SUCCESS
         },
     );
 }
@@ -105,11 +108,11 @@ fn main_inner(
     if arguments.recursive_process {
         let input_json = std::io::read_to_string(std::io::stdin())
             .map_err(|error| anyhow::anyhow!("Stdin reading error: {error}"))?;
-        let input: resolc::ProcessInput = revive_common::deserialize_from_str(input_json.as_str())
+        let input: resolc::ProcessInput = deserialize_from_str(input_json.as_str())
             .map_err(|error| anyhow::anyhow!("Stdin parsing error: {error}"))?;
 
         initialize_llvm(
-            revive_llvm_context::Target::PVM,
+            PolkaVMTarget::PVM,
             resolc::DEFAULT_EXECUTABLE_NAME,
             &input.llvm_arguments,
         );
@@ -125,7 +128,7 @@ fn main_inner(
     }
 
     initialize_llvm(
-        revive_llvm_context::Target::PVM,
+        PolkaVMTarget::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
         &arguments.llvm_arguments,
     );
@@ -133,17 +136,17 @@ fn main_inner(
     let debug_config = match arguments.debug_output_directory {
         Some(ref debug_output_directory) => {
             std::fs::create_dir_all(debug_output_directory.as_path())?;
-            revive_llvm_context::DebugConfig::new(
+            DebugConfig::new(
                 Some(debug_output_directory.to_owned()),
                 arguments.emit_source_debug_info,
             )
         }
-        None => revive_llvm_context::DebugConfig::new(None, arguments.emit_source_debug_info),
+        None => DebugConfig::new(None, arguments.emit_source_debug_info),
     };
 
     let (input_files, remappings) = arguments.split_input_files_and_remappings()?;
 
-    let suppressed_warnings = revive_solc_json_interface::ResolcWarning::try_from_strings(
+    let suppressed_warnings = ResolcWarning::try_from_strings(
         arguments.suppress_warnings.unwrap_or_default().as_slice(),
     )?;
 
@@ -163,13 +166,13 @@ fn main_inner(
     };
 
     let evm_version = match arguments.evm_version {
-        Some(evm_version) => Some(revive_common::EVMVersion::try_from(evm_version.as_str())?),
+        Some(evm_version) => Some(EVMVersion::try_from(evm_version.as_str())?),
         None => None,
     };
 
     let mut optimizer_settings = match arguments.optimization {
-        Some(mode) => revive_llvm_context::OptimizerSettings::try_from_cli(mode)?,
-        None => revive_llvm_context::OptimizerSettings::size(),
+        Some(mode) => OptimizerSettings::try_from_cli(mode)?,
+        None => OptimizerSettings::size(),
     };
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
@@ -179,10 +182,8 @@ fn main_inner(
         None => MetadataHash::Keccak256,
     };
 
-    let memory_config = revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory::new(
-        arguments.heap_size,
-        arguments.stack_size,
-    );
+    let memory_config =
+        SolcStandardJsonInputSettingsPolkaVMMemory::new(arguments.heap_size, arguments.stack_size);
 
     let build = if arguments.yul {
         resolc::yul(

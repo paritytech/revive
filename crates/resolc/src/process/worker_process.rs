@@ -4,6 +4,7 @@ use std::ffi::{c_char, c_void, CStr, CString};
 
 use serde::Deserialize;
 
+use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
@@ -79,14 +80,12 @@ impl Process for WorkerProcess {
         let response = serde_json::from_str(&output_str)
             .unwrap_or_else(|error| panic!("Worker output parsing error: {error}"));
         match response {
-            Response::Success(out) => {
-                match revive_common::deserialize_from_slice(out.data.as_bytes()) {
-                    Ok(output) => output,
-                    Err(error) => {
-                        panic!("resolc.js subprocess output parsing error: {error}")
-                    }
+            Response::Success(out) => match deserialize_from_slice(out.data.as_bytes()) {
+                Ok(output) => output,
+                Err(error) => {
+                    panic!("resolc.js subprocess output parsing error: {error}")
                 }
-            }
+            },
             Response::Error(err) => panic!("Worker error: {}", err.message),
         }
     }

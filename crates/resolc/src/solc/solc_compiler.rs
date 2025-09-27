@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
+use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
@@ -91,21 +92,19 @@ impl Compiler for SolcCompiler {
             );
         }
 
-        let mut output: SolcStandardJsonOutput =
-            revive_common::deserialize_from_slice(output.stdout.as_slice()).map_err(|error| {
-                anyhow::anyhow!(
-                    "{} subprocess output parsing error: {}\n{}",
-                    self.executable,
-                    error,
-                    revive_common::deserialize_from_slice::<serde_json::Value>(
-                        output.stdout.as_slice()
-                    )
+        let mut output: SolcStandardJsonOutput = deserialize_from_slice(output.stdout.as_slice())
+            .map_err(|error| {
+            anyhow::anyhow!(
+                "{} subprocess output parsing error: {}\n{}",
+                self.executable,
+                error,
+                deserialize_from_slice::<serde_json::Value>(output.stdout.as_slice())
                     .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
                     .unwrap_or_else(
                         |_| String::from_utf8_lossy(output.stdout.as_slice()).to_string()
                     ),
-                )
-            })?;
+            )
+        })?;
         output
             .errors
             .retain(|error| match error.error_code.as_deref() {
@@ -168,15 +167,13 @@ impl Compiler for SolcCompiler {
             );
         }
 
-        revive_common::deserialize_from_slice::<CombinedJson>(result.stdout.as_slice()).map_err(
-            |error| {
-                anyhow::anyhow!(
-                    "{} subprocess stdout parsing: {error:?} (stderr: {})",
-                    self.executable,
-                    String::from_utf8_lossy(result.stderr.as_slice()),
-                )
-            },
-        )
+        deserialize_from_slice::<CombinedJson>(result.stdout.as_slice()).map_err(|error| {
+            anyhow::anyhow!(
+                "{} subprocess stdout parsing: {error:?} (stderr: {})",
+                self.executable,
+                String::from_utf8_lossy(result.stderr.as_slice()),
+            )
+        })
     }
 
     /// The `solc --version` mini-parser.

@@ -2,6 +2,9 @@
 
 use inkwell::values::BasicValue;
 
+use revive_common::BIT_LENGTH_BYTE;
+use revive_common::BIT_LENGTH_WORD;
+
 use crate::polkavm::context::Context;
 
 /// Translates the bitwise OR.
@@ -53,7 +56,7 @@ pub fn shift_left<'ctx>(
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
+        context.word_const((BIT_LENGTH_WORD - 1) as u64),
         "shift_left_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -92,7 +95,7 @@ pub fn shift_right<'ctx>(
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
+        context.word_const((BIT_LENGTH_WORD - 1) as u64),
         "shift_right_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -137,7 +140,7 @@ pub fn shift_right_arithmetic<'ctx>(
     let condition_is_overflow = context.builder().build_int_compare(
         inkwell::IntPredicate::UGT,
         shift,
-        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
+        context.word_const((BIT_LENGTH_WORD - 1) as u64),
         "shift_right_arithmetic_is_overflow",
     )?;
     context.build_conditional_branch(condition_is_overflow, overflow_block, non_overflow_block)?;
@@ -145,7 +148,7 @@ pub fn shift_right_arithmetic<'ctx>(
     context.set_basic_block(overflow_block);
     let sign_bit = context.builder().build_right_shift(
         value,
-        context.word_const((revive_common::BIT_LENGTH_WORD - 1) as u64),
+        context.word_const((BIT_LENGTH_WORD - 1) as u64),
         false,
         "shift_right_arithmetic_sign_bit",
     )?;
@@ -232,16 +235,13 @@ pub fn byte<'ctx>(
             .build_int_truncate(operand_1, context.byte_type(), "index_truncated")?;
     let index_in_bits = context.builder().build_int_mul(
         index_truncated,
-        context
-            .byte_type()
-            .const_int(revive_common::BIT_LENGTH_BYTE as u64, false),
+        context.byte_type().const_int(BIT_LENGTH_BYTE as u64, false),
         "index_in_bits",
     )?;
     let index_from_most_significant_bit = context.builder().build_int_sub(
-        context.byte_type().const_int(
-            MAX_INDEX_BYTES * revive_common::BIT_LENGTH_BYTE as u64,
-            false,
-        ),
+        context
+            .byte_type()
+            .const_int(MAX_INDEX_BYTES * BIT_LENGTH_BYTE as u64, false),
         index_in_bits,
         "index_from_msb",
     )?;

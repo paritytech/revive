@@ -2,6 +2,9 @@
 
 use inkwell::values::BasicValueEnum;
 
+use revive_common::BYTE_LENGTH_BYTE;
+use revive_common::BYTE_LENGTH_WORD;
+
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -25,7 +28,7 @@ impl RuntimeFunction for LoadWord {
         let offset = Self::paramater(context, 0).into_int_value();
         let length = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+            .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
         let value = context
             .builder()
@@ -34,7 +37,7 @@ impl RuntimeFunction for LoadWord {
             .basic_block()
             .get_last_instruction()
             .expect("Always exists")
-            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("Alignment is valid");
 
         let swapped_value = context.build_byte_swap(value)?;
@@ -72,7 +75,7 @@ impl RuntimeFunction for StoreWord {
         let offset = Self::paramater(context, 0).into_int_value();
         let length = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+            .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
 
         let value = context.build_byte_swap(Self::paramater(context, 1))?;
@@ -80,7 +83,7 @@ impl RuntimeFunction for StoreWord {
         context
             .builder()
             .build_store(pointer.value, value)?
-            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("Alignment is valid");
         Ok(None)
     }

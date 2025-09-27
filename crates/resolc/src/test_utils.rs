@@ -8,7 +8,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
+use revive_common::MetadataHash;
+use revive_llvm_context::initialize_llvm;
+use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
+use revive_llvm_context::PolkaVMTarget;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::Bytecode;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
 use revive_solc_json_interface::ResolcWarning;
@@ -29,8 +33,8 @@ static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Def
 static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
 static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
     Lazy::new(Default::default);
-const DEBUG_CONFIG: revive_llvm_context::DebugConfig =
-    revive_llvm_context::DebugConfig::new(None, true);
+
+const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
 /// Tests may share and re-use contract code.
 /// The compiled blob cache helps avoiding duplicate compilation.
@@ -65,17 +69,13 @@ pub fn build_solidity_with_options(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
     libraries: SolcStandardJsonInputSettingsLibraries,
     remappings: BTreeSet<String>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
+    optimizer_settings: OptimizerSettings,
     solc_optimizer_enabled: bool,
     suppressed_warnings: Vec<ResolcWarning>,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
 
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
@@ -109,10 +109,7 @@ pub fn build_solidity_with_options(
     if output.has_errors() {
         return Ok(output);
     }
-    let debug_config = revive_llvm_context::DebugConfig::new(
-        None,
-        optimizer_settings.middle_end_as_string() != "z",
-    );
+    let debug_config = DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z");
     let linker_symbols = libraries.as_linker_symbols()?;
     let build = Project::try_from_standard_json_output(
         &mut output,
@@ -123,7 +120,7 @@ pub fn build_solidity_with_options(
     .compile(
         &mut vec![],
         optimizer_settings,
-        revive_common::MetadataHash::Keccak256,
+        MetadataHash::Keccak256,
         &debug_config,
         Default::default(),
         Default::default(),
@@ -147,11 +144,7 @@ pub fn build_solidity_with_options_evm(
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
@@ -209,11 +202,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
     );
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
     let _ = crate::process::native_process::EXECUTABLE
         .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
@@ -256,12 +245,8 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
     check_dependencies();
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
-    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    let optimizer_settings = OptimizerSettings::none();
 
     let sources = sources
         .iter()
@@ -283,7 +268,7 @@ pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()
     let build = project.compile(
         &mut vec![],
         optimizer_settings,
-        revive_common::MetadataHash::None,
+        MetadataHash::None,
         &DEBUG_CONFIG,
         Default::default(),
         Default::default(),
@@ -305,11 +290,7 @@ pub fn build_yul_standard_json(
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
 
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
@@ -322,7 +303,7 @@ pub fn build_yul_standard_json(
     .compile(
         &mut vec![],
         OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?,
-        revive_common::MetadataHash::Keccak256,
+        MetadataHash::Keccak256,
         &DEBUG_CONFIG,
         Default::default(),
         Default::default(),
@@ -353,7 +334,7 @@ pub fn compile_blob_with_options(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
+    optimizer_settings: OptimizerSettings,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),

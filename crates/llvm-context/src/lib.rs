@@ -74,8 +74,8 @@ pub use self::polkavm::link as polkavm_link;
 pub use self::polkavm::r#const as polkavm_const;
 pub use self::polkavm::DummyLLVMWritable as PolkaVMDummyLLVMWritable;
 pub use self::polkavm::WriteLLVM as PolkaVMWriteLLVM;
-pub use self::target_machine::target::Target;
-pub use self::target_machine::TargetMachine;
+pub use self::target_machine::target::Target as PolkaVMTarget;
+pub use self::target_machine::TargetMachine as PolkaVMTargetMachine;
 
 pub(crate) mod debug_config;
 pub(crate) mod optimizer;
@@ -89,7 +89,7 @@ static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 /// This is a no-op if called subsequentially.
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
-pub fn initialize_llvm(target: Target, name: &str, llvm_arguments: &[String]) {
+pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[String]) {
     let Ok(_) = DID_INITIALIZE.set(()) else {
         return; // Tests don't go through a recursive process
     };
@@ -112,6 +112,6 @@ pub fn initialize_llvm(target: Target, name: &str, llvm_arguments: &[String]) {
     inkwell::support::enable_llvm_pretty_stack_trace();
 
     match target {
-        Target::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
+        PolkaVMTarget::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
     }
 }

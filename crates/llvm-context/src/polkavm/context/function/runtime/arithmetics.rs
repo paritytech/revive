@@ -1,6 +1,7 @@
 //! Translates the arithmetic operations.
 
 use inkwell::values::BasicValue;
+use revive_common::BIT_LENGTH_WORD;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
@@ -86,9 +87,7 @@ impl RuntimeFunction for SignedDivision {
 
         context.set_basic_block(block_overflow);
         let max_uint = context.builder().build_int_z_extend(
-            context
-                .integer_type(revive_common::BIT_LENGTH_WORD - 1)
-                .const_all_ones(),
+            context.integer_type(BIT_LENGTH_WORD - 1).const_all_ones(),
             context.word_type(),
             "max_uint",
         )?;

@@ -214,7 +214,7 @@ impl Project {
         solc_output: &mut SolcStandardJsonOutput,
         libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
-        debug_config: &revive_llvm_context::DebugConfig,
+        debug_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
         let mut input_contracts = Vec::with_capacity(solc_output.contracts.len());
         for (path, file) in solc_output.contracts.iter() {

@@ -1,6 +1,11 @@
 //! The entry function.
 
 use inkwell::types::BasicType;
+use revive_common::BIT_LENGTH_ETH_ADDRESS;
+use revive_runtime_api::immutable_data::{
+    GLOBAL_IMMUTABLE_DATA_POINTER, GLOBAL_IMMUTABLE_DATA_SIZE,
+};
+use revive_runtime_api::polkavm_imports::CALL_DATA_SIZE;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 
 use crate::polkavm::context::address_space::AddressSpace;
@@ -48,7 +53,7 @@ impl Entry {
             heap_memory_type.const_zero(),
         );
 
-        let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+        let address_type = context.integer_type(BIT_LENGTH_ETH_ADDRESS);
         context.set_global(
             crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER,
             address_type,
@@ -66,7 +71,7 @@ impl Entry {
             .value
             .as_pointer_value();
         let call_data_size_value = context
-            .build_runtime_call(revive_runtime_api::polkavm_imports::CALL_DATA_SIZE, &[])
+            .build_runtime_call(CALL_DATA_SIZE, &[])
             .expect("the call_data_size syscall method should return a value")
             .into_int_value();
         let call_data_size_value = context.builder().build_int_truncate(
@@ -136,13 +141,13 @@ impl WriteLLVM for Entry {
         )?;
 
         context.declare_global(
-            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_POINTER,
+            GLOBAL_IMMUTABLE_DATA_POINTER,
             context.word_type().array_type(0),
             AddressSpace::Stack,
         );
 
         context.declare_global(
-            revive_runtime_api::immutable_data::GLOBAL_IMMUTABLE_DATA_SIZE,
+            GLOBAL_IMMUTABLE_DATA_SIZE,
             context.xlen_type(),
             AddressSpace::Stack,
         );

@@ -4,12 +4,17 @@ use std::collections::BTreeMap;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
-use crate::{Target, TargetMachine};
+use crate::{PolkaVMTarget, PolkaVMTargetMachine};
 
 use anyhow::Context as AnyhowContext;
 use polkavm_common::program::ProgramBlob;
 use polkavm_disassembler::{Disassembler, DisassemblyFormat};
-use revive_common::{Keccak256, ObjectFormat};
+use revive_common::{
+    Keccak256, ObjectFormat, BIT_LENGTH_ETH_ADDRESS, BIT_LENGTH_WORD, BYTE_LENGTH_ETH_ADDRESS,
+    BYTE_LENGTH_WORD,
+};
+use revive_linker::elf::ElfLinker;
+use revive_linker::pvm::polkavm_linker;
 
 use self::context::build::Build;
 use self::context::Context;
@@ -22,7 +27,7 @@ pub mod evm;
 /// Get a [Build] from contract bytecode and its auxilliary data.
 pub fn build(
     bytecode: &[u8],
-    metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
+    metadata_hash: Option<[u8; BYTE_LENGTH_WORD]>,
 ) -> anyhow::Result<Build> {
     Ok(Build::new(metadata_hash, bytecode.to_owned()))
 }
@@ -57,7 +62,7 @@ pub fn disassemble(
 }
 
 /// Computes the PVM bytecode hash.
-pub fn hash(bytecode_buffer: &[u8]) -> [u8; revive_common::BYTE_LENGTH_WORD] {
+pub fn hash(bytecode_buffer: &[u8]) -> [u8; BYTE_LENGTH_WORD] {
     Keccak256::from_slice(bytecode_buffer)
         .as_bytes()
         .try_into()
@@ -67,32 +72,32 @@ pub fn hash(bytecode_buffer: &[u8]) -> [u8; revive_common::BYTE_LENGTH_WORD] {
 /// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
 pub fn link(
     bytecode: &[u8],
-    linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
-    factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
+    linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
     strip_binary: bool,
-) -> anyhow::Result<(Vec<u8>, revive_common::ObjectFormat)> {
-    match ObjectFormat::try_from(bytecode) {
-        Ok(format @ ObjectFormat::PVM) => Ok((bytecode.to_vec(), format)),
-        Ok(ObjectFormat::ELF) => Ok({
+) -> anyhow::Result<(Vec<u8>, ObjectFormat)> {
+    Ok(match ObjectFormat::try_from(bytecode) {
+        Ok(format @ ObjectFormat::PVM) => (bytecode.to_vec(), format),
+        Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
-            let bytecode_linked =
-                revive_linker::Linker::setup()?.link(bytecode, symbols.as_slice())?;
-            revive_linker::polkavm_linker(&bytecode_linked, strip_binary)
+            let bytecode_linked = ElfLinker::setup()?.link(bytecode, symbols.as_slice())?;
+            polkavm_linker(&bytecode_linked, strip_binary)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
                 .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF))
-        }),
+        }
         Err(error) => panic!("ICE: linker: {error}"),
-    }
+    })
 }
 
+/// The returned module defines given `linker_symbols` and `factory_dependencies` global values.
 pub fn build_symbols(
-    linker_symbols: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_ETH_ADDRESS]>,
-    factory_dependencies: &BTreeMap<String, [u8; revive_common::BYTE_LENGTH_WORD]>,
+    linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
+    factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
 ) -> anyhow::Result<inkwell::memory_buffer::MemoryBuffer> {
     let context = inkwell::context::Context::create();
     let module = context.create_module("symbols");
-    let word_type = context.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
-    let address_type = context.custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32);
+    let word_type = context.custom_width_int_type(BIT_LENGTH_WORD as u32);
+    let address_type = context.custom_width_int_type(BIT_LENGTH_ETH_ADDRESS as u32);
 
     for (name, value) in linker_symbols {
         let global_value = module.add_global(address_type, Default::default(), name);
@@ -120,9 +125,11 @@ pub fn build_symbols(
         );
     }
 
-    Ok(TargetMachine::new(Target::PVM, &OptimizerSettings::none())?
-        .write_to_memory_buffer(&module)
-        .expect("ICE: the symbols module should be valid"))
+    Ok(
+        PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none())?
+            .write_to_memory_buffer(&module)
+            .expect("ICE: the symbols module should be valid"),
+    )
 }
 /// Implemented by items which are translated into LLVM IR.
 pub trait WriteLLVM {

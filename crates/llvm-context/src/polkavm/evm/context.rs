@@ -2,6 +2,8 @@
 
 use inkwell::values::BasicValue;
 
+use revive_common::BIT_LENGTH_ETH_ADDRESS;
+
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 
@@ -39,7 +41,7 @@ pub fn gas_price<'ctx>(
 pub fn origin<'ctx>(
     context: &mut Context<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-    let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+    let address_type = context.integer_type(BIT_LENGTH_ETH_ADDRESS);
     let address_pointer: Pointer<'_> = context
         .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
         .into();

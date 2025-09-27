@@ -7,6 +7,10 @@ use inkwell::values::BasicValue;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_common::BIT_LENGTH_X32;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
 use crate::lexer::token::lexeme::Lexeme;
@@ -93,11 +97,8 @@ impl VariableDeclaration {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for VariableDeclaration {
-    fn into_llvm<'ctx>(
-        mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for VariableDeclaration {
+    fn into_llvm<'ctx>(mut self, context: &mut PolkaVMContext<'ctx>) -> anyhow::Result<()> {
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
             context.set_debug_location(self.location.line, self.location.column, None)?;
@@ -191,7 +192,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for VariableDeclaration {
                 &[
                     context.word_const(0),
                     context
-                        .integer_type(revive_common::BIT_LENGTH_X32)
+                        .integer_type(BIT_LENGTH_X32)
                         .const_int(index as u64, false),
                 ],
                 binding.r#type.unwrap_or_default().into_llvm(context),

@@ -5,6 +5,9 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_llvm_context::PolkaVMArgument;
+use revive_llvm_context::PolkaVMContext;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
 use crate::lexer::token::lexeme::Lexeme;
@@ -102,8 +105,8 @@ impl Expression {
     /// Converts the expression into an LLVM value.
     pub fn into_llvm<'ctx>(
         self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
-    ) -> anyhow::Result<Option<revive_llvm_context::PolkaVMArgument<'ctx>>> {
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<Option<PolkaVMArgument<'ctx>>> {
         match self {
             Self::Literal(literal) => literal
                 .clone()
@@ -130,16 +133,14 @@ impl Expression {
 
                 let constant = context.current_function().borrow().yul().get_constant(&id);
 
-                let argument = revive_llvm_context::PolkaVMArgument::pointer(pointer, id);
+                let argument = PolkaVMArgument::pointer(pointer, id);
 
                 Ok(Some(match constant {
                     Some(constant) => argument.with_constant(constant),
                     _ => argument,
                 }))
             }
-            Self::FunctionCall(call) => Ok(call
-                .into_llvm(context)?
-                .map(revive_llvm_context::PolkaVMArgument::value)),
+            Self::FunctionCall(call) => Ok(call.into_llvm(context)?.map(PolkaVMArgument::value)),
         }
     }
 }

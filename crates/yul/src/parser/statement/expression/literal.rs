@@ -7,6 +7,12 @@ use num::Zero;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_common::BASE_DECIMAL;
+use revive_common::BASE_HEXADECIMAL;
+use revive_common::BYTE_LENGTH_WORD;
+use revive_llvm_context::PolkaVMArgument;
+use revive_llvm_context::PolkaVMContext;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::literal::boolean::Boolean as BooleanLiteral;
 use crate::lexer::token::lexeme::literal::integer::Integer as IntegerLiteral;
@@ -74,8 +80,8 @@ impl Literal {
     /// Converts the literal into its LLVM.
     pub fn into_llvm<'ctx>(
         self,
-        context: &revive_llvm_context::PolkaVMContext<'ctx>,
-    ) -> anyhow::Result<revive_llvm_context::PolkaVMArgument<'ctx>> {
+        context: &PolkaVMContext<'ctx>,
+    ) -> anyhow::Result<PolkaVMArgument<'ctx>> {
         match self.inner {
             LexicalLiteral::Boolean(inner) => {
                 let value = self
@@ -96,7 +102,7 @@ impl Literal {
                     BooleanLiteral::True => num::BigUint::one(),
                 };
 
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
+                Ok(PolkaVMArgument::value(value).with_constant(constant))
             }
             LexicalLiteral::Integer(inner) => {
                 let r#type = self.yul_type.unwrap_or_default().into_llvm(context);
@@ -115,16 +121,15 @@ impl Literal {
 
                 let constant = match inner {
                     IntegerLiteral::Decimal { ref inner } => {
-                        num::BigUint::from_str_radix(inner.as_str(), revive_common::BASE_DECIMAL)
+                        num::BigUint::from_str_radix(inner.as_str(), BASE_DECIMAL)
                     }
-                    IntegerLiteral::Hexadecimal { ref inner } => num::BigUint::from_str_radix(
-                        &inner["0x".len()..],
-                        revive_common::BASE_HEXADECIMAL,
-                    ),
+                    IntegerLiteral::Hexadecimal { ref inner } => {
+                        num::BigUint::from_str_radix(&inner["0x".len()..], BASE_HEXADECIMAL)
+                    }
                 }
                 .expect("Always valid");
 
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_constant(constant))
+                Ok(PolkaVMArgument::value(value).with_constant(constant))
             }
             LexicalLiteral::String(inner) => {
                 let string = inner.inner;
@@ -133,7 +138,7 @@ impl Literal {
                 let mut hex_string = if inner.is_hexadecimal {
                     string.clone()
                 } else {
-                    let mut hex_string = String::with_capacity(revive_common::BYTE_LENGTH_WORD * 2);
+                    let mut hex_string = String::with_capacity(BYTE_LENGTH_WORD * 2);
                     let mut index = 0;
                     loop {
                         if index >= string.len() {
@@ -148,17 +153,16 @@ impl Literal {
                                 index += 3;
                             } else if string[index..].starts_with('u') {
                                 let codepoint_str = &string[index + 1..index + 5];
-                                let codepoint = u32::from_str_radix(
-                                    codepoint_str,
-                                    revive_common::BASE_HEXADECIMAL,
-                                )
-                                .map_err(|error| {
-                                    anyhow::anyhow!(
-                                        "Invalid codepoint `{}`: {}",
-                                        codepoint_str,
-                                        error
-                                    )
-                                })?;
+                                let codepoint =
+                                    u32::from_str_radix(codepoint_str, BASE_HEXADECIMAL).map_err(
+                                        |error| {
+                                            anyhow::anyhow!(
+                                                "Invalid codepoint `{}`: {}",
+                                                codepoint_str,
+                                                error
+                                            )
+                                        },
+                                    )?;
                                 let unicode_char = char::from_u32(codepoint).ok_or_else(|| {
                                     anyhow::anyhow!("Invalid codepoint {}", codepoint)
                                 })?;
@@ -194,16 +198,16 @@ impl Literal {
                     hex_string
                 };
 
-                if hex_string.len() > revive_common::BYTE_LENGTH_WORD * 2 {
+                if hex_string.len() > BYTE_LENGTH_WORD * 2 {
                     return Ok(revive_llvm_context::PolkaVMArgument::value(
                         r#type.const_zero().as_basic_value_enum(),
                     )
                     .with_original(string));
                 }
 
-                if hex_string.len() < revive_common::BYTE_LENGTH_WORD * 2 {
+                if hex_string.len() < BYTE_LENGTH_WORD * 2 {
                     hex_string.push_str(
-                        "0".repeat((revive_common::BYTE_LENGTH_WORD * 2) - hex_string.len())
+                        "0".repeat((BYTE_LENGTH_WORD * 2) - hex_string.len())
                             .as_str(),
                     );
                 }
@@ -215,7 +219,7 @@ impl Literal {
                     )
                     .expect("The value is valid")
                     .as_basic_value_enum();
-                Ok(revive_llvm_context::PolkaVMArgument::value(value).with_original(string))
+                Ok(PolkaVMArgument::value(value).with_original(string))
             }
         }
     }

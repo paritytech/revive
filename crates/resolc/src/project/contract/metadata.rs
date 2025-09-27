@@ -1,5 +1,6 @@
 //! The Solidity contract metadata.
 
+use revive_llvm_context::OptimizerSettings;
 use serde::Serialize;
 
 use crate::ResolcVersion;
@@ -15,7 +16,7 @@ pub struct Metadata {
     /// The pallet revive edition.
     pub revive_version: String,
     /// The PolkaVM compiler optimizer settings.
-    pub optimizer_settings: revive_llvm_context::OptimizerSettings,
+    pub optimizer_settings: OptimizerSettings,
     /// The extra LLVM arguments give used for manual control.
     pub llvm_arguments: Vec<String>,
 }
@@ -25,7 +26,7 @@ impl Metadata {
     pub fn new(
         solc_metadata: serde_json::Value,
         solc_version: Option<semver::Version>,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
+        optimizer_settings: OptimizerSettings,
         llvm_arguments: Vec<String>,
     ) -> Self {
         Self {

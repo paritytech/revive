@@ -5,6 +5,9 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
 use crate::lexer::token::lexeme::Lexeme;
@@ -120,8 +123,8 @@ impl Switch {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for Switch {
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Switch {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
         let scrutinee = self.expression.into_llvm(context)?;
 

@@ -1,10 +1,12 @@
 //! Translates the verbatim simulations.
 
+use revive_llvm_context::PolkaVMContext;
+
 use crate::parser::statement::expression::function_call::FunctionCall;
 
 /// Translates the verbatim simulations.
 pub fn verbatim<'ctx>(
-    context: &mut revive_llvm_context::PolkaVMContext<'ctx>,
+    context: &mut PolkaVMContext<'ctx>,
     call: &mut FunctionCall,
     _input_size: usize,
     output_size: usize,

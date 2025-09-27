@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
@@ -46,11 +47,11 @@ impl Compiler for SoljsonCompiler {
         let input_json = serde_json::to_string(&input).expect("Always valid");
         let out = Self::compile_standard_json(input_json)?;
         let mut output: SolcStandardJsonOutput =
-            revive_common::deserialize_from_slice(out.as_bytes()).map_err(|error| {
+            deserialize_from_slice(out.as_bytes()).map_err(|error| {
                 anyhow::anyhow!(
                     "Soljson output parsing error: {}\n{}",
                     error,
-                    revive_common::deserialize_from_slice::<serde_json::Value>(out.as_bytes())
+                    deserialize_from_slice::<serde_json::Value>(out.as_bytes())
                         .map(|json| serde_json::to_string_pretty(&json).expect("Always valid"))
                         .unwrap_or_else(|_| String::from_utf8_lossy(out.as_bytes()).to_string()),
                 )

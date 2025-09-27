@@ -2,10 +2,12 @@
 
 use std::collections::BTreeSet;
 
+use inkwell::debug_info::AsDIScope;
 use serde::Deserialize;
 use serde::Serialize;
 
-use inkwell::debug_info::AsDIScope;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -132,8 +134,8 @@ impl Block {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for Block {
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Block {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         let current_function = context.current_function().borrow().name().to_owned();
         let current_block = context.basic_block();
 

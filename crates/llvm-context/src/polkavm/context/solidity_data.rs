@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use revive_common::BYTE_LENGTH_WORD;
+
 /// The LLVM IR generator Solidity data.
 /// Describes some data that is only relevant to Solidity.
 #[derive(Debug, Default)]
@@ -19,14 +21,14 @@ impl SolidityData {
 
     /// Returns the current size of immutable values in the contract.
     pub fn immutables_size(&self) -> usize {
-        self.immutables.len() * revive_common::BYTE_LENGTH_WORD
+        self.immutables.len() * BYTE_LENGTH_WORD
     }
 
     /// Allocates memory for an immutable value in the auxiliary heap.
     /// If the identifier is already known, just returns its offset.
     pub fn allocate_immutable(&mut self, identifier: &str) -> usize {
         let number_of_elements = self.immutables.len();
-        let new_offset = number_of_elements * revive_common::BYTE_LENGTH_WORD;
+        let new_offset = number_of_elements * BYTE_LENGTH_WORD;
         *self
             .immutables
             .entry(identifier.to_owned())

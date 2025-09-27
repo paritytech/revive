@@ -1,6 +1,7 @@
 //! Translates the heap memory operations.
 
 use inkwell::values::BasicValue;
+use revive_common::BYTE_LENGTH_BYTE;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::pointer::Pointer;
@@ -79,7 +80,7 @@ pub fn store_byte<'ctx>(
     context
         .builder()
         .build_store(pointer, value)?
-        .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
         .expect("Alignment is valid");
     Ok(())
 }

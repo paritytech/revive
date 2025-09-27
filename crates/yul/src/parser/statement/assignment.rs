@@ -6,6 +6,10 @@ use inkwell::types::BasicType;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_common::BIT_LENGTH_X32;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
 use crate::lexer::token::lexeme::Lexeme;
@@ -113,11 +117,8 @@ impl Assignment {
     }
 }
 
-impl revive_llvm_context::PolkaVMWriteLLVM for Assignment {
-    fn into_llvm(
-        mut self,
-        context: &mut revive_llvm_context::PolkaVMContext,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for Assignment {
+    fn into_llvm(mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         context.set_debug_location(self.location.line, self.location.column, None)?;
 
         let value = match self.initializer.into_llvm(context)? {
@@ -155,7 +156,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for Assignment {
                 &[
                     context.word_const(0),
                     context
-                        .integer_type(revive_common::BIT_LENGTH_X32)
+                        .integer_type(BIT_LENGTH_X32)
                         .const_int(index as u64, false),
                 ],
                 context.word_type().as_basic_type_enum(),

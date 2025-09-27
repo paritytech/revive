@@ -7,6 +7,13 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
+use revive_common::ContractIdentifier;
+use revive_common::ObjectFormat;
+use revive_common::BYTE_LENGTH_WORD;
+use revive_common::EXTENSION_JSON;
+use revive_common::EXTENSION_POLKAVM_ASSEMBLY;
+use revive_common::EXTENSION_POLKAVM_BINARY;
+use revive_llvm_context::PolkaVMBuild;
 use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use serde::Deserialize;
@@ -16,9 +23,9 @@ use serde::Serialize;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contract {
     /// The contract identifier.
-    pub identifier: revive_common::ContractIdentifier,
+    pub identifier: ContractIdentifier,
     /// The LLVM module build.
-    pub build: revive_llvm_context::PolkaVMBuild,
+    pub build: PolkaVMBuild,
     /// The metadata JSON.
     pub metadata_json: serde_json::Value,
     /// The unlinked missing libraries.
@@ -26,20 +33,20 @@ pub struct Contract {
     /// The unresolved factory dependencies.
     pub factory_dependencies: BTreeSet<String>,
     /// The resolved factory dependencies.
-    pub factory_dependencies_resolved: BTreeMap<[u8; revive_common::BYTE_LENGTH_WORD], String>,
+    pub factory_dependencies_resolved: BTreeMap<[u8; BYTE_LENGTH_WORD], String>,
     /// The binary object format.
-    pub object_format: revive_common::ObjectFormat,
+    pub object_format: ObjectFormat,
 }
 
 impl Contract {
     /// A shortcut constructor.
     pub fn new(
-        identifier: revive_common::ContractIdentifier,
-        build: revive_llvm_context::PolkaVMBuild,
+        identifier: ContractIdentifier,
+        build: PolkaVMBuild,
         metadata_json: serde_json::Value,
         missing_libraries: BTreeSet<String>,
         factory_dependencies: BTreeSet<String>,
-        object_format: revive_common::ObjectFormat,
+        object_format: ObjectFormat,
     ) -> Self {
         Self {
             identifier,
@@ -102,9 +109,8 @@ impl Contract {
 
         if output_metadata {
             let file_path = output_path.join(format!(
-                "{file_name}:{}.{}",
+                "{file_name}:{}.{EXTENSION_JSON}",
                 self.identifier.name.as_deref().unwrap_or(file_name),
-                revive_common::EXTENSION_JSON
             ));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
@@ -119,9 +125,8 @@ impl Contract {
         }
         if output_assembly {
             let file_path = output_path.join(format!(
-                "{file_name}:{}.{}",
+                "{file_name}:{}.{EXTENSION_POLKAVM_ASSEMBLY}",
                 self.identifier.name.as_deref().unwrap_or(file_name),
-                revive_common::EXTENSION_POLKAVM_ASSEMBLY
             ));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
@@ -136,9 +141,8 @@ impl Contract {
 
         if output_binary {
             let file_path = output_path.join(format!(
-                "{file_name}:{}.{}",
+                "{file_name}:{}.{EXTENSION_POLKAVM_BINARY}",
                 self.identifier.name.as_deref().unwrap_or(file_name),
-                revive_common::EXTENSION_POLKAVM_BINARY
             ));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(

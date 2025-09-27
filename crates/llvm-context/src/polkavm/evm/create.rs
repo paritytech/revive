@@ -3,6 +3,8 @@
 use inkwell::values::BasicValue;
 use num::Zero;
 
+use revive_common::BIT_LENGTH_ETH_ADDRESS;
+
 use crate::polkavm::context::argument::Argument;
 use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::Context;
@@ -36,7 +38,7 @@ pub fn create<'ctx>(
     };
 
     let address_pointer = context.build_alloca_at_entry(
-        context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
+        context.integer_type(BIT_LENGTH_ETH_ADDRESS),
         "address_pointer",
     );
     context.build_store(address_pointer, context.word_const(0))?;

@@ -1,6 +1,7 @@
 //! Translates a log or event call.
 
 use inkwell::values::BasicValue;
+use revive_common::BYTE_LENGTH_WORD;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
@@ -45,7 +46,7 @@ impl<const N: usize> RuntimeFunction for EventLog<N> {
                 input_length.as_basic_value_enum(),
             ]
         } else {
-            let topics_buffer_size = N * revive_common::BYTE_LENGTH_WORD;
+            let topics_buffer_size = N * BYTE_LENGTH_WORD;
             let topics_buffer_pointer = context.build_alloca_at_entry(
                 context.byte_type().array_type(topics_buffer_size as u32),
                 "topics_buffer",
@@ -55,7 +56,7 @@ impl<const N: usize> RuntimeFunction for EventLog<N> {
                 let topic = Self::paramater(context, n + 2);
                 let topic_buffer_offset = context
                     .xlen_type()
-                    .const_int((n * revive_common::BYTE_LENGTH_WORD) as u64, false);
+                    .const_int((n * BYTE_LENGTH_WORD) as u64, false);
                 context.build_store(
                     context.build_gep(
                         topics_buffer_pointer,

@@ -3,9 +3,16 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use revive_common::ContractIdentifier;
 use revive_common::Keccak256;
 use revive_common::MetadataHash;
+use revive_common::ObjectFormat;
+use revive_llvm_context::DebugConfig;
 use revive_llvm_context::Optimizer;
+use revive_llvm_context::OptimizerSettings;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMContextSolidityData;
+use revive_llvm_context::PolkaVMContextYulData;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -25,7 +32,7 @@ pub mod metadata;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contract {
     /// The absolute file path.
-    pub identifier: revive_common::ContractIdentifier,
+    pub identifier: ContractIdentifier,
     /// The IR source code data.
     pub ir: IR,
     /// The metadata JSON.
@@ -34,11 +41,7 @@ pub struct Contract {
 
 impl Contract {
     /// A shortcut constructor.
-    pub fn new(
-        identifier: revive_common::ContractIdentifier,
-        ir: IR,
-        metadata_json: serde_json::Value,
-    ) -> Self {
+    pub fn new(identifier: ContractIdentifier, ir: IR, metadata_json: serde_json::Value) -> Self {
         Self {
             identifier,
             ir,
@@ -59,17 +62,15 @@ impl Contract {
     pub fn compile(
         self,
         solc_version: Option<SolcVersion>,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
+        optimizer_settings: OptimizerSettings,
         metadata_hash: MetadataHash,
-        mut debug_config: revive_llvm_context::DebugConfig,
+        mut debug_config: DebugConfig,
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
         missing_libraries: BTreeSet<String>,
         factory_dependencies: BTreeSet<String>,
         identifier_paths: BTreeMap<String, String>,
     ) -> anyhow::Result<ContractBuild> {
-        use revive_llvm_context::PolkaVMWriteLLVM;
-
         let llvm = inkwell::context::Context::create();
         let optimizer = Optimizer::new(optimizer_settings);
         let metadata = Metadata::new(
@@ -92,17 +93,10 @@ impl Contract {
         let build = match self.ir {
             IR::Yul(mut yul) => {
                 let module = llvm.create_module(self.identifier.full_path.as_str());
-                let mut context: revive_llvm_context::PolkaVMContext =
-                    revive_llvm_context::PolkaVMContext::new(
-                        &llvm,
-                        module,
-                        optimizer,
-                        debug_config,
-                        memory_config,
-                    );
-                context
-                    .set_solidity_data(revive_llvm_context::PolkaVMContextSolidityData::default());
-                let yul_data = revive_llvm_context::PolkaVMContextYulData::new(identifier_paths);
+                let mut context =
+                    PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);
+                context.set_solidity_data(PolkaVMContextSolidityData::default());
+                let yul_data = PolkaVMContextYulData::new(identifier_paths);
                 context.set_yul_data(yul_data);
 
                 yul.declare(&mut context)?;
@@ -119,7 +113,7 @@ impl Contract {
             metadata_json,
             missing_libraries,
             factory_dependencies,
-            revive_common::ObjectFormat::ELF,
+            ObjectFormat::ELF,
         ))
     }
 
@@ -130,15 +124,5 @@ impl Contract {
             .into_iter()
             .filter(|library| !deployed_libraries.contains(library))
             .collect::<BTreeSet<String>>()
-    }
-}
-
-impl PolkaVMWriteLLVM for Contract {
-    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        self.ir.declare(context)
-    }
-
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        self.ir.into_llvm(context)
     }
 }

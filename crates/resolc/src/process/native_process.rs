@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use once_cell::sync::OnceCell;
+use revive_common::deserialize_from_slice;
+use revive_common::EXIT_CODE_SUCCESS;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
@@ -84,7 +86,7 @@ impl Process for NativeProcess {
             .wait_with_output()
             .unwrap_or_else(|error| panic!("{executable:?} subprocess output reading: {error:?}"));
 
-        if result.status.code() != Some(revive_common::EXIT_CODE_SUCCESS) {
+        if result.status.code() != Some(EXIT_CODE_SUCCESS) {
             let message = format!(
                 "{executable:?} subprocess failed with exit code {:?}:\n{}\n{}",
                 result.status.code(),
@@ -98,7 +100,7 @@ impl Process for NativeProcess {
             ));
         }
 
-        match revive_common::deserialize_from_slice(result.stdout.as_slice()) {
+        match deserialize_from_slice(result.stdout.as_slice()) {
             Ok(output) => output,
             Err(error) => {
                 panic!(

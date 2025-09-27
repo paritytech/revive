@@ -38,17 +38,3 @@ impl From<Yul> for IR {
         Self::Yul(inner)
     }
 }
-
-impl revive_llvm_context::PolkaVMWriteLLVM for IR {
-    fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        match self {
-            Self::Yul(inner) => inner.declare(context),
-        }
-    }
-
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        match self {
-            Self::Yul(inner) => inner.into_llvm(context),
-        }
-    }
-}

@@ -2,6 +2,8 @@
 
 use std::cell::RefCell;
 
+use revive_common::BIT_LENGTH_WORD;
+
 use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 
@@ -164,7 +166,7 @@ impl<'ctx> DebugInfo<'ctx> {
         &self,
         flags: Option<inkwell::debug_info::DIFlags>,
     ) -> anyhow::Result<inkwell::debug_info::DIBasicType<'ctx>> {
-        self.create_primitive_type(revive_common::BIT_LENGTH_WORD, flags)
+        self.create_primitive_type(BIT_LENGTH_WORD, flags)
     }
 
     /// Return the DIBuilder.

@@ -1,6 +1,7 @@
 //! Emulates the linear EVM heap memory via a simulated `sbrk` system call.
 
 use inkwell::values::BasicValue;
+use revive_common::BYTE_LENGTH_WORD;
 
 use crate::polkavm::context::attribute::Attribute;
 use crate::polkavm::context::runtime::RuntimeFunction;
@@ -67,7 +68,7 @@ impl RuntimeFunction for Sbrk {
         context.set_basic_block(offset_in_bounds_block);
         let mask = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64 - 1, false);
+            .const_int(BYTE_LENGTH_WORD as u64 - 1, false);
         let total_size = context
             .builder()
             .build_int_add(offset, size, "total_size")?;

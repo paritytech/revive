@@ -371,7 +371,7 @@ pub fn compile_blob_with_options(
         .object
         .as_str();
     let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
-    assert_eq!(&blob[..3], &[b'P', b'V', b'M']);
+    assert_eq!(&blob[..3], b"PVM");
 
     PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
 

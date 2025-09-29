@@ -220,7 +220,7 @@ impl Default for Specs {
 
 impl Specs {
     /// Get the list of actions to perform
-    /// A default [`SpecAction::VerifyCall`] is injected after each Instantiate or Call action when
+    /// A default [`SpecsAction::VerifyCall`] is injected after each Instantiate or Call action when
     /// missing and not in differential mode
     pub fn actions(&self) -> Vec<SpecsAction> {
         self.actions

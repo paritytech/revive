@@ -1,6 +1,6 @@
 use inkwell::{builder::Builder, context::Context, module::Module, values::IntValue};
 
-/// Creates a module that sets the PolkaVM minimum stack size to [`size`] if linked in.
+/// Creates a module that sets the PolkaVM minimum stack size to `size` if linked in.
 pub fn min_stack_size<'context>(
     context: &'context Context,
     module_name: &str,

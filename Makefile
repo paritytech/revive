@@ -9,6 +9,7 @@
 	install-revive-explorer \
 	format \
 	clippy \
+	doc \
 	machete \
 	test \
 	test-integration \
@@ -52,11 +53,14 @@ format:
 clippy:
 	cargo clippy --all-features --workspace --tests --benches -- --deny warnings
 
+doc:
+	cargo doc --all-features --workspace --document-private-items --no-deps
+
 machete:
 	cargo install cargo-machete
 	cargo machete
 
-test: format clippy machete test-workspace install-revive-runner install-revive-explorer
+test: format clippy machete test-workspace install-revive-runner install-revive-explorer doc
 
 test-integration: install-bin
 	cargo test --package revive-integration
@@ -65,7 +69,7 @@ test-resolc: install
 	cargo test --package resolc
 
 test-workspace: install
-	cargo test --workspace --exclude revive-llvm-builder
+	cargo test --workspace --exclude revive-llvm-builder --doc
 
 test-wasm: install-wasm
 	npm run test:wasm

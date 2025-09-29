@@ -15,3 +15,6 @@ rustflags = [
     "-Clink-arg=-sSTACK_SIZE=128kb",
     "-Clink-arg=-sNODEJS_CATCH_EXIT=0"
 ]
+
+[build]
+rustdocflags = ["-D", "warnings"]

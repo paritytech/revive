@@ -664,7 +664,7 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Builds an aligned stack allocation at the current position.
-    /// Use this if [`build_alloca_at_entry`] might change program semantics.
+    /// Use this if [`Self::build_alloca_at_entry`] might change program semantics.
     /// Otherwise, alloca should always be built at the function prelude!
     pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,

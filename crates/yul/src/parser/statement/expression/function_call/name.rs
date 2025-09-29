@@ -198,7 +198,7 @@ pub enum Name {
     BlobHash,
     /// difficulty of the current block
     Difficulty,
-    /// https://eips.ethereum.org/EIPS/eip-4399
+    /// <https://eips.ethereum.org/EIPS/eip-4399>
     Prevrandao,
     /// current mining beneficiary
     CoinBase,

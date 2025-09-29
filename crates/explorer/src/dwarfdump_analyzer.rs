@@ -188,7 +188,7 @@ impl DwarfdumpAnalyzer {
     }
 }
 
-/// Given a slice of u64 values, returns a Vec<u64> where each element
+/// Given a slice of u64 values, returns a `Vec<u64>` where each element
 /// is linearly scaled into the closed interval [1, 10].
 fn scale_to(data: &[u64], scale_max: u64) -> Vec<u64> {
     if data.is_empty() {

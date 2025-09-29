@@ -1,6 +1,6 @@
 //! Experimental test runner for testing [pallet-revive](https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive) contracts.
-//! The crate exposes a single function [`run_tests`] that takes a [`Specs`] that defines in a declarative way:
-//! - The Genesis configuration
+//! The crate implements [`Specs`] that defines tests a declarative way:
+//! - The Genesis configuration.
 //! - A list of [`SpecsAction`] that will be executed in order.
 //!
 //! ## Example

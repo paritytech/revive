@@ -30,7 +30,7 @@ pub trait RuntimeFunction {
             Self::NAME,
             Self::r#type(context),
             0,
-            Some(inkwell::module::Linkage::External), // TODO: `Private` emits unrelocated AUIPC?
+            Some(inkwell::module::Linkage::LinkOnceODR),
             None,
         )?;
 
@@ -45,6 +45,12 @@ pub trait RuntimeFunction {
             &attributes,
             true,
         );
+        let function = function.borrow().declaration().function_value();
+        let comdat = context
+            .module()
+            .get_or_insert_comdat(&format!("{}_comdat", Self::NAME));
+        comdat.set_selection_kind(inkwell::comdat::ComdatSelectionKind::NoDuplicates);
+        function.as_global_value().set_comdat(comdat);
 
         Ok(())
     }

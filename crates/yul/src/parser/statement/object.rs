@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::collections::HashSet;
 
 use inkwell::debug_info::AsDIScope;
+use revive_llvm_context::PolkaVMCodeType;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -184,6 +185,12 @@ impl Object {
 
 impl PolkaVMWriteLLVM for Object {
     fn declare(&mut self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
+        if self.identifier.ends_with("_deployed") {
+            context.set_code_type(PolkaVMCodeType::Runtime);
+        } else {
+            context.set_code_type(PolkaVMCodeType::Deploy);
+        }
+
         revive_llvm_context::PolkaVMLoadImmutableDataFunction.declare(context)?;
         revive_llvm_context::PolkaVMStoreImmutableDataFunction.declare(context)?;
 
@@ -230,39 +237,11 @@ impl PolkaVMWriteLLVM for Object {
         .into_iter()
         {
             context
-                .get_function(name)
+                .get_function(name, false)
                 .expect("Always exists")
                 .borrow_mut()
                 .set_yul_data(revive_llvm_context::PolkaVMFunctionYulData::default());
         }
-
-        entry.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMEventLogFunction::<0>.into_llvm(context)?;
-        revive_llvm_context::PolkaVMEventLogFunction::<1>.into_llvm(context)?;
-        revive_llvm_context::PolkaVMEventLogFunction::<2>.into_llvm(context)?;
-        revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
-        revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
-        revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
-
-        revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
 
         Ok(())
     }
@@ -280,8 +259,37 @@ impl PolkaVMWriteLLVM for Object {
 
         context.set_debug_location(self.location.line, self.location.column, None)?;
         if self.identifier.ends_with("_deployed") {
+            context.set_code_type(PolkaVMCodeType::Runtime);
             revive_llvm_context::PolkaVMRuntimeCodeFunction::new(self.code).into_llvm(context)?;
         } else {
+            context.set_code_type(PolkaVMCodeType::Deploy);
+            revive_llvm_context::PolkaVMEntryFunction::default().into_llvm(context)?;
+            revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
+
+            revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.into_llvm(context)?;
+
+            revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;
+
+            revive_llvm_context::PolkaVMEventLogFunction::<0>.into_llvm(context)?;
+            revive_llvm_context::PolkaVMEventLogFunction::<1>.into_llvm(context)?;
+            revive_llvm_context::PolkaVMEventLogFunction::<2>.into_llvm(context)?;
+            revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
+            revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
+
+            revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
+
+            revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
+
             revive_llvm_context::PolkaVMDeployCodeFunction::new(self.code).into_llvm(context)?;
         }
 

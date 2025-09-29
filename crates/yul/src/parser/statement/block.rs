@@ -159,6 +159,7 @@ impl PolkaVMWriteLLVM for Block {
         context.set_current_function(
             current_function.as_str(),
             Some((self.location.line, self.location.column)),
+            false,
         )?;
 
         if let Some(debug_info) = context.debug_info() {

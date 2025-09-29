@@ -138,6 +138,7 @@ impl WriteLLVM for Entry {
             0,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )?;
 
         context.declare_global(
@@ -160,7 +161,7 @@ impl WriteLLVM for Entry {
     /// The `entry` function loads calldata, sets globals and calls the runtime or deploy code.
     fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
         let entry = context
-            .get_function(runtime::FUNCTION_ENTRY)
+            .get_function(runtime::FUNCTION_ENTRY, false)
             .expect("the entry function should already be declared")
             .borrow()
             .declaration;
@@ -171,7 +172,7 @@ impl WriteLLVM for Entry {
             true,
         );
 
-        context.set_current_function(runtime::FUNCTION_ENTRY, None)?;
+        context.set_current_function(runtime::FUNCTION_ENTRY, None, false)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         Self::initialize_globals(context)?;

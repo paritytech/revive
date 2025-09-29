@@ -426,8 +426,15 @@ impl<'ctx> Context<'ctx> {
         return_values_length: usize,
         linkage: Option<inkwell::module::Linkage>,
         location: Option<(u32, u32)>,
+        is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        let value = self.module().add_function(name, r#type, linkage);
+        assert!(
+            self.get_function(name, is_frontend).is_none(),
+            "ICE: function '{name}' declared subsequentally"
+        );
+
+        let name = self.internal_function_name(name, is_frontend);
+        let value = self.module().add_function(&name, r#type, linkage);
 
         if self.debug_info().is_some() {
             self.builder().unset_current_debug_location();
@@ -468,7 +475,7 @@ impl<'ctx> Context<'ctx> {
         };
 
         let function = Function::new(
-            name.to_owned(),
+            name.clone(),
             FunctionDeclaration::new(r#type, value),
             r#return,
             entry_block,
@@ -476,7 +483,7 @@ impl<'ctx> Context<'ctx> {
         );
         Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
         let function = Rc::new(RefCell::new(function));
-        self.functions.insert(name.to_string(), function.clone());
+        self.functions.insert(name, function.clone());
 
         self.pop_debug_scope();
 
@@ -484,8 +491,14 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Returns a shared reference to the specified function.
-    pub fn get_function(&self, name: &str) -> Option<Rc<RefCell<Function<'ctx>>>> {
-        self.functions.get(name).cloned()
+    pub fn get_function(
+        &self,
+        name: &str,
+        is_frontend: bool,
+    ) -> Option<Rc<RefCell<Function<'ctx>>>> {
+        self.functions
+            .get(&self.internal_function_name(name, is_frontend))
+            .cloned()
     }
 
     /// Returns a shared reference to the current active function.
@@ -501,8 +514,9 @@ impl<'ctx> Context<'ctx> {
         &mut self,
         name: &str,
         location: Option<(u32, u32)>,
+        frontend: bool,
     ) -> anyhow::Result<()> {
-        let function = self.functions.get(name).cloned().ok_or_else(|| {
+        let function = self.get_function(name, frontend).ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
         self.current_function = Some(function);
@@ -1370,5 +1384,14 @@ impl<'ctx> Context<'ctx> {
                 .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
             false,
         )
+    }
+
+    /// Returns the internal function name.
+    fn internal_function_name(&self, name: &str, is_frontend: bool) -> String {
+        if is_frontend {
+            format!("{name}_{}", self.code_type().unwrap())
+        } else {
+            name.to_string()
+        }
     }
 }

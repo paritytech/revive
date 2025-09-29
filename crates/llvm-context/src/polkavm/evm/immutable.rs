@@ -210,7 +210,7 @@ pub fn load<'ctx>(
             let name = <Load as RuntimeFunction>::NAME;
             context.build_call(
                 context
-                    .get_function(name)
+                    .get_function(name, false)
                     .expect("is always declared for runtime code")
                     .borrow()
                     .declaration(),

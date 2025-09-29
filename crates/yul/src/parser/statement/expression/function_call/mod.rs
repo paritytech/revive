@@ -135,7 +135,7 @@ impl FunctionCall {
                     values.push(value);
                 }
                 values.reverse();
-                let function = context.get_function(name.as_str()).ok_or_else(|| {
+                let function = context.get_function(name.as_str(), true).ok_or_else(|| {
                     anyhow::anyhow!("{} Undeclared function `{}`", location, name)
                 })?;
 

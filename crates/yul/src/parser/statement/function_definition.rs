@@ -215,7 +215,7 @@ impl PolkaVMWriteLLVM for FunctionDefinition {
             self.identifier.as_str(),
             function_type,
             self.result.len(),
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
             Some((self.location.line, self.location.column)),
         )?;
         PolkaVMFunction::set_attributes(

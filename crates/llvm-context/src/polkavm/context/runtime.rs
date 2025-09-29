@@ -30,7 +30,7 @@ pub trait RuntimeFunction {
             Self::NAME,
             Self::r#type(context),
             0,
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External), // TODO: `Private` emits unrelocated AUIPC?
             None,
         )?;
 

@@ -3,7 +3,7 @@
 target datalayout = "e-m:e-p:32:64-p1:32:64-i64:64-i128:128-n32:64-S64"
 target triple = "riscv64-unknown-none-elf"
 
-define i256 @__addmod(i256 %arg1, i256 %arg2, i256 %modulo) #4 {
+define i256 @__addmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
 entry:
   %is_zero = icmp eq i256 %modulo, 0
   br i1 %is_zero, label %return, label %addmod
@@ -28,7 +28,7 @@ return:
   ret i256 %value
 }
 
-define i256 @__clz(i256 %v) #0 {
+define private i256 @__clz(i256 %v) #0 {
 entry:
   %vs128 = lshr i256 %v, 128
   %vs128nz = icmp ne i256 %vs128, 0
@@ -72,7 +72,7 @@ entry:
   ret i256 %result
 }
 
-define i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
+define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
   %.not = icmp ult i256 %1, %2
   br i1 %.not, label %4, label %51
 
@@ -239,7 +239,7 @@ exponent_loop_body:
   br i1 %exp_val_is_less_2, label %return, label %exponent_loop_body
 }
 
-define i256 @__exp_pow2(i256 %val_log2, i256 %exp) #0 {
+define private i256 @__exp_pow2(i256 %val_log2, i256 %exp) #0 {
 entry:
   %shift = mul nuw nsw i256 %val_log2, %exp
   %is_overflow = icmp ugt i256 %shift, 255
@@ -250,8 +250,3 @@ entry:
 
 
 attributes #0 = { mustprogress nofree norecurse nosync nounwind readnone willreturn }
-attributes #1 = { argmemonly readonly nofree null_pointer_is_valid }
-attributes #2 = { argmemonly mustprogress nofree norecurse nosync nounwind willreturn null_pointer_is_valid }
-attributes #3 = { noinline noreturn }
-attributes #4 = { alwaysinline mustprogress nofree norecurse nosync nounwind readnone willreturn }
-attributes #5 = { noreturn nounwind }

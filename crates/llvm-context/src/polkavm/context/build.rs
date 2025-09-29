@@ -1,7 +1,5 @@
 //! The LLVM module build.
 
-use std::collections::BTreeMap;
-
 use revive_common::BYTE_LENGTH_WORD;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,8 +15,6 @@ pub struct Build {
     pub bytecode: Vec<u8>,
     /// The PolkaVM bytecode hash. Unlinked builds don't have a hash yet.
     pub bytecode_hash: Option<[u8; BYTE_LENGTH_WORD]>,
-    /// The hash-to-full-path mapping of the contract factory dependencies.
-    pub factory_dependencies: BTreeMap<String, String>,
 }
 
 impl Build {
@@ -29,7 +25,6 @@ impl Build {
             metadata_hash,
             bytecode,
             bytecode_hash: None,
-            factory_dependencies: BTreeMap::new(),
         }
     }
 }

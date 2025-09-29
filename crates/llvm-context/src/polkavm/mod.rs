@@ -83,7 +83,19 @@ pub fn link(
             let bytecode_linked = ElfLinker::setup()?.link(bytecode, symbols.as_slice())?;
             polkavm_linker(&bytecode_linked, strip_binary)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
-                .unwrap_or_else(|_| (bytecode.to_vec(), ObjectFormat::ELF))
+                .unwrap_or_else(|error| {
+                    if !error
+                        .to_string()
+                        .lines()
+                        .map(|line| line.trim())
+                        .filter(|line| !line.is_empty())
+                        .all(|line| line.contains("found undefined symbol"))
+                    {
+                        panic!("ICE: linker: {error}");
+                    }
+
+                    (bytecode.to_vec(), ObjectFormat::ELF)
+                })
         }
         Err(error) => panic!("ICE: linker: {error}"),
     })

@@ -36,7 +36,7 @@ where
             runtime::FUNCTION_RUNTIME_CODE,
             function_type,
             0,
-            Some(inkwell::module::Linkage::External),
+            Some(inkwell::module::Linkage::Private),
             None,
         )?;
 

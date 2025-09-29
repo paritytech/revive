@@ -69,7 +69,7 @@ test-resolc: install
 	cargo test --package resolc
 
 test-workspace: install
-	cargo test --workspace --exclude revive-llvm-builder --doc
+	cargo test --workspace --exclude revive-llvm-builder
 
 test-wasm: install-wasm
 	npm run test:wasm

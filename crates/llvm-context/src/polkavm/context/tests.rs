@@ -38,6 +38,7 @@ pub fn check_attribute_null_pointer_is_invalid() {
             1,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -62,6 +63,7 @@ pub fn check_attribute_optimize_for_size_mode_3() {
             1,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -86,6 +88,7 @@ pub fn check_attribute_optimize_for_size_mode_z() {
             1,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )
         .expect("Failed to add function");
     assert!(function
@@ -110,6 +113,7 @@ pub fn check_attribute_min_size_mode_3() {
             1,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )
         .expect("Failed to add function");
     assert!(!function
@@ -134,6 +138,7 @@ pub fn check_attribute_min_size_mode_z() {
             1,
             Some(inkwell::module::Linkage::External),
             None,
+            false,
         )
         .expect("Failed to add function");
     assert!(function

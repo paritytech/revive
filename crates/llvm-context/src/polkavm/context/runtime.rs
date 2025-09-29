@@ -32,6 +32,7 @@ pub trait RuntimeFunction {
             0,
             Some(inkwell::module::Linkage::LinkOnceODR),
             None,
+            false,
         )?;
 
         let mut attributes = Self::ATTRIBUTES.to_vec();
@@ -58,7 +59,7 @@ pub trait RuntimeFunction {
     /// Get the function declaration.
     fn declaration<'ctx>(context: &Context<'ctx>) -> Declaration<'ctx> {
         context
-            .get_function(Self::NAME)
+            .get_function(Self::NAME, false)
             .unwrap_or_else(|| panic!("runtime function {} should be declared", Self::NAME))
             .borrow()
             .declaration()
@@ -66,7 +67,7 @@ pub trait RuntimeFunction {
 
     /// Emit the function.
     fn emit(&self, context: &mut Context) -> anyhow::Result<()> {
-        context.set_current_function(Self::NAME, None)?;
+        context.set_current_function(Self::NAME, None, false)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         let return_value = self.emit_body(context)?;
@@ -105,7 +106,7 @@ pub trait RuntimeFunction {
     ) -> inkwell::values::BasicValueEnum<'ctx> {
         let name = Self::NAME;
         context
-            .get_function(name)
+            .get_function(name, false)
             .unwrap_or_else(|| panic!("runtime function {name} should be declared"))
             .borrow()
             .declaration()

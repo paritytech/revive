@@ -1,4 +1,5 @@
 name: Nightly Release
+
 on:
   schedule:
     # Run every day at 01:00 UTC
@@ -10,10 +11,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:c0154e992adb791c3b848dd008939d19862549204f8cb26f5ca7a00f629e6067
 
 jobs:
-  # check if there were commits yesterday
   check_commits:
     runs-on: ubuntu-latest
     outputs:
@@ -22,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch full history to check previous commits
+          fetch-depth: 0
           ref: "main"
 
       - name: Check for commits from yesterday
@@ -47,229 +46,12 @@ jobs:
           fi
 
   build:
-    # github actions matrix jobs don't support multiple outputs
-    # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
     if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
-    outputs:
-      resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
-      resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
-      resolc-aarch64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_url }}
-      resolc-aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-aarch64-apple-darwin_sha }}
-      resolc-x86_64-apple-darwin_url: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_url }}
-      resolc-x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_sha }}
-      resolc-x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_url }}
-      resolc-x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_sha }}
-    strategy:
-      matrix:
-        target:
-          [
-            x86_64-unknown-linux-musl,
-            aarch64-apple-darwin,
-            x86_64-apple-darwin,
-            x86_64-pc-windows-msvc,
-          ]
-        include:
-          - target: x86_64-unknown-linux-musl
-            type: musl
-            runner: ubuntu-24.04
-          - target: aarch64-apple-darwin
-            type: native
-            runner: macos-14
-          - target: x86_64-apple-darwin
-            type: native
-            runner: macos-13
-          - target: x86_64-pc-windows-msvc
-            type: native
-            runner: windows-2022
-    runs-on: ${{ matrix.runner }}
     needs: [check_commits]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          # without this it will override our rust flags
-          rustflags: ""
-          cache-key: ${{ matrix.target }}
-
-      - name: Download LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: ${{ matrix.target }}
-
-      - name: Build
-        if: ${{ matrix.type == 'native' }}
-        shell: bash
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
-          make install-bin
-          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
-
-      - name: Build
-        if: ${{ matrix.type == 'musl' }}
-        run: |
-          docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
-           cd /opt/revive
-           chown -R root:root .
-           apt update && apt upgrade -y && apt install -y pkg-config
-           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
-           make install-bin
-           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
-           "
-          sudo chown -R $(id -u):$(id -g) .
-
-      - name: Install Solc
-        uses: ./.github/actions/get-solc
-
-      - name: Basic Sanity Check
-        shell: bash
-        run: |
-          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
-          echo $result
-          if [[ $result == *'50564d'* ]]; then exit 0; else exit 1; fi
-
-      - name: Upload artifacts (nightly)
-        uses: actions/upload-artifact@v4
-        id: artifact-upload-step
-        with:
-          name: resolc-${{ matrix.target }}
-          path: resolc-${{ matrix.target }}*
-          retention-days: 40
-
-      - name: Set output variables (nightly)
-        id: set-output
-        shell: bash
-        run: |
-          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "resolc-${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          echo "resolc-${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
-          echo "resolc-${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "resolc-${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
-
-  build-wasm:
-    runs-on: ubuntu-24.04
-    needs: [check_commits]
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
-    outputs:
-      resolc-web.js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
-      resolc-web.js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
-    env:
-      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: wasm32-unknown-emscripten
-          # without this it will override our rust flags
-          rustflags: ""
-
-      - name: Download Host LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: x86_64-unknown-linux-gnu
-
-      - name: Download Wasm LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: wasm32-unknown-emscripten
-
-      - name: Download EMSDK
-        uses: ./.github/actions/get-emsdk
-
-      - name: Build
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
-          export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
-          source emsdk/emsdk_env.sh
-          make install-wasm
-          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
-
-      - name: Set Up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Basic Sanity Check
-        run: |
-          mkdir -p solc
-          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.30/soljson.js
-          node -e "
-          const soljson = require('solc/soljson');
-          const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
-
-          const compiler = createRevive();
-          compiler.soljson = soljson;
-
-          const standardJsonInput =
-          {
-            language: 'Solidity',
-            sources: {
-              'MyContract.sol': {
-                content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
-              },
-            },
-            settings: { optimizer: { enabled: false } }
-          };
-
-          compiler.writeToStdin(JSON.stringify(standardJsonInput));
-          compiler.callMain(['--standard-json']);
-
-          // Collect output
-          const stdout = compiler.readFromStdout();
-          const stderr = compiler.readFromStderr();
-
-          if (stderr) { console.error(stderr); process.exit(1); }
-
-          let out = JSON.parse(stdout);
-          let bytecode = out.contracts['MyContract.sol']['MyContract'].evm.bytecode.object
-          console.log(bytecode);
-
-          if(!bytecode.startsWith('50564d')) { process.exit(1); }
-          "
-
-      - name: Compress Artifact
-        run: |
-          mkdir -p resolc-wasm32-unknown-emscripten
-          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
-
-      # There is no way to upload several files as several artifacts with a single upload-artifact step
-      # It's needed to have resolc_web.js separately for night builds for resolc-bin repo
-      # https://github.com/actions/upload-artifact/issues/331
-      - name: Upload artifact resolc.js (nightly)
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolc.js
-          path: resolc-wasm32-unknown-emscripten/resolc.js
-          retention-days: 40
-
-      - name: Upload artifacts resolc.wasm (nightly)
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolc.wasm
-          path: resolc-wasm32-unknown-emscripten/resolc.wasm
-          retention-days: 40
-
-      - name: Upload artifacts resolc_web.js (nightly)
-        uses: actions/upload-artifact@v4
-        id: artifact-upload-step
-        with:
-          name: resolc_web.js
-          path: resolc-wasm32-unknown-emscripten/resolc_web.js
-          retention-days: 40
-
-      - name: Set output variables
-        id: set-output
-        env:
-          TARGET: resolc_web_js
-        run: |
-          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
-          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
-          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: false
+      retention_days: 40
 
   create-macos-fat-binary:
     if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
@@ -303,18 +85,14 @@ jobs:
         env:
           TARGET: resolc-universal-apple-darwin
         run: |
-          echo "Artifact URL is ${{ steps.artifact-upload-step.outputs.artifact-url }}"
-          echo "Artifact SHA is ${{ steps.artifact-upload-step.outputs.artifact-digest }}"
-          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}"
           echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
-          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}""
-          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}"" >> "$GITHUB_OUTPUT"
+          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
 
   generate-nightly-json:
     runs-on: ubuntu-24.04
     if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     environment: tags
-    needs: [build-wasm, build, create-macos-fat-binary, check_commits]
+    needs: [build, create-macos-fat-binary, check_commits]
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4
@@ -351,8 +129,6 @@ jobs:
         run: |
           echo '[' > data.json
           echo '${{ toJSON(needs.build.outputs) }}' >> data.json
-          echo ',' >> data.json
-          echo '${{ toJSON(needs.build-wasm.outputs) }}' >> data.json
           echo ',' >> data.json
           echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}' >> data.json
           echo ']' >> data.json

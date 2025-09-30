@@ -215,8 +215,9 @@ impl PolkaVMWriteLLVM for FunctionDefinition {
             self.identifier.as_str(),
             function_type,
             self.result.len(),
-            Some(inkwell::module::Linkage::Private),
+            Some(inkwell::module::Linkage::External),
             Some((self.location.line, self.location.column)),
+            true,
         )?;
         PolkaVMFunction::set_attributes(
             context.llvm(),
@@ -235,6 +236,7 @@ impl PolkaVMWriteLLVM for FunctionDefinition {
         context.set_current_function(
             self.identifier.as_str(),
             Some((self.location.line, self.location.column)),
+            true,
         )?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 

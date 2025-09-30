@@ -1,6 +1,5 @@
 //! The deploy code function.
 
-use crate::polkavm::context::code_type::CodeType;
 use crate::polkavm::context::function::runtime;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -38,16 +37,16 @@ where
             0,
             Some(inkwell::module::Linkage::Private),
             None,
+            false,
         )?;
 
         self.inner.declare(context)
     }
 
     fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
-        context.set_current_function(runtime::FUNCTION_DEPLOY_CODE, None)?;
+        context.set_current_function(runtime::FUNCTION_DEPLOY_CODE, None, false)?;
 
         context.set_basic_block(context.current_function().borrow().entry_block());
-        context.set_code_type(CodeType::Deploy);
 
         self.inner.into_llvm(context)?;
         context.set_debug_location(0, 0, None)?;

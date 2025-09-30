@@ -40,6 +40,8 @@ env:
 
 jobs:
   build:
+    # github actions matrix jobs don't support multiple outputs
+    # ugly workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
     outputs:
       resolc-x86_64-unknown-linux-musl_url: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_url }}
       resolc-x86_64-unknown-linux-musl_sha: ${{ steps.set-output.outputs.resolc-x86_64-unknown-linux-musl_sha }}
@@ -222,6 +224,9 @@ jobs:
           path: resolc-wasm32-unknown-emscripten/*
           retention-days: ${{ inputs.retention_days }}
 
+      # There is no way to upload several files as several artifacts with a single upload-artifact step
+      # It's needed to have resolc_web.js separately for night builds for resolc-bin repo
+      # https://github.com/actions/upload-artifact/issues/331
       - name: Upload artifact resolc.js (Nightly)
         if: ${{ !inputs.is_release }}
         uses: actions/upload-artifact@v4

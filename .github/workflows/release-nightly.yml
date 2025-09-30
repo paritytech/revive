@@ -27,9 +27,11 @@ jobs:
       - name: Check for commits from yesterday
         id: check_commits
         run: |
+          # Get yesterday's date in YYYY-MM-DD format
           YESTERDAY=$(date -d "yesterday" +%Y-%m-%d)
           echo "Checking for commits from: $YESTERDAY"
 
+          # Check if there were any commits yesterday
           COMMIT_COUNT=$(git log --oneline --since="$YESTERDAY 00:00:00" --until="$YESTERDAY 23:59:59" | wc -l)
 
           echo "Found $COMMIT_COUNT commits from yesterday"

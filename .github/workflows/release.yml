@@ -31,8 +31,7 @@ jobs:
       - name: Check versions
         id: versions
         run: |
-          if [[ $CURRENT_TAG == 'main' ]]; 
-          then
+          if [[ $CURRENT_TAG == 'main' ]]; then
             echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in the main branch"
             exit 0
           fi

@@ -1,4 +1,5 @@
 name: Build & Release
+
 on:
   push:
     branches: ["main"]
@@ -14,8 +15,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # if changed, dont forget to update the env var in release-nightly.yml
-  RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:c0154e992adb791c3b848dd008939d19862549204f8cb26f5ca7a00f629e6067
 
 jobs:
   check-version-changed:
@@ -29,33 +28,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Check that tag and version in Cargo.toml match
       - name: Check versions
         id: versions
         run: |
-          if [[ $CURRENT_TAG == 'main' ]];
-            then
-              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in the main branch";
-              exit 0
-            fi
+          if [[ $CURRENT_TAG == 'main' ]]; then
+            echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in the main branch"
+            exit 0
+          fi
 
-          if [[ $CURRENT_TAG != "v"* ]];
-            then
-              echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR";
-              exit 0
-            fi
+          if [[ $CURRENT_TAG != "v"* ]]; then
+            echo "::notice::Tag $CURRENT_TAG is not a release tag, skipping the check in a PR"
+            exit 0
+          fi
 
           export PKG_VER=v$(cat crates/resolc/Cargo.toml | grep -A 5 package] | grep version | cut -d '=' -f 2 | tr -d '"' | tr -d " ")
           echo "Current tag $CURRENT_TAG"
           echo "Package version $PKG_VER"
-          #
-          if [[ $CURRENT_TAG != $PKG_VER  ]];
-            then
-              echo "::error::Tag $CURRENT_TAG doesn't match package version $PKG_VER in Cargo.toml, please fix";
-              exit 1
-            fi
 
-          # Generating release notes early, in order to avoid checkout at the last step
+          if [[ $CURRENT_TAG != $PKG_VER ]]; then
+            echo "::error::Tag $CURRENT_TAG doesn't match package version $PKG_VER in Cargo.toml, please fix"
+            exit 1
+          fi
+
           export RELEASE_NOTES="$(sed '/^## '${CURRENT_TAG}'/,/^## v/!d' CHANGELOG.md | sed -e '1d' -e '$d')"
 
           echo "Release notes:"
@@ -66,173 +60,15 @@ jobs:
           echo 'EOF' >> $GITHUB_OUTPUT
 
   build:
-    strategy:
-      matrix:
-        target:
-          [
-            x86_64-unknown-linux-musl,
-            aarch64-apple-darwin,
-            x86_64-apple-darwin,
-            x86_64-pc-windows-msvc,
-          ]
-        include:
-          - target: x86_64-unknown-linux-musl
-            type: musl
-            runner: ubuntu-24.04
-          - target: aarch64-apple-darwin
-            type: native
-            runner: macos-14
-          - target: x86_64-apple-darwin
-            type: native
-            runner: macos-13
-          - target: x86_64-pc-windows-msvc
-            type: native
-            runner: windows-2022
-    runs-on: ${{ matrix.runner }}
     needs: [check-version-changed]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          # without this it will override our rust flags
-          rustflags: ""
-          cache-key: ${{ matrix.target }}
-
-      - name: Download LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: ${{ matrix.target }}
-
-      - name: Build
-        if: ${{ matrix.type == 'native' }}
-        shell: bash
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
-          make install-bin
-          mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
-
-      - name: Build
-        if: ${{ matrix.type == 'musl' }}
-        run: |
-          docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
-           cd /opt/revive
-           chown -R root:root .
-           apt update && apt upgrade -y && apt install -y pkg-config
-           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
-           make install-bin
-           mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
-           "
-          sudo chown -R $(id -u):$(id -g) .
-
-      - name: Install Solc
-        uses: ./.github/actions/get-solc
-
-      - name: Basic Sanity Check
-        shell: bash
-        run: |
-          result=$(./resolc-${{ matrix.target }} --bin crates/integration/contracts/flipper.sol)
-          echo $result
-          if [[ $result == *'50564d'* ]]; then exit 0; else exit 1; fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: resolc-${{ matrix.target }}
-          path: resolc-${{ matrix.target }}*
-          retention-days: 1
-
-  build-wasm:
-    runs-on: ubuntu-24.04
-    needs: [check-version-changed]
-    env:
-      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: wasm32-unknown-emscripten
-          # without this it will override our rust flags
-          rustflags: ""
-
-      - name: Download Host LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: x86_64-unknown-linux-gnu
-
-      - name: Download Wasm LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: wasm32-unknown-emscripten
-
-      - name: Download EMSDK
-        uses: ./.github/actions/get-emsdk
-
-      - name: Build
-        run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
-          export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
-          source emsdk/emsdk_env.sh
-          make install-wasm
-          chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
-
-      - name: Set Up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Basic Sanity Check
-        run: |
-          mkdir -p solc
-          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.30/soljson.js
-          node -e "
-          const soljson = require('solc/soljson');
-          const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
-
-          const compiler = createRevive();
-          compiler.soljson = soljson;
-
-          const standardJsonInput =
-          {
-            language: 'Solidity',
-            sources: {
-              'MyContract.sol': {
-                content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
-              },
-            },
-            settings: { optimizer: { enabled: false } }
-          };
-
-          compiler.writeToStdin(JSON.stringify(standardJsonInput));
-          compiler.callMain(['--standard-json']);
-
-          // Collect output
-          const stdout = compiler.readFromStdout();
-          const stderr = compiler.readFromStderr();
-
-          if (stderr) { console.error(stderr); process.exit(1); }
-
-          let out = JSON.parse(stdout);
-          let bytecode = out.contracts['MyContract.sol']['MyContract'].evm.bytecode.object
-          console.log(bytecode);
-
-          if(!bytecode.startsWith('50564d')) { process.exit(1); }
-          "
-
-      - name: Compress Artifact
-        run: |
-          mkdir -p resolc-wasm32-unknown-emscripten
-          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: resolc-wasm32-unknown-emscripten
-          path: resolc-wasm32-unknown-emscripten/*
-          retention-days: 1
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: true
+      retention_days: 1
 
   create-release:
     if: startsWith(github.ref_name, 'v')
-    needs: [check-version-changed, build-wasm]
+    needs: [check-version-changed, build]
     runs-on: macos-14
     environment: tags
     steps:

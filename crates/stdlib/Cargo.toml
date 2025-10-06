@@ -1,6 +1,6 @@
 [package]
 name = "revive-stdlib"
-version = "0.1.1"
+version = "0.2.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

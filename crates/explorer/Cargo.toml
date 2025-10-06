@@ -1,6 +1,6 @@
 [package]
 name = "revive-explorer"
-version.workspace = true
+version = "0.1.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

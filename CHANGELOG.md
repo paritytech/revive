@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed 
+- revert `standard_json.output.source.ast` change to include the `ast`.
+- `standard_json.output_selection` to also look at per file settings.
+
 This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`

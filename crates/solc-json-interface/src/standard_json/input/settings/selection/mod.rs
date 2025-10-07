@@ -2,10 +2,9 @@
 
 pub mod file;
 
-use std::collections::BTreeMap;
-
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 use self::file::flag::Flag;
 use self::file::File as FileSelection;
@@ -54,6 +53,14 @@ impl Selection {
     /// Extends the output selection with another one.
     pub fn extend(&mut self, other: Self) -> &mut Self {
         self.all.extend(other.all);
+        for (entry, file) in other.files {
+            self.files
+                .entry(entry)
+                .and_modify(|v| {
+                    v.extend(file.clone());
+                })
+                .or_insert(file);
+        }
         self
     }
 
@@ -62,14 +69,23 @@ impl Selection {
     ///
     /// Afterwards, the flags are used to prune JSON output before returning it.
     pub fn selection_to_prune(&self) -> Self {
+        let files = self
+            .files
+            .iter()
+            .map(|(k, v)| (k.to_owned(), v.selection_to_prune()))
+            .collect();
+
         Self {
             all: self.all.selection_to_prune(),
-            files: Default::default(),
+            files: files,
         }
     }
 
     /// Whether the flag is requested.
-    pub fn contains(&self, flag: &Flag) -> bool {
+    pub fn contains(&self, path: &String, flag: &Flag) -> bool {
+        if let Some(file) = self.files.get(path) {
+            return file.contains(flag);
+        };
         self.all.contains(flag)
     }
 }

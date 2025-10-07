@@ -47,24 +47,3 @@ pub enum Flag {
     #[serde(rename = "ir")]
     Ir,
 }
-
-//impl std::fmt::Display for Flag {
-//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//        match self {
-//            Self::ABI => write!(f, "abi"),
-//            Self::Metadata => write!(f, "metadata"),
-//            Self::Devdoc => write!(f, "devdoc"),
-//            Self::Userdoc => write!(f, "userdoc"),
-//            Self::MethodIdentifiers => write!(f, "evm.methodIdentifiers"),
-//            Self::StorageLayout => write!(f, "storageLayout"),
-//            Self::AST => write!(f, "ast"),
-//            Self::Yul => write!(f, "irOptimized"),
-//            Self::EVM => write!(f, "evm"),
-//            Self::EVMLA => write!(f, "evm.legacyAssembly"),
-//            Self::EVMBC => write!(f, "evm.bytecode"),
-//            Self::EVMDBC => write!(f, "evm.deployedBytecode"),
-//            Self::Assembly => write!(f, "evm.assembly"),
-//            Self::Ir => write!(f, "ir"),
-//        }
-//    }
-//}

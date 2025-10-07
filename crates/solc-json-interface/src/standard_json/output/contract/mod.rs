@@ -2,7 +2,9 @@
 
 pub mod evm;
 
+#[cfg(feature = "resolc")]
 use std::collections::BTreeMap;
+#[cfg(feature = "resolc")]
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
@@ -45,19 +47,24 @@ pub struct Contract {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,
     /// Unlinked factory dependencies.
+    #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
     pub factory_dependencies_unlinked: BTreeSet<String>,
     /// The contract factory dependencies.
+    #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
     pub factory_dependencies: BTreeMap<String, String>,
     /// Missing linkable libraries.
+    #[cfg(feature = "resolc")]
     #[serde(default, skip_deserializing)]
     pub missing_libraries: BTreeSet<String>,
     /// Binary object format.
-    #[serde(default, skip_deserializing)]
+    #[cfg(feature = "resolc")]
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub object_format: Option<revive_common::ObjectFormat>,
 }
 
+#[cfg(feature = "resolc")]
 impl Contract {
     /// Checks if all fields are unset or empty.
     pub fn is_empty(&self) -> bool {

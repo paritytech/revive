@@ -40,17 +40,6 @@ impl File {
             per_contract,
         }
     }
-    /// Creates the selection required for production compilation (excludes EVM bytecode).
-    pub fn new_required() -> Self {
-        Self {
-            per_file: HashSet::from_iter([SelectionFlag::AST]),
-            per_contract: HashSet::from_iter([
-                SelectionFlag::MethodIdentifiers,
-                SelectionFlag::Metadata,
-                SelectionFlag::Yul,
-            ]),
-        }
-    }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
     pub fn new_required_for_tests() -> Self {
@@ -64,16 +53,6 @@ impl File {
                 SelectionFlag::Yul,
             ]),
         }
-    }
-
-    /// Extends the user's output selection with flag required by our compilation process.
-    pub fn extend_with_required(&mut self) -> &mut Self {
-        let required = Self::new_required();
-
-        self.per_file.extend(required.per_file);
-        self.per_contract.extend(required.per_contract);
-
-        self
     }
 
     /// Extends the output selection with another one.

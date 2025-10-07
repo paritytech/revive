@@ -12,7 +12,7 @@ use crate::standard_json::output::error::error_handler::ErrorHandler;
 use crate::SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSource;
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", feature = "resolc"))]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use self::contract::Contract;
@@ -92,15 +92,6 @@ impl Output {
         mut self,
         selection_to_prune: SolcStandardJsonInputSettingsSelection,
     ) -> ! {
-        let sources = self.sources.values_mut().collect::<Vec<&mut Source>>();
-        for source in sources.into_iter() {
-            if selection_to_prune
-                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::AST)
-            {
-                source.ast = None;
-            }
-        }
-
         let contracts = self
             .contracts
             .values_mut()

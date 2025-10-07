@@ -2,8 +2,6 @@
 
 pub mod file;
 
-use std::collections::BTreeMap;
-
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -15,10 +13,7 @@ use self::file::File as FileSelection;
 pub struct Selection {
     /// Only the 'all' wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
-    all: FileSelection,
-
-    #[serde(skip_serializing_if = "BTreeMap::is_empty", flatten)]
-    pub files: BTreeMap<String, FileSelection>,
+    pub all: FileSelection,
 }
 
 impl Selection {
@@ -26,23 +21,23 @@ impl Selection {
     pub fn new(flags: Vec<Flag>) -> Self {
         Self {
             all: FileSelection::new(flags),
-            files: Default::default(),
         }
     }
 
     /// Creates the selection required by our compilation process.
     pub fn new_required() -> Self {
-        Self {
-            all: FileSelection::new_required(),
-            files: BTreeMap::new(),
-        }
+        Self::new(vec![
+            Flag::AST,
+            Flag::MethodIdentifiers,
+            Flag::Metadata,
+            Flag::Yul,
+        ])
     }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),
-            files: BTreeMap::new(),
         }
     }
 
@@ -64,7 +59,6 @@ impl Selection {
     pub fn selection_to_prune(&self) -> Self {
         Self {
             all: self.all.selection_to_prune(),
-            files: Default::default(),
         }
     }
 

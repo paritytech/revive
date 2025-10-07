@@ -3,9 +3,9 @@
 //! This module provides HTTP endpoints that serve YUL source code,
 //! RISC-V assembly instructions, and location mappings to the browser-based UI.
 
-use serde::{Deserialize, Serialize};
 use crate::assembly_analyzer::AssemblyInstruction;
 use crate::source_mapper::{LocationMapping, SourceMapper};
+use serde::{Deserialize, Serialize};
 
 /// Response containing YUL source code.
 #[derive(Debug, Serialize)]
@@ -47,7 +47,7 @@ impl AssemblyResponse {
             .into_iter()
             .map(AssemblyInstructionDto::from)
             .collect();
-        
+
         Self {
             instructions,
             instruction_count,
@@ -75,7 +75,7 @@ impl From<AssemblyInstruction> for AssemblyInstructionDto {
         } else {
             format!("{}\t{}", instr.mnemonic, instr.operands)
         };
-        
+
         Self {
             address: format!("0x{:x}", instr.address),
             bytes: instr.bytes,
@@ -99,7 +99,7 @@ impl MappingResponse {
     pub fn new(source_mapper: &SourceMapper) -> Self {
         let mappings = source_mapper.to_location_mappings();
         let mapping_count = mappings.len();
-        
+
         Self {
             mappings,
             mapping_count,
@@ -175,7 +175,7 @@ impl ErrorResponse {
             details: None,
         }
     }
-    
+
     /// Creates an error response with details.
     pub fn with_details(
         error: impl Into<String>,
@@ -222,7 +222,7 @@ mod tests {
     fn test_yul_source_response() {
         let content = "function test() {\n    let x := 1\n}".to_string();
         let response = YulSourceResponse::new(content.clone(), "test.yul".to_string());
-        
+
         assert_eq!(response.content, content);
         assert_eq!(response.filename, "test.yul");
         assert_eq!(response.line_count, 3);
@@ -237,7 +237,7 @@ mod tests {
             operands: "sp,sp,2".to_string(),
             line_number: Some(5),
         };
-        
+
         let dto = AssemblyInstructionDto::from(instruction);
         assert_eq!(dto.address, "0x1000");
         assert_eq!(dto.instruction, "addi\tsp,sp,2");
@@ -249,13 +249,13 @@ mod tests {
         let params = AddressQueryParams {
             address: "0x1000".to_string(),
         };
-        
+
         assert_eq!(params.parse_address().unwrap(), 0x1000);
-        
+
         let invalid_params = AddressQueryParams {
             address: "invalid".to_string(),
         };
-        
+
         assert!(invalid_params.parse_address().is_err());
     }
 }

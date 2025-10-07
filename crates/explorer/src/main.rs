@@ -80,16 +80,11 @@ fn main() -> anyhow::Result<()> {
 #[tokio::main]
 async fn run_web_server(args: Args) -> anyhow::Result<()> {
     use revive_explorer::web_server::WebServer;
-    
+
     let source_file = dwarfdump::source_file(&args.file, &args.dwarfdump)?;
-    
-    let server = WebServer::new(
-        args.file,
-        source_file,
-        args.dwarfdump,
-        args.objdump,
-    );
-    
+
+    let server = WebServer::new(args.file, source_file, args.dwarfdump, args.objdump);
+
     println!("🚀 Starting Revive Compiler Explorer WebUI...");
     server.serve(args.port).await
 }

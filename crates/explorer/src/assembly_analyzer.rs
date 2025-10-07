@@ -3,9 +3,9 @@
 //! This module integrates objdump to extract RISC-V assembly instructions
 //! from compiled shared objects, as requested in issue #366.
 
+use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use anyhow::{anyhow, Result};
 
 pub static OBJDUMP_EXECUTABLE: &str = "objdump";
 pub static OBJDUMP_DISASSEMBLE_ARGUMENTS: [&str; 2] = ["-d", "--no-show-raw-insn"];
@@ -93,7 +93,7 @@ impl AssemblyAnalyzer {
     /// "  400000:	02 00 81 13 	addi	sp,sp,2"
     fn parse_instruction_line(&self, line: &str) -> Result<Option<AssemblyInstruction>> {
         let line = line.trim();
-        
+
         // Skip empty lines and section headers
         if line.is_empty() || !line.contains(':') {
             return Ok(None);
@@ -105,14 +105,16 @@ impl AssemblyAnalyzer {
         }
 
         // Parse address
-        let colon_pos = line.find(':').ok_or_else(|| anyhow!("No colon found in line"))?;
+        let colon_pos = line
+            .find(':')
+            .ok_or_else(|| anyhow!("No colon found in line"))?;
         let address_str = &line[..colon_pos].trim();
         let address = u64::from_str_radix(address_str, 16)
             .map_err(|_| anyhow!("Failed to parse address: {}", address_str))?;
 
         // Parse the rest of the line after the colon
         let rest = &line[colon_pos + 1..].trim();
-        
+
         // Split into bytes and instruction parts
         let parts: Vec<&str> = rest.splitn(2, '\t').collect();
         if parts.len() < 2 {
@@ -148,10 +150,10 @@ mod tests {
     #[test]
     fn test_parse_instruction_line() {
         let analyzer = AssemblyAnalyzer::new(None);
-        
+
         let line = "  400000:\t02 00 81 13 \taddi\tsp,sp,2";
         let result = analyzer.parse_instruction_line(line).unwrap();
-        
+
         assert!(result.is_some());
         let instruction = result.unwrap();
         assert_eq!(instruction.address, 0x400000);
@@ -163,13 +165,13 @@ mod tests {
     #[test]
     fn test_skip_invalid_lines() {
         let analyzer = AssemblyAnalyzer::new(None);
-        
+
         let invalid_lines = [
             "Disassembly of section .text:",
             "",
             "file format elf64-littleriscv",
         ];
-        
+
         for line in &invalid_lines {
             let result = analyzer.parse_instruction_line(line).unwrap();
             assert!(result.is_none(), "Should skip line: {}", line);

@@ -3,8 +3,7 @@
 //! This module implements the web server that serves the two-pane interface
 //! and provides REST API endpoints for YUL source and RISC-V assembly data.
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use anyhow::{anyhow, Result};
 use axum::{
     extract::{Query, State},
     http::{header, StatusCode},
@@ -12,18 +11,16 @@ use axum::{
     routing::get,
     Router,
 };
-use tower::ServiceBuilder;
-use tower_http::{
-    cors::CorsLayer,
-    services::ServeDir,
-};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
-use anyhow::{anyhow, Result};
+use tower::ServiceBuilder;
+use tower_http::{cors::CorsLayer, services::ServeDir};
 
 use crate::{
     api::{
-        AnalysisMetadata, AnalysisResponse, AssemblyResponse, ErrorResponse, 
-        LineQueryParams, MappingResponse, ToolVersions, YulSourceResponse
+        AnalysisMetadata, AnalysisResponse, AssemblyResponse, ErrorResponse, LineQueryParams,
+        MappingResponse, ToolVersions, YulSourceResponse,
     },
     assembly_analyzer::AssemblyAnalyzer,
     dwarfdump,
@@ -77,8 +74,11 @@ impl WebServer {
 
     /// Starts the web server on the specified port.
     pub async fn serve(self, port: u16) -> Result<()> {
-        println!("🔍 Analyzing shared object: {}", self.shared_object_path.display());
-        
+        println!(
+            "🔍 Analyzing shared object: {}",
+            self.shared_object_path.display()
+        );
+
         // Perform analysis at startup as requested in the issue
         let analysis_data = self.analyze().await?;
         let app_state = AppState {
@@ -96,16 +96,16 @@ impl WebServer {
             .route("/api/mapping", get(get_mapping))
             .route("/api/assembly-for-line", get(get_assembly_for_line))
             .nest_service("/static", ServeDir::new("static"))
-            .layer(
-                ServiceBuilder::new()
-                    .layer(CorsLayer::permissive())
-            )
+            .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
             .with_state(app_state);
 
         let bind_addr = format!("127.0.0.1:{}", port);
         let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-        
-        println!("🚀 Revive Compiler Explorer running at: http://{}", bind_addr);
+
+        println!(
+            "🚀 Revive Compiler Explorer running at: http://{}",
+            bind_addr
+        );
         println!("📖 Open the URL in your browser to view the YUL ↔ RISC-V interface");
 
         axum::serve(listener, app).await?;
@@ -119,12 +119,18 @@ impl WebServer {
         let debug_lines = dwarfdump::debug_lines(&self.shared_object_path, &self.dwarfdump_path)?;
 
         // Step 2: Read YUL source content
-        let yul_content = fs::read_to_string(&source_file).await
-            .map_err(|e| anyhow!("Failed to read YUL source file {}: {}", source_file.display(), e))?;
-        
+        let yul_content = fs::read_to_string(&source_file).await.map_err(|e| {
+            anyhow!(
+                "Failed to read YUL source file {}: {}",
+                source_file.display(),
+                e
+            )
+        })?;
+
         let yul_source = YulSourceResponse::new(
             yul_content,
-            source_file.file_name()
+            source_file
+                .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
@@ -138,7 +144,7 @@ impl WebServer {
         // Step 4: Build source-to-assembly mapping using debug information
         let mut analyzer = DwarfdumpAnalyzer::new(&source_file, debug_lines.clone());
         analyzer.analyze()?;
-        
+
         let mut source_mapper = SourceMapper::new();
         source_mapper.build_mapping(&debug_lines, &assembly_instructions)?;
 
@@ -197,24 +203,23 @@ async fn get_assembly_for_line(
     Query(params): Query<LineQueryParams>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<String>>, Response> {
-    let addresses = state.analysis.source_mapper.get_assembly_for_line(params.line);
+    let addresses = state
+        .analysis
+        .source_mapper
+        .get_assembly_for_line(params.line);
     let formatted_addresses: Vec<String> = addresses
         .into_iter()
         .map(|addr| format!("0x{:x}", addr))
         .collect();
-    
+
     Ok(Json(formatted_addresses))
 }
 
 /// Helper function to create error responses.
-async fn create_error_response(
-    status: StatusCode,
-    error: &str,
-    message: &str,
-) -> Response {
+async fn create_error_response(status: StatusCode, error: &str, message: &str) -> Response {
     let error_response = ErrorResponse::new(error, message);
     let json_body = serde_json::to_string(&error_response).unwrap_or_default();
-    
+
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, "application/json")
@@ -235,7 +240,7 @@ mod tests {
             None,
             None,
         );
-        
+
         assert_eq!(server.shared_object_path, PathBuf::from("/test/object.so"));
         assert_eq!(server.yul_source_path, PathBuf::from("/test/source.yul"));
     }

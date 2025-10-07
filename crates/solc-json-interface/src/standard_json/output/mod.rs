@@ -101,7 +101,7 @@ impl Output {
         selection_to_prune: SolcStandardJsonInputSettingsSelection,
     ) -> ! {
         for (path, contracts) in self.contracts.iter_mut() {
-            for (_, contract) in contracts {
+            for contract in contracts.values_mut() {
                 if selection_to_prune.contains(
                     path,
                     &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata,

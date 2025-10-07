@@ -12,7 +12,7 @@ use crate::standard_json::output::error::error_handler::ErrorHandler;
 use crate::SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSource;
-#[cfg(feature = "parallel")]
+#[cfg(all(feature = "parallel", feature = "resolc"))]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use self::contract::Contract;

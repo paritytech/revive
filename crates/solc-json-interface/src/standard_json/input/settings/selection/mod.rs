@@ -14,8 +14,7 @@ use self::file::File as FileSelection;
 pub struct Selection {
     /// Only the 'all' wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
-    all: FileSelection,
-
+    pub all: FileSelection,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", flatten)]
     pub files: BTreeMap<String, FileSelection>,
 }
@@ -31,17 +30,19 @@ impl Selection {
 
     /// Creates the selection required by our compilation process.
     pub fn new_required() -> Self {
-        Self {
-            all: FileSelection::new_required(),
-            files: BTreeMap::new(),
-        }
+        Self::new(vec![
+            Flag::AST,
+            Flag::MethodIdentifiers,
+            Flag::Metadata,
+            Flag::Yul,
+        ])
     }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),
-            files: BTreeMap::new(),
+            files: Default::default(),
         }
     }
 

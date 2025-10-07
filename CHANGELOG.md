@@ -10,6 +10,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+### Changed
+- The `ast` output is no longer pruned in standard JSON mode (required for foundry).
+
 ## v0.4.0
 
 This is a development pre-release.

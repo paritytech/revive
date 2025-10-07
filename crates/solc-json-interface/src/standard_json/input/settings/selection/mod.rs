@@ -78,7 +78,7 @@ impl Selection {
 
         Self {
             all: self.all.selection_to_prune(),
-            files: files,
+            files,
         }
     }
 

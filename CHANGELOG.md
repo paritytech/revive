@@ -3,8 +3,7 @@
 ## Unreleased
 
 ### Changed 
-- revert `standard_json.output.source.ast` change to include the `ast`.
-- Restore `standard_json.output_selection` to also look at per file settings.
+- `standard_json.output_selection` to also look at per file settings.
 
 This is a development pre-release.
 

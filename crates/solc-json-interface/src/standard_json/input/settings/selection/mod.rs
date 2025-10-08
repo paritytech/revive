@@ -2,9 +2,10 @@
 
 pub mod file;
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::BTreeMap;
 
 use self::file::flag::Flag;
 use self::file::File as FileSelection;
@@ -88,7 +89,6 @@ impl Selection {
     }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
-    /// Returns the file selection required during tests.
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),

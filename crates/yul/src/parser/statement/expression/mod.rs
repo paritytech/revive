@@ -115,7 +115,7 @@ impl Expression {
                     anyhow::anyhow!(
                         "{} Invalid literal `{}`: {}",
                         literal.location,
-                        literal.inner.to_string(),
+                        literal.inner,
                         error
                     )
                 })

@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-### Changed 
-- `standard_json.output_selection` to also look at per file settings.
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2503.0.1`
+
+## v0.4.1
 
 This is a development pre-release.
 
@@ -11,6 +14,7 @@ Supported `polkadot-sdk` rev: `2503.0.1`
 
 ### Changed
 - The `ast` output is no longer pruned in standard JSON mode (required for foundry).
+- Support `standard_json.output_selection` to also look at per file settings.
 
 ## v0.4.0
 

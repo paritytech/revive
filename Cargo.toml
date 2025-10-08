@@ -24,10 +24,10 @@ revive-differential = { version = "0.2.0", path = "crates/differential" }
 revive-explorer = { version = "0.1.0", path = "crates/explore" }
 revive-integration = { version = "0.2.0", path = "crates/integration" }
 revive-linker = { version = "0.2.0", path = "crates/linker" }
-revive-llvm-context = { version = "0.4.0", path = "crates/llvm-context" }
+revive-llvm-context = { version = "0.4.1", path = "crates/llvm-context" }
 revive-runner = { version = "0.2.0", path = "crates/runner" }
 revive-runtime-api = { version = "0.3.0", path = "crates/runtime-api" }
-revive-solc-json-interface = { version = "0.3.0", path = "crates/solc-json-interface", default-features = false }
+revive-solc-json-interface = { version = "0.4.0", path = "crates/solc-json-interface", default-features = false }
 revive-stdlib = { version = "0.2.0", path = "crates/stdlib" }
 revive-yul = { version = "0.3.0", path = "crates/yul" }
 

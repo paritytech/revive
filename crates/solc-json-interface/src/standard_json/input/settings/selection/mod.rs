@@ -12,7 +12,7 @@ use self::file::File as FileSelection;
 
 /// The `solc --standard-json` per-file output selection.
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
-struct PerFileSelection {
+pub struct PerFileSelection {
     /// Individual file selection configuration, required for foundry.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", flatten)]
     pub files: BTreeMap<String, FileSelection>,

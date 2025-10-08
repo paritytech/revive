@@ -8734,7 +8734,7 @@ dependencies = [
 
 [[package]]
 name = "revive-common"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "hex",
@@ -8890,7 +8890,7 @@ dependencies = [
 
 [[package]]
 name = "revive-yul"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "inkwell",

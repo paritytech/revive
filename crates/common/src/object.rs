@@ -30,8 +30,8 @@ impl FromStr for ObjectFormat {
             "PVM" => Ok(Self::PVM),
             _ => anyhow::bail!(
                 "Unknown object format: {value}. Supported formats: {}, {}",
-                Self::ELF.to_string(),
-                Self::PVM.to_string()
+                Self::ELF,
+                Self::PVM,
             ),
         }
     }

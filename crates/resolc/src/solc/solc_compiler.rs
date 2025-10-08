@@ -88,7 +88,7 @@ impl Compiler for SolcCompiler {
             anyhow::bail!(
                 "{} error: {}",
                 self.executable,
-                String::from_utf8_lossy(output.stderr.as_slice()).to_string()
+                String::from_utf8_lossy(output.stderr.as_slice())
             );
         }
 
@@ -187,7 +187,7 @@ impl Compiler for SolcCompiler {
             anyhow::bail!(
                 "{} error: {}",
                 self.executable,
-                String::from_utf8_lossy(output.stderr.as_slice()).to_string()
+                String::from_utf8_lossy(output.stderr.as_slice())
             );
         }
 

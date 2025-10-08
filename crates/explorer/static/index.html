@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revive Compiler Explorer - YUL ↔ RISC-V</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🔍 Revive Compiler Explorer</h1>
+            <p>Interactive YUL Source ↔ RISC-V Assembly Analysis</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="pane yul-pane">
+                <div class="pane-header">
+                    <span class="pane-title">YUL Source</span>
+                    <span class="pane-info" id="yul-info">Loading...</span>
+                </div>
+                <div class="pane-content">
+                    <pre id="yul-source" class="code-block">Loading YUL source...</pre>
+                </div>
+            </div>
+            
+            <div class="pane assembly-pane">
+                <div class="pane-header">
+                    <span class="pane-title">RISC-V Assembly</span>
+                    <span class="pane-info" id="asm-info">Loading...</span>
+                </div>
+                <div class="pane-content">
+                    <pre id="assembly-output" class="code-block">Loading assembly...</pre>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <p>Click on YUL lines to highlight corresponding RISC-V instructions</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

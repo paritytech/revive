@@ -2,18 +2,71 @@
 
 pub mod file;
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde::Serialize;
 
 use self::file::flag::Flag;
 use self::file::File as FileSelection;
 
+/// The `solc --standard-json` per-file output selection.
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
+pub struct PerFileSelection {
+    /// Individual file selection configuration, required for foundry.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", flatten)]
+    pub files: BTreeMap<String, FileSelection>,
+}
+
+impl PerFileSelection {
+    /// Extends the output selection with another one.
+    pub fn extend(&mut self, other: Self) {
+        for (entry, file) in other.files {
+            self.files
+                .entry(entry)
+                .and_modify(|v| {
+                    v.extend(file.clone());
+                })
+                .or_insert(file);
+        }
+    }
+
+    /// Returns flags that are going to be automatically added by the compiler,
+    /// but were not explicitly requested by the user.
+    ///
+    /// Afterwards, the flags are used to prune JSON output before returning it.
+    pub fn selection_to_prune(&self) -> Self {
+        let files = self
+            .files
+            .iter()
+            .map(|(k, v)| (k.to_owned(), v.selection_to_prune()))
+            .collect();
+        Self { files }
+    }
+
+    /// Returns whether `path` contains the `flag` or `None` if there is no selection for `path`.
+    pub fn contains(&self, path: &String, flag: &Flag) -> Option<bool> {
+        if let Some(file) = self.files.get(path) {
+            return Some(file.contains(flag));
+        };
+        None
+    }
+
+    /// Returns whether this is the empty per file selection.
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+}
+
 /// The `solc --standard-json` output selection.
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
 pub struct Selection {
     /// Only the 'all' wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
+    /// Individual file selection configuration, required for foundry.
     pub all: FileSelection,
+    #[serde(skip_serializing_if = "PerFileSelection::is_empty", flatten)]
+    files: PerFileSelection,
 }
 
 impl Selection {
@@ -21,6 +74,7 @@ impl Selection {
     pub fn new(flags: Vec<Flag>) -> Self {
         Self {
             all: FileSelection::new(flags),
+            files: Default::default(),
         }
     }
 
@@ -38,6 +92,7 @@ impl Selection {
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),
+            files: Default::default(),
         }
     }
 
@@ -49,6 +104,7 @@ impl Selection {
     /// Extends the output selection with another one.
     pub fn extend(&mut self, other: Self) -> &mut Self {
         self.all.extend(other.all);
+        self.files.extend(other.files);
         self
     }
 
@@ -59,11 +115,14 @@ impl Selection {
     pub fn selection_to_prune(&self) -> Self {
         Self {
             all: self.all.selection_to_prune(),
+            files: self.files.selection_to_prune(),
         }
     }
 
     /// Whether the flag is requested.
-    pub fn contains(&self, flag: &Flag) -> bool {
-        self.all.contains(flag)
+    pub fn contains(&self, path: &String, flag: &Flag) -> bool {
+        self.files
+            .contains(path, flag)
+            .unwrap_or(self.all.contains(flag))
     }
 }

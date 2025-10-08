@@ -56,14 +56,22 @@ impl Output {
         messages: &mut Vec<SolcStandardJsonOutputError>,
     ) -> Self {
         let sources = sources
-            .keys()
+            .iter()
             .enumerate()
-            .map(|(index, path)| (path.to_owned(), Source::new(index)))
+            .map(|(index, (path, source))| {
+                (
+                    path.to_owned(),
+                    Source {
+                        id: index,
+                        ast: source.content().map(|x| serde_json::to_value(x).unwrap()),
+                    },
+                )
+            })
             .collect::<BTreeMap<String, Source>>();
 
         Self {
             contracts: BTreeMap::new(),
-            sources,
+            sources: sources.clone(),
             errors: std::mem::take(messages),
 
             version: None,
@@ -92,27 +100,27 @@ impl Output {
         mut self,
         selection_to_prune: SolcStandardJsonInputSettingsSelection,
     ) -> ! {
-        let contracts = self
-            .contracts
-            .values_mut()
-            .flat_map(|contracts| contracts.values_mut())
-            .collect::<Vec<&mut Contract>>();
-        for contract in contracts.into_iter() {
-            if selection_to_prune
-                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata)
-            {
-                contract.metadata = serde_json::Value::Null;
-            }
-            if selection_to_prune
-                .contains(&crate::SolcStandardJsonInputSettingsSelectionFileFlag::Yul)
-            {
-                contract.ir_optimized = String::new();
-            }
-            if let Some(ref mut evm) = contract.evm {
+        for (path, contracts) in self.contracts.iter_mut() {
+            for contract in contracts.values_mut() {
                 if selection_to_prune.contains(
-                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::MethodIdentifiers,
+                    path,
+                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata,
                 ) {
-                    evm.method_identifiers.clear();
+                    contract.metadata = serde_json::Value::Null;
+                }
+                if selection_to_prune.contains(
+                    path,
+                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Yul,
+                ) {
+                    contract.ir_optimized = String::new();
+                }
+                if let Some(ref mut evm) = contract.evm {
+                    if selection_to_prune.contains(
+                        path,
+                        &crate::SolcStandardJsonInputSettingsSelectionFileFlag::MethodIdentifiers,
+                    ) {
+                        evm.method_identifiers.clear();
+                    }
                 }
             }
         }

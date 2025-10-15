@@ -1,6 +1,6 @@
 [package]
 name = "revive-llvm-context"
-version = "0.4.1"
+version = "0.5.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

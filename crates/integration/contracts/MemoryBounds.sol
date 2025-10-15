@@ -30,7 +30,7 @@ contract MemoryBounds {
     fallback() external {
         assembly {
             // Accessing OOB offsets should always work when the length is 0.
-            return(exp(32, 32), 0)
+            return(100000, 0)
         }
     }
 }

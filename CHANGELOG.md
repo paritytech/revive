@@ -6,6 +6,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+### Chnaged
+- Emulated EVM heap memory accesses of zero length are never out of bounds.
+
 ## v0.4.1
 
 This is a development pre-release.

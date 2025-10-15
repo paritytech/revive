@@ -47,6 +47,17 @@ impl RuntimeFunction for Sbrk {
         let offset = Self::paramater(context, 0).into_int_value();
         let size = Self::paramater(context, 1).into_int_value();
 
+        let return_block = context.append_basic_block("return_pointer");
+        let body_block = context.append_basic_block("body");
+        let is_size_zero = context.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            size,
+            context.xlen_type().const_zero(),
+            "is_size_zero",
+        )?;
+        context.build_conditional_branch(is_size_zero, return_block, body_block)?;
+
+        context.set_basic_block(body_block);
         let trap_block = context.append_basic_block("trap");
         let offset_in_bounds_block = context.append_basic_block("offset_in_bounds");
         let is_offset_out_of_bounds = context.builder().build_int_compare(
@@ -91,7 +102,6 @@ impl RuntimeFunction for Sbrk {
         )?;
 
         context.set_basic_block(size_in_bounds_block);
-        let return_block = context.append_basic_block("return_pointer");
         let new_size_block = context.append_basic_block("new_size");
         let is_new_size = context.builder().build_int_compare(
             inkwell::IntPredicate::UGT,

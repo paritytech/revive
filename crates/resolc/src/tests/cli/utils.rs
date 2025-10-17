@@ -22,6 +22,10 @@ pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
 
+/// The simple Solidity contract containing i256 divisions and remains that should be compiled
+/// correctly
+pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
+
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.

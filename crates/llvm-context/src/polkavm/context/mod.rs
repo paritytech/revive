@@ -8,6 +8,7 @@ use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -287,6 +288,17 @@ impl<'ctx> Context<'ctx> {
                     error
                 )
             })?;
+
+        // Remove MinSize on functions that perform large integer div/rem to
+        // avoid compiler crash that happens when large integer div/rem by
+        // power-of-2 are not being expanded by ExpandLargeIntDivRem pass as
+        // it expects peephole from DAGCombine, which doesn't happen due to the
+        // MinSize attribute being set on the function.
+        // NOTE: As soon as it strips attribute from a function where large
+        // integer div/rem is used, it's crucial to call it after inlining.
+        // TODO: Remove this once LLVM fix is backported to LLVM 21 and we
+        // switch to corresponding inkwell version.
+        self.strip_minsize_for_divrem();
 
         self.debug_config
             .dump_llvm_ir_optimized(contract_path, self.module())?;
@@ -1393,5 +1405,39 @@ impl<'ctx> Context<'ctx> {
         } else {
             name.to_string()
         }
+    }
+
+    /// Scans all functions in the module and removes the `MinSize` attribute
+    /// if the function contains any large sdiv, udiv, srem, urem instructions with either unknown
+    /// NOTE: The check here could be relaxed by checking denominator: if the denominator is
+    /// unknown or is a power-of-2 constant, then need to strip the `minsize` attribute; otherwise
+    /// instruction can be ignored as backend will expand it correctly.
+    fn strip_minsize_for_divrem(&self) {
+        self.module().get_functions().for_each(|func| {
+            let has_divrem = func.get_basic_block_iter().any(|b| {
+                b.get_instructions().any(|inst| match inst.get_opcode() {
+                    InstructionOpcode::SDiv
+                    | InstructionOpcode::UDiv
+                    | InstructionOpcode::SRem
+                    | InstructionOpcode::URem => {
+                        inst.get_type().into_int_type().get_bit_width() >= 256
+                    }
+                    _ => false,
+                })
+            });
+            if has_divrem
+                && func
+                    .get_enum_attribute(
+                        inkwell::attributes::AttributeLoc::Function,
+                        Attribute::MinSize as u32,
+                    )
+                    .is_some()
+            {
+                func.remove_enum_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    Attribute::MinSize as u32,
+                );
+            }
+        });
     }
 }

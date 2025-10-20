@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
-use inkwell::values::InstructionOpcode;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -1408,40 +1408,35 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Scans all functions in the module and removes the `MinSize` attribute
-    /// if the function contains any large sdiv, udiv, srem, urem instructions.
+    /// if the function contains any large sdiv, udiv, srem, urem instructions with either unknown
+    /// NOTE: The check here could be relaxed by checking denominator: if the denominator is
+    /// unknown or is a power-of-2 constant, then need to strip the `minsize` attribute; otherwise
+    /// instruction can be ignored as backend will expand it correctly.
     fn strip_minsize_for_divrem(&self) {
         self.module().get_functions().for_each(|func| {
             let has_divrem = func.get_basic_block_iter().any(|b| {
-                b.get_instructions().any(|inst| {
-                    match inst.get_opcode() {
-                        InstructionOpcode::SDiv
-                        | InstructionOpcode::UDiv
-                        | InstructionOpcode::SRem
-                        | InstructionOpcode::URem =>
-                        // This might be too aggressive, because compiler works only crashes for
-                        // power-of-2 cases, otherwise works correctly.
-                        // However, if the second operand is not a constant at this moment, there's
-                        // a small change ExpandDivRemPass will still fail if some conprop
-                        // optimization will be done.
-                        return inst.get_type().into_int_type().get_bit_width() >= 256,
-                        _ => return false
+                b.get_instructions().any(|inst| match inst.get_opcode() {
+                    InstructionOpcode::SDiv
+                    | InstructionOpcode::UDiv
+                    | InstructionOpcode::SRem
+                    | InstructionOpcode::URem => {
+                        inst.get_type().into_int_type().get_bit_width() >= 256
                     }
+                    _ => false,
                 })
             });
-            if has_divrem {
-                if func
+            if has_divrem
+                && func
                     .get_enum_attribute(
                         inkwell::attributes::AttributeLoc::Function,
                         Attribute::MinSize as u32,
                     )
                     .is_some()
-                {
-                    func.remove_enum_attribute(
-                        inkwell::attributes::AttributeLoc::Function,
-                        Attribute::MinSize as u32,
-                    );
-                }
-
+            {
+                func.remove_enum_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    Attribute::MinSize as u32,
+                );
             }
         });
     }

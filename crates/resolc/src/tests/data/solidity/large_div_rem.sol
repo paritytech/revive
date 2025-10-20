@@ -23,7 +23,19 @@ contract LargeDivRem {
 
     function div_7(int n) public pure returns (int q) {
         assembly {
-            q := sdiv(n, 7)
+            q := sdiv(n, 2)
+        }
+    }
+
+    function rem_k(int n, int k) public pure returns (int q) {
+        assembly {
+            q := smod(n, k)
+        }
+    }
+
+    function div_k(int n, int k) public pure returns (int q) {
+        assembly {
+            q := sdiv(n, k)
         }
     }
 }

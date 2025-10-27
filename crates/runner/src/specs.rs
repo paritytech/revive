@@ -209,9 +209,9 @@ impl Default for Specs {
         Self {
             differential: false,
             balances: vec![
-                (ALICE, 1_000_000_000),
-                (BOB, 1_000_000_000),
-                (CHARLIE, 1_000_000_000),
+                (ALICE, 1_000_000_000 * ETH_RATIO),
+                (BOB, 1_000_000_000 * ETH_RATIO),
+                (CHARLIE, 1_000_000_000 * ETH_RATIO),
             ],
             actions: Default::default(),
         }
@@ -445,12 +445,13 @@ impl Specs {
                             let time_start = Instant::now();
                             let result = Contracts::bare_instantiate(
                                 origin,
-                                value,
+                                pallet_revive::Pallet::<Runtime>::convert_native_to_evm(value),
                                 gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
                                 code,
                                 data,
                                 salt.0,
+                                pallet_revive::ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -483,10 +484,11 @@ impl Specs {
                             let result = Contracts::bare_call(
                                 RuntimeOrigin::signed(origin.to_account_id(&results)),
                                 dest.to_eth_addr(&results),
-                                value,
+                                pallet_revive::Pallet::<Runtime>::convert_native_to_evm(value),
                                 gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
                                 data,
+                                pallet_revive::ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Exec {
                                 result,

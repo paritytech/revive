@@ -74,19 +74,19 @@ parameter_types! {
 impl pallet_revive::Config for Runtime {
     type Time = Timestamp;
     type Currency = Balances;
-    type CallFilter = ();
-    type ChainExtension = ();
+    type Balance = Balance;
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
     type AddressMapper = AccountId32Mapper<Self>;
     type RuntimeMemory = ConstU32<{ 512 * 1024 * 1024 }>;
     type PVFMemory = ConstU32<{ 1024 * 1024 * 1024 }>;
     type UnsafeUnstableInterface = UnstableInterface;
-    type UploadOrigin = EnsureSigned<AccountId32>;
-    type InstantiateOrigin = EnsureSigned<AccountId32>;
+    type UploadOrigin = EnsureSigned<Self::AccountId>;
+    type InstantiateOrigin = EnsureSigned<Self::AccountId>;
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;
     type ChainId = ConstU64<420_420_420>;
     type FindAuthor = Self;
+    type NativeToEthRatio = ConstU32<{ crate::ETH_RATIO as u32 }>;
 }
 
 impl FindAuthor<<Runtime as frame_system::Config>::AccountId> for Runtime {

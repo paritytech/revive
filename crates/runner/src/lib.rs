@@ -57,7 +57,9 @@ pub const CHARLIE: H160 = H160([3u8; 20]);
 /// Default gas limit
 pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000_000, 3 * 1024 * 1024 * 1024);
 /// Default deposit limit
-pub const DEPOSIT_LIMIT: Balance = 10_000_000;
+pub const DEPOSIT_LIMIT: Balance = 10_000_000 * ETH_RATIO;
+/// The native to ETH balance factor.
+pub const ETH_RATIO: Balance = 1_000_000;
 
 /// Externalities builder
 #[derive(Default)]

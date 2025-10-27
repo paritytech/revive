@@ -63,7 +63,7 @@ machete:
 	cargo install cargo-machete
 	cargo machete
 
-test: format clippy machete test-workspace install-revive-runner install-revive-explorer doc
+test: clippy machete test-workspace install-revive-runner install-revive-explorer doc
 
 test-integration: install-bin
 	cargo test --package revive-integration

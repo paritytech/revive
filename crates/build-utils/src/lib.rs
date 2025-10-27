@@ -1,7 +1,7 @@
 //! The compiler build utilities library.
 
 /// The revive LLVM host dependency directory prefix environment variable.
-pub const REVIVE_LLVM_HOST_PREFIX: &str = "LLVM_SYS_181_PREFIX";
+pub const REVIVE_LLVM_HOST_PREFIX: &str = "LLVM_SYS_211_PREFIX";
 
 /// The revive LLVM target dependency directory prefix environment variable.
 pub const REVIVE_LLVM_TARGET_PREFIX: &str = "REVIVE_LLVM_TARGET_PREFIX";

@@ -1277,7 +1277,7 @@ impl<'ctx> Context<'ctx> {
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
                     self.llvm
-                        .create_enum_attribute(Attribute::NoCapture as u32, 0),
+                        .create_enum_attribute(Attribute::Captures as u32, 0), // captures(none)
                 );
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),

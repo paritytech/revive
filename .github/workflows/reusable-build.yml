@@ -90,7 +90,7 @@ jobs:
         if: ${{ matrix.type == 'native' }}
         shell: bash
         run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
+          export LLVM_SYS_211_PREFIX=$PWD/llvm-${{ matrix.target }}
           make install-bin
           mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
 
@@ -101,7 +101,7 @@ jobs:
            cd /opt/revive
            chown -R root:root .
            apt update && apt upgrade -y && apt install -y pkg-config
-           export LLVM_SYS_181_PREFIX=/opt/revive/llvm-${{ matrix.target }}
+           export LLVM_SYS_211_PREFIX=/opt/revive/llvm-${{ matrix.target }}
            make install-bin
            mv target/${{ matrix.target }}/release/resolc resolc-${{ matrix.target }}
            "
@@ -161,7 +161,7 @@ jobs:
 
       - name: Build
         run: |
-          export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
+          export LLVM_SYS_211_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
           source emsdk/emsdk_env.sh
           make install-wasm

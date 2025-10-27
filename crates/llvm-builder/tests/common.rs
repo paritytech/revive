@@ -2,7 +2,7 @@ use assert_fs::fixture::FileWriteStr;
 
 pub const REVIVE_LLVM: &str = "revive-llvm";
 pub const REVIVE_LLVM_REPO_URL: &str = "https://github.com/llvm/llvm-project";
-pub const REVIVE_LLVM_REPO_TEST_BRANCH: &str = "release/18.x";
+pub const REVIVE_LLVM_REPO_TEST_BRANCH: &str = "release/21.x";
 
 pub struct TestDir {
     _lockfile: assert_fs::NamedTempFile,

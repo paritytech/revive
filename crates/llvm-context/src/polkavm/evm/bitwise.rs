@@ -275,6 +275,6 @@ pub fn count_leading_zeros<'ctx>(
             "clz",
         )?
         .try_as_basic_value()
-        .left()
+        .basic()
         .expect("the llvm.ctlz should return a value"))
 }

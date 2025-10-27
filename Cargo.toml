@@ -80,9 +80,10 @@ polkadot-sdk = { version = "=2507.4.0" }
 
 # llvm
 [workspace.dependencies.inkwell]
-version = "0.6.0"
+git = "https://github.com/TheDan64/inkwell.git"
+branch = "master"
 default-features = false
-features = ["serde", "llvm18-1", "no-libffi-linking", "target-riscv"]
+features = ["serde", "llvm21-1", "no-libffi-linking", "target-riscv"]
 
 [profile.bench]
 inherits = "release"

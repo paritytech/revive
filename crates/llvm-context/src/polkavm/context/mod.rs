@@ -838,8 +838,7 @@ impl<'ctx> Context<'ctx> {
             .builder()
             .build_call(intrinsic, &[value.into()], "call_byte_swap")?
             .try_as_basic_value()
-            .left()
-            .unwrap())
+            .unwrap_basic())
     }
 
     /// Builds a GEP instruction.
@@ -912,7 +911,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap()
             .try_as_basic_value()
-            .left()
+            .basic()
     }
 
     /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
@@ -950,7 +949,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap();
         self.modify_call_site_value(arguments, call_site_value, function);
-        call_site_value.try_as_basic_value().left()
+        call_site_value.try_as_basic_value().basic()
     }
 
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
@@ -1082,13 +1081,7 @@ impl<'ctx> Context<'ctx> {
 
         Ok(call_site_value
             .try_as_basic_value()
-            .left()
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <PolkaVMSbrkFunction as RuntimeFunction>::NAME,
-                )
-            })
+            .unwrap_basic()
             .into_pointer_value())
     }
 
@@ -1277,7 +1270,7 @@ impl<'ctx> Context<'ctx> {
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
                     self.llvm
-                        .create_enum_attribute(Attribute::NoCapture as u32, 0),
+                        .create_enum_attribute(Attribute::Captures as u32, 0), // captures(none)
                 );
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),

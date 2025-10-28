@@ -3,6 +3,7 @@
 target-llvm
 *.dot
 .vscode/
+.zed/
 .DS_Store
 /*.sol
 /*.yul
@@ -11,6 +12,7 @@ target-llvm
 /llvm*
 node_modules
 artifacts
+**/generated
 tmp
 /*.html
 /build

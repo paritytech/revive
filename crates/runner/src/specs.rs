@@ -1,5 +1,6 @@
 use std::{str::FromStr, time::Instant};
 
+use polkadot_sdk::pallet_revive::Pallet;
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -445,12 +446,13 @@ impl Specs {
                             let time_start = Instant::now();
                             let result = Contracts::bare_instantiate(
                                 origin,
-                                value,
+                                value.into(),
                                 gas_limit.unwrap_or(GAS_LIMIT),
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
                                 code,
                                 data,
                                 salt.0,
+                                pallet_revive::BumpNonce::No,
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -483,7 +485,7 @@ impl Specs {
                             let result = Contracts::bare_call(
                                 RuntimeOrigin::signed(origin.to_account_id(&results)),
                                 dest.to_eth_addr(&results),
-                                value,
+                                value.into(),
                                 gas_limit.unwrap_or(GAS_LIMIT),
                                 storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
                                 data,
@@ -497,8 +499,10 @@ impl Specs {
                             expectation.verify(results.last().expect("No call to verify"));
                         }
                         VerifyBalance { origin, expected } => {
-                            let balance = Balances::usable_balance(origin.to_account_id(&results));
-                            assert_eq!(balance, expected);
+                            assert_eq!(
+                                Pallet::<Runtime>::evm_balance(&origin.to_eth_addr(&results)),
+                                expected.into()
+                            );
                         }
                         VerifyStorage {
                             contract,

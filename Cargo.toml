@@ -46,21 +46,21 @@ num = "0.4.3"
 sha1 = "0.10"
 sha3 = "0.10"
 thiserror = "2.0"
-which = "7.0"
+which = "8.0"
 path-slash = "0.2"
 rayon = "1.10"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.24.0"
-polkavm-linker = "0.24.0"
-polkavm-disassembler = "0.24.0"
-polkavm = "0.24.0"
+polkavm-common = "0.29.0"
+polkavm-linker = "0.29.0"
+polkavm-disassembler = "0.29.0"
+polkavm = "0.29.0"
 alloy-primitives = { version = "1.1", features = ["serde"] }
 alloy-sol-types = "1.1"
-alloy-genesis = "1.0"
+alloy-genesis = "1.0.41"
 alloy-serde = "1.0"
 env_logger = { version = "0.11.8", default-features = false }
 serde_stacker = "0.1.12"
-criterion = { version = "0.6", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 log = { version = "0.4.27" }
 git2 = { version = "0.20.2", default-features = false }
 downloader = "0.2.8"
@@ -68,15 +68,15 @@ flate2 = "1.1"
 fs_extra = "1.3"
 num_cpus = "1"
 tar = "0.4"
-toml = "0.8"
-assert_cmd = "2.0"
+toml = "0.9"
+assert_cmd = "2"
 assert_fs = "1.1"
 normpath = "1.3"
 
 # polkadot-sdk and friends
 codec = { version = "3.7.5", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { version = "2503.0.1" }
+polkadot-sdk = { version = "2509.0.0" }
 
 # llvm
 [workspace.dependencies.inkwell]

@@ -74,7 +74,6 @@ parameter_types! {
 impl pallet_revive::Config for Runtime {
     type Time = Timestamp;
     type Currency = Balances;
-    type Balance = Balance;
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
     type AddressMapper = AccountId32Mapper<Self>;

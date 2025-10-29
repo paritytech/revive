@@ -27,6 +27,8 @@ use std::time::Duration;
 
 use hex::{FromHex, ToHex};
 use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
+use polkadot_sdk::frame_support::traits::Currency;
+use polkadot_sdk::pallet_revive::{Config, Pallet};
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::ContractResult,
@@ -82,18 +84,28 @@ impl ExtBuilder {
     /// Build the externalities
     pub fn build(self) -> sp_io::TestExternalities {
         sp_tracing::try_init_simple();
+
         let mut t = frame_system::GenesisConfig::<Runtime>::default()
             .build_storage()
             .unwrap();
+
         pallet_balances::GenesisConfig::<Runtime> {
             balances: self.balance_genesis_config,
             dev_accounts: None,
         }
         .assimilate_storage(&mut t)
         .unwrap();
+
         let mut ext = sp_io::TestExternalities::new(t);
         ext.register_extension(KeystoreExt::new(MemoryKeystore::new()));
-        ext.execute_with(|| System::set_block_number(1));
+        ext.execute_with(|| {
+            let _ = <Runtime as Config>::Currency::deposit_creating(
+                &Pallet::<Runtime>::account_id(),
+                <Runtime as Config>::Currency::minimum_balance(),
+            );
+
+            System::set_block_number(1);
+        });
 
         ext
     }

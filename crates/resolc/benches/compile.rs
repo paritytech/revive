@@ -22,10 +22,12 @@ fn measure_resolc(iters: u64, arguments: &[&str]) -> Duration {
     start.elapsed()
 }
 
+#[inline(always)]
 fn execute_resolc(arguments: &[&str]) {
     execute_command("resolc", arguments)
 }
 
+#[inline(always)]
 fn execute_command(command: &str, arguments: &[&str]) {
     Command::new(command)
         .args(arguments)

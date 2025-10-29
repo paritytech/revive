@@ -210,9 +210,9 @@ impl Default for Specs {
         Self {
             differential: false,
             balances: vec![
-                (ALICE, 1_000_000_000 * ETH_RATIO),
-                (BOB, 1_000_000_000 * ETH_RATIO),
-                (CHARLIE, 1_000_000_000 * ETH_RATIO),
+                (ALICE, 1_000_000_000),
+                (BOB, 1_000_000_000),
+                (CHARLIE, 1_000_000_000),
             ],
             actions: Default::default(),
         }
@@ -499,10 +499,10 @@ impl Specs {
                             expectation.verify(results.last().expect("No call to verify"));
                         }
                         VerifyBalance { origin, expected } => {
-                            //let balance = Balances::usable_balance(origin.to_account_id(&results));
-                            let balance =
-                                Pallet::<Runtime>::evm_balance(&origin.to_eth_addr(&results));
-                            assert_eq!(balance, expected.into());
+                            assert_eq!(
+                                Pallet::<Runtime>::evm_balance(&origin.to_eth_addr(&results)),
+                                expected.into()
+                            );
                         }
                         VerifyStorage {
                             contract,

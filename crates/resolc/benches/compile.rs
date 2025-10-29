@@ -1,21 +1,44 @@
 #![cfg(feature = "bench-resolc")]
 
-use std::time::Duration;
+use std::{
+    process::Command,
+    time::{Duration, Instant},
+};
 
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
     BenchmarkGroup, Criterion,
 };
-use revive_benchmarks::contracts::Contract;
+use revive_integration::cases::UncompiledContract;
+
+fn measure_resolc(iters: u64, arguments: &[&str]) -> Duration {
+    let start = Instant::now();
+
+    for _i in 0..iters {
+        execute_resolc(arguments);
+    }
+
+    start.elapsed()
+}
+
+fn execute_resolc(arguments: &[&str]) {
+    execute_command("resolc", arguments)
+}
+
+fn execute_command(command: &str, arguments: &[&str]) {
+    Command::new(command)
+        .args(arguments)
+        .output()
+        .expect("command failed");
+}
 
 fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
     group.measurement_time(Duration::from_secs(50));
     group.sample_size(10);
 
-    #[cfg(feature = "bench-resolc")]
     group.bench_function("Resolc", |b| {
-        b.iter_custom(|iters| revive_benchmarks::measure_resolc(iters, compiler_arguments));
+        b.iter_custom(|iters| measure_resolc(iters, compiler_arguments));
     });
 
     group.finish();
@@ -29,7 +52,7 @@ where
 }
 
 fn bench_store_uint256(c: &mut Criterion) {
-    let contract = Contract::store_uint256_n_times(1000);
+    let contract = UncompiledContract::store_uint256_n_times(1000);
     let group = group(c, &contract.name);
     let compiler_arguments = &[&contract.path, "-O0"];
 

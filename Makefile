@@ -21,6 +21,7 @@
 	bench-pvm \
 	bench-evm \
 	bench-resolc \
+	bench-resolc-to-json \
 	clean
 
 install: install-bin install-npm
@@ -92,8 +93,12 @@ bench-evm: install-bin
 	| criterion-table > crates/benchmarks/EVM.md
 
 bench-resolc: install-bin
-	cargo criterion --bench compile --features bench-resolc --message-format=json \
-	| criterion-table > crates/benchmarks/resolc.md
+	cargo criterion --package resolc --bench compile --features bench-resolc --message-format=json \
+	| criterion-table > crates/resolc/BENCHMARKS.md
+
+bench-resolc-to-json: install-bin
+	cargo criterion --package resolc --bench compile --features bench-resolc --message-format=json \
+	> crates/resolc/BENCHMARKS.json
 
 clean:
 	cargo clean ; \

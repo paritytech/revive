@@ -11,13 +11,11 @@ description = "revive compiler benchmarks"
 default = ["bench-pvm-interpreter"]
 bench-pvm-interpreter = ["revive-runner"]
 bench-evm = ["revive-differential"]
-bench-resolc = ["resolc"]
 
 [dependencies]
 hex = { workspace = true }
 alloy-primitives = { workspace = true }
 
-resolc = { workspace = true, optional = true }
 revive-integration = { workspace = true }
 revive-differential = { workspace = true, optional = true }
 revive-runner = { workspace = true, optional = true }
@@ -27,8 +25,4 @@ criterion = { workspace = true }
 
 [[bench]]
 name = "execute"
-harness = false
-
-[[bench]]
-name = "compile"
 harness = false

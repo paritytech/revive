@@ -8689,6 +8689,7 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "clap",
+ "criterion",
  "git2",
  "hex",
  "inkwell",
@@ -8699,6 +8700,7 @@ dependencies = [
  "path-slash",
  "rayon",
  "revive-common",
+ "revive-integration",
  "revive-llvm-context",
  "revive-solc-json-interface",
  "revive-yul",
@@ -8716,7 +8718,6 @@ dependencies = [
  "alloy-primitives 1.4.0",
  "criterion",
  "hex",
- "resolc",
  "revive-differential",
  "revive-integration",
  "revive-runner",

@@ -68,30 +68,3 @@ pub fn measure_evm(code: &[u8], input: &[u8], iters: u64) -> std::time::Duration
 
     total_time
 }
-
-#[cfg(feature = "bench-resolc")]
-pub mod contracts;
-
-#[cfg(feature = "bench-resolc")]
-pub fn measure_resolc(iters: u64, arguments: &[&str]) -> std::time::Duration {
-    let start = std::time::Instant::now();
-
-    for _i in 0..iters {
-        execute_resolc(arguments);
-    }
-
-    start.elapsed()
-}
-
-#[cfg(feature = "bench-resolc")]
-fn execute_resolc(arguments: &[&str]) {
-    execute_command("resolc", arguments)
-}
-
-#[cfg(feature = "bench-resolc")]
-fn execute_command(command: &str, arguments: &[&str]) {
-    std::process::Command::new(command)
-        .args(arguments)
-        .output()
-        .expect("command failed");
-}

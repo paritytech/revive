@@ -42,7 +42,7 @@ pub static GAS_PRICE: &str = "gas_price";
 
 pub static GET_IMMUTABLE_DATA: &str = "get_immutable_data";
 
-pub static GET_STORAGE: &str = "get_storage";
+pub static GET_STORAGE: &str = "get_storage_or_zero";
 
 pub static HASH_KECCAK_256: &str = "hash_keccak_256";
 
@@ -62,7 +62,7 @@ pub static RETURNDATASIZE: &str = "return_data_size";
 
 pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
 
-pub static SET_STORAGE: &str = "set_storage";
+pub static SET_STORAGE: &str = "set_storage_or_clear";
 
 pub static VALUE_TRANSFERRED: &str = "value_transferred";
 

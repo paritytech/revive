@@ -510,13 +510,10 @@ impl Specs {
                             expected,
                         } => {
                             let address = contract.to_eth_addr(&results);
-                            let Ok(value) = Contracts::get_storage(address, key) else {
-                                panic!("error reading storage for address {address}");
-                            };
-                            let Some(value) = value else {
-                                panic!("no value at {address} key 0x{}", hex::encode(key));
-                            };
-                            assert_eq!(value, expected, "at key 0x{}", hex::encode(key));
+                            let value = Contracts::get_storage(address, key)
+                                .unwrap_or_else(|error| panic!("at {address}: {error:?}"))
+                                .unwrap_or_else(|| vec![0; 32]);
+                            assert_eq!(value, expected, "at {address} key 0x{}", hex::encode(key));
                         }
                     }
                 }

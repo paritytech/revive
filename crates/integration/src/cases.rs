@@ -396,8 +396,8 @@ impl UncompiledContract {
     /// Builds and returns a contract which stores a `uint256` in
     /// the same memory location `n` times. (Used for detecting
     /// anomalies in compilation via benchmarking.)
-    pub fn store_uint256_n_times(n: u16) -> Self {
-        let name = "StoreUint256";
+    pub fn overwrite_same_memory_n_times(n: u16) -> Self {
+        let name = "OverwriteSameMemory";
         let mut code = format!(
             r#"
 // SPDX-License-Identifier: MIT

@@ -53,8 +53,8 @@ where
     c.benchmark_group(group_name)
 }
 
-fn bench_store_uint256(c: &mut Criterion) {
-    let contract = UncompiledContract::store_uint256_n_times(1000);
+fn bench_overwrite_same_memory(c: &mut Criterion) {
+    let contract = UncompiledContract::overwrite_same_memory_n_times(1000);
     let group = group(c, &contract.name);
     let compiler_arguments = &[&contract.path, "-O0"];
 
@@ -103,7 +103,7 @@ macro_rules! create_bench_functions {
         criterion_group!(
             name = compile;
             config = Criterion::default();
-            targets = bench_store_uint256,
+            targets = bench_overwrite_same_memory,
             $(
                 $function_name
             ),*

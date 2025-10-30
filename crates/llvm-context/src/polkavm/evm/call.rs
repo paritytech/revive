@@ -99,7 +99,7 @@ pub fn call<'ctx>(
     let is_success = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         success,
-        context.integer_const(revive_common::BIT_LENGTH_X64, 0),
+        context.integer_const(revive_common::BIT_LENGTH_X32, 0),
         "is_success",
     )?;
 
@@ -178,7 +178,7 @@ pub fn delegate_call<'ctx>(
     let is_success = context.builder().build_int_compare(
         inkwell::IntPredicate::EQ,
         success,
-        context.integer_const(revive_common::BIT_LENGTH_X64, 0),
+        context.integer_const(revive_common::BIT_LENGTH_X32, 0),
         "is_success",
     )?;
 

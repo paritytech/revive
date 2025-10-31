@@ -6,8 +6,11 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2509.0.0`
 
-### Chnaged
+### Changed
 - Emulated EVM heap memory accesses of zero length are never out of bounds.
+
+### Fixed
+- An off-by-one bug cusing incorrect `SDIV` overflow semantics.
 
 ## v0.4.1
 

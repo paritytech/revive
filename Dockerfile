@@ -21,7 +21,7 @@ RUN apt update && \
 COPY . .
 COPY --from=llvm-builder /opt/revive/target-llvm /opt/revive/target-llvm
 
-ENV LLVM_SYS_181_PREFIX=/opt/revive/target-llvm/musl/target-final
+ENV LLVM_SYS_211_PREFIX=/opt/revive/target-llvm/musl/target-final
 RUN make install-bin
 
 FROM alpine:latest

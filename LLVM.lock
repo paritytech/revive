@@ -1,3 +1,3 @@
 url = "https://github.com/llvm/llvm-project.git"
-branch = "release/18.x"
-ref = "3b5b5c1ec4a3095ab096dd780e84d7ab81f3d7ff"
+branch = "release/21.x"
+ref = "45afac62e373ef239e4f6bceb420a2d0924223ff"

@@ -5,7 +5,6 @@ pub mod builtins;
 pub mod ccache_variant;
 pub mod llvm_path;
 pub mod llvm_project;
-pub mod lock;
 pub mod platforms;
 pub mod sanitizer;
 pub mod target_env;
@@ -14,7 +13,6 @@ pub mod utils;
 
 pub use self::build_type::BuildType;
 pub use self::llvm_path::LLVMPath;
-pub use self::lock::Lock;
 pub use self::platforms::Platform;
 
 use std::collections::HashSet;
@@ -23,86 +21,20 @@ use std::process::Command;
 pub use target_env::TargetEnv;
 pub use target_triple::TargetTriple;
 
-/// Executes the LLVM repository cloning.
-pub fn clone(lock: Lock, deep: bool, target_env: TargetEnv) -> anyhow::Result<()> {
+/// Initializes the LLVM submodule if not already done.
+pub fn init_submodule() -> anyhow::Result<()> {
     utils::check_presence("git")?;
 
-    if target_env == TargetEnv::Emscripten {
-        utils::install_emsdk()?;
-    }
-
     let destination_path = PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE);
-    if destination_path.exists() {
-        log::warn!(
-            "LLVM repository directory {} already exists, falling back to checkout",
-            destination_path.display()
-        );
-        return checkout(lock, false);
-    }
-
-    let mut clone_args = vec!["clone", "--branch", lock.branch.as_str()];
-    if !deep {
-        clone_args.push("--depth");
-        clone_args.push("1");
+    if destination_path.join(".git").exists() {
+        log::info!("LLVM submodule already initialized");
+        return Ok(());
     }
 
     utils::command(
-        Command::new("git")
-            .args(clone_args)
-            .arg(lock.url.as_str())
-            .arg(destination_path.to_string_lossy().as_ref()),
-        "LLVM repository cloning",
+        Command::new("git").args(["submodule", "update", "--init", "--recursive"]),
+        "LLVM submodule initialization",
     )?;
-
-    if let Some(r#ref) = lock.r#ref {
-        utils::command(
-            Command::new("git")
-                .args(["checkout", r#ref.as_str()])
-                .current_dir(destination_path.to_string_lossy().as_ref()),
-            "LLVM repository commit checking out",
-        )?;
-    }
-
-    Ok(())
-}
-
-/// Executes the checkout of the specified branch.
-pub fn checkout(lock: Lock, force: bool) -> anyhow::Result<()> {
-    let destination_path = PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE);
-
-    utils::command(
-        Command::new("git")
-            .current_dir(destination_path.as_path())
-            .args(["fetch", "--all", "--tags"]),
-        "LLVM repository data fetching",
-    )?;
-
-    if force {
-        utils::command(
-            Command::new("git")
-                .current_dir(destination_path.as_path())
-                .args(["clean", "-d", "-x", "--force"]),
-            "LLVM repository cleaning",
-        )?;
-    }
-
-    utils::command(
-        Command::new("git")
-            .current_dir(destination_path.as_path())
-            .args(["checkout", "--force", lock.branch.as_str()]),
-        "LLVM repository data pulling",
-    )?;
-
-    if let Some(r#ref) = lock.r#ref {
-        let mut checkout_command = Command::new("git");
-        checkout_command.current_dir(destination_path.as_path());
-        checkout_command.arg("checkout");
-        if force {
-            checkout_command.arg("--force");
-        }
-        checkout_command.arg(r#ref);
-        utils::command(&mut checkout_command, "LLVM repository checking out")?;
-    }
 
     Ok(())
 }
@@ -332,8 +264,6 @@ pub fn clean() -> anyhow::Result<()> {
             .expect("target_env parent directory is target-llvm"),
     )?;
     remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_EMSDK_SOURCE))?;
-    remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE))?;
-    remove_if_exists(&PathBuf::from(LLVMPath::DIRECTORY_LLVM_HOST_SOURCE))?;
 
     Ok(())
 }

@@ -1,32 +1,41 @@
-use assert_fs::fixture::FileWriteStr;
+use assert_fs::TempDir;
 
 pub const REVIVE_LLVM: &str = "revive-llvm";
-pub const REVIVE_LLVM_REPO_URL: &str = "https://github.com/llvm/llvm-project";
-pub const REVIVE_LLVM_REPO_TEST_BRANCH: &str = "release/18.x";
 
 pub struct TestDir {
-    _lockfile: assert_fs::NamedTempFile,
+    _tempdir: TempDir,
     path: std::path::PathBuf,
 }
 
-/// Creates a temporary lock file for testing.
+/// Creates a temporary directory for testing with submodule setup.
 impl TestDir {
-    pub fn with_lockfile(reference: Option<String>) -> anyhow::Result<Self> {
-        let file =
-            assert_fs::NamedTempFile::new(revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH)?;
-        let lock = revive_llvm_builder::Lock {
-            url: REVIVE_LLVM_REPO_URL.to_string(),
-            branch: REVIVE_LLVM_REPO_TEST_BRANCH.to_string(),
-            r#ref: reference,
-        };
-        file.write_str(toml::to_string(&lock)?.as_str())?;
+    pub fn new() -> anyhow::Result<Self> {
+        let tempdir = TempDir::new()?;
+
+        // Initialize a git repo and add the LLVM submodule
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&tempdir)
+            .output()?;
+
+        std::process::Command::new("git")
+            .args([
+                "submodule",
+                "add",
+                "https://github.com/llvm/llvm-project.git",
+                "llvm",
+            ])
+            .current_dir(&tempdir)
+            .output()?;
+
+        std::process::Command::new("git")
+            .args(["submodule", "update", "--init", "--recursive"])
+            .current_dir(&tempdir)
+            .output()?;
 
         Ok(Self {
-            path: file
-                .parent()
-                .expect("lockfile parent dir always exists")
-                .into(),
-            _lockfile: file,
+            path: tempdir.path().to_path_buf(),
+            _tempdir: tempdir,
         })
     }
 

@@ -134,7 +134,7 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
         .success();
 
     // Build with emscripten target
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::cargo_bin!(common::REVIVE_LLVM)?
         .current_dir(test_dir.path())
         .arg("--target-env")
         .arg("emscripten")

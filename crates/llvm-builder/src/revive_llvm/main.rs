@@ -3,7 +3,6 @@
 pub(crate) mod arguments;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -29,13 +28,6 @@ fn main_inner() -> anyhow::Result<()> {
     revive_llvm_builder::utils::directory_target_llvm(arguments.target_env);
 
     match arguments.subcommand {
-        Subcommand::Clone { deep } => {
-            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from(
-                revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH,
-            ))?;
-            revive_llvm_builder::clone(lock, deep, arguments.target_env)?;
-        }
-
         Subcommand::Build {
             build_type,
             targets,
@@ -50,6 +42,12 @@ fn main_inner() -> anyhow::Result<()> {
             sanitizer,
             enable_valgrind,
         } => {
+            if arguments.target_env == revive_llvm_builder::TargetEnv::Emscripten {
+                revive_llvm_builder::utils::install_emsdk()?;
+            }
+
+            revive_llvm_builder::init_submodule()?;
+
             let mut targets = targets
                 .into_iter()
                 .map(|target| revive_llvm_builder::Platform::from_str(target.as_str()))
@@ -105,13 +103,6 @@ fn main_inner() -> anyhow::Result<()> {
                 sanitizer,
                 enable_valgrind,
             )?;
-        }
-
-        Subcommand::Checkout { force } => {
-            let lock = revive_llvm_builder::Lock::try_from(&PathBuf::from(
-                revive_llvm_builder::lock::LLVM_LOCK_DEFAULT_PATH,
-            ))?;
-            revive_llvm_builder::checkout(lock, force)?;
         }
 
         Subcommand::Clean => {

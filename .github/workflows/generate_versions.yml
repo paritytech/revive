@@ -16,12 +16,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: tmp
+          submodules: true
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
           repository: paritytech/resolc-bin
           path: resolc-bin
+          submodules: true
 
       - uses: actions/create-github-app-token@v1
         id: app-token

@@ -92,7 +92,7 @@ impl RuntimeFunction for SignedDivision {
             "max_uint",
         )?;
         let is_operand_1_overflow = context.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
+            inkwell::IntPredicate::SLT,
             operand_1,
             context.builder().build_int_neg(max_uint, "min_uint")?,
             "is_operand_1_overflow",

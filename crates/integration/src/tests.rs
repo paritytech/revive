@@ -169,6 +169,8 @@ fn signed_division() {
         (minus_five, two),
         (I256::MINUS_ONE, I256::MIN),
         (one, I256::ZERO),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::MIN + I256::ONE, I256::MINUS_ONE),
     ] {
         actions.push(Call {
             origin: TestAddress::Alice,

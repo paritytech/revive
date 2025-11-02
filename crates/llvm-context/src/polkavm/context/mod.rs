@@ -899,7 +899,7 @@ impl<'ctx> Context<'ctx> {
         name: &'static str,
         arguments: &[inkwell::values::BasicValueEnum<'ctx>],
     ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
-        Some(self.builder
+        self.builder
             .build_direct_call(
                 self.runtime_api_method(name),
                 &arguments
@@ -911,7 +911,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap()
             .try_as_basic_value()
-            .unwrap_basic())
+            .basic()
     }
 
     /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
@@ -949,7 +949,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap();
         self.modify_call_site_value(arguments, call_site_value, function);
-        Some(call_site_value.try_as_basic_value().unwrap_basic())
+        call_site_value.try_as_basic_value().basic()
     }
 
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.

@@ -822,8 +822,7 @@ impl<'ctx> Context<'ctx> {
             .builder()
             .build_call(intrinsic, &[value.into()], "call_byte_swap")?
             .try_as_basic_value()
-            .left()
-            .unwrap())
+            .unwrap_basic())
     }
 
     /// Builds a GEP instruction.
@@ -884,7 +883,7 @@ impl<'ctx> Context<'ctx> {
         name: &'static str,
         arguments: &[inkwell::values::BasicValueEnum<'ctx>],
     ) -> Option<inkwell::values::BasicValueEnum<'ctx>> {
-        self.builder
+        Some(self.builder
             .build_direct_call(
                 self.runtime_api_method(name),
                 &arguments
@@ -896,7 +895,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap()
             .try_as_basic_value()
-            .left()
+            .unwrap_basic())
     }
 
     /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
@@ -934,7 +933,7 @@ impl<'ctx> Context<'ctx> {
             )
             .unwrap();
         self.modify_call_site_value(arguments, call_site_value, function);
-        call_site_value.try_as_basic_value().left()
+        Some(call_site_value.try_as_basic_value().unwrap_basic())
     }
 
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
@@ -1066,13 +1065,7 @@ impl<'ctx> Context<'ctx> {
 
         Ok(call_site_value
             .try_as_basic_value()
-            .left()
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <PolkaVMSbrkFunction as RuntimeFunction>::NAME,
-                )
-            })
+            .unwrap_basic()
             .into_pointer_value())
     }
 

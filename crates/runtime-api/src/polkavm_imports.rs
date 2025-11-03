@@ -64,11 +64,13 @@ pub static SET_IMMUTABLE_DATA: &str = "set_immutable_data";
 
 pub static SET_STORAGE: &str = "set_storage_or_clear";
 
+pub static TERMINATE: &str = "terminate";
+
 pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 32] = [
+pub static IMPORTS: [&str; 33] = [
     ADDRESS,
     BALANCE,
     BALANCE_OF,
@@ -100,6 +102,7 @@ pub static IMPORTS: [&str; 32] = [
     RETURNDATASIZE,
     SET_IMMUTABLE_DATA,
     SET_STORAGE,
+    TERMINATE,
     VALUE_TRANSFERRED,
 ];
 

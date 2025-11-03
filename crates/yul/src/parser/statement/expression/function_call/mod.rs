@@ -661,6 +661,14 @@ impl FunctionCall {
             Name::Invalid => {
                 revive_llvm_context::polkavm_evm_return::invalid(context).map(|_| None)
             }
+            Name::SelfDestruct => {
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
+                revive_llvm_context::polkavm_evm_return::selfdestruct(
+                    context,
+                    arguments[0].into_int_value(),
+                )
+                .map(|_| None)
+            }
 
             Name::Log0 => {
                 let arguments = self.pop_arguments_llvm::<2>(context)?;
@@ -959,13 +967,6 @@ impl FunctionCall {
                 let _arguments = self.pop_arguments_llvm::<4>(context)?;
                 anyhow::bail!(
                     "{} The `EXTCODECOPY` instruction is not supported",
-                    location
-                )
-            }
-            Name::SelfDestruct => {
-                let _arguments = self.pop_arguments_llvm::<1>(context)?;
-                anyhow::bail!(
-                    "{} The `SELFDESTRUCT` instruction is not supported",
                     location
                 )
             }

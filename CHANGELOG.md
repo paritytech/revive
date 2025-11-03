@@ -6,6 +6,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2509.0.0`
 
+### Added
+- Support for `selfdestruct`.
+
 ### Changed
 - Emulated EVM heap memory accesses of zero length are never out of bounds.
 

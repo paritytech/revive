@@ -73,6 +73,5 @@ pub fn selfdestruct<'ctx>(
         revive_runtime_api::polkavm_imports::TERMINATE,
         &[address.into()],
     );
-
     Ok(())
 }

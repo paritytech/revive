@@ -66,12 +66,10 @@ pub fn selfdestruct<'ctx>(
     context: &mut Context<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
-    let address = context
-        .build_address_argument_store(address)?
-        .to_int(context);
+    let address_pointer = context.build_address_argument_store(address)?;
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::TERMINATE,
-        &[address.into()],
+        &[address_pointer.to_int(context).into()],
     );
     Ok(())
 }

@@ -260,7 +260,7 @@ impl<'ctx> Context<'ctx> {
     pub fn build(
         self,
         contract_path: &str,
-        metadata_hash: Option<revive_common::Keccak256>,
+        metadata_hash: Option<Vec<u8>>,
     ) -> anyhow::Result<Build> {
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
@@ -325,12 +325,7 @@ impl<'ctx> Context<'ctx> {
 
         self.debug_config.dump_object(contract_path, &object)?;
 
-        crate::polkavm::build(
-            &object,
-            metadata_hash
-                .as_ref()
-                .map(|hash| hash.as_bytes().try_into().unwrap()),
-        )
+        crate::polkavm::build(&object, metadata_hash)
     }
 
     /// Verifies the current LLVM IR module.

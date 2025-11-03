@@ -16,6 +16,7 @@ use revive_llvm_context::PolkaVMContextYulData;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Digest;
 
 use revive_llvm_context::PolkaVMWriteLLVM;
 
@@ -84,8 +85,18 @@ impl Contract {
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
         let metadata_json_bytes = serde_json::to_vec(&metadata_json).expect("Always valid");
         let metadata_bytes = match metadata_hash {
-            MetadataHash::Keccak256 => Keccak256::from_slice(&metadata_json_bytes).into(),
-            MetadataHash::IPFS => todo!("IPFS hash isn't supported yet"),
+            MetadataHash::Keccak256 => {
+                let digest = Keccak256::from_slice(&metadata_json_bytes);
+                Some(digest.to_vec())
+            }
+            MetadataHash::IPFS => {
+                // IPFS multihash: 0x12 (sha2-256) 0x20 (32 bytes) + sha2-256 digest
+                let digest = sha2::Sha256::digest(&metadata_json_bytes);
+                let mut mh = Vec::with_capacity(34);
+                mh.extend_from_slice(&[0x12, 0x20]);
+                mh.extend_from_slice(&digest);
+                Some(mh)
+            }
             MetadataHash::None => None,
         };
         debug_config.set_contract_path(&self.identifier.full_path);

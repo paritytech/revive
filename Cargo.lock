@@ -8958,7 +8958,7 @@ dependencies = [
 
 [[package]]
 name = "resolc"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -9042,7 +9042,7 @@ dependencies = [
 
 [[package]]
 name = "revive-integration"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -9070,7 +9070,7 @@ dependencies = [
 
 [[package]]
 name = "revive-llvm-builder"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9113,7 +9113,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runner"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "alloy-primitives",
  "anyhow",
@@ -9132,7 +9132,7 @@ dependencies = [
 
 [[package]]
 name = "revive-runtime-api"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "inkwell",
@@ -9163,7 +9163,7 @@ dependencies = [
 
 [[package]]
 name = "revive-yul"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "inkwell",

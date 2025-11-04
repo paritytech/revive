@@ -27,8 +27,6 @@ jobs:
       RELEASE_NOTES: ${{ steps.versions.outputs.RELEASE_NOTES }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Check versions
         id: versions
@@ -132,8 +130,6 @@ jobs:
     environment: tags
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4

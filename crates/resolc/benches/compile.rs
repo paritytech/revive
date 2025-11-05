@@ -2,7 +2,7 @@
 
 use std::{
     process::{Command, Output},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use criterion::{
@@ -11,24 +11,13 @@ use criterion::{
     BenchmarkGroup, Criterion,
 };
 
-fn measure_resolc(arguments: &[&str], iters: u64) -> Duration {
-    let start = Instant::now();
-
-    for _i in 0..iters {
-        let result = execute_resolc(arguments);
-        assert!(
-            result.status.success(),
-            "command failed: {}",
-            get_stderr(&result)
-        );
-    }
-
-    start.elapsed()
-}
-
-#[inline(always)]
-fn execute_resolc(arguments: &[&str]) -> Output {
-    execute_command("resolc", arguments)
+fn execute_resolc(arguments: &[&str]) {
+    let result = execute_command("resolc", arguments);
+    assert!(
+        result.status.success(),
+        "command failed: {}",
+        get_stderr(&result)
+    );
 }
 
 #[inline(always)]
@@ -58,7 +47,7 @@ fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
     group.sample_size(10);
 
     group.bench_function("Resolc", |b| {
-        b.iter_custom(|iters| measure_resolc(compiler_arguments, iters));
+        b.iter(|| execute_resolc(compiler_arguments));
     });
 
     group.finish();

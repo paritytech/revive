@@ -12,7 +12,6 @@ target-llvm
 /llvm*
 node_modules
 artifacts
-**/generated
 tmp
 /*.html
 /build

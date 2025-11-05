@@ -10,7 +10,6 @@ use criterion::{
     measurement::{Measurement, WallTime},
     BenchmarkGroup, Criterion,
 };
-use revive_integration::cases::UncompiledContract;
 
 fn measure_resolc(arguments: &[&str], iters: u64) -> Duration {
     let start = Instant::now();
@@ -47,6 +46,13 @@ fn get_contract_path(name: &str) -> String {
     format!("crates/integration/contracts/{name}.sol")
 }
 
+fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
+where
+    M: Measurement,
+{
+    c.benchmark_group(group_name)
+}
+
 fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10);
@@ -56,21 +62,6 @@ fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
     });
 
     group.finish();
-}
-
-fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
-where
-    M: Measurement,
-{
-    c.benchmark_group(group_name)
-}
-
-fn bench_overwrite_same_memory(c: &mut Criterion) {
-    let contract = UncompiledContract::overwrite_same_memory_n_times(1000);
-    let group = group(c, &contract.name);
-    let compiler_arguments = &[&contract.path, "-O0"];
-
-    bench(group, compiler_arguments);
 }
 
 fn bench_baseline(c: &mut Criterion) {
@@ -131,7 +122,6 @@ criterion_group!(
     name = compile;
     config = Criterion::default();
     targets =
-        bench_overwrite_same_memory,
         bench_baseline,
         bench_erc20,
         bench_sha1,

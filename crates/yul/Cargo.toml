@@ -21,7 +21,6 @@ revive-llvm-context = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-revive-solc-json-interface = { workspace = true }
 
 [features]
 bench-yul = []

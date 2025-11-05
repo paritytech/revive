@@ -9,41 +9,21 @@ use criterion::{
 };
 use inkwell::context::Context as InkwellContext;
 use revive_llvm_context::{
-    initialize_llvm, DebugConfig, Optimizer, OptimizerSettings, PolkaVMContext, PolkaVMTarget,
-    PolkaVMWriteLLVM,
+    initialize_llvm, Optimizer, OptimizerSettings, PolkaVMContext, PolkaVMTarget, PolkaVMWriteLLVM,
 };
-use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
-
-struct LLVMContextConfig {
-    optimizer_settings: OptimizerSettings,
-    debug_config: DebugConfig,
-    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-    llvm_arguments: Vec<String>,
-}
-
-impl Default for LLVMContextConfig {
-    fn default() -> Self {
-        Self {
-            optimizer_settings: OptimizerSettings::none(),
-            debug_config: Default::default(),
-            memory_config: Default::default(),
-            llvm_arguments: Default::default(),
-        }
-    }
-}
 
 fn measure(
     source_code: &str,
     llvm: &InkwellContext,
-    llvm_context_config: &LLVMContextConfig,
+    optimizer_settings: &OptimizerSettings,
     iters: u64,
 ) -> Duration {
     let mut total_time = Duration::default();
 
     for i in 0..iters {
         let llvm_module_name = format!("module_{}", i);
-        let mut llvm_context = create_llvm_context(&llvm, &llvm_module_name, &llvm_context_config);
+        let mut llvm_context = create_llvm_context(&llvm, &llvm_module_name, optimizer_settings);
 
         let start = Instant::now();
         yul_to_llvm_ir(source_code, &mut llvm_context);
@@ -69,33 +49,33 @@ fn parse_yul(source_code: &str) -> AstObject {
 fn create_llvm_context<'ctx>(
     llvm: &'ctx InkwellContext,
     module_name: &str,
-    context_config: &LLVMContextConfig,
+    optimizer_settings: &OptimizerSettings,
 ) -> PolkaVMContext<'ctx> {
-    initialize_llvm(PolkaVMTarget::PVM, "resolc", &context_config.llvm_arguments);
+    initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
 
     let module = llvm.create_module(module_name);
-    let optimizer = Optimizer::new(context_config.optimizer_settings.to_owned());
+    let optimizer = Optimizer::new(optimizer_settings.to_owned());
 
     PolkaVMContext::new(
         llvm,
         module,
         optimizer,
-        context_config.debug_config.to_owned(),
-        context_config.memory_config,
+        Default::default(),
+        Default::default(),
     )
 }
 
 fn bench(
     mut group: BenchmarkGroup<'_, WallTime>,
     source_code: &str,
-    llvm_context_config: LLVMContextConfig,
+    optimizer_settings: OptimizerSettings,
 ) {
     let llvm = InkwellContext::create();
 
     group.sample_size(10);
 
     group.bench_function("Yul -> LLVM IR", |b| {
-        b.iter_custom(|iters| measure(source_code, &llvm, &llvm_context_config, iters));
+        b.iter_custom(|iters| measure(source_code, &llvm, &optimizer_settings, iters));
     });
 
     group.finish();
@@ -111,9 +91,8 @@ where
 fn bench_memset(c: &mut Criterion) {
     let group = group(c, "Memset");
     let source_code = include_str!("../../resolc/src/tests/data/yul/memset.yul");
-    let llvm_context_config = LLVMContextConfig::default();
 
-    bench(group, source_code, llvm_context_config);
+    bench(group, source_code, OptimizerSettings::none());
 }
 
 criterion_group!(

@@ -9166,11 +9166,13 @@ name = "revive-yul"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "criterion",
  "inkwell",
  "num",
  "regex",
  "revive-common",
  "revive-llvm-context",
+ "revive-solc-json-interface",
  "serde",
  "thiserror 2.0.17",
 ]

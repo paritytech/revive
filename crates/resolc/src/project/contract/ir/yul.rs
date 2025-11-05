@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use revive_yul::parser::statement::object::Object;
 
-/// he contract Yul source code.
+/// The contract Yul source code.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Yul {
     /// The Yul AST object.

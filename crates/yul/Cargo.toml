@@ -18,3 +18,14 @@ thiserror = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+revive-solc-json-interface = { workspace = true }
+
+[features]
+bench-yul = []
+
+[[bench]]
+name = "parse_and_into_llvm"
+harness = false

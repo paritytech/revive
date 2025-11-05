@@ -20,6 +20,7 @@
 	bench \
 	bench-pvm \
 	bench-evm \
+	bench-yul \
 	clean
 
 install: install-bin install-npm
@@ -89,6 +90,10 @@ bench-pvm: install-bin
 bench-evm: install-bin
 	cargo criterion --bench execute --features bench-evm --message-format=json \
 	| criterion-table > crates/benchmarks/EVM.md
+
+bench-yul: install-bin
+	cargo criterion --package revive-yul --bench parse_and_into_llvm --features bench-yul --message-format=json \
+	| criterion-table > crates/yul/BENCHMARKS.md
 
 clean:
 	cargo clean ; \

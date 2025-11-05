@@ -1,7 +1,7 @@
 #![cfg(feature = "bench-resolc")]
 
 use std::{
-    process::Command,
+    process::{Command, Output},
     time::{Duration, Instant},
 };
 
@@ -16,23 +16,29 @@ fn measure_resolc(arguments: &[&str], iters: u64) -> Duration {
     let start = Instant::now();
 
     for _i in 0..iters {
-        execute_resolc(arguments);
+        let result = execute_resolc(arguments);
+        assert!(
+            result.status.success(),
+            "command failed: {}",
+            get_stderr(&result)
+        );
     }
 
     start.elapsed()
 }
 
 #[inline(always)]
-fn execute_resolc(arguments: &[&str]) {
+fn execute_resolc(arguments: &[&str]) -> Output {
     execute_command("resolc", arguments)
 }
 
 #[inline(always)]
-fn execute_command(command: &str, arguments: &[&str]) {
-    Command::new(command)
-        .args(arguments)
-        .output()
-        .expect("command failed");
+fn execute_command(command: &str, arguments: &[&str]) -> Output {
+    Command::new(command).args(arguments).output().unwrap()
+}
+
+fn get_stderr(result: &Output) -> String {
+    String::from_utf8_lossy(&result.stderr).to_string()
 }
 
 /// Get the relative path to a `.sol` contract file with file stem `name`.

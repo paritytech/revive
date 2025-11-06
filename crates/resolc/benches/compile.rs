@@ -108,7 +108,7 @@ fn bench_value(c: &mut Criterion) {
 }
 
 criterion_group!(
-    name = compile;
+    name = benches;
     config = Criterion::default();
     targets =
         bench_baseline,
@@ -119,4 +119,4 @@ criterion_group!(
         bench_value,
 );
 
-criterion_main!(compile);
+criterion_main!(benches);

@@ -11,6 +11,7 @@ use criterion::{
     BenchmarkGroup, Criterion,
 };
 
+/// Function under test - Execute the resolc executable.
 fn execute_resolc(arguments: &[&str]) {
     let result = execute_command("resolc", arguments);
     assert!(
@@ -22,7 +23,10 @@ fn execute_resolc(arguments: &[&str]) {
 
 #[inline(always)]
 fn execute_command(command: &str, arguments: &[&str]) -> Output {
-    Command::new(command).args(arguments).output().unwrap()
+    Command::new(command)
+        .args(arguments)
+        .output()
+        .expect("expected command output")
 }
 
 fn get_stderr(result: &Output) -> String {

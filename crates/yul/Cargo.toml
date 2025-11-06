@@ -23,8 +23,13 @@ revive-llvm-context = { workspace = true }
 criterion = { workspace = true }
 
 [features]
-bench-yul = []
+bench-parse = []
+bench-llvm-ir = []
 
 [[bench]]
-name = "parse_and_into_llvm"
+name = "parse"
+harness = false
+
+[[bench]]
+name = "make_llvm_ir"
 harness = false

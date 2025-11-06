@@ -22,6 +22,8 @@ impl TestDir {
             .args([
                 "submodule",
                 "add",
+                "-b",
+                "release/18.x",
                 "https://github.com/llvm/llvm-project.git",
                 "llvm",
             ])
@@ -29,7 +31,7 @@ impl TestDir {
             .output()?;
 
         std::process::Command::new("git")
-            .args(["submodule", "update", "--init", "--recursive"])
+            .args(["submodule", "update", "--init", "--recursive", "--force", "--depth 1",])
             .current_dir(&tempdir)
             .output()?;
 

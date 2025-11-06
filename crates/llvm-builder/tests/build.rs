@@ -10,7 +10,7 @@ fn build_and_clean() -> anyhow::Result<()> {
     let test_dir = common::TestDir::new()?;
 
     Command::new(cargo::cargo_bin!("revive-llvm"))
-        .current_dir(&test_dir.path())
+        .current_dir(test_dir.path())
         .arg("build")
         .arg("--llvm-projects")
         .arg("clang")

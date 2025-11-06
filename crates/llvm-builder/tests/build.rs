@@ -2,20 +2,20 @@ pub mod common;
 
 use std::process::Command;
 
-use assert_cmd::prelude::*;
+use assert_cmd::{cargo, prelude::*};
 
 /// This test verifies that the LLVM repository can be successfully cloned, built, and cleaned.
 #[test]
 fn clone_build_and_clean() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--llvm-projects")
@@ -25,13 +25,13 @@ fn clone_build_and_clean() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("builtins")
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clean")
         .assert()
@@ -47,13 +47,13 @@ fn clone_build_and_clean() -> anyhow::Result<()> {
 fn clone_build_and_clean_musl() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .arg("clone")
         .current_dir(test_dir.path())
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--llvm-projects")
@@ -63,7 +63,7 @@ fn clone_build_and_clean_musl() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .arg("--target-env")
         .arg("musl")
         .arg("build")
@@ -75,7 +75,7 @@ fn clone_build_and_clean_musl() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clean")
         .assert()
@@ -91,13 +91,13 @@ fn clone_build_and_clean_musl() -> anyhow::Result<()> {
 fn debug_build_with_tests_coverage() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--enable-coverage")
@@ -120,13 +120,13 @@ fn debug_build_with_tests_coverage() -> anyhow::Result<()> {
 fn build_with_sanitizers() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--sanitizer")
@@ -146,16 +146,16 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
-    let command = Command::cargo_bin(common::REVIVE_LLVM)?;
+    let command = Command::new(cargo::cargo_bin!("revive-llvm"));
     let program = command.get_program().to_string_lossy();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--llvm-projects")
@@ -183,7 +183,7 @@ fn clone_build_and_clean_emscripten() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .arg("clean")
         .current_dir(test_dir.path())
         .assert()

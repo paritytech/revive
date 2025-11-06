@@ -98,26 +98,3 @@ contract ExternalCodeCopy {
 
     build_solidity(sources(&[("test.sol", code)])).unwrap();
 }
-
-#[test]
-#[should_panic(expected = "The `SELFDESTRUCT` instruction is not supported")]
-fn selfdestruct_yul() {
-    let solidity = r#"
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract MinimalDestructible {
-    address payable public owner;
-
-    constructor() {
-        owner = payable(msg.sender);
-    }
-
-    function destroy() public {
-        require(msg.sender == owner, "Only the owner can call this function.");
-        selfdestruct(owner);
-    }
-}"#;
-
-    build_solidity(sources(&[("test.sol", solidity)])).unwrap();
-}

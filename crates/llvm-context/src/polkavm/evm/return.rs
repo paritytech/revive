@@ -60,3 +60,16 @@ pub fn invalid(context: &mut Context) -> anyhow::Result<()> {
     context.build_call(context.intrinsics().trap, &[], "invalid_trap");
     Ok(())
 }
+
+/// Translates the `selfdestruct` instruction.
+pub fn selfdestruct<'ctx>(
+    context: &mut Context<'ctx>,
+    address: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    let address_pointer = context.build_address_argument_store(address)?;
+    context.build_runtime_call(
+        revive_runtime_api::polkavm_imports::TERMINATE,
+        &[address_pointer.to_int(context).into()],
+    );
+    Ok(())
+}

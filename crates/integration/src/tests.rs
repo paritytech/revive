@@ -63,6 +63,7 @@ test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
 test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
 test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
+test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -169,6 +170,8 @@ fn signed_division() {
         (minus_five, two),
         (I256::MINUS_ONE, I256::MIN),
         (one, I256::ZERO),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::MIN + I256::ONE, I256::MINUS_ONE),
     ] {
         actions.push(Call {
             origin: TestAddress::Alice,

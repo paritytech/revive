@@ -4,10 +4,24 @@
 
 This is a development pre-release.
 
-Supported `polkadot-sdk` rev: `2503.0.1`
+Supported `polkadot-sdk` rev: `2509.0.0`
 
-### Chnaged
+## v0.5.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2509.0.0`
+
+### Added
+- Support for `SELFDESTRUCT`.
+
+### Changed
 - Emulated EVM heap memory accesses of zero length are never out of bounds.
+- Switched to newer and cheaper storage syscalls (omits reads and writes of `0` values).
+
+### Fixed
+- Introduced a workaround avoiding compiler crashes caused by a bug in LLVM affecting `SDIV`.
+- An off-by-one bug affecting `SDIV` overflow semantics.
 
 ## v0.4.1
 

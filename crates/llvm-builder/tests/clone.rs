@@ -2,7 +2,7 @@ pub mod common;
 
 use std::process::Command;
 
-use assert_cmd::prelude::*;
+use assert_cmd::{cargo, prelude::*};
 
 /// This test verifies that the LLVM repository can be successfully cloned using a specific branch
 /// and reference.
@@ -10,7 +10,7 @@ use assert_cmd::prelude::*;
 fn clone() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .assert()
@@ -25,7 +25,7 @@ fn clone() -> anyhow::Result<()> {
 fn clone_deep() -> anyhow::Result<()> {
     let test_dir = common::TestDir::with_lockfile(None)?;
 
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("clone")
         .arg("--deep")

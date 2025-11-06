@@ -157,6 +157,10 @@ fn emit_load<'ctx>(
     key: BasicValueEnum<'ctx>,
     transient: bool,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    let is_transient = context.xlen_type().const_int(transient as u64, false);
+    let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
+
     let mut key = context.build_load(
         super::Pointer::new(
             context.word_type(),
@@ -168,33 +172,17 @@ fn emit_load<'ctx>(
     if !transient {
         key = context.build_byte_swap(key)?;
     }
-
-    let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
-    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
-    let length_pointer = context.build_alloca_at_entry(context.xlen_type(), "length_pointer");
-
     context.builder().build_store(key_pointer.value, key)?;
-    context.build_store(value_pointer, context.word_const(0))?;
-    context.build_store(
-        length_pointer,
-        context
-            .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
-    )?;
-
-    let is_transient = context.xlen_type().const_int(transient as u64, false);
 
     let arguments = [
         is_transient.into(),
         key_pointer.to_int(context).into(),
-        context.xlen_type().const_all_ones().into(),
         value_pointer.to_int(context).into(),
-        length_pointer.to_int(context).into(),
     ];
     context.build_runtime_call(revive_runtime_api::polkavm_imports::GET_STORAGE, &arguments);
 
     // We do not to check the return value: Solidity assumes infallible loads.
-    // If a key doesn't exist the "zero" value is returned (ensured by above write).
+    // If a key doesn't exist the syscall returns zero.
 
     let value = context.build_load(value_pointer, "storage_value")?;
     Ok(if transient {
@@ -210,6 +198,10 @@ fn emit_store<'ctx>(
     value: BasicValueEnum<'ctx>,
     transient: bool,
 ) -> anyhow::Result<()> {
+    let is_transient = context.xlen_type().const_int(transient as u64, false);
+    let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
+    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
+
     let mut key = context.build_load(
         super::Pointer::new(
             context.word_type(),
@@ -224,27 +216,20 @@ fn emit_store<'ctx>(
             Default::default(),
             value.into_pointer_value(),
         ),
-        "key",
+        "value",
     )?;
     if !transient {
         key = context.build_byte_swap(key)?;
         value = context.build_byte_swap(value)?;
     }
 
-    let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
-    let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
-
     context.build_store(key_pointer, key)?;
     context.build_store(value_pointer, value)?;
-
-    let is_transient = context.xlen_type().const_int(transient as u64, false);
 
     let arguments = [
         is_transient.into(),
         key_pointer.to_int(context).into(),
-        context.xlen_type().const_all_ones().into(),
         value_pointer.to_int(context).into(),
-        context.integer_const(crate::polkavm::XLEN, 32).into(),
     ];
     context.build_runtime_call(revive_runtime_api::polkavm_imports::SET_STORAGE, &arguments);
 

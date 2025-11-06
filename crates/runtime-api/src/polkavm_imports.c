@@ -53,11 +53,11 @@ POLKAVM_IMPORT(void, block_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, block_number, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, call, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
+POLKAVM_IMPORT(uint32_t, call, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
 
-POLKAVM_IMPORT(uint64_t, call_data_copy, uint32_t, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, call_data_copy, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, call_data_load, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, call_data_load, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(uint64_t, call_data_size)
 
@@ -69,7 +69,7 @@ POLKAVM_IMPORT(uint64_t, code_size, uint32_t)
 
 POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, delegate_call, uint64_t, uint64_t, uint64_t, uint32_t, uint64_t, uint64_t)
+POLKAVM_IMPORT(uint32_t, delegate_call, uint64_t, uint64_t, uint64_t, uint32_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 
@@ -79,11 +79,11 @@ POLKAVM_IMPORT(uint64_t, gas_price);
 
 POLKAVM_IMPORT(void, get_immutable_data, uint32_t, uint32_t);
 
-POLKAVM_IMPORT(uint64_t, get_storage, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+POLKAVM_IMPORT(void, get_storage_or_zero, uint32_t, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, hash_keccak_256, uint32_t, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint64_t, instantiate, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
+POLKAVM_IMPORT(uint32_t, instantiate, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, now, uint32_t)
 
@@ -99,8 +99,8 @@ POLKAVM_IMPORT(uint64_t, return_data_size)
 
 POLKAVM_IMPORT(void, set_immutable_data, uint32_t, uint32_t);
 
-POLKAVM_IMPORT(uint64_t, set_storage, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+POLKAVM_IMPORT(uint32_t, set_storage_or_clear, uint32_t, uint32_t, uint32_t)
+
+POLKAVM_IMPORT(void, terminate, uint32_t)
 
 POLKAVM_IMPORT(void, value_transferred, uint32_t)
-
-POLKAVM_IMPORT(void, weight_to_fee, uint64_t, uint64_t, uint32_t);

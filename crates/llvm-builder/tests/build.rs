@@ -127,14 +127,14 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
         .current_dir(test_dir.path())
         .arg("build")
         .arg("--llvm-projects")
-        .arg("lld")
-        .arg("--llvm-projects")
         .arg("clang")
+        .arg("--llvm-projects")
+        .arg("lld")
         .assert()
         .success();
 
     // Build with emscripten target
-    Command::new(common::REVIVE_LLVM)
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())
         .arg("--target-env")
         .arg("emscripten")

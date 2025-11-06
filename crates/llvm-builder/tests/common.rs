@@ -31,7 +31,14 @@ impl TestDir {
             .output()?;
 
         std::process::Command::new("git")
-            .args(["submodule", "update", "--init", "--recursive", "--force", "--depth 1",])
+            .args([
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+                "--force",
+                "--depth 1",
+            ])
             .current_dir(&tempdir)
             .output()?;
 

@@ -140,8 +140,7 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
     // `cd {} && . ./emsdk_env.sh && cd ..` helps the script to locate `emsdk.py`
     // @see https://github.com/emscripten-core/emsdk/blob/9dbdc4b3437750b85d16931c7c801bb71a782122/emsdk_env.sh#L61-L69
     let emsdk_wrapped_build_command = format!(
-        "{program} --target-env emscripten clone && \
-        cd {} && . ./emsdk_env.sh && cd .. && \
+        "cd {} && . ./emsdk_env.sh && cd .. && \
         {program} --target-env emscripten build --llvm-projects lld",
         revive_llvm_builder::LLVMPath::DIRECTORY_EMSDK_SOURCE,
     );

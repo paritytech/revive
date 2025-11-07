@@ -23,23 +23,27 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::Compiler;
 
-static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
     Lazy::new(Default::default);
+static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
+    Lazy::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
+    Lazy::new(Default::default);
+static YUL_IR_CACHE: Lazy<Mutex<HashMap<CachedCompilation, String>>> = Lazy::new(Default::default);
 
 const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
 /// Tests may share and re-use contract code.
-/// The compiled blob cache helps avoiding duplicate compilation.
+/// The compilation result (such as blobs) cache helps avoiding duplicate compilation.
 #[derive(Hash, PartialEq, Eq)]
-struct CachedBlob {
+struct CachedCompilation {
     /// The contract name.
     contract_name: String,
     /// Whether the solc optimizer is enabled.
@@ -336,7 +340,7 @@ pub fn compile_blob_with_options(
     solc_optimizer_enabled: bool,
     optimizer_settings: OptimizerSettings,
 ) -> Vec<u8> {
-    let id = CachedBlob {
+    let id = CachedCompilation {
         contract_name: contract_name.to_owned(),
         opt: optimizer_settings.middle_end_as_string(),
         solc_optimizer_enabled,
@@ -424,7 +428,7 @@ fn compile_evm(
     solc_optimizer_enabled: bool,
     runtime: bool,
 ) -> Vec<u8> {
-    let id = CachedBlob {
+    let id = CachedCompilation {
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
@@ -464,4 +468,79 @@ fn compile_evm(
     cache.lock().unwrap().insert(id, blob.clone());
 
     blob
+}
+
+/// Generates Yul IR contracts grouped by files from Solidity source files.
+fn generate_yul(
+    sources: BTreeMap<String, SolcStandardJsonInputSource>,
+    solc_optimizer_enabled: bool,
+) -> anyhow::Result<BTreeMap<String, BTreeMap<String, SolcStandardJsonOutputContract>>> {
+    check_dependencies();
+
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        Default::default(),
+        Default::default(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            Default::default(),
+            Default::default(),
+        ),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        false,
+    )?;
+
+    let output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
+    output.check_errors()?;
+
+    Ok(output.contracts)
+}
+
+/// Compiles the Solidity source code into Yul IR and returns
+/// the Yul IR code of the contract named `contract_name`.
+/// The `solc` optimizer will be enabled.
+pub fn compile_to_yul(contract_name: &str, source_code: &str) -> String {
+    compile_to_yul_with_options(contract_name, source_code, true)
+}
+
+/// Compiles the Solidity source code into Yul IR and returns
+/// the Yul IR code of the contract named `contract_name`.
+pub fn compile_to_yul_with_options(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> String {
+    let id = CachedCompilation {
+        contract_name: contract_name.to_owned(),
+        solc_optimizer_enabled,
+        solidity: source_code.to_owned(),
+        opt: String::new(),
+    };
+
+    if let Some(yul) = YUL_IR_CACHE.lock().unwrap().get(&id) {
+        return yul.clone();
+    }
+
+    let file_name = "contract.sol";
+    let sources = BTreeMap::from([(
+        file_name.to_owned(),
+        SolcStandardJsonInputSource::from(source_code.to_owned()),
+    )]);
+
+    generate_yul(sources, solc_optimizer_enabled)
+        .expect("source should compile")
+        .get(file_name)
+        .expect(&format!("file `{file_name}` not found in solc output"))
+        .get(contract_name)
+        .expect(&format!(
+            "contract `{contract_name}` not found in solc output"
+        ))
+        .ir_optimized
+        .to_owned()
 }

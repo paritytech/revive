@@ -13,7 +13,7 @@ use revive_llvm_context::{
 };
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
-/// Function under test - Lower the Yul AST Object into LLVM IR.
+/// Function under test - Lowers the Yul AST Object into LLVM IR.
 fn make_llvm_ir(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
     ast.declare(&mut llvm_context)
         .expect("expected LLVM IR generation");

@@ -536,11 +536,9 @@ pub fn compile_to_yul_with_options(
     generate_yul(sources, solc_optimizer_enabled)
         .expect("source should compile")
         .get(file_name)
-        .expect(&format!("file `{file_name}` not found in solc output"))
+        .unwrap_or_else(|| panic!("file `{file_name}` not found in solc output"))
         .get(contract_name)
-        .expect(&format!(
-            "contract `{contract_name}` not found in solc output"
-        ))
+        .unwrap_or_else(|| panic!("contract `{contract_name}` not found in solc output"))
         .ir_optimized
         .to_owned()
 }

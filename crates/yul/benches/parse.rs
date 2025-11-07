@@ -9,7 +9,7 @@ use criterion::{
 use revive_integration::cases::Contract;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
-/// Function under test - Parse Yul source code.
+/// Function under test - Parses Yul source code.
 fn parse(source_code: &str) {
     let mut lexer = Lexer::new(source_code.to_owned());
     AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object");

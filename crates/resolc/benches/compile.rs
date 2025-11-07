@@ -11,7 +11,7 @@ use criterion::{
     BenchmarkGroup, Criterion,
 };
 
-/// Function under test - Execute the resolc executable.
+/// Function under test - Executes the resolc executable.
 fn execute_resolc(arguments: &[&str]) {
     let result = execute_command("resolc", arguments);
     assert!(
@@ -59,8 +59,8 @@ fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
 
 fn bench_baseline(c: &mut Criterion) {
     let name = "Baseline";
-    let path = get_contract_path(name);
     let group = group(c, name);
+    let path = get_contract_path(name);
     let compiler_arguments = &[&path, "-O0"];
 
     bench(group, compiler_arguments);
@@ -68,8 +68,8 @@ fn bench_baseline(c: &mut Criterion) {
 
 fn bench_erc20(c: &mut Criterion) {
     let name = "ERC20";
-    let path = get_contract_path(name);
     let group = group(c, name);
+    let path = get_contract_path(name);
     let compiler_arguments = &[&path, "-O0"];
 
     bench(group, compiler_arguments);
@@ -77,8 +77,8 @@ fn bench_erc20(c: &mut Criterion) {
 
 fn bench_sha1(c: &mut Criterion) {
     let name = "SHA1";
-    let path = get_contract_path(name);
     let group = group(c, name);
+    let path = get_contract_path(name);
     let compiler_arguments = &[&path, "-O0"];
 
     bench(group, compiler_arguments);
@@ -86,8 +86,8 @@ fn bench_sha1(c: &mut Criterion) {
 
 fn bench_storage(c: &mut Criterion) {
     let name = "Storage";
-    let path = get_contract_path(name);
     let group = group(c, name);
+    let path = get_contract_path(name);
     let compiler_arguments = &[&path, "-O0"];
 
     bench(group, compiler_arguments);
@@ -95,17 +95,8 @@ fn bench_storage(c: &mut Criterion) {
 
 fn bench_transfer(c: &mut Criterion) {
     let name = "Transfer";
-    let path = get_contract_path(name);
     let group = group(c, name);
-    let compiler_arguments = &[&path, "-O0"];
-
-    bench(group, compiler_arguments);
-}
-
-fn bench_value(c: &mut Criterion) {
-    let name = "Value";
     let path = get_contract_path(name);
-    let group = group(c, name);
     let compiler_arguments = &[&path, "-O0"];
 
     bench(group, compiler_arguments);
@@ -120,7 +111,6 @@ criterion_group!(
         bench_sha1,
         bench_storage,
         bench_transfer,
-        bench_value,
 );
 
 criterion_main!(benches);

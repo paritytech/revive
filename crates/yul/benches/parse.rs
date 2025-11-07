@@ -1,10 +1,12 @@
 #![cfg(feature = "bench-parse")]
 
+use alloy_primitives::*;
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
     BenchmarkGroup, Criterion,
 };
+use revive_integration::cases::Contract;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
 /// Function under test - Parse Yul source code.
@@ -20,26 +22,55 @@ where
     c.benchmark_group(group_name)
 }
 
-fn bench(mut group: BenchmarkGroup<'_, WallTime>, source_code: &str) {
+fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)
+where
+    F: Fn() -> Contract,
+{
     group.sample_size(10);
 
+    let source_code = contract().yul;
+
     group.bench_function("Revive", |b| {
-        b.iter(|| parse(source_code));
+        b.iter(|| parse(&source_code));
     });
 
     group.finish();
 }
 
-fn bench_memset(c: &mut Criterion) {
-    let group = group(c, "Memset - Parse");
-    let source_code = include_str!("../../resolc/src/tests/data/yul/memset.yul");
+fn bench_baseline(c: &mut Criterion) {
+    bench(group(c, "Baseline - Parse"), Contract::baseline);
+}
 
-    bench(group, source_code);
+fn bench_erc20(c: &mut Criterion) {
+    bench(group(c, "ERC20 - Parse"), Contract::erc20);
+}
+
+fn bench_sha1(c: &mut Criterion) {
+    bench(group(c, "SHA1 - Parse"), || {
+        Contract::sha1(vec![0xff].into())
+    });
+}
+
+fn bench_storage(c: &mut Criterion) {
+    bench(group(c, "Storage - Parse"), || {
+        Contract::storage_transient(U256::from(0))
+    });
+}
+
+fn bench_transfer(c: &mut Criterion) {
+    bench(group(c, "Transfer - Parse"), || {
+        Contract::transfer_self(U256::from(0))
+    });
 }
 
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = bench_memset
+    targets =
+        bench_baseline,
+        bench_erc20,
+        bench_sha1,
+        bench_storage,
+        bench_transfer,
 );
 criterion_main!(benches);

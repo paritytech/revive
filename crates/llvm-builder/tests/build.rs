@@ -122,6 +122,8 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 fn build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::new()?;
+    let command = Command::new(cargo::cargo_bin!("revive-llvm"));
+    let program = command.get_program().to_string_lossy();
 
     Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(test_dir.path())

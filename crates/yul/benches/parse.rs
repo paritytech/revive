@@ -26,9 +26,9 @@ fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)
 where
     F: Fn() -> Contract,
 {
-    group.sample_size(10);
-
     let source_code = contract().yul;
+
+    group.sample_size(10);
 
     group.bench_function("Revive", |b| {
         b.iter(|| parse(&source_code));

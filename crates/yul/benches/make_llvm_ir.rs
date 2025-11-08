@@ -28,12 +28,11 @@ fn parse(source_code: &str) -> AstObject {
 
 fn create_llvm_context<'ctx>(
     llvm: &'ctx InkwellContext,
-    module_name: &str,
     optimizer_settings: &OptimizerSettings,
 ) -> PolkaVMContext<'ctx> {
     initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
 
-    let module = llvm.create_module(module_name);
+    let module = llvm.create_module("module_bench");
     let optimizer = Optimizer::new(optimizer_settings.to_owned());
 
     PolkaVMContext::new(
@@ -66,12 +65,7 @@ fn bench<F>(
 
     group.bench_function("Revive", |b| {
         b.iter_batched(
-            || {
-                (
-                    ast.clone(),
-                    create_llvm_context(&llvm, "module_bench", &optimizer_settings),
-                )
-            },
+            || (ast.clone(), create_llvm_context(&llvm, &optimizer_settings)),
             |(ast, llvm_context)| make_llvm_ir(ast, llvm_context),
             BatchSize::SmallInput,
         );

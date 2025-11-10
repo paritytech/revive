@@ -1,5 +1,3 @@
-#![cfg(feature = "bench-resolc")]
-
 use std::{
     path::PathBuf,
     process::{Command, Output},

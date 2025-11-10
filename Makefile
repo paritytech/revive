@@ -92,7 +92,7 @@ bench-evm: install-bin
 	| criterion-table > crates/benchmarks/EVM.md
 
 bench-resolc: install-bin
-	cargo criterion --package resolc --bench compile --features bench-resolc --message-format=json \
+	cargo criterion --package resolc --bench compile --message-format=json \
 	| criterion-table > crates/resolc/BENCHMARKS.md
 
 clean:

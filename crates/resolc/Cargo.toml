@@ -53,7 +53,6 @@ criterion = { workspace = true }
 [features]
 parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
-bench-resolc = []
 
 [[bench]]
 name = "compile"

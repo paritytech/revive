@@ -8973,7 +8973,6 @@ dependencies = [
  "path-slash",
  "rayon",
  "revive-common",
- "revive-integration",
  "revive-llvm-context",
  "revive-solc-json-interface",
  "revive-yul",

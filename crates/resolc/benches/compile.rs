@@ -39,13 +39,10 @@ fn get_stderr(result: &Output) -> String {
 }
 
 /// Gets the absolute path of a file. The `relative_path` must
-/// be relative to this file.
+/// be relative to the `resolc` crate.
 /// Panics if the path does not exist or is not an accessible file.
-fn get_absolute_path(relative_path: &str) -> String {
-    let this_file = PathBuf::from(file!());
-    let this_directory = this_file.parent().expect("expected a parent directory");
-    let absolute_path = this_directory.join(relative_path);
-
+fn absolute_path(relative_path: &str) -> String {
+    let absolute_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path);
     if !absolute_path.is_file() {
         panic!("expected a file at `{}`", absolute_path.display());
     }
@@ -81,7 +78,7 @@ fn bench(
 
 fn bench_empty(c: &mut Criterion) {
     let group = group(c, "Empty");
-    let path = get_absolute_path("../src/tests/data/solidity/contract.sol");
+    let path = absolute_path("src/tests/data/solidity/contract.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
 
@@ -90,7 +87,7 @@ fn bench_empty(c: &mut Criterion) {
 
 fn bench_dependency(c: &mut Criterion) {
     let group = group(c, "Dependency");
-    let path = get_absolute_path("../src/tests/data/solidity/dependency.sol");
+    let path = absolute_path("src/tests/data/solidity/dependency.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
 
@@ -99,7 +96,7 @@ fn bench_dependency(c: &mut Criterion) {
 
 fn bench_large_div_rem(c: &mut Criterion) {
     let group = group(c, "LargeDivRem");
-    let path = get_absolute_path("../src/tests/data/solidity/large_div_rem.sol");
+    let path = absolute_path("src/tests/data/solidity/large_div_rem.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
 

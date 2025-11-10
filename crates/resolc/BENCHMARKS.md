@@ -3,43 +3,29 @@
 ## Table of Contents
 
 - [Benchmark Results](#benchmark-results)
-    - [Baseline](#baseline)
-    - [ERC20](#erc20)
-    - [SHA1](#sha1)
-    - [Storage](#storage)
-    - [Transfer](#transfer)
+    - [Empty](#empty)
+    - [Dependency](#dependency)
+    - [LargeDivRem](#largedivrem)
 
 ## Benchmark Results
 
-### Baseline
+### Empty
 
-|        | `Resolc`                   |
-|:-------|:-------------------------- |
-|        | `114.21 ms` (✅ **1.00x**)  |
+|        | `resolc`                 | `solc`                          |
+|:-------|:-------------------------|:------------------------------- |
+|        | `62.70 ms` (✅ **1.00x**) | `8.47 ms` (🚀 **7.40x faster**)  |
 
-### ERC20
+### Dependency
 
-|        | `Resolc`                   |
-|:-------|:-------------------------- |
-|        | `281.25 ms` (✅ **1.00x**)  |
+|        | `resolc`                  | `solc`                           |
+|:-------|:--------------------------|:-------------------------------- |
+|        | `141.28 ms` (✅ **1.00x**) | `7.93 ms` (🚀 **17.81x faster**)  |
 
-### SHA1
+### LargeDivRem
 
-|        | `Resolc`                   |
-|:-------|:-------------------------- |
-|        | `165.39 ms` (✅ **1.00x**)  |
-
-### Storage
-
-|        | `Resolc`                   |
-|:-------|:-------------------------- |
-|        | `120.40 ms` (✅ **1.00x**)  |
-
-### Transfer
-
-|        | `Resolc`                   |
-|:-------|:-------------------------- |
-|        | `123.19 ms` (✅ **1.00x**)  |
+|        | `resolc`                  | `solc`                           |
+|:-------|:--------------------------|:-------------------------------- |
+|        | `108.51 ms` (✅ **1.00x**) | `8.60 ms` (🚀 **12.61x faster**)  |
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)

@@ -10,22 +10,28 @@ use criterion::{
     BenchmarkGroup, Criterion,
 };
 
-/// The function under test executes the resolc executable.
+/// The function under test executes the `resolc` executable.
 fn execute_resolc(arguments: &[&str]) {
-    let result = execute_command("resolc", arguments);
+    execute_command("resolc", arguments);
+}
+
+/// The function under test executes the `solc` executable.
+fn execute_solc(arguments: &[&str]) {
+    execute_command("solc", arguments);
+}
+
+#[inline(always)]
+fn execute_command(command: &str, arguments: &[&str]) {
+    let result = Command::new(command)
+        .args(arguments)
+        .output()
+        .expect("expected command output");
+
     assert!(
         result.status.success(),
         "command failed: {}",
         get_stderr(&result)
     );
-}
-
-#[inline(always)]
-fn execute_command(command: &str, arguments: &[&str]) -> Output {
-    Command::new(command)
-        .args(arguments)
-        .output()
-        .expect("expected command output")
 }
 
 fn get_stderr(result: &Output) -> String {
@@ -54,12 +60,20 @@ where
     c.benchmark_group(group_name)
 }
 
-fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
+fn bench(
+    mut group: BenchmarkGroup<'_, WallTime>,
+    resolc_arguments: &[&str],
+    solc_arguments: &[&str],
+) {
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10);
 
     group.bench_function("resolc", |b| {
-        b.iter(|| execute_resolc(compiler_arguments));
+        b.iter(|| execute_resolc(resolc_arguments));
+    });
+
+    group.bench_function("solc", |b| {
+        b.iter(|| execute_solc(solc_arguments));
     });
 
     group.finish();
@@ -68,25 +82,28 @@ fn bench(mut group: BenchmarkGroup<'_, WallTime>, compiler_arguments: &[&str]) {
 fn bench_empty(c: &mut Criterion) {
     let group = group(c, "Empty");
     let path = get_absolute_path("../src/tests/data/solidity/contract.sol");
-    let compiler_arguments = &[&path, "-O0"];
+    let resolc_arguments = &[&path, "-O3"];
+    let solc_arguments = &[&path, "--optimize"];
 
-    bench(group, compiler_arguments);
+    bench(group, resolc_arguments, solc_arguments);
 }
 
 fn bench_dependency(c: &mut Criterion) {
     let group = group(c, "Dependency");
     let path = get_absolute_path("../src/tests/data/solidity/dependency.sol");
-    let compiler_arguments = &[&path, "-O0"];
+    let resolc_arguments = &[&path, "-O3"];
+    let solc_arguments = &[&path, "--optimize"];
 
-    bench(group, compiler_arguments);
+    bench(group, resolc_arguments, solc_arguments);
 }
 
 fn bench_large_div_rem(c: &mut Criterion) {
     let group = group(c, "LargeDivRem");
     let path = get_absolute_path("../src/tests/data/solidity/large_div_rem.sol");
-    let compiler_arguments = &[&path, "-O0"];
+    let resolc_arguments = &[&path, "-O3"];
+    let solc_arguments = &[&path, "--optimize"];
 
-    bench(group, compiler_arguments);
+    bench(group, resolc_arguments, solc_arguments);
 }
 
 criterion_group!(

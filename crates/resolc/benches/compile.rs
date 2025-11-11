@@ -77,9 +77,6 @@ fn bench(
     solc_arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) {
-    group.measurement_time(Duration::from_secs(10));
-    group.sample_size(10);
-
     group.bench_function("resolc", |b| {
         b.iter_batched(
             || get_stdin_config(stdin_file_path),
@@ -100,7 +97,10 @@ fn bench(
 }
 
 fn bench_empty(c: &mut Criterion) {
-    let group = group(c, "Empty");
+    let mut group = group(c, "Empty");
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(8));
     let path = absolute_path("src/tests/data/solidity/contract.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
@@ -109,7 +109,10 @@ fn bench_empty(c: &mut Criterion) {
 }
 
 fn bench_dependency(c: &mut Criterion) {
-    let group = group(c, "Dependency");
+    let mut group = group(c, "Dependency");
+    group
+        .sample_size(50)
+        .measurement_time(Duration::from_secs(8));
     let path = absolute_path("src/tests/data/solidity/dependency.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
@@ -118,7 +121,10 @@ fn bench_dependency(c: &mut Criterion) {
 }
 
 fn bench_large_div_rem(c: &mut Criterion) {
-    let group = group(c, "LargeDivRem");
+    let mut group = group(c, "LargeDivRem");
+    group
+        .sample_size(50)
+        .measurement_time(Duration::from_secs(9));
     let path = absolute_path("src/tests/data/solidity/large_div_rem.sol");
     let resolc_arguments = &[&path, "-O3"];
     let solc_arguments = &[&path, "--optimize"];
@@ -127,7 +133,10 @@ fn bench_large_div_rem(c: &mut Criterion) {
 }
 
 fn bench_memset(c: &mut Criterion) {
-    let group = group(c, "Memset (`--yul`)");
+    let mut group = group(c, "Memset (`--yul`)");
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(7));
     let path = absolute_path("src/tests/data/yul/memset.yul");
     let resolc_arguments = &[&path, "--yul", "-O3"];
     let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
@@ -136,7 +145,10 @@ fn bench_memset(c: &mut Criterion) {
 }
 
 fn bench_return(c: &mut Criterion) {
-    let group = group(c, "Return (`--yul`)");
+    let mut group = group(c, "Return (`--yul`)");
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(6));
     let path = absolute_path("src/tests/data/yul/return.yul");
     let resolc_arguments = &[&path, "--yul", "-O3"];
     let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
@@ -145,7 +157,10 @@ fn bench_return(c: &mut Criterion) {
 }
 
 fn bench_standard_json_contracts(c: &mut Criterion) {
-    let group = group(c, "Multiple Contracts (`--standard-json`)");
+    let mut group = group(c, "Multiple Contracts (`--standard-json`)");
+    group
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(35));
     let path = absolute_path("src/tests/data/standard_json/solidity_contracts.json");
     let resolc_arguments = &["--standard-json"];
     let solc_arguments = &["--standard-json"];

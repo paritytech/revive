@@ -6,6 +6,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2509.0.0`
 
+### Changed
+- Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
+
 ## v0.5.0
 
 This is a development pre-release.

@@ -103,6 +103,24 @@ fn bench_large_div_rem(c: &mut Criterion) {
     bench(group, resolc_arguments, solc_arguments);
 }
 
+fn bench_memset(c: &mut Criterion) {
+    let group = group(c, "Memset (`--yul`)");
+    let path = absolute_path("src/tests/data/yul/memset.yul");
+    let resolc_arguments = &[&path, "--yul", "-O3"];
+    let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
+
+    bench(group, resolc_arguments, solc_arguments);
+}
+
+fn bench_return(c: &mut Criterion) {
+    let group = group(c, "Return (`--yul`)");
+    let path = absolute_path("src/tests/data/yul/return.yul");
+    let resolc_arguments = &[&path, "--yul", "-O3"];
+    let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
+
+    bench(group, resolc_arguments, solc_arguments);
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default();
@@ -110,6 +128,8 @@ criterion_group!(
         bench_empty,
         bench_dependency,
         bench_large_div_rem,
+        bench_memset,
+        bench_return,
 );
 
 criterion_main!(benches);

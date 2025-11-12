@@ -101,7 +101,7 @@ export async function compile(
       enabled: true,
       runs: 200,
     },
-    bin = process.env.RESOLC_BIN,
+    bin,
   } = option
 
   const input = JSON.stringify({
@@ -128,7 +128,7 @@ export async function compile(
  * resolve the package root
  * use resolve-pkg to find the package root, and fallback to using require.resolve if the package defines an exports field
  * see https://github.com/sindresorhus/resolve-pkg/issues/9
- **/
+ */
 function resolvePkgRoot(basePackage: string) {
   const packageRoot = resolvePkg(basePackage)
   if (packageRoot) {

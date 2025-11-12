@@ -30,5 +30,5 @@ fn no_evm_codegen_requested() {
     assert_command_success(&result, "EVM codegen std json input fixture should build");
 
     let output: SolcStandardJsonOutput = serde_json::from_str(&result.stdout).unwrap();
-    assert!(!output.errors.iter().any(|msg| msg.severity == "error"),)
+    assert!(!output.errors.iter().any(|msg| msg.severity == "error"))
 }

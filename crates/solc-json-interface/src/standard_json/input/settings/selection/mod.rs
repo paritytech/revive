@@ -56,6 +56,14 @@ impl PerFileSelection {
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
+
+    /// Removes unneeded selections.
+    pub fn retain(&mut self) {
+        for file in self.files.values_mut() {
+            file.per_contract.retain(Flag::is_required_for_codegen);
+            file.per_file.retain(Flag::is_required_for_codegen);
+        }
+    }
 }
 
 /// The `solc --standard-json` output selection.
@@ -124,5 +132,12 @@ impl Selection {
         self.files
             .contains(path, flag)
             .unwrap_or(self.all.contains(flag))
+    }
+
+    /// Removes unneeded selections.
+    pub fn retain(&mut self) {
+        self.all.per_file.retain(Flag::is_required_for_codegen);
+        self.all.per_contract.retain(Flag::is_required_for_codegen);
+        self.files.retain();
     }
 }

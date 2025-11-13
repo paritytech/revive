@@ -123,7 +123,6 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 fn build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::new()?;
     let path = test_dir.path();
-    let command = Command::new(cargo::cargo_bin!("revive-llvm"));
 
     Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(path)
@@ -135,13 +134,11 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    Command::new(
-        cargo::cargo_bin!(common::REVIVE_LLVM)?
-            .current_dir(path)
-            .arg("emsdk")
-            .assert()
-            .success(),
-    );
+    Command::new(cargo::cargo_bin!("revive-llvm"))
+        .current_dir(path)
+        .arg("emsdk")
+        .assert()
+        .success();
 
     // Two little shell-dependent things here:
     // Doing `. ./emsdk_env.sh` instead of `source`, as `source` might be missing in some shells
@@ -159,7 +156,7 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
         .success();
 
     // Build with emscripten target
-    Command::cargo_bin(common::REVIVE_LLVM)?
+    Command::new(cargo::cargo_bin!("revive-llvm"))
         .current_dir(path)
         .arg("--target-env")
         .arg("emscripten")

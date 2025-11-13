@@ -8962,6 +8962,7 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
+ "criterion",
  "git2",
  "hex",
  "inkwell",

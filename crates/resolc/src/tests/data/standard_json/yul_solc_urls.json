@@ -2,9 +2,7 @@
   "language": "Yul",
   "sources": {
     "Test": {
-      "urls": [
-        "src/tests/data/yul/Test.yul"
-      ]
+      "urls": ["src/tests/data/yul/return.yul"]
     }
   },
   "settings": {

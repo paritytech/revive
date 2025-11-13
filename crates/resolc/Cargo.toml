@@ -48,8 +48,12 @@ git2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+criterion = { workspace = true }
 
 [features]
 parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
 
+[[bench]]
+name = "compile"
+harness = false

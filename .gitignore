@@ -3,6 +3,7 @@
 target-llvm
 *.dot
 .vscode/
+.zed/
 .DS_Store
 /*.sol
 /*.yul

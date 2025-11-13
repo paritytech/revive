@@ -20,6 +20,7 @@
 	bench \
 	bench-pvm \
 	bench-evm \
+	bench-resolc \
 	clean
 
 install: install-bin install-npm
@@ -89,6 +90,10 @@ bench-pvm: install-bin
 bench-evm: install-bin
 	cargo criterion --bench execute --features bench-evm --message-format=json \
 	| criterion-table > crates/benchmarks/EVM.md
+
+bench-resolc: install-bin
+	cargo criterion --package resolc --bench compile --message-format=json \
+	| criterion-table > crates/resolc/BENCHMARKS.md
 
 clean:
 	cargo clean ; \

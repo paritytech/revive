@@ -28,7 +28,7 @@ impl TestDir {
                 "https://github.com/llvm/llvm-project.git",
                 "llvm",
             ])
-            .current_dir(&tmppath)
+            .current_dir(tmppath)
             .output()?;
 
         std::process::Command::new("git")
@@ -40,7 +40,7 @@ impl TestDir {
                 "--force",
                 "--depth 1",
             ])
-            .current_dir(&tmppath)
+            .current_dir(tmppath)
             .output()?;
 
         Ok(Self {

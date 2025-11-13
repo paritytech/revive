@@ -70,6 +70,9 @@ pub enum Subcommand {
         enable_valgrind: bool,
     },
 
+    /// Install emsdk
+    Emsdk,
+
     /// Clean the build artifacts.
     Clean,
 

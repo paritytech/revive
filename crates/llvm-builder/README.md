@@ -67,12 +67,6 @@ Obtain a compatible build for your host platform from the release section of thi
 </details>
 
 <details>
-<summary>4. (Optional) Create the `LLVM.lock` file.</summary>
-
-   * The `LLVM.lock` dictates the LLVM source tree being used.
-     A default `./LLVM.lock` pointing to the release used for development is already provided.
-
-</details>
 
 <details>
 <summary>5. Build LLVM.</summary>

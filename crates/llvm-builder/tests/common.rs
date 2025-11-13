@@ -11,11 +11,12 @@ pub struct TestDir {
 impl TestDir {
     pub fn new() -> anyhow::Result<Self> {
         let tempdir = TempDir::new()?;
+        let tmppath = tempdir.path();
 
         // Initialize a git repo and add the LLVM submodule
         std::process::Command::new("git")
             .args(["init"])
-            .current_dir(&tempdir)
+            .current_dir(tmppath)
             .output()?;
 
         std::process::Command::new("git")
@@ -27,7 +28,7 @@ impl TestDir {
                 "https://github.com/llvm/llvm-project.git",
                 "llvm",
             ])
-            .current_dir(&tempdir)
+            .current_dir(&tmppath)
             .output()?;
 
         std::process::Command::new("git")
@@ -39,11 +40,11 @@ impl TestDir {
                 "--force",
                 "--depth 1",
             ])
-            .current_dir(&tempdir)
+            .current_dir(&tmppath)
             .output()?;
 
         Ok(Self {
-            path: tempdir.path().to_path_buf(),
+            path: tmppath.to_path_buf(),
             _tempdir: tempdir,
         })
     }

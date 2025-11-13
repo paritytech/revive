@@ -42,11 +42,7 @@ fn main_inner() -> anyhow::Result<()> {
             sanitizer,
             enable_valgrind,
         } => {
-            if arguments.target_env == revive_llvm_builder::TargetEnv::Emscripten {
-                revive_llvm_builder::utils::install_emsdk()?;
-            }
-
-            revive_llvm_builder::init_submodule()?;
+            revive_llvm_builder::init(false)?;
 
             let mut targets = targets
                 .into_iter()
@@ -103,6 +99,10 @@ fn main_inner() -> anyhow::Result<()> {
                 sanitizer,
                 enable_valgrind,
             )?;
+        }
+
+        Subcommand::Emsdk => {
+            revive_llvm_builder::init(true)?;
         }
 
         Subcommand::Clean => {

@@ -22,8 +22,12 @@ pub use target_env::TargetEnv;
 pub use target_triple::TargetTriple;
 
 /// Initializes the LLVM submodule if not already done.
-pub fn init_submodule() -> anyhow::Result<()> {
+pub fn init(init_emscripten: bool) -> anyhow::Result<()> {
     utils::check_presence("git")?;
+
+    if init_emscripten {
+        utils::install_emsdk()?;
+    }
 
     let destination_path = PathBuf::from(LLVMPath::DIRECTORY_LLVM_SOURCE);
     if destination_path.join(".git").exists() {

@@ -1,8 +1,10 @@
 //! The tests for running resolc with standard JSON option.
 
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::tests::cli::utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
+    execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
@@ -20,4 +22,13 @@ fn runs_with_valid_input_file() {
 
     let solc_result = execute_solc_with_stdin_input(arguments, STANDARD_JSON_CONTRACTS_PATH);
     assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn no_evm_codegen_requested() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_EVM_CODEGEN_PATH);
+    assert_command_success(&result, "EVM codegen std json input fixture should build");
+
+    let output: SolcStandardJsonOutput = serde_json::from_str(&result.stdout).unwrap();
+    assert!(!output.errors.iter().any(|msg| msg.severity == "error"))
 }

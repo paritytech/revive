@@ -47,3 +47,16 @@ pub enum Flag {
     #[serde(rename = "ir")]
     Ir,
 }
+
+impl Flag {
+    /// Whether this selection flag is required for the revive codegen.
+    ///
+    /// Specifically, EVM bytecode and related flags should never be requested.
+    /// It will be replaced by PVM code anyways.
+    pub fn is_required_for_codegen(&self) -> bool {
+        !matches!(
+            self,
+            Flag::EVMBC | Flag::EVMDBC | Flag::EVMLA | Flag::EVM | Flag::Assembly
+        )
+    }
+}

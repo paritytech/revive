@@ -38,7 +38,7 @@ install-llvm-builder:
 	cargo install --force --locked --path crates/llvm-builder
 
 install-llvm: install-llvm-builder
-	revive-llvm clone
+	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
 install-revive-runner:

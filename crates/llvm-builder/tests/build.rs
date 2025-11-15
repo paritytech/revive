@@ -119,7 +119,6 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 
 /// Tests the build and clean process of the LLVM repository for the emscripten target.
 #[test]
-#[cfg(target_os = "linux")]
 fn build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::new()?;
     let path = test_dir.path();

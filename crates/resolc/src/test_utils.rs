@@ -30,20 +30,18 @@ use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::Compiler;
 
-static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
+static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
     Lazy::new(Default::default);
-static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
-    Lazy::new(Default::default);
-static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedCompilation, Vec<u8>>>> =
-    Lazy::new(Default::default);
-static YUL_IR_CACHE: Lazy<Mutex<HashMap<CachedCompilation, String>>> = Lazy::new(Default::default);
+static YUL_IR_CACHE: Lazy<Mutex<HashMap<CachedBlob, String>>> = Lazy::new(Default::default);
 
 const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
 /// Tests may share and re-use contract code.
-/// The compilation result (such as blobs) cache helps avoiding duplicate compilation.
+/// The compiled blob cache helps avoiding duplicate compilation.
 #[derive(Hash, PartialEq, Eq)]
-struct CachedCompilation {
+struct CachedBlob {
     /// The contract name.
     contract_name: String,
     /// Whether the solc optimizer is enabled.
@@ -340,7 +338,7 @@ pub fn compile_blob_with_options(
     solc_optimizer_enabled: bool,
     optimizer_settings: OptimizerSettings,
 ) -> Vec<u8> {
-    let id = CachedCompilation {
+    let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         opt: optimizer_settings.middle_end_as_string(),
         solc_optimizer_enabled,
@@ -428,7 +426,7 @@ fn compile_evm(
     solc_optimizer_enabled: bool,
     runtime: bool,
 ) -> Vec<u8> {
-    let id = CachedCompilation {
+    let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
@@ -516,7 +514,7 @@ pub fn compile_to_yul_with_options(
     source_code: &str,
     solc_optimizer_enabled: bool,
 ) -> String {
-    let id = CachedCompilation {
+    let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solc_optimizer_enabled,
         solidity: source_code.to_owned(),

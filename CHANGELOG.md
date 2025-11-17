@@ -10,6 +10,9 @@ Supported `polkadot-sdk` rev: `2509.0.0`
 - Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
 
+### Fixed:
+- The missing `STOP` instruction at the end of `code` blocks.
+
 ## v0.5.0
 
 This is a development pre-release.

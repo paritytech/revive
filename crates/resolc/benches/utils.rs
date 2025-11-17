@@ -50,6 +50,8 @@ pub fn absolute_path(relative_path: &str) -> String {
     absolute_path.to_string_lossy().into_owned()
 }
 
+// TODO: Remove allow dead code after moving helpers to `tests` module. (May move the tests as well.)
+#[allow(dead_code)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,8 +160,7 @@ mod tests {
 
     /// Asserts that the `resolc` output of compiling Solidity from JSON input contains a PVM blob.
     /// - `result`: The result of running the command.
-    /// - `file_name`: The file name of the contract to verify the existence of a PVM blob for
-    ///                (corresponds to the name specified as a `source` in the JSON input).
+    /// - `file_name`: The file name of the contract to verify the existence of a PVM blob for (corresponds to the name specified as a `source` in the JSON input).
     /// - `contract_name`: The name of the contract to verify the existence of a PVM blob for.
     fn assert_pvm_blob_from_json(result: &Output, file_name: &str, contract_name: &str) {
         assert_binary_blob_from_json(result, file_name, contract_name, PVM_BLOB_START);
@@ -167,8 +168,7 @@ mod tests {
 
     /// Asserts that the `solc` output of compiling Solidity from JSON input contains an EVM blob.
     /// - `result`: The result of running the command.
-    /// - `file_name`: The file name of the contract to verify the existence of an EVM blob for
-    ///                (corresponds to the name specified as a `source` in the JSON input).
+    /// - `file_name`: The file name of the contract to verify the existence of an EVM blob for (corresponds to the name specified as a `source` in the JSON input).
     /// - `contract_name`: The name of the contract to verify the existence of an EVM blob for.
     fn assert_evm_blob_from_json(result: &Output, file_name: &str, contract_name: &str) {
         assert_binary_blob_from_json(
@@ -200,8 +200,7 @@ mod tests {
 
     /// Asserts that the output of compiling Solidity from JSON input contains a binary blob.
     /// - `result`: The result of running the command.
-    /// - `file_name`: The file name of the contract to verify the existence of a binary blob for
-    ///                (corresponds to the name specified as a `source` in the JSON input).
+    /// - `file_name`: The file name of the contract to verify the existence of a binary blob for (corresponds to the name specified as a `source` in the JSON input).
     /// - `contract_name`: The name of the contract to verify the existence of a binary blob for.
     /// - `blob_start`: The starting hex value of the binary blob.
     ///
@@ -249,12 +248,12 @@ mod tests {
         );
     }
 
-    /// Gets the error message of the first error reported when compiling from JSON input.
+    /// Gets the first error message reported when compiling from JSON input.
     ///
     /// See [output description](https://docs.soliditylang.org/en/latest/using-the-compiler.html#output-description)
     /// for more details on the JSON output format.
-    fn get_first_json_error(errors: &Vec<serde_json::Value>) -> &str {
-        errors.get(0).unwrap()["message"].as_str().unwrap()
+    fn get_first_json_error(errors: &[serde_json::Value]) -> &str {
+        errors.first().unwrap()["message"].as_str().unwrap()
     }
 
     /// Converts bytes to a string.

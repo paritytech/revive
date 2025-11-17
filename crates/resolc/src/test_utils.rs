@@ -470,7 +470,7 @@ fn compile_evm(
     blob
 }
 
-/// Generates Yul IR contracts grouped by files from Solidity source files.
+/// Internal helper to compiler `sources` to their optimized Yul IR.
 fn generate_yul(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
     solc_optimizer_enabled: bool,

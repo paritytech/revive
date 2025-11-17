@@ -9,7 +9,7 @@ use criterion::{
 use revive_integration::cases::Contract;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
-/// Function under test - Parses the Yul `source_code`.
+/// The function under test parses the Yul `source_code`.
 /// Consumes the source code String in order to not time the cloning.
 fn parse(source_code: String) {
     let mut lexer = Lexer::new(source_code);
@@ -31,7 +31,7 @@ where
 
     group.sample_size(10);
 
-    group.bench_function("Revive", |b| {
+    group.bench_function("parse", |b| {
         b.iter_batched(|| source_code.clone(), parse, BatchSize::SmallInput);
     });
 

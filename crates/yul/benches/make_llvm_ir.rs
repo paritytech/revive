@@ -1,5 +1,3 @@
-#![cfg(feature = "bench-llvm-ir")]
-
 use alloy_primitives::*;
 use criterion::{
     criterion_group, criterion_main,

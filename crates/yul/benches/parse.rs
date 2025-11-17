@@ -1,5 +1,3 @@
-#![cfg(feature = "bench-parse")]
-
 use alloy_primitives::*;
 use criterion::{
     criterion_group, criterion_main,

@@ -555,6 +555,7 @@ fn code_block_stops() {
                 storage_deposit_limit: None,
                 data: Default::default(),
             },
+            VerifyCall(Default::default()),
         ],
         differential: false,
         ..Default::default()
@@ -611,6 +612,7 @@ fn code_block_with_nested_object_stops() {
                 storage_deposit_limit: None,
                 data: Default::default(),
             },
+            VerifyCall(Default::default()),
         ],
         differential: false,
         ..Default::default()

@@ -1,16 +1,13 @@
-use std::{
-    fs::File,
-    path::PathBuf,
-    process::{Command, Output, Stdio},
-    time::Duration,
-};
+use std::{process::Stdio, time::Duration};
 
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
     BatchSize, BenchmarkGroup, Criterion,
 };
-use resolc::{self, SolcCompiler};
+
+mod utils;
+use utils::*;
 
 /// The function under test executes the `resolc` executable.
 fn execute_resolc(arguments: &[&str], stdin_config: Stdio) {
@@ -24,44 +21,6 @@ fn execute_solc(arguments: &[&str], stdin_config: Stdio) {
         arguments,
         stdin_config,
     );
-}
-
-#[inline(always)]
-fn execute_command(command: &str, arguments: &[&str], stdin_config: Stdio) {
-    let result = Command::new(command)
-        .args(arguments)
-        .stdin(stdin_config)
-        .output()
-        .expect("expected command output");
-
-    assert!(
-        result.status.success(),
-        "command failed: {}",
-        get_stderr(&result)
-    );
-}
-
-fn get_stderr(result: &Output) -> String {
-    String::from_utf8_lossy(&result.stderr).to_string()
-}
-
-fn get_stdin_config(stdin_file_path: Option<&str>) -> Stdio {
-    match stdin_file_path {
-        Some(path) => Stdio::from(File::open(path).unwrap()),
-        None => Stdio::null(),
-    }
-}
-
-/// Gets the absolute path of a file. The `relative_path` must
-/// be relative to the `resolc` crate.
-/// Panics if the path does not exist or is not an accessible file.
-fn absolute_path(relative_path: &str) -> String {
-    let absolute_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path);
-    if !absolute_path.is_file() {
-        panic!("expected a file at `{}`", absolute_path.display());
-    }
-
-    absolute_path.to_string_lossy().into_owned()
 }
 
 fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
@@ -102,8 +61,15 @@ fn bench_empty(c: &mut Criterion) {
         .sample_size(100)
         .measurement_time(Duration::from_secs(8));
     let path = absolute_path("src/tests/data/solidity/contract.sol");
-    let resolc_arguments = &[&path, "-O3"];
-    let solc_arguments = &[&path, "--optimize"];
+    let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
+    let solc_arguments = &[
+        &path,
+        "--bin",
+        "--via-ir",
+        "--optimize",
+        "--optimize-runs",
+        SolcOptSettings::PERFORMANCE,
+    ];
 
     bench(group, resolc_arguments, solc_arguments, None);
 }
@@ -112,10 +78,17 @@ fn bench_dependency(c: &mut Criterion) {
     let mut group = group(c, "Dependency");
     group
         .sample_size(50)
-        .measurement_time(Duration::from_secs(8));
+        .measurement_time(Duration::from_secs(9));
     let path = absolute_path("src/tests/data/solidity/dependency.sol");
-    let resolc_arguments = &[&path, "-O3"];
-    let solc_arguments = &[&path, "--optimize"];
+    let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
+    let solc_arguments = &[
+        &path,
+        "--bin",
+        "--via-ir",
+        "--optimize",
+        "--optimize-runs",
+        SolcOptSettings::PERFORMANCE,
+    ];
 
     bench(group, resolc_arguments, solc_arguments, None);
 }
@@ -123,11 +96,18 @@ fn bench_dependency(c: &mut Criterion) {
 fn bench_large_div_rem(c: &mut Criterion) {
     let mut group = group(c, "LargeDivRem");
     group
-        .sample_size(50)
+        .sample_size(45)
         .measurement_time(Duration::from_secs(9));
     let path = absolute_path("src/tests/data/solidity/large_div_rem.sol");
-    let resolc_arguments = &[&path, "-O3"];
-    let solc_arguments = &[&path, "--optimize"];
+    let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
+    let solc_arguments = &[
+        &path,
+        "--bin",
+        "--via-ir",
+        "--optimize",
+        "--optimize-runs",
+        SolcOptSettings::PERFORMANCE,
+    ];
 
     bench(group, resolc_arguments, solc_arguments, None);
 }
@@ -138,8 +118,15 @@ fn bench_memset(c: &mut Criterion) {
         .sample_size(100)
         .measurement_time(Duration::from_secs(7));
     let path = absolute_path("src/tests/data/yul/memset.yul");
-    let resolc_arguments = &[&path, "--yul", "-O3"];
-    let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
+    let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
+    let solc_arguments = &[
+        &path,
+        "--strict-assembly",
+        "--bin",
+        "--optimize",
+        "--optimize-runs",
+        SolcOptSettings::PERFORMANCE,
+    ];
 
     bench(group, resolc_arguments, solc_arguments, None);
 }
@@ -150,8 +137,15 @@ fn bench_return(c: &mut Criterion) {
         .sample_size(100)
         .measurement_time(Duration::from_secs(6));
     let path = absolute_path("src/tests/data/yul/return.yul");
-    let resolc_arguments = &[&path, "--yul", "-O3"];
-    let solc_arguments = &[&path, "--strict-assembly", "--optimize"];
+    let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
+    let solc_arguments = &[
+        &path,
+        "--strict-assembly",
+        "--bin",
+        "--optimize",
+        "--optimize-runs",
+        SolcOptSettings::PERFORMANCE,
+    ];
 
     bench(group, resolc_arguments, solc_arguments, None);
 }

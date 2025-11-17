@@ -241,47 +241,52 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
 }
 
 /// Checks if the Yul project can be built without errors.
-pub fn build_yul<T: ToString + Display>(sources: &[(T, T)]) -> anyhow::Result<()> {
+pub fn build_yul<T: ToString + Display>(
+    sources: &[(T, T)],
+) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
     check_dependencies();
-
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-    let optimizer_settings = OptimizerSettings::none();
 
-    let sources = sources
-        .iter()
-        .map(|(path, source)| {
-            (
-                path.to_string(),
-                SolcStandardJsonInputSource::from(source.to_string()),
-            )
-        })
-        .collect();
-    let mut output = SolcStandardJsonOutput::new(&sources, &mut vec![]);
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
-    let project = Project::try_from_yul_sources(
-        sources,
+    let mut build = Project::try_from_yul_sources(
+        sources
+            .iter()
+            .map(|(path, source)| {
+                (
+                    path.to_string(),
+                    SolcStandardJsonInputSource::from(source.to_string()),
+                )
+            })
+            .collect(),
         Default::default(),
-        Some(&mut output),
-        &Default::default(),
-    )?;
-    let build = project.compile(
+        None,
+        &DEBUG_CONFIG,
+    )?
+    .compile(
         &mut vec![],
-        optimizer_settings,
-        MetadataHash::None,
+        OptimizerSettings::size(),
+        MetadataHash::Keccak256,
         &DEBUG_CONFIG,
         Default::default(),
         Default::default(),
     )?;
+    build.take_and_write_warnings();
     build.check_errors()?;
 
-    let build = build.link(BTreeMap::new(), &DEBUG_CONFIG);
+    let mut build = build.link(Default::default(), &DEBUG_CONFIG);
+    build.take_and_write_warnings();
     build.check_errors()?;
 
-    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    build.write_to_standard_json(&mut output, &solc.version()?)?;
-    output.check_errors()?;
-    Ok(())
+    Ok(build
+        .results
+        .into_iter()
+        .fold(BTreeMap::new(), |mut init, (path, result)| {
+            init.insert(path.to_string(), result.unwrap().build.bytecode);
+            init
+        }))
 }
 
 /// Builds the Yul standard JSON and returns the standard JSON output.
@@ -292,13 +297,19 @@ pub fn build_yul_standard_json(
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
 
+    let _ = crate::process::native_process::EXECUTABLE
+        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
+
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
+    if output.has_errors() {
+        return Ok(output);
+    }
     let build = Project::try_from_yul_sources(
         solc_input.sources,
         Default::default(),
         Some(&mut output),
-        &Default::default(),
+        &DEBUG_CONFIG,
     )?
     .compile(
         &mut vec![],
@@ -314,7 +325,6 @@ pub fn build_yul_standard_json(
     build.check_errors()?;
     build.write_to_standard_json(&mut output, &solc.version()?)?;
 
-    output.check_errors()?;
     Ok(output)
 }
 

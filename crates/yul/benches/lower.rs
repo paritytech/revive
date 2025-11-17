@@ -59,7 +59,7 @@ fn bench<F>(
     let llvm = InkwellContext::create();
     let ast = parse(&contract().yul);
 
-    group.sample_size(10);
+    group.sample_size(90);
 
     group.bench_function("lower", |b| {
         b.iter_batched(

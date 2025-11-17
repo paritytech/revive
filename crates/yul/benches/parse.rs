@@ -27,7 +27,7 @@ where
 {
     let source_code = contract().yul;
 
-    group.sample_size(10);
+    group.sample_size(200);
 
     group.bench_function("parse", |b| {
         b.iter_batched(|| source_code.clone(), parse, BatchSize::SmallInput);

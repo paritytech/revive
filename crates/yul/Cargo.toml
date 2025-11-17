@@ -29,5 +29,5 @@ name = "parse"
 harness = false
 
 [[bench]]
-name = "make_llvm_ir"
+name = "lower"
 harness = false

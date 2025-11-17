@@ -12,7 +12,7 @@ use revive_llvm_context::{
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
 /// The function under test lowers the Yul `Object` into LLVM IR.
-fn make_llvm_ir(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
+fn lower(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
     ast.declare(&mut llvm_context)
         .expect("the AST should be valid");
     ast.into_llvm(&mut llvm_context)
@@ -61,10 +61,10 @@ fn bench<F>(
 
     group.sample_size(10);
 
-    group.bench_function("Revive", |b| {
+    group.bench_function("lower", |b| {
         b.iter_batched(
             || (ast.clone(), create_llvm_context(&llvm, &optimizer_settings)),
-            |(ast, llvm_context)| make_llvm_ir(ast, llvm_context),
+            |(ast, llvm_context)| lower(ast, llvm_context),
             BatchSize::SmallInput,
         );
     });
@@ -74,7 +74,7 @@ fn bench<F>(
 
 fn bench_baseline(c: &mut Criterion) {
     bench(
-        group(c, "Baseline - To LLVM IR"),
+        group(c, "Baseline - Lower"),
         Contract::baseline,
         OptimizerSettings::none(),
     );
@@ -82,7 +82,7 @@ fn bench_baseline(c: &mut Criterion) {
 
 fn bench_erc20(c: &mut Criterion) {
     bench(
-        group(c, "ERC20 - To LLVM IR"),
+        group(c, "ERC20 - Lower"),
         Contract::erc20,
         OptimizerSettings::none(),
     );
@@ -90,7 +90,7 @@ fn bench_erc20(c: &mut Criterion) {
 
 fn bench_sha1(c: &mut Criterion) {
     bench(
-        group(c, "SHA1 - To LLVM IR"),
+        group(c, "SHA1 - Lower"),
         || Contract::sha1(vec![0xff].into()),
         OptimizerSettings::none(),
     );
@@ -98,7 +98,7 @@ fn bench_sha1(c: &mut Criterion) {
 
 fn bench_storage(c: &mut Criterion) {
     bench(
-        group(c, "Storage - To LLVM IR"),
+        group(c, "Storage - Lower"),
         || Contract::storage_transient(U256::from(0)),
         OptimizerSettings::none(),
     );
@@ -106,7 +106,7 @@ fn bench_storage(c: &mut Criterion) {
 
 fn bench_transfer(c: &mut Criterion) {
     bench(
-        group(c, "Transfer - To LLVM IR"),
+        group(c, "Transfer - Lower"),
         || Contract::transfer_self(U256::from(0)),
         OptimizerSettings::none(),
     );

@@ -93,7 +93,7 @@ bench-evm: install-bin
 
 bench-resolc: test-resolc
 	cargo criterion --package resolc --bench compile --message-format=json \
-	| criterion-table > crates/resolc/BENCHMARKS.md
+	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
 clean:
 	cargo clean ; \

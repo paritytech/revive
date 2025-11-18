@@ -64,6 +64,9 @@ impl PolkaVMWriteLLVM for Code {
     fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         self.block.into_llvm(context)?;
 
+        // The EVM lets the code return implicitly.
+        revive_llvm_context::polkavm_evm_return::stop(context)?;
+
         Ok(())
     }
 }

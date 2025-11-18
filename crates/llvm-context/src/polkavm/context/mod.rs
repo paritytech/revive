@@ -134,7 +134,7 @@ impl<'ctx> Context<'ctx> {
             module
                 .get_function(import)
                 .unwrap_or_else(|| panic!("{import} import should be declared"))
-                .set_linkage(inkwell::module::Linkage::External);
+                .set_linkage(inkwell::module::Linkage::Internal);
         }
     }
 

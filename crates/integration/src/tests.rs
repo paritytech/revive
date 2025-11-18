@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use alloy_primitives::*;
+use resolc::test_utils::build_yul;
 use revive_runner::*;
 use SpecsAction::*;
 
@@ -514,6 +515,104 @@ fn create2_salt() {
                 data: predictor.calldata,
                 salt: OptionalHex::default(),
             },
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn code_block_stops() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test"{
+  code {
+    tstore(0x7fd9d641,0x7b1e022)
+    returndatacopy(0x0,0x0,returndatasize())
+  }
+  object "Test_deployed" { code{} }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(Default::default()),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn code_block_with_nested_object_stops() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test" {
+    code {
+        function allocate(size) -> ptr {
+            ptr := mload(0x40)
+            if iszero(ptr) { ptr := 0x60 }
+            mstore(0x40, add(ptr, size))
+        }
+        let size := datasize("Test_deployed")
+        let offset := allocate(size)
+        datacopy(offset, dataoffset("Test_deployed"), size)
+        return(offset, size)
+    }
+    object "Test_deployed" {
+        code {
+            sstore(0, 100)
+	 }
+        object "Test" {
+            code {
+	    revert(0,0)
+            }
+        }
+    }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(Default::default()),
         ],
         differential: false,
         ..Default::default()

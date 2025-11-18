@@ -119,8 +119,11 @@ fn build_with_sanitizers() -> anyhow::Result<()> {
 
 /// Tests the build and clean process of the LLVM repository for the emscripten target.
 #[test]
+#[cfg(target_os = "linux")]
 fn build_and_clean_emscripten() -> anyhow::Result<()> {
     let test_dir = common::TestDir::new()?;
+    let command = Command::new(cargo::cargo_bin!("revive-llvm"));
+    let program = command.get_program().to_string_lossy();
     let path = test_dir.path();
 
     Command::new(cargo::cargo_bin!("revive-llvm"))
@@ -144,7 +147,8 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
     // `cd {} && . ./emsdk_env.sh && cd ..` helps the script to locate `emsdk.py`
     // @see https://github.com/emscripten-core/emsdk/blob/9dbdc4b3437750b85d16931c7c801bb71a782122/emsdk_env.sh#L61-L69
     let emsdk_wrapped_build_command = format!(
-        "cd {} && . ./emsdk_env.sh && cd ..",
+        "cd {} && . ./emsdk_env.sh && cd .. && \
+        {program} --target-env emscripten build --llvm-projects lld",
         revive_llvm_builder::LLVMPath::DIRECTORY_EMSDK_SOURCE,
     );
     Command::new("sh")
@@ -154,14 +158,9 @@ fn build_and_clean_emscripten() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    // Build with emscripten target
     Command::new(cargo::cargo_bin!("revive-llvm"))
+        .arg("clean")
         .current_dir(path)
-        .arg("--target-env")
-        .arg("emscripten")
-        .arg("build")
-        .arg("--llvm-projects")
-        .arg("lld")
         .assert()
         .success();
 

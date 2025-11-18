@@ -1,4 +1,4 @@
-use alloy_primitives::*;
+use alloy_primitives::U256;
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
@@ -8,7 +8,6 @@ use revive_integration::cases::Contract;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
 /// The function under test parses the Yul `source_code`.
-/// Consumes the source code String in order to not time the cloning.
 fn parse(source_code: String) {
     let mut lexer = Lexer::new(source_code);
     AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object");

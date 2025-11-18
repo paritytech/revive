@@ -95,15 +95,15 @@ bench-evm: install-bin
 
 bench-yul: install-bin
 	cargo criterion --package revive-yul --all-targets --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS.md
+	| criterion-table > crates/yul/BENCHMARKS_M4PRO.md
 
 bench-parse-yul: install-bin
 	cargo criterion --package revive-yul --bench parse --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS_PARSE.md
+	| criterion-table > crates/yul/BENCHMARKS_PARSE_M4PRO.md
 
 bench-lower-yul: install-bin
 	cargo criterion --package revive-yul --bench lower --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS_LOWER.md
+	| criterion-table > crates/yul/BENCHMARKS_LOWER_M4PRO.md
 
 clean:
 	cargo clean ; \

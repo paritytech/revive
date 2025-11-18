@@ -1,4 +1,4 @@
-use alloy_primitives::*;
+use alloy_primitives::U256;
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},

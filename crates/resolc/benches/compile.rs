@@ -1,25 +1,30 @@
-use std::{process::Stdio, time::Duration};
+//! The `resolc` compilation benchmarks.
+//! The tests mimicking the commands run by these benchmarks exist in `src/tests/cli/bin.rs`.
+
+use std::time::Duration;
 
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
-    BatchSize, BenchmarkGroup, Criterion,
+    BenchmarkGroup, Criterion,
+};
+use resolc::{
+    self,
+    cli_utils::{absolute_path, execute_command, ResolcOptSettings, SolcOptSettings},
+    SolcCompiler,
 };
 
-mod utils;
-use utils::*;
-
 /// The function under test executes the `resolc` executable.
-fn execute_resolc(arguments: &[&str], stdin_config: Stdio) {
-    execute_command(resolc::DEFAULT_EXECUTABLE_NAME, arguments, stdin_config);
+fn execute_resolc(arguments: &[&str], stdin_file_path: Option<&str>) {
+    execute_command(resolc::DEFAULT_EXECUTABLE_NAME, arguments, stdin_file_path);
 }
 
 /// The function under test executes the `solc` executable.
-fn execute_solc(arguments: &[&str], stdin_config: Stdio) {
+fn execute_solc(arguments: &[&str], stdin_file_path: Option<&str>) {
     execute_command(
         SolcCompiler::DEFAULT_EXECUTABLE_NAME,
         arguments,
-        stdin_config,
+        stdin_file_path,
     );
 }
 
@@ -37,19 +42,11 @@ fn bench(
     stdin_file_path: Option<&str>,
 ) {
     group.bench_function("resolc", |b| {
-        b.iter_batched(
-            || get_stdin_config(stdin_file_path),
-            |stdin_config| execute_resolc(resolc_arguments, stdin_config),
-            BatchSize::SmallInput,
-        );
+        b.iter(|| execute_resolc(resolc_arguments, stdin_file_path));
     });
 
     group.bench_function("solc", |b| {
-        b.iter_batched(
-            || get_stdin_config(stdin_file_path),
-            |stdin_config| execute_solc(solc_arguments, stdin_config),
-            BatchSize::SmallInput,
-        );
+        b.iter(|| execute_solc(solc_arguments, stdin_file_path));
     });
 
     group.finish();
@@ -173,5 +170,4 @@ criterion_group!(
         bench_return,
         bench_standard_json_contracts,
 );
-
 criterion_main!(benches);

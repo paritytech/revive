@@ -2,6 +2,7 @@
 
 use std::{
     fs::File,
+    path::PathBuf,
     process::{Command, Stdio},
 };
 
@@ -30,6 +31,22 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+
+/// Common `resolc` CLI optimization settings.
+pub struct ResolcOptSettings;
+impl ResolcOptSettings {
+    pub const NONE: &'static str = "-O0";
+    pub const PERFORMANCE: &'static str = "-O3";
+    pub const SIZE: &'static str = "-Oz";
+}
+
+/// Common `solc` CLI optimization settings for `--optimize-runs`.
+pub struct SolcOptSettings;
+impl SolcOptSettings {
+    pub const NONE: &'static str = "0";
+    pub const PERFORMANCE: &'static str = "20000";
+    pub const SIZE: &'static str = "1";
+}
 
 /// The result of executing a command.
 pub struct CommandResult {
@@ -125,4 +142,16 @@ pub fn assert_command_failure(result: &CommandResult, error_message_prefix: &str
         revive_common::EXIT_CODE_FAILURE,
         result.code
     );
+}
+
+/// Gets the absolute path of a file. The `relative_path` must
+/// be relative to the `resolc` crate.
+/// Panics if the path does not exist or is not an accessible file.
+pub fn absolute_path(relative_path: &str) -> String {
+    let absolute_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative_path);
+    if !absolute_path.is_file() {
+        panic!("expected a file at `{}`", absolute_path.display());
+    }
+
+    absolute_path.to_string_lossy().into_owned()
 }

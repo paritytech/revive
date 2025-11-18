@@ -210,4 +210,9 @@ impl Input {
             let _ = source.try_resolve();
         });
     }
+
+    /// Removes unneded output selections.
+    pub fn retain_output_selection(&mut self) {
+        self.settings.retain_output_selection();
+    }
 }

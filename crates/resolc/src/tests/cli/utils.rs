@@ -18,9 +18,15 @@ pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
 /// The memeset YUL contract test fixture path.
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
 /// The standard JSON contracts test fixture path.
-///
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
+/// The standard JSON no EVM codegen test fixture path.
+///
+/// This contains EVM bytecode selection flags with provided code
+/// that doesn't compile without `viaIr`. Because we remove those
+/// selection flags, it should compile fine regardless.
+pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
+    "src/tests/data/standard_json/no_evm_codegen.json";
 
 /// The simple Solidity contract containing i256 divisions and remains that should be compiled
 /// correctly

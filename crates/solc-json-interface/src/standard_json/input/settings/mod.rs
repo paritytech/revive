@@ -112,4 +112,9 @@ impl Settings {
     pub fn selection_to_prune(&self) -> Selection {
         self.output_selection.selection_to_prune()
     }
+
+    /// Removes unneeded selections.
+    pub fn retain_output_selection(&mut self) {
+        self.output_selection.retain();
+    }
 }

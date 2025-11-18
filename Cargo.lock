@@ -8967,6 +8967,7 @@ dependencies = [
  "hex",
  "inkwell",
  "libc",
+ "log",
  "mimalloc",
  "normpath",
  "once_cell",

@@ -1,7 +1,7 @@
 //! The tests for running resolc with explicit optimization.
 
-use crate::tests::cli::utils::{
-    self, assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
+use crate::cli_utils::{
+    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
     execute_solc, RESOLC_YUL_FLAG, SOLIDITY_CONTRACT_PATH, SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH,
     YUL_MEMSET_CONTRACT_PATH,
 };
@@ -13,7 +13,7 @@ fn runs_with_valid_level() {
     for level in LEVELS {
         let optimization_argument = format!("-O{level}");
         let arguments = &[YUL_MEMSET_CONTRACT_PATH, "--yul", &optimization_argument];
-        let resolc_result = utils::execute_resolc(arguments);
+        let resolc_result = execute_resolc(arguments);
         assert!(
             resolc_result.success,
             "Providing the level `{optimization_argument}` should succeed with exit code {}, got {}.\nDetails: {}",
@@ -63,7 +63,7 @@ fn test_large_div_rem_expansion() {
     for level in LEVELS {
         let optimization_argument = format!("-O{level}");
         let arguments = &[SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH, &optimization_argument];
-        let resolc_result = utils::execute_resolc(arguments);
+        let resolc_result = execute_resolc(arguments);
         assert!(
             resolc_result.success,
             "Providing the level `{optimization_argument}` should succeed with exit code {}, got {}.\nDetails: {}",

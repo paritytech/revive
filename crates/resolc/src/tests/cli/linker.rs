@@ -1,4 +1,4 @@
-use crate::tests::cli::utils::{assert_command_success, execute_resolc, DEPENDENCY_CONTRACT_PATH};
+use crate::cli_utils::{assert_command_success, execute_resolc, DEPENDENCY_CONTRACT_PATH};
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]

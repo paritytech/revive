@@ -1,6 +1,6 @@
 //! The tests for running resolc with standard JSON option.
 
-use crate::tests::cli::utils::{
+use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
 };

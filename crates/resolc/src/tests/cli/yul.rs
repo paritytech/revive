@@ -1,6 +1,6 @@
 //! The tests for running resolc with yul option.
 
-use crate::tests::cli::utils::{
+use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc, execute_solc, RESOLC_YUL_FLAG,
     SOLC_YUL_FLAG, YUL_CONTRACT_PATH,
 };

@@ -1,4 +1,4 @@
-use crate::tests::cli::utils::{
+use crate::cli_utils::{
     assert_command_success, execute_resolc, RESOLC_YUL_FLAG, YUL_CONTRACT_PATH,
 };
 

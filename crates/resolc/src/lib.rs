@@ -55,6 +55,7 @@ pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
 
 pub(crate) mod build;
+pub mod cli_utils;
 pub(crate) mod r#const;
 pub(crate) mod linker;
 pub(crate) mod missing_libraries;

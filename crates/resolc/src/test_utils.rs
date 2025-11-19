@@ -553,13 +553,16 @@ pub fn compile_to_yul_with_options(
 
 #[cfg(test)]
 mod tests {
+    use std::fs::read_to_string;
+
     use super::compile_to_yul;
+    use crate::cli_utils::SOLIDITY_DEPENDENCY_CONTRACT_PATH;
 
     #[test]
     fn compiles_to_yul() {
         let contract_name = "Dependency";
-        let source_code = include_str!("tests/data/solidity/dependency.sol");
-        let yul = compile_to_yul(contract_name, source_code);
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        let yul = compile_to_yul(contract_name, &source_code);
         assert!(
             yul.contains(&format!("object \"{contract_name}")),
             "the `{contract_name}` contract IR code should contain a Yul object"
@@ -570,7 +573,7 @@ mod tests {
     #[should_panic(expected = "contract `Nonexistent` not found in solc output")]
     fn error_nonexistent_contract_in_yul() {
         let contract_name = "Nonexistent";
-        let source_code = include_str!("tests/data/solidity/dependency.sol");
-        compile_to_yul(contract_name, source_code);
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        compile_to_yul(contract_name, &source_code);
     }
 }

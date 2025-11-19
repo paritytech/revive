@@ -9,7 +9,7 @@ use crate::{
     SolcCompiler,
 };
 
-/// The starting hex value of a PVM blob (encoding of `"PVM"`)).
+/// The starting hex value of a PVM blob (encoding of `"PVM"`).
 const PVM_BLOB_START: &str = "50564d";
 
 /// The starting hex value of an EVM blob compiled from Solidity.

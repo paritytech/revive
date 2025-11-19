@@ -10,7 +10,11 @@ use criterion::{
 };
 use resolc::{
     self,
-    cli_utils::{absolute_path, execute_command, ResolcOptSettings, SolcOptSettings},
+    cli_utils::{
+        absolute_path, execute_command, ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH,
+        STANDARD_JSON_CONTRACTS_PATH, YUL_MEMSET_CONTRACT_PATH, YUL_RETURN_CONTRACT_PATH,
+    },
     SolcCompiler,
 };
 
@@ -57,7 +61,7 @@ fn bench_empty(c: &mut Criterion) {
     group
         .sample_size(100)
         .measurement_time(Duration::from_secs(8));
-    let path = absolute_path("src/tests/data/solidity/contract.sol");
+    let path = absolute_path(SOLIDITY_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -76,7 +80,7 @@ fn bench_dependency(c: &mut Criterion) {
     group
         .sample_size(50)
         .measurement_time(Duration::from_secs(9));
-    let path = absolute_path("src/tests/data/solidity/dependency.sol");
+    let path = absolute_path(SOLIDITY_DEPENDENCY_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -95,7 +99,7 @@ fn bench_large_div_rem(c: &mut Criterion) {
     group
         .sample_size(45)
         .measurement_time(Duration::from_secs(9));
-    let path = absolute_path("src/tests/data/solidity/large_div_rem.sol");
+    let path = absolute_path(SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -114,7 +118,7 @@ fn bench_memset(c: &mut Criterion) {
     group
         .sample_size(100)
         .measurement_time(Duration::from_secs(7));
-    let path = absolute_path("src/tests/data/yul/memset.yul");
+    let path = absolute_path(YUL_MEMSET_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -133,7 +137,7 @@ fn bench_return(c: &mut Criterion) {
     group
         .sample_size(100)
         .measurement_time(Duration::from_secs(6));
-    let path = absolute_path("src/tests/data/yul/return.yul");
+    let path = absolute_path(YUL_RETURN_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -152,7 +156,7 @@ fn bench_standard_json_contracts(c: &mut Criterion) {
     group
         .sample_size(20)
         .measurement_time(Duration::from_secs(35));
-    let path = absolute_path("src/tests/data/standard_json/solidity_contracts.json");
+    let path = absolute_path(STANDARD_JSON_CONTRACTS_PATH);
     let resolc_arguments = &["--standard-json"];
     let solc_arguments = &["--standard-json"];
 

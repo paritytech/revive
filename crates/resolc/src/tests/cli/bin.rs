@@ -3,7 +3,8 @@
 use crate::{
     cli_utils::{
         absolute_path, assert_command_success, execute_command, CommandResult, ResolcOptSettings,
-        SolcOptSettings,
+        SolcOptSettings, SOLIDITY_CONTRACT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -125,7 +126,7 @@ fn get_first_json_error(errors: &[serde_json::Value]) -> &str {
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity.
 #[test]
 fn compiles_solidity_to_binary_blob() {
-    let path = absolute_path("src/tests/data/solidity/contract.sol");
+    let path = absolute_path(SOLIDITY_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -146,7 +147,7 @@ fn compiles_solidity_to_binary_blob() {
 /// This test mimics the command used in the `resolc` benchmarks when compiling Yul.
 #[test]
 fn compiles_yul_to_binary_blob() {
-    let path = absolute_path("src/tests/data/yul/memset.yul");
+    let path = absolute_path(YUL_MEMSET_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
         &path,
@@ -167,7 +168,7 @@ fn compiles_yul_to_binary_blob() {
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity via standard JSON input.
 #[test]
 fn compiles_json_to_binary_blob() {
-    let path = absolute_path("src/tests/data/standard_json/solidity_contracts.json");
+    let path = absolute_path(STANDARD_JSON_CONTRACTS_PATH);
     let resolc_arguments = &["--standard-json"];
     let solc_arguments = &["--standard-json"];
 

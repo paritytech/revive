@@ -11,12 +11,17 @@ use crate::SolcCompiler;
 /// The simple Solidity contract test fixture path.
 pub const SOLIDITY_CONTRACT_PATH: &str = "src/tests/data/solidity/contract.sol";
 /// The dependency Solidity contract test fixture path.
-pub const DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dependency.sol";
+pub const SOLIDITY_DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dependency.sol";
+/// The simple Solidity contract containing i256 divisions and remains
+/// that should be compiled correctly.
+pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
 /// The memeset YUL contract test fixture path.
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
+/// The return YUL contract test fixture path.
+pub const YUL_RETURN_CONTRACT_PATH: &str = "src/tests/data/yul/return.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
@@ -28,10 +33,6 @@ pub const STANDARD_JSON_CONTRACTS_PATH: &str =
 /// selection flags, it should compile fine regardless.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen.json";
-
-/// The simple Solidity contract containing i256 divisions and remains that should be compiled
-/// correctly.
-pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

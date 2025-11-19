@@ -42,6 +42,7 @@ pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
 
 /// Common `resolc` CLI optimization settings.
 pub struct ResolcOptSettings;
+
 impl ResolcOptSettings {
     pub const NONE: &'static str = "-O0";
     pub const PERFORMANCE: &'static str = "-O3";
@@ -50,6 +51,7 @@ impl ResolcOptSettings {
 
 /// Common `solc` CLI optimization settings for `--optimize-runs`.
 pub struct SolcOptSettings;
+
 impl SolcOptSettings {
     pub const NONE: &'static str = "0";
     pub const PERFORMANCE: &'static str = "20000";

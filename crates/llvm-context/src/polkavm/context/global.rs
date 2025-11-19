@@ -35,7 +35,7 @@ impl<'ctx> Global<'ctx> {
             .add_global(r#type, Some(address_space.into()), name);
         let global = Self { r#type, value };
 
-        global.value.set_linkage(inkwell::module::Linkage::External);
+        global.value.set_linkage(inkwell::module::Linkage::Internal);
         global
             .value
             .set_visibility(inkwell::GlobalVisibility::Default);

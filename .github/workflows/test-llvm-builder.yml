@@ -4,11 +4,8 @@ on:
     branches: ["main"]
     types: [opened, synchronize]
     paths:
-      - 'LLVM.lock'
       - 'crates/llvm-builder/**'
       - '.github/workflows/test-llvm-builder.yml'
-    paths-ignore:
-      - "**.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -25,6 +22,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # without this it will override our rust flags

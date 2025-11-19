@@ -78,7 +78,7 @@ SECTIONS {
             "--error-limit=0",
             "--relocatable",
             "--emit-relocs",
-            "--no-relax",
+            "--relax",
             "--unique",
             "--gc-sections",
             self.linker_script_path.to_str().expect("should be utf8"),

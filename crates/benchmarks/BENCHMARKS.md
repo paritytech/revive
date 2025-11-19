@@ -4,7 +4,7 @@
 
 - [Benchmark Results](#benchmark-results)
     - [Baseline](#baseline)
-    - [OddPorduct](#oddporduct)
+    - [OddProduct](#oddproduct)
     - [TriangleNumber](#trianglenumber)
     - [FibonacciRecursive](#fibonaccirecursive)
     - [FibonacciIterative](#fibonacciiterative)
@@ -19,7 +19,7 @@
 |:--------|:-------------------------|:-------------------------------- |
 | **`0`** | `10.08 us` (✅ **1.00x**) | `10.32 us` (✅ **1.02x slower**)  |
 
-### OddPorduct
+### OddProduct
 
 |              | `EVM`                     | `PVMInterpreter`                 |
 |:-------------|:--------------------------|:-------------------------------- |
@@ -70,4 +70,3 @@
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)
-

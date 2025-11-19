@@ -55,6 +55,8 @@ pub use self::solc::LAST_SUPPORTED_VERSION as SolcLastSupportedVersion;
 pub use self::version::Version as ResolcVersion;
 
 pub(crate) mod build;
+#[cfg(not(target_os = "emscripten"))]
+pub mod cli_utils;
 pub(crate) mod r#const;
 pub(crate) mod linker;
 pub(crate) mod missing_libraries;
@@ -209,6 +211,7 @@ pub fn standard_json<T: Compiler>(
         .debug_information
         .unwrap_or(false);
     solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
+    solc_input.retain_output_selection();
     let mut solc_output = solc.standard_json(
         &mut solc_input,
         messages,

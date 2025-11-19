@@ -20,6 +20,7 @@
 	bench \
 	bench-pvm \
 	bench-evm \
+	bench-resolc \
 	bench-yul \
 	bench-parse-yul \
 	bench-lower-yul \
@@ -41,7 +42,7 @@ install-llvm-builder:
 	cargo install --force --locked --path crates/llvm-builder
 
 install-llvm: install-llvm-builder
-	revive-llvm clone
+	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
 install-revive-runner:
@@ -69,7 +70,7 @@ test-integration: install-bin
 	cargo test --package revive-integration
 
 test-resolc: install
-	cargo test --package resolc
+	cargo test --package resolc --benches
 
 test-workspace: install
 	cargo test --workspace --exclude revive-llvm-builder
@@ -92,6 +93,10 @@ bench-pvm: install-bin
 bench-evm: install-bin
 	cargo criterion --bench execute --features bench-evm --message-format=json \
 	| criterion-table > crates/benchmarks/EVM.md
+
+bench-resolc: test-resolc
+	cargo criterion --package resolc --bench compile --message-format=json \
+	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
 bench-yul: install-bin
 	cargo criterion --package revive-yul --all-targets --message-format=json \

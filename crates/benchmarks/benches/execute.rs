@@ -57,7 +57,7 @@ fn bench_baseline(c: &mut Criterion) {
 }
 
 fn bench_odd_product(c: &mut Criterion) {
-    let group = group(c, "OddPorduct");
+    let group = group(c, "OddProduct");
     let parameters = &[10_000, 100_000, 300000];
 
     bench(group, parameters, parameters, Contract::odd_product);

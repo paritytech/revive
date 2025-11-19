@@ -20,6 +20,7 @@
 	bench \
 	bench-pvm \
 	bench-evm \
+	bench-resolc \
 	clean
 
 install: install-bin install-npm
@@ -66,7 +67,7 @@ test-integration: install-bin
 	cargo test --package revive-integration
 
 test-resolc: install
-	cargo test --package resolc
+	cargo test --package resolc --benches
 
 test-workspace: install
 	cargo test --workspace --exclude revive-llvm-builder
@@ -89,6 +90,10 @@ bench-pvm: install-bin
 bench-evm: install-bin
 	cargo criterion --bench execute --features bench-evm --message-format=json \
 	| criterion-table > crates/benchmarks/EVM.md
+
+bench-resolc: test-resolc
+	cargo criterion --package resolc --bench compile --message-format=json \
+	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
 clean:
 	cargo clean ; \

@@ -1,4 +1,4 @@
-use crate::tests::cli::utils::{assert_command_success, execute_resolc, DEPENDENCY_CONTRACT_PATH};
+use crate::cli_utils::{assert_command_success, execute_resolc, SOLIDITY_DEPENDENCY_CONTRACT_PATH};
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]
@@ -6,7 +6,7 @@ fn deploy_time_linking_works() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_directory = temp_dir.path().to_path_buf();
     let source_path = temp_dir.path().to_path_buf().join("dependency.sol");
-    std::fs::copy(DEPENDENCY_CONTRACT_PATH, &source_path).unwrap();
+    std::fs::copy(SOLIDITY_DEPENDENCY_CONTRACT_PATH, &source_path).unwrap();
 
     assert_command_success(
         &execute_resolc(&[
@@ -58,7 +58,7 @@ fn deploy_time_linking_works() {
 
 #[test]
 fn emits_unlinked_binary_warning() {
-    let output = execute_resolc(&[DEPENDENCY_CONTRACT_PATH, "--bin"]);
+    let output = execute_resolc(&[SOLIDITY_DEPENDENCY_CONTRACT_PATH, "--bin"]);
     assert_command_success(&output, "Missing libraries should compile fine");
     assert!(output.stderr.contains("is unlinked"));
 }

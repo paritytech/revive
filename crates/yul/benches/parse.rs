@@ -2,14 +2,14 @@ use alloy_primitives::U256;
 use criterion::{
     criterion_group, criterion_main,
     measurement::{Measurement, WallTime},
-    BatchSize, BenchmarkGroup, Criterion,
+    BenchmarkGroup, Criterion,
 };
 use revive_integration::cases::Contract;
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
 /// The function under test parses the Yul `source_code`.
-fn parse(source_code: String) {
-    let mut lexer = Lexer::new(source_code);
+fn parse(source_code: &str) {
+    let mut lexer = Lexer::new(source_code.to_owned());
     AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object");
 }
 
@@ -29,7 +29,7 @@ where
     group.sample_size(200);
 
     group.bench_function("parse", |b| {
-        b.iter_batched(|| source_code.clone(), parse, BatchSize::SmallInput);
+        b.iter(|| parse(&source_code));
     });
 
     group.finish();

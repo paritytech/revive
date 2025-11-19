@@ -17,7 +17,7 @@ fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkG
 where
     M: Measurement,
 {
-    c.benchmark_group(group_name)
+    c.benchmark_group(format!("{group_name} - parse"))
 }
 
 fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)
@@ -36,33 +36,31 @@ where
 }
 
 fn bench_baseline(c: &mut Criterion) {
-    bench(group(c, "Baseline - Parse"), Contract::baseline);
+    bench(group(c, "Baseline"), Contract::baseline);
 }
 
 fn bench_erc20(c: &mut Criterion) {
-    bench(group(c, "ERC20 - Parse"), Contract::erc20);
+    bench(group(c, "ERC20"), Contract::erc20);
 }
 
 fn bench_sha1(c: &mut Criterion) {
-    bench(group(c, "SHA1 - Parse"), || {
-        Contract::sha1(vec![0xff].into())
-    });
+    bench(group(c, "SHA1"), || Contract::sha1(vec![0xff].into()));
 }
 
 fn bench_storage(c: &mut Criterion) {
-    bench(group(c, "Storage - Parse"), || {
+    bench(group(c, "Storage"), || {
         Contract::storage_transient(U256::from(0))
     });
 }
 
 fn bench_transfer(c: &mut Criterion) {
-    bench(group(c, "Transfer - Parse"), || {
+    bench(group(c, "Transfer"), || {
         Contract::transfer_self(U256::from(0))
     });
 }
 
 criterion_group!(
-    name = benches;
+    name = benches_parse;
     config = Criterion::default();
     targets =
         bench_baseline,
@@ -71,4 +69,4 @@ criterion_group!(
         bench_storage,
         bench_transfer,
 );
-criterion_main!(benches);
+criterion_main!(benches_parse);

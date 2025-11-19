@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alloy_primitives::U256;
 use criterion::{
     criterion_group, criterion_main,
@@ -46,7 +48,7 @@ fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkG
 where
     M: Measurement,
 {
-    c.benchmark_group(group_name)
+    c.benchmark_group(format!("{group_name} - lower"))
 }
 
 fn bench<F>(
@@ -59,7 +61,9 @@ fn bench<F>(
     let llvm = InkwellContext::create();
     let ast = parse(&contract().yul);
 
-    group.sample_size(90);
+    group
+        .sample_size(90)
+        .measurement_time(Duration::from_secs(6));
 
     group.bench_function("lower", |b| {
         b.iter_batched(
@@ -74,7 +78,7 @@ fn bench<F>(
 
 fn bench_baseline(c: &mut Criterion) {
     bench(
-        group(c, "Baseline - Lower"),
+        group(c, "Baseline"),
         Contract::baseline,
         OptimizerSettings::none(),
     );
@@ -82,7 +86,7 @@ fn bench_baseline(c: &mut Criterion) {
 
 fn bench_erc20(c: &mut Criterion) {
     bench(
-        group(c, "ERC20 - Lower"),
+        group(c, "ERC20"),
         Contract::erc20,
         OptimizerSettings::none(),
     );
@@ -90,7 +94,7 @@ fn bench_erc20(c: &mut Criterion) {
 
 fn bench_sha1(c: &mut Criterion) {
     bench(
-        group(c, "SHA1 - Lower"),
+        group(c, "SHA1"),
         || Contract::sha1(vec![0xff].into()),
         OptimizerSettings::none(),
     );
@@ -98,7 +102,7 @@ fn bench_sha1(c: &mut Criterion) {
 
 fn bench_storage(c: &mut Criterion) {
     bench(
-        group(c, "Storage - Lower"),
+        group(c, "Storage"),
         || Contract::storage_transient(U256::from(0)),
         OptimizerSettings::none(),
     );
@@ -106,14 +110,14 @@ fn bench_storage(c: &mut Criterion) {
 
 fn bench_transfer(c: &mut Criterion) {
     bench(
-        group(c, "Transfer - Lower"),
+        group(c, "Transfer"),
         || Contract::transfer_self(U256::from(0)),
         OptimizerSettings::none(),
     );
 }
 
 criterion_group!(
-    name = benches;
+    name = benches_lower;
     config = Criterion::default();
     targets =
         bench_baseline,
@@ -122,4 +126,4 @@ criterion_group!(
         bench_storage,
         bench_transfer,
 );
-criterion_main!(benches);
+criterion_main!(benches_lower);

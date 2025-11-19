@@ -3,74 +3,74 @@
 ## Table of Contents
 
 - [Benchmark Results](#benchmark-results)
-    - [Baseline - Lower](#baseline---lower)
-    - [ERC20 - Lower](#erc20---lower)
-    - [SHA1 - Lower](#sha1---lower)
-    - [Storage - Lower](#storage---lower)
-    - [Transfer - Lower](#transfer---lower)
-    - [Baseline - Parse](#baseline---parse)
-    - [ERC20 - Parse](#erc20---parse)
-    - [SHA1 - Parse](#sha1---parse)
-    - [Storage - Parse](#storage---parse)
-    - [Transfer - Parse](#transfer---parse)
+    - [Baseline - lower](#baseline---lower)
+    - [ERC20 - lower](#erc20---lower)
+    - [SHA1 - lower](#sha1---lower)
+    - [Storage - lower](#storage---lower)
+    - [Transfer - lower](#transfer---lower)
+    - [Baseline - parse](#baseline---parse)
+    - [ERC20 - parse](#erc20---parse)
+    - [SHA1 - parse](#sha1---parse)
+    - [Storage - parse](#storage---parse)
+    - [Transfer - parse](#transfer---parse)
 
 ## Benchmark Results
 
-### Baseline - Lower
+### Baseline - lower
 
 |        | `lower`                    |
 |:-------|:-------------------------- |
 |        | `118.53 us` (✅ **1.00x**)  |
 
-### ERC20 - Lower
+### ERC20 - lower
 
 |        | `lower`                    |
 |:-------|:-------------------------- |
 |        | `638.83 us` (✅ **1.00x**)  |
 
-### SHA1 - Lower
+### SHA1 - lower
 
 |        | `lower`                    |
 |:-------|:-------------------------- |
 |        | `341.96 us` (✅ **1.00x**)  |
 
-### Storage - Lower
+### Storage - lower
 
 |        | `lower`                    |
 |:-------|:-------------------------- |
 |        | `153.08 us` (✅ **1.00x**)  |
 
-### Transfer - Lower
+### Transfer - lower
 
 |        | `lower`                    |
 |:-------|:-------------------------- |
 |        | `154.48 us` (✅ **1.00x**)  |
 
-### Baseline - Parse
+### Baseline - parse
 
 |        | `parse`                  |
 |:-------|:------------------------ |
 |        | `8.27 us` (✅ **1.00x**)  |
 
-### ERC20 - Parse
+### ERC20 - parse
 
 |        | `parse`                    |
 |:-------|:-------------------------- |
 |        | `152.57 us` (✅ **1.00x**)  |
 
-### SHA1 - Parse
+### SHA1 - parse
 
 |        | `parse`                   |
 |:-------|:------------------------- |
 |        | `71.87 us` (✅ **1.00x**)  |
 
-### Storage - Parse
+### Storage - parse
 
 |        | `parse`                   |
 |:-------|:------------------------- |
 |        | `15.52 us` (✅ **1.00x**)  |
 
-### Transfer - Parse
+### Transfer - parse
 
 |        | `parse`                   |
 |:-------|:------------------------- |

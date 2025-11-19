@@ -9,7 +9,7 @@ use criterion::{
 use inkwell::context::Context as InkwellContext;
 use revive_integration::cases::Contract;
 use revive_llvm_context::{
-    initialize_llvm, Optimizer, OptimizerSettings, PolkaVMContext, PolkaVMTarget, PolkaVMWriteLLVM,
+    polkavm_context_test_utils::create_context, OptimizerSettings, PolkaVMContext, PolkaVMWriteLLVM,
 };
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
@@ -24,24 +24,6 @@ fn lower(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
 fn parse(source_code: &str) -> AstObject {
     let mut lexer = Lexer::new(source_code.to_owned());
     AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object")
-}
-
-fn create_llvm_context<'ctx>(
-    llvm: &'ctx InkwellContext,
-    optimizer_settings: &OptimizerSettings,
-) -> PolkaVMContext<'ctx> {
-    initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
-
-    let module = llvm.create_module("module_bench");
-    let optimizer = Optimizer::new(optimizer_settings.to_owned());
-
-    PolkaVMContext::new(
-        llvm,
-        module,
-        optimizer,
-        Default::default(),
-        Default::default(),
-    )
 }
 
 fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
@@ -67,7 +49,12 @@ fn bench<F>(
 
     group.bench_function("lower", |b| {
         b.iter_batched(
-            || (ast.clone(), create_llvm_context(&llvm, &optimizer_settings)),
+            || {
+                (
+                    ast.clone(),
+                    create_context(&llvm, optimizer_settings.to_owned()),
+                )
+            },
             |(ast, llvm_context)| lower(ast, llvm_context),
             BatchSize::SmallInput,
         );

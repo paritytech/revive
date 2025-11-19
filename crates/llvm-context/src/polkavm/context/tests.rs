@@ -1,28 +1,8 @@
 //! The LLVM IR generator context tests.
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
-use crate::optimizer::Optimizer;
 use crate::polkavm::context::attribute::Attribute;
-use crate::polkavm::context::Context;
-use crate::PolkaVMTarget;
-
-pub fn create_context(
-    llvm: &inkwell::context::Context,
-    optimizer_settings: OptimizerSettings,
-) -> Context<'_> {
-    crate::initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
-
-    let module = llvm.create_module("test");
-    let optimizer = Optimizer::new(optimizer_settings);
-
-    Context::new(
-        llvm,
-        module,
-        optimizer,
-        Default::default(),
-        Default::default(),
-    )
-}
+use crate::polkavm::context::test_utils::create_context;
 
 #[test]
 pub fn check_attribute_null_pointer_is_invalid() {

@@ -53,6 +53,7 @@ pub mod r#loop;
 pub mod pointer;
 pub mod runtime;
 pub mod solidity_data;
+pub mod test_utils;
 pub mod yul_data;
 
 #[cfg(test)]

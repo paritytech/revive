@@ -4,13 +4,14 @@ use crate::utils::path_windows_to_unix as to_unix;
 use std::{env::consts::EXE_EXTENSION, process::Command};
 
 /// Static CFLAGS variable passed to the compiler building the compiler-rt builtins.
-const C_FLAGS: [&str; 6] = [
+const C_FLAGS: [&str; 7] = [
     "--target=riscv64",
     "-march=rv64emac",
     "-mabi=lp64e",
     "-mcpu=generic-rv64",
     "-nostdlib",
     "-nodefaultlibs",
+    "-fuse-ld=lld",
 ];
 
 /// Static CMAKE arguments for building the compiler-rt builtins.

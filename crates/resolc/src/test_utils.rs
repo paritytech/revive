@@ -540,3 +540,27 @@ pub fn compile_to_yul_with_options(
         .ir_optimized
         .to_owned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::compile_to_yul;
+
+    #[test]
+    fn compiles_to_yul() {
+        let contract_name = "Dependency";
+        let source_code = include_str!("tests/data/solidity/dependency.sol");
+        let yul = compile_to_yul(contract_name, source_code);
+        assert!(
+            yul.contains(&format!("object \"{contract_name}")),
+            "the `{contract_name}` contract IR code should contain a Yul object"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "contract `Nonexistent` not found in solc output")]
+    fn error_nonexistent_contract_in_yul() {
+        let contract_name = "Nonexistent";
+        let source_code = include_str!("tests/data/solidity/dependency.sol");
+        compile_to_yul(contract_name, source_code);
+    }
+}

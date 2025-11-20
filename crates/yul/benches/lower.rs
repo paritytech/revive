@@ -13,7 +13,7 @@ use revive_llvm_context::{
 };
 use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 
-/// The function under test lowers the Yul `Object` into LLVM IR.
+/// The function under test lowers the Yul `Object` into unoptimized LLVM IR.
 fn lower(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
     ast.declare(&mut llvm_context)
         .expect("the AST should be valid");
@@ -33,15 +33,16 @@ where
     c.benchmark_group(format!("{group_name} - lower"))
 }
 
-fn bench<F>(
-    mut group: BenchmarkGroup<'_, WallTime>,
-    contract: F,
-    optimizer_settings: OptimizerSettings,
-) where
+fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)
+where
     F: Fn() -> Contract,
 {
-    let llvm = InkwellContext::create();
     let ast = parse(&contract().yul);
+    let llvm = InkwellContext::create();
+    // The optimizer settings will not affect the benchmarks since we're currently
+    // measuring lowering into unoptimized IR and not running the optimization passes.
+    // (This is still needed as an argument below.)
+    let optimizer_settings = OptimizerSettings::none();
 
     group
         .sample_size(90)
@@ -64,43 +65,27 @@ fn bench<F>(
 }
 
 fn bench_baseline(c: &mut Criterion) {
-    bench(
-        group(c, "Baseline"),
-        Contract::baseline,
-        OptimizerSettings::none(),
-    );
+    bench(group(c, "Baseline"), Contract::baseline);
 }
 
 fn bench_erc20(c: &mut Criterion) {
-    bench(
-        group(c, "ERC20"),
-        Contract::erc20,
-        OptimizerSettings::none(),
-    );
+    bench(group(c, "ERC20"), Contract::erc20);
 }
 
 fn bench_sha1(c: &mut Criterion) {
-    bench(
-        group(c, "SHA1"),
-        || Contract::sha1(vec![0xff].into()),
-        OptimizerSettings::none(),
-    );
+    bench(group(c, "SHA1"), || Contract::sha1(vec![0xff].into()));
 }
 
 fn bench_storage(c: &mut Criterion) {
-    bench(
-        group(c, "Storage"),
-        || Contract::storage_transient(U256::from(0)),
-        OptimizerSettings::none(),
-    );
+    bench(group(c, "Storage"), || {
+        Contract::storage_transient(U256::from(0))
+    });
 }
 
 fn bench_transfer(c: &mut Criterion) {
-    bench(
-        group(c, "Transfer"),
-        || Contract::transfer_self(U256::from(0)),
-        OptimizerSettings::none(),
-    );
+    bench(group(c, "Transfer"), || {
+        Contract::transfer_self(U256::from(0))
+    });
 }
 
 criterion_group!(

@@ -14,6 +14,7 @@
 	test \
 	test-integration \
 	test-resolc \
+	test-yul \
 	test-workspace \
 	test-wasm \
 	test-llvm-builder

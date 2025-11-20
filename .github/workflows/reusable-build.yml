@@ -69,7 +69,9 @@ jobs:
             runner: macos-14
           - target: x86_64-apple-darwin
             type: native
-            runner: macos-13
+            # `macos-15-intel` will be the last x86_64 `macos` image supported by GHA.
+            # It will be available until Aug. 2027 (see https://github.com/actions/runner-images/issues/13045).
+            runner: macos-15-intel
           - target: x86_64-pc-windows-msvc
             type: native
             runner: windows-2022

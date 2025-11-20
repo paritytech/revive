@@ -58,7 +58,9 @@ jobs:
           - target: x86_64-apple-darwin
             builder-arg: gnu
             host: macos
-            runner: macos-13
+            # `macos-15-intel` will be the last x86_64 `macos` image supported by GHA.
+            # It will be available until Aug. 2027 (see https://github.com/actions/runner-images/issues/13045).
+            runner: macos-15-intel
           - target: x86_64-pc-windows-msvc
             builder-arg: gnu
             host: windows

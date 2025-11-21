@@ -75,7 +75,7 @@ test-yul:
 	cargo test --package revive-yul --benches
 
 test-workspace: install
-	cargo test --workspace --exclude revive-llvm-builder
+	cargo test --workspace --benches --exclude revive-llvm-builder
 
 test-wasm: install-wasm
 	npm run test:wasm

@@ -2,12 +2,20 @@
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::polkavm::context::attribute::Attribute;
-use crate::polkavm::context::test_utils::create_context;
+use crate::polkavm::context::Context;
+use crate::PolkaVMTarget;
+
+/// Initializes the LLVM compiler backend.
+fn initialize_llvm() {
+    crate::initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
+}
 
 #[test]
 pub fn check_attribute_null_pointer_is_invalid() {
+    initialize_llvm();
+
     let llvm = inkwell::context::Context::create();
-    let mut context = create_context(&llvm, OptimizerSettings::cycles());
+    let mut context = Context::new_dummy(&llvm, OptimizerSettings::cycles());
 
     let function = context
         .add_function(
@@ -31,8 +39,10 @@ pub fn check_attribute_null_pointer_is_invalid() {
 
 #[test]
 pub fn check_attribute_optimize_for_size_mode_3() {
+    initialize_llvm();
+
     let llvm = inkwell::context::Context::create();
-    let mut context = create_context(&llvm, OptimizerSettings::cycles());
+    let mut context = Context::new_dummy(&llvm, OptimizerSettings::cycles());
 
     let function = context
         .add_function(
@@ -56,8 +66,10 @@ pub fn check_attribute_optimize_for_size_mode_3() {
 
 #[test]
 pub fn check_attribute_optimize_for_size_mode_z() {
+    initialize_llvm();
+
     let llvm = inkwell::context::Context::create();
-    let mut context = create_context(&llvm, OptimizerSettings::size());
+    let mut context = Context::new_dummy(&llvm, OptimizerSettings::size());
 
     let function = context
         .add_function(
@@ -81,8 +93,10 @@ pub fn check_attribute_optimize_for_size_mode_z() {
 
 #[test]
 pub fn check_attribute_min_size_mode_3() {
+    initialize_llvm();
+
     let llvm = inkwell::context::Context::create();
-    let mut context = create_context(&llvm, OptimizerSettings::cycles());
+    let mut context = Context::new_dummy(&llvm, OptimizerSettings::cycles());
 
     let function = context
         .add_function(
@@ -106,8 +120,10 @@ pub fn check_attribute_min_size_mode_3() {
 
 #[test]
 pub fn check_attribute_min_size_mode_z() {
+    initialize_llvm();
+
     let llvm = inkwell::context::Context::create();
-    let mut context = create_context(&llvm, OptimizerSettings::size());
+    let mut context = Context::new_dummy(&llvm, OptimizerSettings::size());
 
     let function = context
         .add_function(

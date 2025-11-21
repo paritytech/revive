@@ -46,7 +46,6 @@ pub use self::polkavm::context::pointer::storage::StoreWord as PolkaVMStoreStora
 pub use self::polkavm::context::pointer::Pointer as PolkaVMPointer;
 pub use self::polkavm::context::r#loop::Loop as PolkaVMLoop;
 pub use self::polkavm::context::solidity_data::SolidityData as PolkaVMContextSolidityData;
-pub use self::polkavm::context::test_utils as polkavm_context_test_utils;
 pub use self::polkavm::context::yul_data::YulData as PolkaVMContextYulData;
 pub use self::polkavm::context::Context as PolkaVMContext;
 pub use self::polkavm::disassemble as polkavm_disassemble;

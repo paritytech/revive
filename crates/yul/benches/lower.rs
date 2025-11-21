@@ -9,7 +9,7 @@ use criterion::{
 use inkwell::context::Context as InkwellContext;
 use revive_integration::cases::Contract;
 use revive_llvm_context::{
-    polkavm_context_test_utils::create_context, OptimizerSettings, PolkaVMContext, PolkaVMWriteLLVM,
+    initialize_llvm, OptimizerSettings, PolkaVMContext, PolkaVMTarget, PolkaVMWriteLLVM,
 };
 use revive_yul::{lexer::Lexer, parser::statement::object::Object};
 
@@ -43,6 +43,8 @@ where
     // not running the optimization passes.
     let optimizer_settings = OptimizerSettings::none();
 
+    initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
+
     group
         .sample_size(90)
         .measurement_time(Duration::from_secs(6));
@@ -52,7 +54,7 @@ where
             || {
                 (
                     ast.clone(),
-                    create_context(&llvm, optimizer_settings.to_owned()),
+                    PolkaVMContext::new_dummy(&llvm, optimizer_settings.to_owned()),
                 )
             },
             |(ast, llvm_context)| lower(ast, llvm_context),

@@ -53,7 +53,6 @@ pub mod r#loop;
 pub mod pointer;
 pub mod runtime;
 pub mod solidity_data;
-pub mod test_utils;
 pub mod yul_data;
 
 #[cfg(test)]
@@ -255,6 +254,20 @@ impl<'ctx> Context<'ctx> {
             solidity_data: None,
             yul_data: None,
         }
+    }
+
+    /// Initializes a new dummy LLVM context.
+    pub fn new_dummy(
+        llvm: &'ctx inkwell::context::Context,
+        optimizer_settings: OptimizerSettings,
+    ) -> Self {
+        Self::new(
+            llvm,
+            llvm.create_module("dummy"),
+            Optimizer::new(optimizer_settings),
+            Default::default(),
+            Default::default(),
+        )
     }
 
     /// Builds the LLVM IR module, returning the build artifacts.

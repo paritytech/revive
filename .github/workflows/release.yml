@@ -69,7 +69,7 @@ jobs:
   create-release:
     if: startsWith(github.ref_name, 'v')
     needs: [check-version-changed, build]
-    runs-on: macos-14
+    runs-on: macos-15
     environment: tags
     steps:
       - name: Download Artifacts
@@ -126,7 +126,7 @@ jobs:
 
   npm-release:
     needs: [create-release]
-    runs-on: macos-14
+    runs-on: macos-15
     environment: tags
     steps:
       - uses: actions/checkout@v4

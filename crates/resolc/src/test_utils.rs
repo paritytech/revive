@@ -23,7 +23,6 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
-use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
 use crate::project::Project;
@@ -478,52 +477,15 @@ fn compile_evm(
     blob
 }
 
-/// Internal helper to compiler `sources` to their optimized Yul IR.
-fn generate_yul(
-    sources: BTreeMap<String, SolcStandardJsonInputSource>,
-    solc_optimizer_enabled: bool,
-) -> anyhow::Result<BTreeMap<String, BTreeMap<String, SolcStandardJsonOutputContract>>> {
-    check_dependencies();
-
-    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
-        None,
-        sources.clone(),
-        Default::default(),
-        Default::default(),
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            solc_optimizer_enabled,
-            Default::default(),
-            Default::default(),
-        ),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        false,
-    )?;
-
-    let output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
-    output.check_errors()?;
-
-    Ok(output.contracts)
-}
-
 /// Compiles the Solidity source code into Yul IR and returns
 /// the Yul IR code of the contract named `contract_name`.
-/// The `solc` optimizer will be enabled.
-pub fn compile_to_yul(contract_name: &str, source_code: &str) -> String {
-    compile_to_yul_with_options(contract_name, source_code, true)
-}
-
-/// Compiles the Solidity source code into Yul IR and returns
-/// the Yul IR code of the contract named `contract_name`.
-pub fn compile_to_yul_with_options(
+pub fn compile_to_yul(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
 ) -> String {
+    check_dependencies();
+
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solc_optimizer_enabled,
@@ -540,9 +502,33 @@ pub fn compile_to_yul_with_options(
         file_name.to_owned(),
         SolcStandardJsonInputSource::from(source_code.to_owned()),
     )]);
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        Default::default(),
+        Default::default(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            Default::default(),
+            Default::default(),
+        ),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        false,
+    )
+    .unwrap();
 
-    generate_yul(sources, solc_optimizer_enabled)
-        .expect("source should compile")
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()).unwrap();
+    let output = solc
+        .standard_json(&mut input, &mut vec![], None, vec![], None)
+        .unwrap();
+    output.check_errors().unwrap();
+
+    output
+        .contracts
         .get(file_name)
         .unwrap_or_else(|| panic!("file `{file_name}` not found in solc output"))
         .get(contract_name)
@@ -562,7 +548,7 @@ mod tests {
     fn compiles_to_yul() {
         let contract_name = "Dependency";
         let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
-        let yul = compile_to_yul(contract_name, &source_code);
+        let yul = compile_to_yul(contract_name, &source_code, true);
         assert!(
             yul.contains(&format!("object \"{contract_name}")),
             "the `{contract_name}` contract IR code should contain a Yul object"
@@ -574,6 +560,6 @@ mod tests {
     fn error_nonexistent_contract_in_yul() {
         let contract_name = "Nonexistent";
         let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
-        compile_to_yul(contract_name, &source_code);
+        compile_to_yul(contract_name, &source_code, true);
     }
 }

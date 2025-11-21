@@ -20,7 +20,7 @@ impl Contract {
             evm_runtime: compile_evm_bin_runtime(name, code),
             pvm_runtime: compile_blob(name, code),
             calldata,
-            yul: compile_to_yul(name, code),
+            yul: compile_to_yul(name, code, true),
         }
     }
 
@@ -30,7 +30,7 @@ impl Contract {
             evm_runtime: compile_evm_bin_runtime(name, code),
             pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
             calldata,
-            yul: compile_to_yul(name, code),
+            yul: compile_to_yul(name, code, true),
         }
     }
 }

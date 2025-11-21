@@ -54,7 +54,7 @@ jobs:
           - target: aarch64-apple-darwin
             builder-arg: gnu
             host: macos
-            runner: macos-14
+            runner: macos-15
           - target: x86_64-apple-darwin
             builder-arg: gnu
             host: macos

@@ -30,7 +30,7 @@ fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkG
 where
     M: Measurement,
 {
-    c.benchmark_group(format!("{group_name} - lower"))
+    c.benchmark_group(group_name)
 }
 
 fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)

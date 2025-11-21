@@ -23,6 +23,8 @@
 	bench-evm \
 	bench-resolc \
 	bench-yul \
+	bench-parse-yul \
+	bench-lower-yul \
 	clean
 
 install: install-bin install-npm
@@ -69,13 +71,13 @@ test-integration: install-bin
 	cargo test --package revive-integration
 
 test-resolc: install
-	cargo test --package resolc --benches
+	cargo test --package resolc --all-targets
 
 test-yul:
-	cargo test --package revive-yul --benches
+	cargo test --package revive-yul --all-targets
 
 test-workspace: install
-	cargo test --workspace --benches --exclude revive-llvm-builder
+	cargo test --workspace --all-targets --exclude revive-llvm-builder
 
 test-wasm: install-wasm
 	npm run test:wasm
@@ -100,9 +102,15 @@ bench-resolc: test-resolc
 	cargo criterion --package resolc --bench compile --message-format=json \
 	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
-bench-yul: test-yul
-	cargo criterion --package revive-yul --benches --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS_M4PRO.md
+bench-yul: test-yul bench-parse-yul bench-lower-yul
+
+bench-parse-yul: test-yul
+	cargo criterion --package revive-yul --bench parse --message-format=json \
+	| criterion-table > crates/yul/BENCHMARKS_PARSE_M4PRO.md
+
+bench-lower-yul: test-yul
+	cargo criterion --package revive-yul --bench lower --message-format=json \
+	| criterion-table > crates/yul/BENCHMARKS_LOWER_M4PRO.md
 
 clean:
 	cargo clean ; \

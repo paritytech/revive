@@ -11,19 +11,19 @@ use revive_integration::cases::Contract;
 use revive_llvm_context::{
     polkavm_context_test_utils::create_context, OptimizerSettings, PolkaVMContext, PolkaVMWriteLLVM,
 };
-use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
+use revive_yul::{lexer::Lexer, parser::statement::object::Object};
 
 /// The function under test lowers the Yul `Object` into unoptimized LLVM IR.
-fn lower(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
+fn lower(mut ast: Object, mut llvm_context: PolkaVMContext) {
     ast.declare(&mut llvm_context)
         .expect("the AST should be valid");
     ast.into_llvm(&mut llvm_context)
         .expect("the AST should lower to LLVM IR");
 }
 
-fn parse(source_code: &str) -> AstObject {
+fn parse(source_code: &str) -> Object {
     let mut lexer = Lexer::new(source_code.to_owned());
-    AstObject::parse(&mut lexer, None).expect("the Yul source should parse")
+    Object::parse(&mut lexer, None).expect("the Yul source should parse")
 }
 
 fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>

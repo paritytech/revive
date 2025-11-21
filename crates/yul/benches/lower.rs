@@ -23,7 +23,7 @@ fn lower(mut ast: AstObject, mut llvm_context: PolkaVMContext) {
 
 fn parse(source_code: &str) -> AstObject {
     let mut lexer = Lexer::new(source_code.to_owned());
-    AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object")
+    AstObject::parse(&mut lexer, None).expect("the Yul source should parse")
 }
 
 fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
@@ -39,9 +39,8 @@ where
 {
     let ast = parse(&contract().yul);
     let llvm = InkwellContext::create();
-    // The optimizer settings will not affect the benchmarks since we're currently
-    // measuring lowering into unoptimized IR and not running the optimization passes.
-    // (This is still needed as an argument below.)
+    // The optimizer settings will not affect the benchmarks since we're
+    // not running the optimization passes.
     let optimizer_settings = OptimizerSettings::none();
 
     group

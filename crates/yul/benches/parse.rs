@@ -10,7 +10,7 @@ use revive_yul::{lexer::Lexer, parser::statement::object::Object as AstObject};
 /// The function under test parses the Yul `source_code`.
 fn parse(source_code: &str) {
     let mut lexer = Lexer::new(source_code.to_owned());
-    AstObject::parse(&mut lexer, None).expect("expected a Yul AST Object");
+    AstObject::parse(&mut lexer, None).expect("the Yul source should parse");
 }
 
 fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>

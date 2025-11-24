@@ -17,7 +17,7 @@
 	test-yul \
 	test-workspace \
 	test-wasm \
-	test-llvm-builder
+	test-llvm-builder \
 	bench \
 	bench-pvm \
 	bench-evm \

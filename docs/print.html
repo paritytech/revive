@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bf8d8ca1.js";
+            window.path_to_searchindex_js = "searchindex-c97bb057.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0a59406b.js"></script>
+        <script src="toc-c828a282.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,6 +178,7 @@
                         <h1 id="welcome"><a class="header" href="#welcome">Welcome</a></h1>
 <p>Hello and a warm welcome to the revive Solidity compiler book!</p>
 <p>This is the comprehensive documentation resource of the revive Solidity compiler project.</p>
+<p>See also: <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for a more information about contracts on Polkadot.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> User guide</a></h1>
 <p>The <code>resolc</code> compiler can be used via the <code>resolc</code> CLI interface or supported tooling.</p>
@@ -214,7 +215,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <p>For a detailed reference about the CLI, please see <code>resolc --help</code>.</p>
 </blockquote>
 <h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
-<pre><code>  -O, --optimization &lt;OPTIMIZATION&gt;
+<pre><code class="language-bash">  -O, --optimization &lt;OPTIMIZATION&gt;
 </code></pre>
 <p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.</p>
 <p>Valid levels are the following:</p>
@@ -228,7 +229,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </ul>
 <p>By default, <code>-O3</code> is applied.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
-<pre><code>      --stack-size &lt;STACK_SIZE&gt;
+<pre><code class="language-bash">      --stack-size &lt;STACK_SIZE&gt;
 </code></pre>
 <p>PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.</p>
 <p>You are incentiviced to keep this value as small as possible:</p>
@@ -236,47 +237,37 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li>Increasing the heap size will increase startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contracts code size</li>
 </ol>
-<dl>
-<dt id="default-value-65536"><a class="header" href="#default-value-65536">Default value: 65536</a></dt>
-<dd>
-<p>::warning</p>
-</dd>
-<dt id="if-the-contract-uses-more-stack-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime"><a class="header" href="#if-the-contract-uses-more-stack-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime">If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</a></dt>
-<dd>
-<p>::</p>
-</dd>
-</dl>
+<p>Default value: 65536</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
 <h3 id="heap-size"><a class="header" href="#heap-size">Heap size</a></h3>
-<pre><code>     --heap-size &lt;HEAP_SIZE&gt;
+<pre><code class="language-bash">     --heap-size &lt;HEAP_SIZE&gt;
 </code></pre>
 <p>Unlike the EVM, due to the lack of dynamic memory metering, PVM contracts emulate the EVM heap memory with a static buffer. Consequentially, instead of infinite memory with exponentially growing gas costs, PVM contracts have a finite amount of memory with constant gas costs available.</p>
 <p>You are incentiviced to keep this value as small as possible:
 1.Increasing the heap size will increase startup costs.
 2.The heap size contributes to the total memory size a contract can use, which includes the contracts code size</p>
-<dl>
-<dt id="default-value-65536-1"><a class="header" href="#default-value-65536-1">Default value: 65536</a></dt>
-<dd>
-<p>::warning</p>
-</dd>
-<dt id="if-the-contract-uses-more-heap-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime"><a class="header" href="#if-the-contract-uses-more-heap-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime">If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</a></dt>
-<dd>
-<p>::</p>
-</dd>
-</dl>
+<p>Default value: 65536</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
 <h3 id="solc"><a class="header" href="#solc">solc</a></h3>
-<pre><code>      --solc &lt;SOLC&gt;
+<pre><code class="language-bash">      --solc &lt;SOLC&gt;
 </code></pre>
 <p>Specify the path to the <code>solc</code> executable. By default, the one in <code>${PATH}</code> is used.</p>
 <h3 id="debug-artifacts"><a class="header" href="#debug-artifacts">Debug artifacts</a></h3>
-<pre><code>      --debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
+<pre><code class="language-bash">      --debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
 </code></pre>
 <p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF shared object and the PVM assembly. Useful for debugging and development purposes.</p>
 <h3 id="debug-info"><a class="header" href="#debug-info">Debug info</a></h3>
-<pre><code>  -g
+<pre><code class="language-bash">  -g
 </code></pre>
 <p>Generate source based debug information in the output code file. Useful for debugging and development purposes and disabled by default.</p>
 <h3 id="deploy-time-linking"><a class="header" href="#deploy-time-linking">Deploy time linking</a></h3>
-<pre><code>  --link
+<pre><code class="language-bash">  --link
 </code></pre>
 <p>In Solidity, 3 things can happen with libraries:</p>
 <ol>
@@ -311,7 +302,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <h1 id="js-npm-package"><a class="header" href="#js-npm-package">JS NPM package</a></h1>
 <p>The <code>resolc</code> compiler driver is published as NPM package under <a href="https://www.npmjs.com/package/@parity/resolc">@parity/resolc</a>.</p>
 <p>It’s usable from <code>node.js</code> code or directly from the command line:</p>
-<pre><code>npx @parity/resolc@latest --bin crates/integration/contracts/flipper.sol -o /tmp/out
+<pre><code class="language-shell">npx @parity/resolc@latest --bin crates/integration/contracts/flipper.sol -o /tmp/out
 </code></pre>
 <blockquote>
 <p><strong>Note</strong></p>
@@ -326,8 +317,25 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="standard-json-interface"><a class="header" href="#standard-json-interface">Standard JSON interface</a></h1>
-<p>The <code>revive</code> compiler supports a superset of the <code>solc</code> standard JSON interface. The following additional (PVM related) configurations are supported.</p>
-<p>TODO</p>
+<p>The <code>revive</code> compiler is mostly compatible with the <code>solc</code> standard JSON interface. There are a few additional (PVM related) <strong>input</strong> configurations:</p>
+<h2 id="the-settingspolkavm-object"><a class="header" href="#the-settingspolkavm-object">The <code>settings.polkavm</code> object</a></h2>
+<p>Used to configure PVM specific compiler settings.</p>
+<h3 id="settingspolkavmdebuginformation"><a class="header" href="#settingspolkavmdebuginformation"><code>settings.polkavm.debugInformation</code></a></h3>
+<p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
+<h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
+<p>Used to apply PVM specific memory configuration settings.</p>
+<h4 id="settingspolkavmheapsize"><a class="header" href="#settingspolkavmheapsize"><code>settings.polkavm.heapSize</code></a></h4>
+<p>A numerical value allowing to configure the contract heap size. Corresponds to <code>resolc --heap-size</code>.</p>
+<h4 id="settingspolkavmstacksize"><a class="header" href="#settingspolkavmstacksize"><code>settings.polkavm.stackSize</code></a></h4>
+<p>A numerical value allowing to configure the contract stack size. Corresponds to <code>resolc --stack-size</code>.</p>
+<h2 id="the-settingsoptimizer-object"><a class="header" href="#the-settingsoptimizer-object">The <code>settings.optimizer</code> object</a></h2>
+<p>The <code>settings.optimizer</code> object is augmented with support for PVM specific optimization settings.</p>
+<h3 id="settingsoptimizermode"><a class="header" href="#settingsoptimizermode"><code>settings.optimizer.mode</code></a></h3>
+<p>A single char value to configure the LLVM optimizer settings. Corresponds to <code>resolc -O</code>.</p>
+<h2 id="settingsllvmarguments"><a class="header" href="#settingsllvmarguments"><code>settings.llvmArguments</code></a></h2>
+<p>Allows to specify arbitrary command line arguments to LLVM initialization. Used mainly for development and debugging purposes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="differences-to-evm"><a class="header" href="#differences-to-evm">Differences to EVM</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="development"><a class="header" href="#development">Development</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>

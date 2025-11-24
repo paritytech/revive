@@ -7,7 +7,7 @@ We aim to keep the `resolc` CLI usage close to `solc`. However, due to fundament
 > For a detailed reference about the CLI, please see `resolc --help`.
 
 ### LLVM optimization levels
-```
+```bash
   -O, --optimization <OPTIMIZATION>
 ```
 
@@ -24,7 +24,7 @@ Valid levels are the following:
 By default, `-O3` is applied.
 
 ### Stack size
-```
+```bash
       --stack-size <STACK_SIZE>
 ```
 
@@ -36,14 +36,12 @@ You are incentiviced to keep this value as small as possible:
 
 Default value: 65536
           
-:::warning 
-
-If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!
-
-:::
+> **Warning** 
+>
+> If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!
 
 ### Heap size
-```
+```bash
      --heap-size <HEAP_SIZE>
 ```
 
@@ -55,34 +53,32 @@ You are incentiviced to keep this value as small as possible:
 
 Default value: 65536
           
-:::warning
-
-If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!
-
-:::
+> **Warning**
+>
+> If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!
 
 ### solc
-```
+```bash
       --solc <SOLC>
 ```
 
 Specify the path to the `solc` executable. By default, the one in `${PATH}` is used.
 
 ### Debug artifacts
-```
+```bash
       --debug-output-dir <DEBUG_OUTPUT_DIRECTORY>
 ```
 
 Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF shared object and the PVM assembly. Useful for debugging and development purposes.
 
 ### Debug info
-```
+```bash
   -g
 ```
 Generate source based debug information in the output code file. Useful for debugging and development purposes and disabled by default.
 
 ### Deploy time linking
-```
+```bash
   --link
 ```
 

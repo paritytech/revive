@@ -4,7 +4,7 @@ The `resolc` compiler driver is published as NPM package under [@parity/resolc](
 
 It's usable from `node.js` code or directly from the command line:
 
-```
+```shell
 npx @parity/resolc@latest --bin crates/integration/contracts/flipper.sol -o /tmp/out
 ```
 

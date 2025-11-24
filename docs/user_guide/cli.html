@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bf8d8ca1.js";
+            window.path_to_searchindex_js = "../searchindex-c97bb057.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a59406b.js"></script>
+        <script src="../toc-c828a282.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,7 +181,7 @@
 <p>For a detailed reference about the CLI, please see <code>resolc --help</code>.</p>
 </blockquote>
 <h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
-<pre><code>  -O, --optimization &lt;OPTIMIZATION&gt;
+<pre><code class="language-bash">  -O, --optimization &lt;OPTIMIZATION&gt;
 </code></pre>
 <p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.</p>
 <p>Valid levels are the following:</p>
@@ -195,7 +195,7 @@
 </ul>
 <p>By default, <code>-O3</code> is applied.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
-<pre><code>      --stack-size &lt;STACK_SIZE&gt;
+<pre><code class="language-bash">      --stack-size &lt;STACK_SIZE&gt;
 </code></pre>
 <p>PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.</p>
 <p>You are incentiviced to keep this value as small as possible:</p>
@@ -203,47 +203,37 @@
 <li>Increasing the heap size will increase startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contracts code size</li>
 </ol>
-<dl>
-<dt id="default-value-65536"><a class="header" href="#default-value-65536">Default value: 65536</a></dt>
-<dd>
-<p>::warning</p>
-</dd>
-<dt id="if-the-contract-uses-more-stack-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime"><a class="header" href="#if-the-contract-uses-more-stack-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime">If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</a></dt>
-<dd>
-<p>::</p>
-</dd>
-</dl>
+<p>Default value: 65536</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
 <h3 id="heap-size"><a class="header" href="#heap-size">Heap size</a></h3>
-<pre><code>     --heap-size &lt;HEAP_SIZE&gt;
+<pre><code class="language-bash">     --heap-size &lt;HEAP_SIZE&gt;
 </code></pre>
 <p>Unlike the EVM, due to the lack of dynamic memory metering, PVM contracts emulate the EVM heap memory with a static buffer. Consequentially, instead of infinite memory with exponentially growing gas costs, PVM contracts have a finite amount of memory with constant gas costs available.</p>
 <p>You are incentiviced to keep this value as small as possible:
 1.Increasing the heap size will increase startup costs.
 2.The heap size contributes to the total memory size a contract can use, which includes the contracts code size</p>
-<dl>
-<dt id="default-value-65536-1"><a class="header" href="#default-value-65536-1">Default value: 65536</a></dt>
-<dd>
-<p>::warning</p>
-</dd>
-<dt id="if-the-contract-uses-more-heap-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime"><a class="header" href="#if-the-contract-uses-more-heap-memory-than-configured-it-will-compile-fine-but-eventually-revert-execution-at-runtime">If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</a></dt>
-<dd>
-<p>::</p>
-</dd>
-</dl>
+<p>Default value: 65536</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
 <h3 id="solc"><a class="header" href="#solc">solc</a></h3>
-<pre><code>      --solc &lt;SOLC&gt;
+<pre><code class="language-bash">      --solc &lt;SOLC&gt;
 </code></pre>
 <p>Specify the path to the <code>solc</code> executable. By default, the one in <code>${PATH}</code> is used.</p>
 <h3 id="debug-artifacts"><a class="header" href="#debug-artifacts">Debug artifacts</a></h3>
-<pre><code>      --debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
+<pre><code class="language-bash">      --debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
 </code></pre>
 <p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF shared object and the PVM assembly. Useful for debugging and development purposes.</p>
 <h3 id="debug-info"><a class="header" href="#debug-info">Debug info</a></h3>
-<pre><code>  -g
+<pre><code class="language-bash">  -g
 </code></pre>
 <p>Generate source based debug information in the output code file. Useful for debugging and development purposes and disabled by default.</p>
 <h3 id="deploy-time-linking"><a class="header" href="#deploy-time-linking">Deploy time linking</a></h3>
-<pre><code>  --link
+<pre><code class="language-bash">  --link
 </code></pre>
 <p>In Solidity, 3 things can happen with libraries:</p>
 <ol>

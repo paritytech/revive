@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bf8d8ca1.js";
+            window.path_to_searchindex_js = "../searchindex-c97bb057.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0a59406b.js"></script>
+        <script src="../toc-c828a282.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,8 +175,23 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="standard-json-interface"><a class="header" href="#standard-json-interface">Standard JSON interface</a></h1>
-<p>The <code>revive</code> compiler supports a superset of the <code>solc</code> standard JSON interface. The following additional (PVM related) configurations are supported.</p>
-<p>TODO</p>
+<p>The <code>revive</code> compiler is mostly compatible with the <code>solc</code> standard JSON interface. There are a few additional (PVM related) <strong>input</strong> configurations:</p>
+<h2 id="the-settingspolkavm-object"><a class="header" href="#the-settingspolkavm-object">The <code>settings.polkavm</code> object</a></h2>
+<p>Used to configure PVM specific compiler settings.</p>
+<h3 id="settingspolkavmdebuginformation"><a class="header" href="#settingspolkavmdebuginformation"><code>settings.polkavm.debugInformation</code></a></h3>
+<p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
+<h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
+<p>Used to apply PVM specific memory configuration settings.</p>
+<h4 id="settingspolkavmheapsize"><a class="header" href="#settingspolkavmheapsize"><code>settings.polkavm.heapSize</code></a></h4>
+<p>A numerical value allowing to configure the contract heap size. Corresponds to <code>resolc --heap-size</code>.</p>
+<h4 id="settingspolkavmstacksize"><a class="header" href="#settingspolkavmstacksize"><code>settings.polkavm.stackSize</code></a></h4>
+<p>A numerical value allowing to configure the contract stack size. Corresponds to <code>resolc --stack-size</code>.</p>
+<h2 id="the-settingsoptimizer-object"><a class="header" href="#the-settingsoptimizer-object">The <code>settings.optimizer</code> object</a></h2>
+<p>The <code>settings.optimizer</code> object is augmented with support for PVM specific optimization settings.</p>
+<h3 id="settingsoptimizermode"><a class="header" href="#settingsoptimizermode"><code>settings.optimizer.mode</code></a></h3>
+<p>A single char value to configure the LLVM optimizer settings. Corresponds to <code>resolc -O</code>.</p>
+<h2 id="settingsllvmarguments"><a class="header" href="#settingsllvmarguments"><code>settings.llvmArguments</code></a></h2>
+<p>Allows to specify arbitrary command line arguments to LLVM initialization. Used mainly for development and debugging purposes.</p>
 
                     </main>
 
@@ -186,7 +201,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../development.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../user_guide/differences.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -200,7 +215,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../development.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../user_guide/differences.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -23,8 +23,6 @@
 	bench-evm \
 	bench-resolc \
 	bench-yul \
-	bench-parse-yul \
-	bench-lower-yul \
 	clean
 
 install: install-bin install-npm

@@ -7,23 +7,56 @@ name: "Download LLVM"
 inputs:
   target:
     required: true
+  version:
+    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest LLVM release."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
+    - name: detect llvm version from submodule
+      id: detect-version
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.version }}" ]; then
+          # Extract branch from .gitmodules (e.g., "release/18.x")
+          BRANCH=$(git config -f .gitmodules submodule.llvm.branch)
+          if [ -n "$BRANCH" ]; then
+            # Extract version from branch name (e.g., "18.x" from "release/18.x")
+            VERSION_PREFIX=$(echo "$BRANCH" | sed 's|release/||' | sed 's|\.x$||')
+            echo "Detected LLVM version prefix from submodule branch: $VERSION_PREFIX"
+            
+            # Special case: pin LLVM 18 to specific version 18.1.8
+            if [ "$VERSION_PREFIX" = "18" ]; then
+              echo "Using pinned version for LLVM 18: llvm-18.1.8"
+              echo "version_prefix=llvm-18.1.8" >> $GITHUB_OUTPUT
+            else
+              echo "version_prefix=llvm-$VERSION_PREFIX" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No branch found in .gitmodules, will use latest release"
+            echo "version_prefix=" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Using explicitly provided version: ${{ inputs.version }}"
+          echo "version_prefix=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        fi
+    
     - name: find asset
       id: find
       uses: actions/github-script@v7
       env:
         target: ${{ inputs.target }}
+        version_prefix: ${{ steps.detect-version.outputs.version_prefix }}
       with:
         result-encoding: string
         script: |
           let page = 1;
           let releases = [];
 
-          let releasePrefix = "llvm-"
           let target = process.env.target
+          let versionPrefix = process.env.version_prefix
 
           do {
             const res = await github.rest.repos.listReleases({
@@ -38,15 +71,31 @@ runs:
               return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
             });
 
-            let llvmLatestRelease = releases.find(release => {
-              return release.tag_name.startsWith(releasePrefix);
-            });
-            if (llvmLatestRelease){
-                let asset = llvmLatestRelease.assets.find(asset =>{
+            let llvmRelease;
+            if (versionPrefix) {
+              // Search for latest release matching the version prefix
+              llvmRelease = releases.find(release => {
+                return release.tag_name.startsWith(versionPrefix);
+              });
+              if (llvmRelease) {
+                core.info(`Found LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
+              }
+            } else {
+              // Find latest LLVM release
+              llvmRelease = releases.find(release => {
+                return release.tag_name.startsWith('llvm-');
+              });
+              if (llvmRelease) {
+                core.info(`Found latest LLVM version: ${llvmRelease.tag_name}`);
+              }
+            }
+
+            if (llvmRelease){
+                let asset = llvmRelease.assets.find(asset =>{
                     return asset.name.includes(target);
                 });
                 if (!asset){
-                  core.setFailed(`Artifact for '${target}' not found in release ${llvmLatestRelease.tag_name} (${llvmLatestRelease.html_url})`);
+                  core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
                   process.exit();
                 }
                 return asset.browser_download_url;
@@ -55,7 +104,11 @@ runs:
             page++;
           } while(releases.length > 0);
 
-          core.setFailed(`No LLVM releases with '${releasePrefix}' atifacts found! Please release LLVM before running this workflow.`);
+          if (versionPrefix) {
+            core.setFailed(`No LLVM releases matching prefix '${versionPrefix}' found! Please check the version.`);
+          } else {
+            core.setFailed(`No LLVM releases found! Please release LLVM before running this workflow.`);
+          }
           process.exit();
 
     - name: download

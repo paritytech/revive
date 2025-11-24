@@ -257,6 +257,8 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Initializes a new dummy LLVM context.
+    ///
+    /// Omits the LLVM module initialization; use this only in tests and benchmarks.
     pub fn new_dummy(
         llvm: &'ctx inkwell::context::Context,
         optimizer_settings: OptimizerSettings,

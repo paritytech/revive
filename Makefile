@@ -102,13 +102,9 @@ bench-resolc: test-resolc
 	cargo criterion --package resolc --bench compile --message-format=json \
 	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
-bench-yul: test-yul bench-parse-yul bench-lower-yul
-
-bench-parse-yul: test-yul
+bench-yul: test-yul
 	cargo criterion --package revive-yul --bench parse --message-format=json \
 	| criterion-table > crates/yul/BENCHMARKS_PARSE_M4PRO.md
-
-bench-lower-yul: test-yul
 	cargo criterion --package revive-yul --bench lower --message-format=json \
 	| criterion-table > crates/yul/BENCHMARKS_LOWER_M4PRO.md
 

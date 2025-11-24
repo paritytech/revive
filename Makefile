@@ -10,6 +10,7 @@
 	format \
 	clippy \
 	doc \
+	book \
 	machete \
 	test \
 	test-integration \
@@ -17,6 +18,7 @@
 	test-workspace \
 	test-wasm \
 	test-llvm-builder \
+	test-book \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -57,6 +59,9 @@ clippy:
 doc:
 	cargo doc --all-features --workspace --document-private-items --no-deps
 
+book: test-book
+	mdbook serve book --open
+
 machete:
 	cargo install cargo-machete
 	cargo machete
@@ -78,6 +83,11 @@ test-wasm: install-wasm
 test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
+
+test-book:
+	cargo install mdbook --version 0.5.1
+	mdbook test book
+	mdbook build book
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \
@@ -102,3 +112,4 @@ clean:
 	rm -rf crates/resolc/src/tests/cli/artifacts ; \
 	cargo uninstall resolc ; \
 	cargo uninstall revive-llvm-builder ;
+	mdbook clean book

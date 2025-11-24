@@ -527,14 +527,18 @@ pub fn compile_to_yul(
         .unwrap();
     output.check_errors().unwrap();
 
-    output
+    let yul = output
         .contracts
         .get(file_name)
         .unwrap_or_else(|| panic!("file `{file_name}` not found in solc output"))
         .get(contract_name)
         .unwrap_or_else(|| panic!("contract `{contract_name}` not found in solc output"))
         .ir_optimized
-        .to_owned()
+        .to_owned();
+
+    YUL_IR_CACHE.lock().unwrap().insert(id, yul.clone());
+
+    yul
 }
 
 #[cfg(test)]

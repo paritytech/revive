@@ -18,3 +18,16 @@ thiserror = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
+
+[dev-dependencies]
+alloy-primitives = { workspace = true }
+criterion = { workspace = true }
+revive-integration = { workspace = true }
+
+[[bench]]
+name = "parse"
+harness = false
+
+[[bench]]
+name = "lower"
+harness = false

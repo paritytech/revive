@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ff1dc228.js";
+            window.path_to_searchindex_js = "searchindex-2352b113.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-87096f5b.js"></script>
+        <script src="toc-ada1652e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,8 +180,8 @@
 <p>This is the comprehensive documentation resource of the revive Solidity compiler project.</p>
 <h2 id="target-audience"><a class="header" href="#target-audience">Target audience</a></h2>
 <ul>
-<li>Solidity dApp developers and deployers are should read the user guide chapter. Compiling Solidity to PVM introduces some important difference to EVM which should be well understood.</li>
-<li>Contributors will find the architecture and interals chapters helpful in getting up to speed.</li>
+<li><strong>Solidity dApp developers</strong> and should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>
+<li><strong>Contributors</strong> will find the architecture and interals chapters helpful in getting up to speed.</li>
 </ul>
 <h2 id="see-aloso"><a class="header" href="#see-aloso">See aloso</a></h2>
 <p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
@@ -273,7 +273,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </code></pre>
 <p>Generate source based debug information in the output code file. Useful for debugging and development purposes and disabled by default.</p>
 <h3 id="deploy-time-linking"><a class="header" href="#deploy-time-linking">Deploy time linking</a></h3>
-<pre><code class="language-bash">  --link
+<pre><code class="language-bash">  --link [--libraries &lt;LIBRARIES&gt;] &lt;INPUT_FILES&gt;
 </code></pre>
 <p>In Solidity, 3 things can happen with libraries:</p>
 <ol>
@@ -316,11 +316,17 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tooling-integration"><a class="header" href="#tooling-integration">Tooling integration</a></h1>
-<p><code>resolc</code> is being integrated into the following customized toolings:</p>
+<p><code>resolc</code> achieved successful integration into a variety of third party developer tools.</p>
+<h2 id="solidity-toolkits"><a class="header" href="#solidity-toolkits">Solidity toolkits</a></h2>
+<p>Support for <code>resolc</code> is available in forks of the <a href="https://hardhat.org">hardhat</a> and <a href="https://getfoundry.sh">foundry</a> Solidity toolkits:</p>
 <ul>
-<li><a href="https://github.com/paritytech/hardhat-polkadot">Hardhat</a></li>
-<li><a href="https://github.com/paritytech/foundry-polkadot?tab=readme-ov-file#2-resolc-compiler-integration">Foundry</a></li>
+<li><a href="https://github.com/paritytech/hardhat-polkadot">The parity Hardhat fork</a></li>
+<li><a href="https://github.com/paritytech/foundry-polkadot?tab=readme-ov-file#2-resolc-compiler-integration">The parity Foundry fork</a></li>
 </ul>
+<h2 id="compiler-explorer"><a class="header" href="#compiler-explorer">Compiler explorer</a></h2>
+<p><code>resolc</code> is available on <a href="https://godbolt.org">godbolt.org</a> for the Solidity and Yul input languages. See also the announcement post on the <a href="https://forum.polkadot.network/t/resolc-is-live-on-compiler-explorer">forum</a>.</p>
+<h2 id="remix-ide"><a class="header" href="#remix-ide">Remix IDE</a></h2>
+<p>There is remix IDE fork with <code>resolc</code> support at <a href="https://remix.polkadot.io">remix.polkadot.io</a>. Unfortunately this is no longer actively maintained (there might be bugs and outdated <code>resolc</code> versions).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="standard-json-interface"><a class="header" href="#standard-json-interface">Standard JSON interface</a></h1>
 <p>The <code>revive</code> compiler is mostly compatible with the <code>solc</code> standard JSON interface. There are a few additional (PVM related) <strong>input</strong> configurations:</p>
@@ -373,7 +379,37 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 [TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: REVERT, data: [] })
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="development"><a class="header" href="#development">Development</a></h1>
+<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
+<p>The <code>revive</code> compiler is an open source software project and we gladly accept contributions from anyone!</p>
+<h2 id="development"><a class="header" href="#development">Development</a></h2>
+<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
+<h3 id="building-the-compiler"><a class="header" href="#building-the-compiler">Building the compiler</a></h3>
+<p>A quick reference on how to build the Solidity compiler is maintained in the projects <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
+<h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
+<p>The <a href="https://github.com/paritytech/revive/blob/main/Makefile">Makefile</a> comprehensively encapsulates all development aspects of this codebase. It is kept concise and readable. Please read and use it! You’ll learn for example:</p>
+<ul>
+<li>How to build and install a <code>resolc</code> development version.</li>
+<li>How to run tests and benchmarks.</li>
+<li>How to cross-compile <code>resolc</code>.</li>
+</ul>
+<p>As a general rule-of-thumb: If <code>make test</code> runs fine locally, chances for green CI pipelines are good.</p>
+<h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>
+<ol>
+<li>Changes must be submitted via a pull request (PR) to the github upstream repository.</li>
+<li>Ensure that your branch passes <code>make test</code> locally when submitting a pull request.</li>
+<li>A PR must not be merged until CI fully passes. Exceptions can be made (for example to fix CI issues itself).</li>
+<li>No force pushes to the <code>main</code> branch and open PR branches.</li>
+<li>Maintainers can request changes or deny contributions to their own discretion.</li>
+</ol>
+<h2 id="ai-policy"><a class="header" href="#ai-policy">AI policy</a></h2>
+<p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the follwing</strong>:</p>
+<p><em>Project maintainers may reject any contribution (or portions of it) if the contribution shows signs of problematic involvement of generative AI</em>.</p>
+<p>Judgement of “problematic involvement” lies at the sole discretion of project maintainers. No proof (whether a contribution was in fact AI generated or not) is required. Rationale:</p>
+<ul>
+<li>No one enjoys reading soulless and uncanny LLM slop. Please review and fix any AI slop yourself prior to submitting a PR.</li>
+<li>A Solidity compiler is security sensitive software. Even miniscule mistakes can ultimately lead to loss of funds. AI models are inherently stochastic. They regurarly fail to capture important nuances or produce straight hallucinations. Code that was “blindly” generated has no home here.</li>
+<li><code>revive</code> is a large codebase. Generative AI assistants may not have enough “context window” to sufficiently capture correctness, consistency and style aspects of the codebase. We’d like to keep this codebase maintainable <em>by humans</em> for the forseeable future.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="internals"><a class="header" href="#internals">Internals</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>

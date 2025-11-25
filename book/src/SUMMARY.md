@@ -9,7 +9,7 @@
   - [Standard JSON interface](./user_guide/std_json.md)
   - [Differences to EVM](./user_guide/differences.md)
 - [`revive-runner` sandbox](./revive_runner.md)
-- [Development](./development.md)
+- [Contributor guide](./contributor_guide.md)
 
 - [Internals](./internals.md)
 - [FAQ](./faq.md)

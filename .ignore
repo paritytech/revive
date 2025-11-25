@@ -1,2 +1,3 @@
 # This is no longer in .gitignore; we add it here (honored by tools like rg and fd).
 llvm/
+docs/

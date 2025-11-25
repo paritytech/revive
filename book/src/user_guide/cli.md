@@ -79,7 +79,7 @@ Generate source based debug information in the output code file. Useful for debu
 
 ### Deploy time linking
 ```bash
-  --link
+  --link [--libraries <LIBRARIES>] <INPUT_FILES>
 ```
 
 In Solidity, 3 things can happen with libraries:

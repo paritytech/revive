@@ -26,11 +26,14 @@ runs:
             # Extract version from branch name (e.g., "18.x" from "release/18.x")
             VERSION_PREFIX=$(echo "$BRANCH" | sed 's|release/||' | sed 's|\.x$||')
             echo "Detected LLVM version prefix from submodule branch: $VERSION_PREFIX"
-            
+
             # Special case: pin LLVM 18 to specific version 18.1.8
             if [ "$VERSION_PREFIX" = "18" ]; then
               echo "Using pinned version for LLVM 18: llvm-18.1.8"
               echo "version_prefix=llvm-18.1.8" >> $GITHUB_OUTPUT
+            elif [ "$VERSION_PREFIX" = "21" ]; then
+              echo "Using pinned version for LLVM 21: llvm-21.1.6"
+              echo "version_prefix=llvm-21.1.6" >> $GITHUB_OUTPUT
             else
               echo "version_prefix=llvm-$VERSION_PREFIX" >> $GITHUB_OUTPUT
             fi
@@ -42,7 +45,7 @@ runs:
           echo "Using explicitly provided version: ${{ inputs.version }}"
           echo "version_prefix=${{ inputs.version }}" >> $GITHUB_OUTPUT
         fi
-    
+
     - name: find asset
       id: find
       uses: actions/github-script@v7

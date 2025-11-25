@@ -486,11 +486,16 @@ pub fn compile_to_yul(
 ) -> String {
     check_dependencies();
 
+    let optimizer = SolcStandardJsonInputSettingsOptimizer::new(
+        solc_optimizer_enabled,
+        Default::default(),
+        Default::default(),
+    );
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         solc_optimizer_enabled,
         solidity: source_code.to_owned(),
-        opt: String::new(),
+        opt: optimizer.mode.into(),
     };
 
     if let Some(yul) = YUL_IR_CACHE.lock().unwrap().get(&id) {
@@ -508,11 +513,7 @@ pub fn compile_to_yul(
         Default::default(),
         Default::default(),
         SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            solc_optimizer_enabled,
-            Default::default(),
-            Default::default(),
-        ),
+        optimizer,
         Default::default(),
         Default::default(),
         Default::default(),

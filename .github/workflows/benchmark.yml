@@ -1,0 +1,111 @@
+name: Benchmark
+
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    # TODO: Add condition that the base branch in the PR is main.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # Without this it will override our rust flags.
+          rustflags: ""
+
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM Environment Variables
+        run: |
+          echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+
+      - name: Install Benchmarking Tools
+        run: |
+          cargo install cargo-criterion critcmp
+
+      - name: Checkout and Compile Main Branch
+        run: |
+          git fetch origin "$GITHUB_DEFAULT_BRANCH":"$GITHUB_DEFAULT_BRANCH"
+          git checkout -f "$GITHUB_DEFAULT_BRANCH"
+          make install
+
+      - name: Run Benchmarks on Main Branch
+        run: |
+          cargo bench --package resolc --bench compile -- --save-baseline main-resolc
+          cargo bench --package revive-yul --bench parse -- --save-baseline main-yul-parse
+          cargo bench --package revive-yul --bench lower -- --save-baseline main-yul-lower
+        timeout-minutes: 20
+
+      - name: Checkout and Compile PR Branch
+        run: |
+          git checkout -f ${{ github.sha }}
+          make install
+
+      - name: Run Benchmarks on PR Branch
+        run: |
+          cargo bench --package resolc --bench compile -- --save-baseline pr-resolc
+          cargo bench --package revive-yul --bench parse -- --save-baseline pr-yul-parse
+          cargo bench --package revive-yul --bench lower -- --save-baseline pr-yul-lower
+        timeout-minutes: 20
+
+      - name: Compare Benchmarks
+        run: |
+          critcmp main-resolc pr-resolc > benchmarks-resolc
+          critcmp main-yul-parse pr-yul-parse > benchmarks-yul-parse
+          critcmp main-yul-lower pr-yul-lower > benchmarks-yul-lower
+
+      - name: Post PR Comment with Benchmark Results
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark
+          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          message: |
+            # Benchmarks
+
+            ## Compile E2E
+
+            <details>
+                <summary>Details</summary>
+
+            ```
+            $(cat benchmarks-resolc)
+            ```
+
+            </details>
+
+            ## Parse Yul
+
+            <details>
+                <summary>Details</summary>
+
+            ```
+            $(cat benchmarks-yul-parse)
+            ```
+
+            </details>
+
+            ## Lower Yul
+
+            <details>
+                <summary>Details</summary>
+
+            ```
+            $(cat benchmarks-yul-lower)
+            ```
+
+            </details>

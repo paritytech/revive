@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>revive-runner sandbox - revive compiler book</title>
+        <title>Developer Guide - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,45 +174,18 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="revive-runner-sandbox"><a class="header" href="#revive-runner-sandbox"><code>revive-runner</code> sandbox</a></h1>
-<p>Running contract code usually requires a blockchain node. While local dev nodes can be used, sometimes it’s just not desirable to do so. Instead, it can be much more convenient to run and debug contract code with a stripped down environment.</p>
-<p>This is where the <code>revive-runner</code> comes in handy. In a nutshell, it is a single-binary no-blockchain <code>pallet-revive</code> runtime.</p>
-<h2 id="installation-and-usage"><a class="header" href="#installation-and-usage">Installation and usage</a></h2>
-<p>Inside the root <code>revive</code> repository directory, install it from source (requires Rust installed):</p>
-<pre><code class="language-bash">make install-revive-runner
-</code></pre>
-<p>After installing, see <code>revive-runner --help</code> for usage help.</p>
-<h2 id="trace-logs"><a class="header" href="#trace-logs">Trace logs</a></h2>
-<p>The standard <code>RUST_LOG</code> environment variable controls the log output from the contract execution. This includes <code>revive</code> runtime logs and PVM execution trace logs. Sometimes it’s convenient to have more fine granular insight. Some useful filters:</p>
-<ul>
-<li><code>RUST_LOG=runtime=trace</code>: The <code>pallet-revive</code> runtime trace logs.</li>
-<li><code>RUST_LOG=polkavm=trace</code>: Low level PolkaVM instruction tracing.</li>
-</ul>
-<h2 id="automatic-contract-instantiation"><a class="header" href="#automatic-contract-instantiation">Automatic contract instantiation</a></h2>
-<p>To avoid running the constract in an unitialized state, <code>revive-runner</code> automatically instantiates the contract before calling it (constructor arguments can be provided).</p>
-<h2 id="example"><a class="header" href="#example">Example</a></h2>
-<p>Suppose we want to trace the syscalls of the execution of a compiled contract file <code>Flipper.pvm</code>:</p>
-<pre><code class="language-bash">RUST_LOG=runtime=trace revive-runner -f Flipper.pvm
-[DEBUG runtime::revive] Contract memory usage: purgable=6144/3145728 KB baseline=103063/1572864
-[TRACE runtime::revive::strace] call_data_size() = Ok(0) gas_consumed: Weight { ref_time: 985209, proof_size: 0 }
-[TRACE runtime::revive::strace] value_transferred(out_ptr: 4294836096) = Ok(()) gas_consumed: Weight { ref_time: 2937634, proof_size: 0 }
-[TRACE runtime::revive::strace] call_data_copy(out_ptr: 131216, out_len: 0, offset: 0) = Ok(()) gas_consumed: Weight { ref_time: 4084483, proof_size: 0 }
-[TRACE runtime::revive::strace] seal_return(flags: 0, data_ptr: 131216, data_len: 0) = Err(TrapReason::Return(ReturnData { flags: 0, data: [] })) gas_consumed: Weight { ref_time: 5510615, proof_size: 0 }
-[TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: (empty), data: [] })
-[TRACE runtime::revive::strace] call_data_size() = Ok(0) gas_consumed: Weight { ref_time: 985209, proof_size: 0 }
-[TRACE runtime::revive::strace] seal_return(flags: 1, data_ptr: 131088, data_len: 0) = Err(TrapReason::Return(ReturnData { flags: 1, data: [] })) gas_consumed: Weight { ref_time: 2456669, proof_size: 0 }
-[TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: REVERT, data: [] })
-</code></pre>
+                        <h1 id="developer-guide"><a class="header" href="#developer-guide">Developer guide</a></h1>
+<p>This chapter covers internal aspects of the compiler and helps contributors getting started with the <code>revive</code> codebase.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="user_guide/differences.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="revive_runner.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="developer_guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="developer_guide/contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -222,11 +195,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="user_guide/differences.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="revive_runner.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="developer_guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="developer_guide/contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

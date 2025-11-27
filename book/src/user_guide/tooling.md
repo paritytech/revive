@@ -1,6 +1,6 @@
 # Tooling integration
 
-`resolc` achieved successful integration into a variety of third party developer tools.
+`resolc` achieved successful integration with a variety of third party developer tools.
 
 ## Solidity toolkits
 

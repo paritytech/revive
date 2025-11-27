@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2352b113.js";
+            window.path_to_searchindex_js = "searchindex-0f888317.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ada1652e.js"></script>
+        <script src="toc-e2449b4d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,10 +187,11 @@
 <p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> user guide</a></h1>
-<p>The <code>resolc</code> compiler can be used via the <code>resolc</code> CLI driver binary, the NPM package or supported tooling.</p>
+<p>This chapter explains the ways to use <code>resolc</code> as well as some important aspects of compiling Solidity to PolkaVM with <code>resolc</code>.</p>
 <h2 id="revive-vs-resolc-nomenclature"><a class="header" href="#revive-vs-resolc-nomenclature"><code>revive</code> vs. <code>resolc</code> nomenclature</a></h2>
-<p><code>revive</code> is the name of the overarching “Solidity to PolkaVM” compiler project, which contains multiple components (for example the YUL frontend but also the <code>resolc</code> executable itself).</p>
-<p><code>resolc</code> is the name of the single entry-point frontend binary executable, which transparently uses all revive components to produce compiled contract artifacts.</p>
+<p><code>revive</code> is the name of the overarching “Solidity to PolkaVM” compiler project, which contains multiple components (for example the Yul parser, the code generation library, the <code>resolc</code> executable itself and many things more).</p>
+<p><code>resolc</code> is the name of the compiler driver executable, which transparently uses many <code>revive</code> components to produce compiled contract artifacts.</p>
+<p>In other words, <code>revive</code> is the full compiler infrastructure (more like <code>LLVM</code>) and <code>resolc</code> is a user-facing single-entrypoint compiler frontend (more like <code>clang</code>).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
 <p>Building Solidity contracts for PolkaVM requires installing the following two compilers:</p>
@@ -277,28 +278,31 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </code></pre>
 <p>In Solidity, 3 things can happen with libraries:</p>
 <ol>
-<li>They are not callable externally and thus can be inlined.</li>
+<li>They are not <code>extern</code>ally callable and thus can be inlined.
+<ol>
 <li>The solc Solidity optimizer inlines those (which usually the case). Note: <code>resolc</code> always activates the solc Solidity optimizer.</li>
 <li>If the solc Solidity optimzer is disabled or for some reason fails to inline them (both rare), they are not inlined and require linking.</li>
-<li>They are linked at compile time. This is the case if at compile time the library address is known (i.e. <code>--libraries</code> supplied in CLI or the corresponding setting in STD JSON input).</li>
-<li>They are linked at deploy time. This happens when the compiler does not know the library address (i.e. <code>--libraries</code> flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it’s discourage and should never be used by production dApps, see the warning box here.</li>
 </ol>
-<p>This means: If the cases <code>1.2</code> and / or <code>3</code> occur during contract compilation, the emitted contract code is “unlinked”:</p>
+</li>
+<li>They are <code>extern</code>ally callable but still linked at compile time. This is the case if at compile time the library address is known (i.e. <code>--libraries</code> supplied in CLI or the corresponding setting in STD JSON input).</li>
+<li>They are linked at deploy time. This happens when the compiler does not know the library address (i.e. <code>--libraries</code> flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it’s discourage and should never be used by production dApps.</li>
+</ol>
+<p>In cases <code>1.2</code> and <code>3</code>:</p>
 <ul>
-<li>The compiler emits DELEGATECALL to the non-inlined (unlinked) library.</li>
-<li>The emitted code blobs are considered “unlinked” and not deployable.</li>
+<li>Some of the produced code blobs will be in the “unlinked” raw <code>ELF</code> object format and not yet deployable.</li>
 <li>To make them deployable, they need to be “linked” (done using the <code>resolc --link</code> linker mode explained below).</li>
+<li>The compiler emitted <code>DELEGATECALL</code> instructions to call non-inlined (unlinked) libraries. The contract deployer must make sure to deploy any libraries prior to contract deployment.</li>
 </ul>
 <blockquote>
-<p><strong>Tip</strong></p>
+<p><strong>Warning</strong></p>
 <p>Using deploy time linking is officially <strong>discouraged</strong>. Mainly due to bytecode hashes changing after the fact. We decided to support it in <code>resolc</code> regardless, due to popular reqeust.</p>
 </blockquote>
 <p>Similar to how it works in <code>solc</code>, <code>--libraries</code> may be used to provide libraries during linking mode.</p>
 <p>Unlike with <code>solc</code>, where linking implies a simple string substitution mechanism, <code>resolc</code> needs to resolve actual missing <code>ELF</code> symbols. This is due to how factory dependencies work in PVM. As a consequence, it isn’t sufficient to just provide the unlinked blobs to the linker. Instead, they must be provided in the exact same directory structure the Solidity source code was found during compile time.</p>
 <p>Example:</p>
 <ul>
-<li>The contract <code>src/foo/bar.sol:Bar</code> needs deploy time linking.</li>
-<li>The unlinked contract blob needs to be provided inside a relative <code>src/foo/</code> directory to <code>--link</code>. Otherwise the symbol resolution will fail.</li>
+<li>The contract <code>src/foo/bar.sol:Bar</code> is involved in deploy time linking. It may be a factory dependency.</li>
+<li>The contract blob needs to be provided inside a relative <code>src/foo/</code> directory to <code>--link</code>. Otherwise symbol resolution may fail.</li>
 </ul>
 <blockquote>
 <p><strong>Note</strong></p>
@@ -316,7 +320,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tooling-integration"><a class="header" href="#tooling-integration">Tooling integration</a></h1>
-<p><code>resolc</code> achieved successful integration into a variety of third party developer tools.</p>
+<p><code>resolc</code> achieved successful integration with a variety of third party developer tools.</p>
 <h2 id="solidity-toolkits"><a class="header" href="#solidity-toolkits">Solidity toolkits</a></h2>
 <p>Support for <code>resolc</code> is available in forks of the <a href="https://hardhat.org">hardhat</a> and <a href="https://getfoundry.sh">foundry</a> Solidity toolkits:</p>
 <ul>
@@ -379,7 +383,10 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 [TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: REVERT, data: [] })
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
+<h1 id="developer-guide"><a class="header" href="#developer-guide">Developer guide</a></h1>
+<p>This chapter covers internal aspects of the compiler and helps contributors getting started with the <code>revive</code> codebase.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
 <p>The <code>revive</code> compiler is an open source software project and we gladly accept contributions from anyone!</p>
 <h2 id="development"><a class="header" href="#development">Development</a></h2>
 <p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
@@ -411,7 +418,59 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li><code>revive</code> is a large codebase. Generative AI assistants may not have enough “context window” to sufficiently capture correctness, consistency and style aspects of the codebase. We’d like to keep this codebase maintainable <em>by humans</em> for the forseeable future.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="internals"><a class="header" href="#internals">Internals</a></h1>
+<h1 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h1>
+<h2 id="crates-organization"><a class="header" href="#crates-organization">Crates organization</a></h2>
+<p><code>revive</code> is organized as a Rust workspace code repository.</p>
+<h3 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h3>
+<p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please it there.</p>
+<p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
+<h3 id="dependencies-1"><a class="header" href="#dependencies-1">Dependencies</a></h3>
+<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
+<p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="compiler-architecture"><a class="header" href="#compiler-architecture">Compiler architecture</a></h1>
+<p><code>revive</code> relies on <code>solc</code>, the <a href="https://github.com/ethereum/solidity">Ethereum Solidity compiler</a>, as the Solidity frontend to process smart contracts written in Solidity. <a href="https://github.com/llvm/llvm-project">LLVM</a>, a popular and powerful compiler framework, is used as the compiler backend and does the heavy lifting in terms of optimizitations and RISC-V code generation.</p>
+<p><code>revive</code> mainly takes care of lowering the YUL intermediate representation (IR) produced by <code>solc</code> to LLVM IR. This approach provides a good balance between maintaining a high level of Ethereum compatibility, good contract performance and feasible engineering efforts.</p>
+<h2 id="resolc"><a class="header" href="#resolc"><code>resolc</code></a></h2>
+<h3 id="compilation-process"><a class="header" href="#compilation-process">Compilation process</a></h3>
+<p>When compiling a Solidity source file, the following steps happen under the hood:</p>
+<ol>
+<li><code>solc</code> is used to lower the Solidity source code into <a href="https://docs.soliditylang.org/en/latest/yul.html">YUL intermediate representation</a>.</li>
+<li><code>revive</code> lowers the YUL IR into LLVM IR.</li>
+<li>LLVM optimizes the code and emits a RISC-V ELF shared object (through LLD).</li>
+<li>The <a href="https://github.com/paritytech/polkavm">PolkaVM</a> linker finally links the ELF shared object into a PolkaVM blob.</li>
+</ol>
+<p>This compilation process can be visualized as follows:</p>
+<p><img src="developer_guide/images/resolc.svg" alt="Architecture Overview"></p>
+<h3 id="single-static-binary-distribution"><a class="header" href="#single-static-binary-distribution">Single static binary distribution</a></h3>
+<h2 id="the-revive-compiler-libraries"><a class="header" href="#the-revive-compiler-libraries">The <code>revive</code> compiler libraries</a></h2>
+<p>The main compiler logic is implemented in the <code>revive-yul</code> and <code>revive-llvm-context</code> crates.</p>
+<p>The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and also our own <code>revive-llvm-context</code> compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).</p>
+<h2 id="evm-heap-memory"><a class="header" href="#evm-heap-memory">EVM heap memory</a></h2>
+<p>PVM doesn’t offer a similar API. Hence the emitted contract code emulates the linear EVM heap memory using a static byte buffer. Data inside this byte buffer is kept big endian for EVM compatibility reasons (unaligned access is allowed and makes optimizing this non-trivial).</p>
+<p>Unlike with the EVM, where heap memory usage is gas metered, our heap size is static (the size is user controllable via a setting flag). The compiler emits bound checks to prevent overflows.</p>
+<h2 id="the-llvm-dependency"><a class="header" href="#the-llvm-dependency">The LLVM dependency</a></h2>
+<p>LLVM is a special non Rust dependency. We interface its builder interface via the <a href="https://crates.io/crates/inkwell">inkwell</a> wrapper crate.</p>
+<p>We use upstream LLVM but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and leave assertions always on. Further we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-plattform build script and is used to build and release the LLVM dependency.</p>
+<p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process but we don’t want to distribute another binary.</p>
+<h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
+<p>At the moment, no real custom optimizations are implemented. Thus we are missing some optimization opportunities that neither solc nor LLVM can realize (due to their lack of domain specific semantics). Further, solc optimizes for target machine orthogonal to our target (BE 256bit stack machine vs. 64bit LE RISC architecture) and the EVM gas model. We started working on an additional IR layer between Yul and LLVM to capture this.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="pallet-revive-runtime-and-pvm"><a class="header" href="#pallet-revive-runtime-and-pvm">pallet-revive runtime and PVM</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h1>
+<p>We require the official Rust formatter and clippy linters. In addition to that, please also consider the following best-effort aspects:</p>
+<ul>
+<li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
+<li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
+<li>Don’t write macros and don’t use thrid party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
+<li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
+<li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
+<li>Public items must have a meaningful doc comment.</li>
+<li>Provide a meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
 <h2 id="what-evm-version-do-you-support"><a class="header" href="#what-evm-version-do-you-support">What EVM version do you support?</a></h2>

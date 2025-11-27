@@ -84,18 +84,18 @@ Generate source based debug information in the output code file. Useful for debu
 
 In Solidity, 3 things can happen with libraries:
 
-1. They are not callable externally and thus can be inlined.
-  1. The solc Solidity optimizer inlines those (which usually the case). Note: `resolc` always activates the solc Solidity optimizer.
-  2. If the solc Solidity optimzer is disabled or for some reason fails to inline them (both rare), they are not inlined and require linking.
-2. They are linked at compile time. This is the case if at compile time the library address is known (i.e. `--libraries` supplied in CLI or the corresponding setting in STD JSON input).
-3. They are linked at deploy time. This happens when the compiler does not know the library address (i.e. `--libraries` flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it's discourage and should never be used by production dApps, see the warning box here.
+1. They are not `extern`ally callable and thus can be inlined.
+    1. The solc Solidity optimizer inlines those (which usually the case). Note: `resolc` always activates the solc Solidity optimizer.
+    2. If the solc Solidity optimzer is disabled or for some reason fails to inline them (both rare), they are not inlined and require linking.
+2. They are `extern`ally callable but still linked at compile time. This is the case if at compile time the library address is known (i.e. `--libraries` supplied in CLI or the corresponding setting in STD JSON input).
+3. They are linked at deploy time. This happens when the compiler does not know the library address (i.e. `--libraries` flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it's discourage and should never be used by production dApps.
 
-This means: If the cases `1.2` and / or `3` occur during contract compilation, the emitted contract code is "unlinked":
-- The compiler emits DELEGATECALL to the non-inlined (unlinked) library.
-- The emitted code blobs are considered "unlinked" and not deployable.
+In cases `1.2` and `3`:
+- Some of the produced code blobs will be in the "unlinked" raw `ELF` object format and not yet deployable.
 - To make them deployable, they need to be "linked" (done using the `resolc --link` linker mode explained below).
+- The compiler emitted `DELEGATECALL` instructions to call non-inlined (unlinked) libraries. The contract deployer must make sure to deploy any libraries prior to contract deployment.
 
-> **Tip**
+> **Warning**
 > 
 > Using deploy time linking is officially **discouraged**. Mainly due to bytecode hashes changing after the fact. We decided to support it in `resolc` regardless, due to popular reqeust.
 
@@ -104,11 +104,10 @@ Similar to how it works in `solc`, `--libraries` may be used to provide librarie
 Unlike with `solc`, where linking implies a simple string substitution mechanism, `resolc` needs to resolve actual missing `ELF` symbols. This is due to how factory dependencies work in PVM. As a consequence, it isn't sufficient to just provide the unlinked blobs to the linker. Instead, they must be provided in the exact same directory structure the Solidity source code was found during compile time.
 
 Example:
-- The contract `src/foo/bar.sol:Bar` needs deploy time linking.
-- The unlinked contract blob needs to be provided inside a relative `src/foo/` directory to `--link`. Otherwise the symbol resolution will fail.
+- The contract `src/foo/bar.sol:Bar` is involved in deploy time linking. It may be a factory dependency.
+- The contract blob needs to be provided inside a relative `src/foo/` directory to `--link`. Otherwise symbol resolution may fail.
 
 > **Note**
 >
 > Tooling is supposed to take care of this. In the future, we may append explicit linkage data to simplify the deploy time linking feature.
-
 

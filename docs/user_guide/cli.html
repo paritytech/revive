@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2352b113.js";
+            window.path_to_searchindex_js = "../searchindex-0f888317.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ada1652e.js"></script>
+        <script src="../toc-e2449b4d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -237,28 +237,31 @@
 </code></pre>
 <p>In Solidity, 3 things can happen with libraries:</p>
 <ol>
-<li>They are not callable externally and thus can be inlined.</li>
+<li>They are not <code>extern</code>ally callable and thus can be inlined.
+<ol>
 <li>The solc Solidity optimizer inlines those (which usually the case). Note: <code>resolc</code> always activates the solc Solidity optimizer.</li>
 <li>If the solc Solidity optimzer is disabled or for some reason fails to inline them (both rare), they are not inlined and require linking.</li>
-<li>They are linked at compile time. This is the case if at compile time the library address is known (i.e. <code>--libraries</code> supplied in CLI or the corresponding setting in STD JSON input).</li>
-<li>They are linked at deploy time. This happens when the compiler does not know the library address (i.e. <code>--libraries</code> flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it’s discourage and should never be used by production dApps, see the warning box here.</li>
 </ol>
-<p>This means: If the cases <code>1.2</code> and / or <code>3</code> occur during contract compilation, the emitted contract code is “unlinked”:</p>
+</li>
+<li>They are <code>extern</code>ally callable but still linked at compile time. This is the case if at compile time the library address is known (i.e. <code>--libraries</code> supplied in CLI or the corresponding setting in STD JSON input).</li>
+<li>They are linked at deploy time. This happens when the compiler does not know the library address (i.e. <code>--libraries</code> flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it’s discourage and should never be used by production dApps.</li>
+</ol>
+<p>In cases <code>1.2</code> and <code>3</code>:</p>
 <ul>
-<li>The compiler emits DELEGATECALL to the non-inlined (unlinked) library.</li>
-<li>The emitted code blobs are considered “unlinked” and not deployable.</li>
+<li>Some of the produced code blobs will be in the “unlinked” raw <code>ELF</code> object format and not yet deployable.</li>
 <li>To make them deployable, they need to be “linked” (done using the <code>resolc --link</code> linker mode explained below).</li>
+<li>The compiler emitted <code>DELEGATECALL</code> instructions to call non-inlined (unlinked) libraries. The contract deployer must make sure to deploy any libraries prior to contract deployment.</li>
 </ul>
 <blockquote>
-<p><strong>Tip</strong></p>
+<p><strong>Warning</strong></p>
 <p>Using deploy time linking is officially <strong>discouraged</strong>. Mainly due to bytecode hashes changing after the fact. We decided to support it in <code>resolc</code> regardless, due to popular reqeust.</p>
 </blockquote>
 <p>Similar to how it works in <code>solc</code>, <code>--libraries</code> may be used to provide libraries during linking mode.</p>
 <p>Unlike with <code>solc</code>, where linking implies a simple string substitution mechanism, <code>resolc</code> needs to resolve actual missing <code>ELF</code> symbols. This is due to how factory dependencies work in PVM. As a consequence, it isn’t sufficient to just provide the unlinked blobs to the linker. Instead, they must be provided in the exact same directory structure the Solidity source code was found during compile time.</p>
 <p>Example:</p>
 <ul>
-<li>The contract <code>src/foo/bar.sol:Bar</code> needs deploy time linking.</li>
-<li>The unlinked contract blob needs to be provided inside a relative <code>src/foo/</code> directory to <code>--link</code>. Otherwise the symbol resolution will fail.</li>
+<li>The contract <code>src/foo/bar.sol:Bar</code> is involved in deploy time linking. It may be a factory dependency.</li>
+<li>The contract blob needs to be provided inside a relative <code>src/foo/</code> directory to <code>--link</code>. Otherwise symbol resolution may fail.</li>
 </ul>
 <blockquote>
 <p><strong>Note</strong></p>

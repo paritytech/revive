@@ -49,9 +49,9 @@ jobs:
 
       - name: Run Benchmarks on Main Branch
         run: |
-          cargo bench --package resolc --bench compile -- --save-baseline main_branch_resolc
-          cargo bench --package revive-yul --bench parse -- --save-baseline main_branch_yul_parse
-          cargo bench --package revive-yul --bench lower -- --save-baseline main_branch_yul_lower
+          cargo bench --package resolc --bench compile -- --save-baseline main_resolc
+          cargo bench --package revive-yul --bench parse -- --save-baseline main_yul_parse
+          cargo bench --package revive-yul --bench lower -- --save-baseline main_yul_lower
         timeout-minutes: 20
 
       - name: Checkout and Compile PR Branch
@@ -61,16 +61,16 @@ jobs:
 
       - name: Run Benchmarks on PR Branch
         run: |
-          cargo bench --package resolc --bench compile -- --save-baseline pr_branch_resolc
-          cargo bench --package revive-yul --bench parse -- --save-baseline pr_branch_yul_parse
-          cargo bench --package revive-yul --bench lower -- --save-baseline pr_branch_yul_lower
+          cargo bench --package resolc --bench compile -- --save-baseline pr_resolc
+          cargo bench --package revive-yul --bench parse -- --save-baseline pr_yul_parse
+          cargo bench --package revive-yul --bench lower -- --save-baseline pr_yul_lower
         timeout-minutes: 20
 
       - name: Compare Benchmarks
         run: |
-          critcmp main_branch_resolc pr_branch_resolc > benchmarks_resolc
-          critcmp main_branch_yul_parse pr_branch_yul_parse > benchmarks_yul_parse
-          critcmp main_branch_yul_lower pr_branch_yul_lower > benchmarks_yul_lower
+          critcmp main_resolc pr_resolc > benchmarks_resolc
+          critcmp main_yul_parse pr_yul_parse > benchmarks_yul_parse
+          critcmp main_yul_lower pr_yul_lower > benchmarks_yul_lower
 
       - name: Create Report
         run: |
@@ -80,7 +80,7 @@ jobs:
           ## Compile E2E
 
           <details>
-              <summary>Details</summary>
+              <summary>Results</summary>
 
           \`\`\`
           $(cat benchmarks_resolc)
@@ -91,7 +91,7 @@ jobs:
           ## Parse Yul
 
           <details>
-              <summary>Details</summary>
+              <summary>Results</summary>
 
           \`\`\`
           $(cat benchmarks_yul_parse)
@@ -102,7 +102,7 @@ jobs:
           ## Lower Yul
 
           <details>
-              <summary>Details</summary>
+              <summary>Results</summary>
 
           \`\`\`
           $(cat benchmarks_yul_lower)

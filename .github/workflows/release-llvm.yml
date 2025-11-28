@@ -104,6 +104,7 @@ jobs:
       - name: Build LLVM
         if: ${{ matrix.target == 'wasm32-unknown-emscripten' }}
         run: |
+          revive-llvm emsdk
           source emsdk/emsdk_env.sh
           revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld
 

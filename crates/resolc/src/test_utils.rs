@@ -33,6 +33,7 @@ static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Def
 static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
 static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
     Lazy::new(Default::default);
+static YUL_IR_CACHE: Lazy<Mutex<HashMap<CachedBlob, String>>> = Lazy::new(Default::default);
 
 const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
@@ -474,4 +475,96 @@ fn compile_evm(
     cache.lock().unwrap().insert(id, blob.clone());
 
     blob
+}
+
+/// Compiles the Solidity source code into Yul IR and returns
+/// the Yul IR code of the contract named `contract_name`.
+pub fn compile_to_yul(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+) -> String {
+    check_dependencies();
+
+    let optimizer = SolcStandardJsonInputSettingsOptimizer::new(
+        solc_optimizer_enabled,
+        Default::default(),
+        Default::default(),
+    );
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        solc_optimizer_enabled,
+        solidity: source_code.to_owned(),
+        opt: optimizer.mode.into(),
+    };
+
+    if let Some(yul) = YUL_IR_CACHE.lock().unwrap().get(&id) {
+        return yul.clone();
+    }
+
+    let file_name = "contract.sol";
+    let sources = BTreeMap::from([(
+        file_name.to_owned(),
+        SolcStandardJsonInputSource::from(source_code.to_owned()),
+    )]);
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        Default::default(),
+        Default::default(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        optimizer,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        false,
+    )
+    .unwrap();
+
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()).unwrap();
+    let output = solc
+        .standard_json(&mut input, &mut vec![], None, vec![], None)
+        .unwrap();
+    output.check_errors().unwrap();
+
+    let yul = output
+        .contracts
+        .get(file_name)
+        .unwrap_or_else(|| panic!("file `{file_name}` not found in solc output"))
+        .get(contract_name)
+        .unwrap_or_else(|| panic!("contract `{contract_name}` not found in solc output"))
+        .ir_optimized
+        .to_owned();
+
+    YUL_IR_CACHE.lock().unwrap().insert(id, yul.clone());
+
+    yul
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::read_to_string;
+
+    use super::compile_to_yul;
+    use crate::cli_utils::SOLIDITY_DEPENDENCY_CONTRACT_PATH;
+
+    #[test]
+    fn compiles_to_yul() {
+        let contract_name = "Dependency";
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        let yul = compile_to_yul(contract_name, &source_code, true);
+        assert!(
+            yul.contains(&format!("object \"{contract_name}")),
+            "the `{contract_name}` contract IR code should contain a Yul object"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "contract `Nonexistent` not found in solc output")]
+    fn error_nonexistent_contract_in_yul() {
+        let contract_name = "Nonexistent";
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        compile_to_yul(contract_name, &source_code, true);
+    }
 }

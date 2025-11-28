@@ -10,6 +10,7 @@ pub struct Contract {
     pub evm_runtime: Vec<u8>,
     pub pvm_runtime: Vec<u8>,
     pub calldata: Vec<u8>,
+    pub yul: String,
 }
 
 impl Contract {
@@ -19,6 +20,7 @@ impl Contract {
             evm_runtime: compile_evm_bin_runtime(name, code),
             pvm_runtime: compile_blob(name, code),
             calldata,
+            yul: compile_to_yul(name, code, true),
         }
     }
 
@@ -28,6 +30,7 @@ impl Contract {
             evm_runtime: compile_evm_bin_runtime(name, code),
             pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
             calldata,
+            yul: compile_to_yul(name, code, true),
         }
     }
 }

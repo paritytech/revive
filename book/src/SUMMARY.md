@@ -8,6 +8,7 @@
   - [Tooling integration](./user_guide/tooling.md)
   - [Standard JSON interface](./user_guide/std_json.md)
   - [Differences to EVM](./user_guide/differences.md)
+  - [Rust contract libraries](./user_guide/rust_libraries.md)
 - [`revive-runner` sandbox](./revive_runner.md)
 - [Developer Guide](./developer_guide.md)
   - [Contributor guide](./developer_guide/contributing.md)

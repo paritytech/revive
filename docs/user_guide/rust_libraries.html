@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Testing strategy - revive compiler book</title>
+        <title>Rust contract libraries - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,67 +174,26 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
-<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
+                        <h1 id="rust-contract-libraries"><a class="header" href="#rust-contract-libraries">Rust contract libraries</a></h1>
 <blockquote>
-<p><strong>Tip</strong></p>
-<p>Running the integration tests require the <code>evm</code> tool from <code>go-ethereum</code> in your <code>$PATH</code>.</p>
-<p>Either install it using your package manager or to build it from source:</p>
-<pre><code class="language-bash">git clone https://github.com/ethereum/go-ethereum/
-cd go-ethereum
-make all
-export PATH=/path/to/go-ethereum/build/bin/:$PATH
-</code></pre>
+<p><strong>Note</strong></p>
+<p>This is not yet implemented but something for consideration on the roadmap.</p>
 </blockquote>
-<h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
-<p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
-<h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
-<p>A high level of bug compatibility with Ethereum is ensured through <a href="https://en.wikipedia.org/wiki/Differential_testing"><strong>differential testing</strong></a> with the Ethereum <code>solc</code> and EVM contracts stack. The <a href="https://crates.io/crates/revive-integration">revive-integration</a> library is the central integration test utility, providing a set of Solidity integration test cases. Further, it implements differential tests against the reference implementation by combining the <a href="https://crates.io/crates/revive-runner">revive-runner</a> sandbox, the <a href="https://github.com/ethereum/go-ethereum/tree/master/cmd/evm">go-ethereum EVM tool</a> and the <a href="https://crates.io/crates/revive-differential">revive-differential</a>.</p>
-<p>The <code>revive-runner</code> library provides a <a href="https://en.wikipedia.org/wiki/Declarative_programming"><strong>declarative</strong></a> test <a href="https://github.com/paritytech/revive/blob/main/crates/runner/src/specs.rs">specification format</a>. This vastly simplifies writing differential test cases and removes a lot of room for errors in test logic. Example:</p>
-<pre><code class="language-json">{
-    "differential": true,
-    "actions": [
-        {
-            "Instantiate": {
-                "code": {
-                    "Solidity": {
-                        "contract": "Bitwise"
-                    }
-                }
-            }
-        },
-        {
-            "Call": {
-                "dest": {
-                    "Instantiated": 0
-                },
-                "data": "3fa4f245"
-            }
-        }
-    ]
-}
-</code></pre>
-<p>Above example instantiates the <code>Bitwise</code> contract and calls it with some defined calldata. The <code>revive-runner</code> library implements a helper wrapper to execute test specs on the go-ethereum standalone <code>evm</code> tool. This allows the <code>revive-runner</code> to execute specs against the EVM and the <code>pallet-revive</code> runtime. Key to differential teststing is setting <code>"differential": true</code>, resulting in the following:</p>
-<ol>
-<li>The <code>Bitwise</code> contract is compiled to EVM and PVM code.</li>
-<li>The runner executes the defined <code>actions</code> on the EVM and collects all state changes (storage, balance) and execution results.</li>
-<li>The runner executes each action on the PVM. Observed state changes <em>after each step</em> as well as the final execution result is asserted to  match the EVM counterparts <strong>exactly</strong>.</li>
-</ol>
-<p><strong>Note how we never defined any expected outcome manually.</strong> Instead, we simply observe and collect the data defining the “correct” outcome.</p>
-<p>Differential testing in combination with declerative test specifications proved to be simple yet very effective in ensuring expected Ethereum Solidity semantics on <code>pallet-revive</code>.</p>
-<h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
-<p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
-<p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follows the exact same strategy but implements a much more powerful test spec format, spec runner and reports. This allows differentially testing of much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
+<p>Solidity - tightly coupled to the EVM - introduces some inherent inefficiencies that are by design and either need to be followed or can’t be easily worked around, even with efforts like better optimized compiler and VM implementations. This represents a technical dead end. So far the EVM sees no adoption beyond the blockchain industry. Chances are that <a href="https://ethereum-magicians.org/t/long-term-l1-execution-layer-proposal-replace-the-evm-with-risc-v">the EVM end up deprecated</a> for technical reasons (or maybe not and the RISC-V idea gets abandonded next year, who knows).</p>
+<p>PVM however is a general purpose VM, it supports LLVM based mainstream programming languages like Rust. It’s a common software engineering practice to compose applications from pieces written in multiple languages, using each to their own strength. For example, AI solutions traditionally use the python scripting language for convenient developer experience, while the underlying AI models get implemented in a lower level language such as C++.</p>
+<p>The same pattern can of course be applied to dApps, where we’d expect application specific languages like Solidity mixed with libraries implementing computationally complex algorithms in a lower level language. Business logic and user interfaces are naturally implemented as regular Solidity dApps which can include (link against) Rust libraries. Rust is a fast, safe low level language and the Polkadot SDK is written in Rust itself, making it an excellent choice.</p>
+<p>For examples, <a href="https://en.wikipedia.org/wiki/Zero-knowledge_proof">ZK proof verifiers</a> or expensive <a href="https://en.wikipedia.org/wiki/Decentralized_finance">DeFi</a> primitives would benefit greatly from Rust implementations.</p>
+<p><code>revive</code> provides tooling support and a small Rust contracts SDK for seamless integration with Rust libraries.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../developer_guide/target.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../user_guide/differences.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../faq.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../revive_runner.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -244,11 +203,11 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../developer_guide/target.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../user_guide/differences.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../faq.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../revive_runner.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

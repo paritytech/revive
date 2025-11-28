@@ -2,6 +2,18 @@
 
 Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the `revive` compiler implementation is tested for correctness and how we define correctness.
 
+> **Tip**
+>
+> Running the integration tests require the `evm` tool from `go-ethereum` in your `$PATH`.
+>
+> Either install it using your package manager or to build it from source:
+> ```bash
+> git clone https://github.com/ethereum/go-ethereum/
+> cd go-ethereum
+> make all
+> export PATH=/path/to/go-ethereum/build/bin/:$PATH
+> ```
+
 ## Bug compatibility with Ethereum Solidity
 
 As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the `solc` reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn't always possible. However, wherever it is possible, we follow the philosophy of [**bug compatibility**](https://en.wikipedia.org/wiki/Bug_compatibility) with the Ethereum contracts stack.

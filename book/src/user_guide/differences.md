@@ -105,10 +105,6 @@ Only valid to use in EVM (they also have no use-case in PVM) and produce a compi
 
 Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.
 
-### `extcodecopy`
-
-This is deprecated and produces a compile time error.
-
 ## Difference regarding the `solc` `via-ir` mode
 
 There are two different compilation pipelines available in `solc` and [there are small differences between them](https://docs.soliditylang.org/en/latest/ir-breaking-changes.html).

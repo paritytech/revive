@@ -6,8 +6,8 @@ This is the comprehensive documentation resource of the revive Solidity compiler
 
 ## Target audience
 
-- **Solidity dApp developers** and should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.
-- **Contributors** will find the architecture and interals chapters helpful in getting up to speed.
+- **Solidity dApp developers** should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.
+- **Contributors** will find the contributor guide helpful for getting up to speed.
 
 ## See aloso
 

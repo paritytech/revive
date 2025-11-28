@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-269a7a85.js";
+            window.path_to_searchindex_js = "searchindex-99d99782.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-95998a27.js"></script>
+        <script src="toc-38e71797.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,8 +180,8 @@
 <p>This is the comprehensive documentation resource of the revive Solidity compiler project.</p>
 <h2 id="target-audience"><a class="header" href="#target-audience">Target audience</a></h2>
 <ul>
-<li><strong>Solidity dApp developers</strong> and should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>
-<li><strong>Contributors</strong> will find the architecture and interals chapters helpful in getting up to speed.</li>
+<li><strong>Solidity dApp developers</strong> should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>
+<li><strong>Contributors</strong> will find the contributor guide helpful for getting up to speed.</li>
 </ul>
 <h2 id="see-aloso"><a class="header" href="#see-aloso">See aloso</a></h2>
 <p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
@@ -422,8 +422,6 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <p>Only valid to use in EVM (they also have no use-case in PVM) and produce a compile time error.</p>
 <h3 id="blobhash-blobbasefee"><a class="header" href="#blobhash-blobbasefee"><code>blobhash</code>, <code>blobbasefee</code></a></h3>
 <p>Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.</p>
-<h3 id="extcodecopy"><a class="header" href="#extcodecopy"><code>extcodecopy</code></a></h3>
-<p>This is deprecated and produces a compile time error.</p>
 <h2 id="difference-regarding-the-solc-via-ir-mode"><a class="header" href="#difference-regarding-the-solc-via-ir-mode">Difference regarding the <code>solc</code> <code>via-ir</code> mode</a></h2>
 <p>There are two different compilation pipelines available in <code>solc</code> and <a href="https://docs.soliditylang.org/en/latest/ir-breaking-changes.html">there are small differences between them</a>.</p>
 <p>Since <code>resolc</code> processes the YUL IR, always assume the <code>solc</code> IR based codegen behavior for contracts compiled with the <code>revive</code> compiler.</p>
@@ -568,6 +566,16 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
 <p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
+<blockquote>
+<p><strong>Tip</strong></p>
+<p>Running the integration tests require the <code>evm</code> tool from <code>go-ethereum</code> in your <code>$PATH</code>.</p>
+<p>Either install it using your package manager or to build it from source:</p>
+<pre><code class="language-bash">git clone https://github.com/ethereum/go-ethereum/
+cd go-ethereum
+make all
+export PATH=/path/to/go-ethereum/build/bin/:$PATH
+</code></pre>
+</blockquote>
 <h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
 <p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
 <h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
@@ -620,6 +628,15 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <p>The 24kb code size restriction only exist for the EVM. Our limit is currently around 1mb and may increase further in the future.</p>
 <h2 id="is-resolc-a-drop-in-replacement-for-solc"><a class="header" href="#is-resolc-a-drop-in-replacement-for-solc">Is <code>resolc</code> a drop-in replacement for <code>solc</code>?</a></h2>
 <p>No. <code>resolc</code> aims to work very familiar to <code>solc</code> but it’s not considered a drop-in replacement.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="roadmap-and-vision"><a class="header" href="#roadmap-and-vision">Roadmap and Vision</a></h1>
+<p>The <code>revive</code> compiler speeds up Solidity contracts by orders of magnitudes. <code>revive</code> provides a decisive edge over other contract plattforms. Notably, the cmopiler eliminates the need of re-writing Solidity dApps as single dApp parachains for scaling reasons. Retaining as high compatibility with Ethereum Solidity as possible keeps entry barriers low.</p>
+<p>We believe in Dr. Gavin Woods <a href="https://gavwood.com/dappsweb3.html">ĐApps: What Web 3.0 Looks Like</a> manifesto and the ecosystem of the Solidity programming language. Our motivation lies in the realization that for a <em>true</em> web3 revolution, significant scaling efforts, like the ones provided by the PVM and this project, are necessary to unfold.</p>
+<h2 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h2>
+<p>The first major release, <code>resolc</code> v1.0.0, emits functional PVM code from given Solidity sources. It relies on solc and LLVM for optimizations. The main priority for the first major release was delivering a mostly feature complete and safe Solidity v0.8.0 compiler.</p>
+<p>Focus for the second major release is on the custom optimization pipeline, which significantly improves emitted code blob sizes.</p>
+<p>The below roadmap gives a rough overview about the projects development timeline.</p>
+<p><img src="images/roadmap.svg" alt="Roadmap"></p>
 
                     </main>
 

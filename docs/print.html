@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-08b5f20b.js";
+            window.path_to_searchindex_js = "searchindex-8603404a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-e2449b4d.js"></script>
+        <script src="toc-95998a27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@
 <p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> user guide</a></h1>
-<p>This chapter explains the ways to use <code>resolc</code> as well as some important aspects of compiling Solidity to PolkaVM with <code>resolc</code>.</p>
+<p>This chapter explains how to use <code>resolc</code> in different ways as well as some important aspects of compiling Solidity to PolkaVM with <code>resolc</code>.</p>
 <h2 id="revive-vs-resolc-nomenclature"><a class="header" href="#revive-vs-resolc-nomenclature"><code>revive</code> vs. <code>resolc</code> nomenclature</a></h2>
 <p><code>revive</code> is the name of the overarching “Solidity to PolkaVM” compiler project, which contains multiple components (for example the Yul parser, the code generation library, the <code>resolc</code> executable itself and many things more).</p>
 <p><code>resolc</code> is the name of the compiler driver executable, which transparently uses many <code>revive</code> components to produce compiled contract artifacts.</p>
@@ -386,11 +386,9 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <h1 id="developer-guide"><a class="header" href="#developer-guide">Developer guide</a></h1>
 <p>This chapter covers internal aspects of the compiler and helps contributors getting started with the <code>revive</code> codebase.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
 <p>The <code>revive</code> compiler is an open source software project and we gladly accept contributions from anyone!</p>
-<h2 id="development"><a class="header" href="#development">Development</a></h2>
-<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
-<h3 id="building-the-compiler"><a class="header" href="#building-the-compiler">Building the compiler</a></h3>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
 <p>A quick reference on how to build the Solidity compiler is maintained in the projects <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
 <h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
 <p>The <a href="https://github.com/paritytech/revive/blob/main/Makefile">Makefile</a> comprehensively encapsulates all development aspects of this codebase. It is kept concise and readable. Please read and use it! You’ll learn for example:</p>
@@ -400,6 +398,14 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li>How to cross-compile <code>resolc</code>.</li>
 </ul>
 <p>As a general rule-of-thumb: If <code>make test</code> runs fine locally, chances for green CI pipelines are good.</p>
+<h3 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h3>
+<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
+<h4 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h4>
+<p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please implement it there.</p>
+<p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
+<h4 id="dependencies-1"><a class="header" href="#dependencies-1">Dependencies</a></h4>
+<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
+<p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
 <h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>
 <ol>
 <li>Changes must be submitted via a pull request (PR) to the github upstream repository.</li>
@@ -408,6 +414,17 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li>No force pushes to the <code>main</code> branch and open PR branches.</li>
 <li>Maintainers can request changes or deny contributions to their own discretion.</li>
 </ol>
+<h2 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h2>
+<p>We require the official Rust formatter and clippy linter. In addition to that, please also consider the following best-effort aspects:</p>
+<ul>
+<li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
+<li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
+<li>Don’t write macros and don’t use thrid party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
+<li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
+<li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
+<li>Public items must have a meaningful doc comment.</li>
+<li>Provide a meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
+</ul>
 <h2 id="ai-policy"><a class="header" href="#ai-policy">AI policy</a></h2>
 <p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the follwing</strong>:</p>
 <p><em>Project maintainers may reject any contribution (or portions of it) if the contribution shows signs of problematic involvement of generative AI</em>.</p>
@@ -418,22 +435,12 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li><code>revive</code> is a large codebase. Generative AI assistants may not have enough “context window” to sufficiently capture correctness, consistency and style aspects of the codebase. We’d like to keep this codebase maintainable <em>by humans</em> for the forseeable future.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h1>
-<h2 id="crates-organization"><a class="header" href="#crates-organization">Crates organization</a></h2>
-<p><code>revive</code> is organized as a Rust workspace code repository.</p>
-<h3 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h3>
-<p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please it there.</p>
-<p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
-<h3 id="dependencies-1"><a class="header" href="#dependencies-1">Dependencies</a></h3>
-<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
-<p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="compiler-architecture"><a class="header" href="#compiler-architecture">Compiler architecture</a></h1>
+<h1 id="compiler-architecture-and-internals"><a class="header" href="#compiler-architecture-and-internals">Compiler architecture and internals</a></h1>
 <p><code>revive</code> relies on <code>solc</code>, the <a href="https://github.com/ethereum/solidity">Ethereum Solidity compiler</a>, as the Solidity frontend to process smart contracts written in Solidity. <a href="https://github.com/llvm/llvm-project">LLVM</a>, a popular and powerful compiler framework, is used as the compiler backend and does the heavy lifting in terms of optimizitations and RISC-V code generation.</p>
 <p><code>revive</code> mainly takes care of lowering the YUL intermediate representation (IR) produced by <code>solc</code> to LLVM IR. This approach provides a good balance between maintaining a high level of Ethereum compatibility, good contract performance and feasible engineering efforts.</p>
 <h2 id="resolc"><a class="header" href="#resolc"><code>resolc</code></a></h2>
-<h3 id="compilation-process"><a class="header" href="#compilation-process">Compilation process</a></h3>
-<p>When compiling a Solidity source file, the following steps happen under the hood:</p>
+<p><code>resolc</code> is the overarching compiler driver library and binary.</p>
+<p>When compiling a Solidity source file with <code>resolc</code>, the following steps happen under the hood:</p>
 <ol>
 <li><code>solc</code> is used to lower the Solidity source code into <a href="https://docs.soliditylang.org/en/latest/yul.html">YUL intermediate representation</a>.</li>
 <li><code>revive</code> lowers the YUL IR into LLVM IR.</li>
@@ -442,10 +449,18 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 </ol>
 <p>This compilation process can be visualized as follows:</p>
 <p><img src="developer_guide/images/resolc.svg" alt="Architecture Overview"></p>
-<h3 id="single-static-binary-distribution"><a class="header" href="#single-static-binary-distribution">Single static binary distribution</a></h3>
+<h2 id="reproducible-contract-builds"><a class="header" href="#reproducible-contract-builds">Reproducible contract builds</a></h2>
+<p>Because on-chain contract code is identified via it’s code blob hash, it is crucial to maintain reproducible contract builds. A given compiler version must reproduce the contract build <em>exactly</em> on every target plattform <code>resolc</code> supports via the official binary releases.</p>
+<p>To ensure this, we employ the following measures:</p>
+<ul>
+<li>The code generation must be fully deterministic. For example iterating over standard <code>HashMap</code> invalidates this due to it’s internal state, so it’s not a valid thing to do in <code>revive</code> (to counter that, for example a <code>BTreeMap</code> must be used instead).</li>
+<li>We release fully statically linked <code>resolc</code> binaries. This prevents dynamic linking of potentially differentiating libraries</li>
+<li>The only non-bundled dependency is the <code>solc</code> compiler. This is considered fine because the same properties apply to <code>solc</code>.</li>
+</ul>
 <h2 id="the-revive-compiler-libraries"><a class="header" href="#the-revive-compiler-libraries">The <code>revive</code> compiler libraries</a></h2>
 <p>The main compiler logic is implemented in the <code>revive-yul</code> and <code>revive-llvm-context</code> crates.</p>
 <p>The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and also our own <code>revive-llvm-context</code> compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).</p>
+<p>The Yul library also implements a simple <a href="https://en.wikipedia.org/wiki/Visitor_pattern">visitor</a> interface (see <a href="https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs">visitor.rs</a>). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated for historical reasons only.</p>
 <h2 id="evm-heap-memory"><a class="header" href="#evm-heap-memory">EVM heap memory</a></h2>
 <p>PVM doesn’t offer a similar API. Hence the emitted contract code emulates the linear EVM heap memory using a static byte buffer. Data inside this byte buffer is kept big endian for EVM compatibility reasons (unaligned access is allowed and makes optimizing this non-trivial).</p>
 <p>Unlike with the EVM, where heap memory usage is gas metered, our heap size is static (the size is user controllable via a setting flag). The compiler emits bound checks to prevent overflows.</p>
@@ -454,12 +469,30 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <p>We use upstream LLVM but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and leave assertions always on. Further we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-plattform build script and is used to build and release the LLVM dependency.</p>
 <p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process but we don’t want to distribute another binary.</p>
 <h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
-<p>At the moment, no real custom optimizations are implemented. Thus we are missing some optimization opportunities that neither solc nor LLVM can realize (due to their lack of domain specific semantics). Further, solc optimizes for target machine orthogonal to our target (BE 256bit stack machine vs. 64bit LE RISC architecture) and the EVM gas model. We started working on an additional IR layer between Yul and LLVM to capture this.</p>
+<p>At the moment, no significant custom optimizations are implemented. Thus we are missing some optimization opportunities that neither solc nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Further, solc optimizes for EVM gas and a target machine orthogonal to our target (BE 256bit stack machine EVM vs. 64bit LE RISC architecture PVM). We started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="pallet-revive-runtime-and-pvm"><a class="header" href="#pallet-revive-runtime-and-pvm">pallet-revive runtime and PVM</a></h1>
+<h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
+<p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>
+<h2 id="target-cpu-configuration"><a class="header" href="#target-cpu-configuration">Target CPU configuration</a></h2>
+<p>The exact target CPU configuration can be found <a href="https://github.com/paritytech/revive/blob/8cd10a613625428956eb33c39c9022a91bfbf103/crates/llvm-context/src/target_machine/mod.rs#L22-L32">here</a>.</p>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>The PVM linker requires fully relocatable ELF objects.</p>
+</blockquote>
+<h2 id="why-pvm"><a class="header" href="#why-pvm">Why PVM</a></h2>
+<p>PVM is a RISC-V based VM designed to overcome the flaws of <a href="https://webassembly.org/">WebAssebmly (Wasm)</a>. Wasm was believed to be a more efficient successor to the rather slow EVM. However, Wasm is far from an ideal target for smart contracts as some of its design decisions are unfavorable for short-lived workloads. The main problem is on-chain Wasm bytecode compilation or interpretation overhead. Prior benchmarks consistently ignoring this overhead seeded the blockchain industry with flawed assumptions: <em>Only when ignoring the startup overhead</em> Wasm is much faster than the slow computing EVM. In practice however, gains are nullified entirely and Wasm looses completely even against very slow VMs like the EVM. Executing Wasm contracts is in fact so inefficient that typical contract workloads are <em>orders of magnitude</em> more expensive than the equivalent EVM variant.</p>
+<p>On the other hand, since RISC-V is similar to CPUs found in validator hardware (x86 and ARM), bytecode translation mostly boils down to a linear mapping from one instruction to another. The <em>embedded</em> ISA specification reduces the number of general purpose registers, in turn removing the need for expensive register allocation. This guarantees single-pass <code>O(n)</code> JIT compilation of contract bytecode. The close proximity of PVM bytecode with actual validator CPU bytecode effectively allows to move all expensive compilation workload off-chain. Benchmarks (<a href="https://hackmd.io/@XXX9CM1uSSCWVNFRYaSB5g/HJarTUhJA#Results-execute">1</a>, <a href="https://github.com/paritytech/polkavm/blob/master/BENCHMARKS.md">2</a>) show that with the PVM JIT, sandboxed PVM code executes at around half the speed of native code, which falls into the same ballpark of the state-of-the-art <code>wasmtime</code> Wasm implementation (while EVM sits somewhere around 1/10 to less than 1/100 of native speed). However, the PVM JIT compiler only uses a fraction of the time <code>wasmtime</code> requires to compile the code.</p>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>The PVM JIT isn’t available yet in <code>pallet-revive</code>. At the time of writing, the contract code is interpreted. Which is orders of magnitude slower than the JIT.</p>
+</blockquote>
+<h2 id="host-environment-pallet-revive"><a class="header" href="#host-environment-pallet-revive">Host environment: <code>pallet-revive</code></a></h2>
+<p>The <code>revive</code> compiler targets the <a href="https://docs.rs/pallet-revive/"><code>pallet-revive</code> runtime environment</a>.</p>
+<p><code>pallet-revive</code> exposes a <a href="https://docs.rs/pallet-revive/0.10.1/pallet_revive/trait.SyscallDoc.html">syscall like interface</a> for contract interactions with the host environment. This is provided by the <a href="https://crates.io/crates/revive-runtime-api">revive-runtime-api</a> library.</p>
+<p>After the initial launch on the Polkadot Asset Hub blockchain, the runtime API is considered stable and backwards compatible indefinitively.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
-<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
+<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
 <h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
 <p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
 <h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
@@ -499,18 +532,6 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
 <p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
 <p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follows the exact same strategy but implements a much more powerful test spec format, spec runner and reports. This allows differentially testing of much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h1>
-<p>We require the official Rust formatter and clippy linters. In addition to that, please also consider the following best-effort aspects:</p>
-<ul>
-<li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
-<li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
-<li>Don’t write macros and don’t use thrid party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
-<li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
-<li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
-<li>Public items must have a meaningful doc comment.</li>
-<li>Provide a meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
 <h2 id="what-evm-version-do-you-support"><a class="header" href="#what-evm-version-do-you-support">What EVM version do you support?</a></h2>

@@ -1,6 +1,6 @@
 # `resolc` user guide
 
-This chapter explains the ways to use `resolc` as well as some important aspects of compiling Solidity to PolkaVM with `resolc`.
+This chapter explains how to use `resolc` in different ways as well as some important aspects of compiling Solidity to PolkaVM with `resolc`.
 
 ## `revive` vs. `resolc` nomenclature
 `revive` is the name of the overarching "Solidity to PolkaVM" compiler project, which contains multiple components (for example the Yul parser, the code generation library, the `resolc` executable itself and many things more).

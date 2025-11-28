@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Contributing guide - revive compiler book</title>
+        <title>Contributor guide - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-08b5f20b.js";
+            window.path_to_searchindex_js = "../searchindex-8603404a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2449b4d.js"></script>
+        <script src="../toc-95998a27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,11 +174,9 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+                        <h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
 <p>The <code>revive</code> compiler is an open source software project and we gladly accept contributions from anyone!</p>
-<h2 id="development"><a class="header" href="#development">Development</a></h2>
-<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
-<h3 id="building-the-compiler"><a class="header" href="#building-the-compiler">Building the compiler</a></h3>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
 <p>A quick reference on how to build the Solidity compiler is maintained in the projects <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
 <h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
 <p>The <a href="https://github.com/paritytech/revive/blob/main/Makefile">Makefile</a> comprehensively encapsulates all development aspects of this codebase. It is kept concise and readable. Please read and use it! You’ll learn for example:</p>
@@ -188,6 +186,14 @@
 <li>How to cross-compile <code>resolc</code>.</li>
 </ul>
 <p>As a general rule-of-thumb: If <code>make test</code> runs fine locally, chances for green CI pipelines are good.</p>
+<h3 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h3>
+<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
+<h4 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h4>
+<p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please implement it there.</p>
+<p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
+<h4 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h4>
+<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
+<p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
 <h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>
 <ol>
 <li>Changes must be submitted via a pull request (PR) to the github upstream repository.</li>
@@ -196,6 +202,17 @@
 <li>No force pushes to the <code>main</code> branch and open PR branches.</li>
 <li>Maintainers can request changes or deny contributions to their own discretion.</li>
 </ol>
+<h2 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h2>
+<p>We require the official Rust formatter and clippy linter. In addition to that, please also consider the following best-effort aspects:</p>
+<ul>
+<li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
+<li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
+<li>Don’t write macros and don’t use thrid party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
+<li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
+<li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
+<li>Public items must have a meaningful doc comment.</li>
+<li>Provide a meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
+</ul>
 <h2 id="ai-policy"><a class="header" href="#ai-policy">AI policy</a></h2>
 <p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the follwing</strong>:</p>
 <p><em>Project maintainers may reject any contribution (or portions of it) if the contribution shows signs of problematic involvement of generative AI</em>.</p>
@@ -214,7 +231,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../developer_guide/codebase.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../developer_guide/architecture.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -228,7 +245,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../developer_guide/codebase.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../developer_guide/architecture.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

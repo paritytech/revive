@@ -1,7 +1,6 @@
 # Testing strategy
 
-
-Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes beyond simple unit and integration tests. This chapter explains how the `revive` compiler implementation is tested for correctness and how we define correctness.
+Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the `revive` compiler implementation is tested for correctness and how we define correctness.
 
 ## Bug compatibility with Ethereum Solidity
 

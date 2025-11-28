@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Target runtime and VM - revive compiler book</title>
+        <title>PVM and the pallet-revive runtime target - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-08b5f20b.js";
+            window.path_to_searchindex_js = "../searchindex-8603404a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e2449b4d.js"></script>
+        <script src="../toc-95998a27.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,7 +174,25 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="pallet-revive-runtime-and-pvm"><a class="header" href="#pallet-revive-runtime-and-pvm">pallet-revive runtime and PVM</a></h1>
+                        <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
+<p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>
+<h2 id="target-cpu-configuration"><a class="header" href="#target-cpu-configuration">Target CPU configuration</a></h2>
+<p>The exact target CPU configuration can be found <a href="https://github.com/paritytech/revive/blob/8cd10a613625428956eb33c39c9022a91bfbf103/crates/llvm-context/src/target_machine/mod.rs#L22-L32">here</a>.</p>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>The PVM linker requires fully relocatable ELF objects.</p>
+</blockquote>
+<h2 id="why-pvm"><a class="header" href="#why-pvm">Why PVM</a></h2>
+<p>PVM is a RISC-V based VM designed to overcome the flaws of <a href="https://webassembly.org/">WebAssebmly (Wasm)</a>. Wasm was believed to be a more efficient successor to the rather slow EVM. However, Wasm is far from an ideal target for smart contracts as some of its design decisions are unfavorable for short-lived workloads. The main problem is on-chain Wasm bytecode compilation or interpretation overhead. Prior benchmarks consistently ignoring this overhead seeded the blockchain industry with flawed assumptions: <em>Only when ignoring the startup overhead</em> Wasm is much faster than the slow computing EVM. In practice however, gains are nullified entirely and Wasm looses completely even against very slow VMs like the EVM. Executing Wasm contracts is in fact so inefficient that typical contract workloads are <em>orders of magnitude</em> more expensive than the equivalent EVM variant.</p>
+<p>On the other hand, since RISC-V is similar to CPUs found in validator hardware (x86 and ARM), bytecode translation mostly boils down to a linear mapping from one instruction to another. The <em>embedded</em> ISA specification reduces the number of general purpose registers, in turn removing the need for expensive register allocation. This guarantees single-pass <code>O(n)</code> JIT compilation of contract bytecode. The close proximity of PVM bytecode with actual validator CPU bytecode effectively allows to move all expensive compilation workload off-chain. Benchmarks (<a href="https://hackmd.io/@XXX9CM1uSSCWVNFRYaSB5g/HJarTUhJA#Results-execute">1</a>, <a href="https://github.com/paritytech/polkavm/blob/master/BENCHMARKS.md">2</a>) show that with the PVM JIT, sandboxed PVM code executes at around half the speed of native code, which falls into the same ballpark of the state-of-the-art <code>wasmtime</code> Wasm implementation (while EVM sits somewhere around 1/10 to less than 1/100 of native speed). However, the PVM JIT compiler only uses a fraction of the time <code>wasmtime</code> requires to compile the code.</p>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>The PVM JIT isn’t available yet in <code>pallet-revive</code>. At the time of writing, the contract code is interpreted. Which is orders of magnitude slower than the JIT.</p>
+</blockquote>
+<h2 id="host-environment-pallet-revive"><a class="header" href="#host-environment-pallet-revive">Host environment: <code>pallet-revive</code></a></h2>
+<p>The <code>revive</code> compiler targets the <a href="https://docs.rs/pallet-revive/"><code>pallet-revive</code> runtime environment</a>.</p>
+<p><code>pallet-revive</code> exposes a <a href="https://docs.rs/pallet-revive/0.10.1/pallet_revive/trait.SyscallDoc.html">syscall like interface</a> for contract interactions with the host environment. This is provided by the <a href="https://crates.io/crates/revive-runtime-api">revive-runtime-api</a> library.</p>
+<p>After the initial launch on the Polkadot Asset Hub blockchain, the runtime API is considered stable and backwards compatible indefinitively.</p>
 
                     </main>
 

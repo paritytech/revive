@@ -10,11 +10,9 @@
   - [Differences to EVM](./user_guide/differences.md)
 - [`revive-runner` sandbox](./revive_runner.md)
 - [Developer Guide](./developer_guide.md)
-  - [Contributing guide](./developer_guide/contributing.md)
-  - [Codebase organization](./developer_guide/codebase.md)
+  - [Contributor guide](./developer_guide/contributing.md)
   - [Compiler architecture](./developer_guide/architecture.md)
-  - [Target runtime and VM](./developer_guide/target.md)
+  - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
   - [Testing strategy](./developer_guide/testing.md)
-  - [Style guide](./developer_guide/style.md)
 - [FAQ](./faq.md)
 

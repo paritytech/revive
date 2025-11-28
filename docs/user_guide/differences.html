@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8603404a.js";
+            window.path_to_searchindex_js = "../searchindex-269a7a85.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-95998a27.js"></script>
@@ -175,6 +175,81 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="differences-to-evm"><a class="header" href="#differences-to-evm">Differences to EVM</a></h1>
+<p>This section highlights some potentially observable differences in the <a href="https://docs.soliditylang.org/en/latest/yul.html#evm-dialect">YUL EVM dialect</a> translation compared to Ethereum Solidity.</p>
+<p>Solidity developers deploying dApps to <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive"><code>pallet-revive</code></a> ought to read and understand this section well.</p>
+<h2 id="deploy-code-vs-runtime-code"><a class="header" href="#deploy-code-vs-runtime-code">Deploy code vs. runtime code</a></h2>
+<p>Our contract runtime does not differentiate between runtime code and deploy (constructor) code.
+Instead, both are emitted into a single PVM contract code blob and live on-chain.
+Therefor, in EVM termonology, the deploy code equals the runtime code.</p>
+<blockquote>
+<p><strong>Tip</strong></p>
+<p>In constructor code, the <code>codesize</code> instruction will return the call data size instead of the actual code blob size.</p>
+</blockquote>
+<h2 id="solidity"><a class="header" href="#solidity">Solidity</a></h2>
+<p>We are aware of the following differences in the translation of Solidity code.</p>
+<h3 id="addresscreationcode"><a class="header" href="#addresscreationcode"><code>address.creationCode</code></a></h3>
+<p>This returns the bytecode keccak256 hash instead.</p>
+<h2 id="yul-functions"><a class="header" href="#yul-functions">YUL functions</a></h2>
+<p>The below list contains noteworthy differences in the translation of YUL functions.</p>
+<blockquote>
+<p><strong>Note</strong></p>
+<p>Many functions receive memory buffer offset pointer or size arguments. Since the PVM pointer size is 32 bit, supplying memory offset or buffer size values above <code>2^32-1</code> will trap the contract immediatly.</p>
+</blockquote>
+<p>The <code>solc</code> compiler ought to always emit valid memory references, so Solidity dApp authors don’t need to worry about this unless they deal with low level <code>assembly</code> code.</p>
+<h3 id="mload-mstore-msize-mcopy-memory-related-functions"><a class="header" href="#mload-mstore-msize-mcopy-memory-related-functions"><code>mload</code>, <code>mstore</code>, <code>msize</code>, <code>mcopy</code> (memory related functions)</a></h3>
+<p>In general, revive preserves the memory layout, meaning low level memory operations are supported. However, a few caveats apply:</p>
+<ul>
+<li>The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefor variable).</li>
+<li>Thus, accessing memory offsets larger than the fixed buffer size will trap the contract at runtime with an <code>OutOfBound</code> error.</li>
+<li>The compiler might detect and optimize unused memory reads and writes, leading to a different <code>msize</code> compared to what the EVM would see.</li>
+</ul>
+<h3 id="calldataload-calldatacopy"><a class="header" href="#calldataload-calldatacopy"><code>calldataload</code>, <code>calldatacopy</code></a></h3>
+<p>In the constructor code, the offset is ignored and this always returns <code>0</code>.</p>
+<h3 id="codecopy"><a class="header" href="#codecopy"><code>codecopy</code></a></h3>
+<p>Only supported in constructor code.</p>
+<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
+<p>Traps the contract but does not consume the remaining gas.</p>
+<h3 id="call-delegatecall-staticall"><a class="header" href="#call-delegatecall-staticall"><code>call</code>, <code>delegatecall</code>, <code>staticall</code></a></h3>
+<p>Calls ignore the supplied gas limit (if any) but forward all remaining resources.
+The reason is multifold, see <a href="../differences_to_eth.html">Differences to Ethereum</a> (section <code>Cross-Contract Call Gas Limit</code>).</p>
+<p>Contract authors are strongly advised to <a href="https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy">protect against re-entrancy attacks</a>.</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>The <code>solc</code> compiler supplies a gas stipend of <code>2300</code> to calls resulting from <code>address payable.{send,transfer}</code>. Which means: The resource limits solc injects for balance transfer calls will be ignored and not protect against re-entrancy attacks.</p>
+</blockquote>
+<p><code>revive</code> uses a heuristic to detect this. If detected, the compiler will disable call re-entrancy to protect against re-entrancy attacks with balance transfers (child context resources still remain uncapped). But this is just a heuristc and not guaranteed behavior.</p>
+<p>Note: Using <code>address payable.{send,transfer}</code> <a href="https://diligence.consensys.io/blog/2019/09/stop-using-soliditys-transfer-now/">is considered deprecated since a long time ago</a> anyways. There is a revive pre-compile planned for making safe balance transfers.</p>
+<h3 id="create-create2"><a class="header" href="#create-create2"><code>create</code>, <code>create2</code></a></h3>
+<p>Deployments on revive work different than on EVM, see also <a href="../differences_to_eth.html">Differences to Ethereum</a> (section <code>PolkaVM instead of EVM</code>). In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate">revive runtime expects two pointers</a>:</p>
+<ol>
+<li>A buffer containing the code hash to deploy.</li>
+<li>The constructor arguments buffer.</li>
+</ol>
+<p>To make contract instantiation using the <code>new</code> keyword in Solidity work seamlessly,
+<code>revive</code> translates the <code>dataoffset</code> and <code>datasize</code> instructions so that they assume the contract hash instead of the contract code.
+The hash is always of constant size.
+Thus, <code>revive</code> is able to supply the expected code hash and constructor arguments pointer to the runtime.</p>
+<blockquote>
+<p><strong>Warning</strong></p>
+<p>This might fall apart in code creating contracts inside <code>assembly</code> blocks. <strong>We strongly discourage using the <code>create</code> family opcodes to manually craft deployments in <code>assembly</code> blocks!</strong> Usually, the reason for using <code>assembly</code> blocks is to save gas, which is futile on revive anyways due to lower transaction costs.</p>
+</blockquote>
+<h3 id="dataoffset"><a class="header" href="#dataoffset"><code>dataoffset</code></a></h3>
+<p>Returns the contract hash.</p>
+<h3 id="datasize"><a class="header" href="#datasize"><code>datasize</code></a></h3>
+<p>Returns the contract hash size (constant value of <code>32</code>).</p>
+<h3 id="gas-gaslimit"><a class="header" href="#gas-gaslimit"><code>gas</code>, <code>gaslimit</code></a></h3>
+<p>Instead of gas limits, contracts on Polkadot are subject to multi dimensional weight limits (see <a href="../differences_to_eth.html">Differences to Ethereum</a>, section <code>Gas Model</code>). These opcodes return the corresponding <code>ref_time</code> weight limit part only.</p>
+<h3 id="prevrandao-difficulty"><a class="header" href="#prevrandao-difficulty"><code>prevrandao</code>, <code>difficulty</code></a></h3>
+<p>Translates to a constant value of <code>2500000000000000</code>.</p>
+<h3 id="pc-extcodecopy"><a class="header" href="#pc-extcodecopy"><code>pc</code>, <code>extcodecopy</code></a></h3>
+<p>Only valid to use in EVM (they also have no use-case in PVM) and produce a compile time error.</p>
+<h3 id="blobhash-blobbasefee"><a class="header" href="#blobhash-blobbasefee"><code>blobhash</code>, <code>blobbasefee</code></a></h3>
+<p>Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.</p>
+<h3 id="extcodecopy"><a class="header" href="#extcodecopy"><code>extcodecopy</code></a></h3>
+<p>This is deprecated and produces a compile time error.</p>
+<h2 id="difference-regarding-the-solc-via-ir-mode"><a class="header" href="#difference-regarding-the-solc-via-ir-mode">Difference regarding the <code>solc</code> <code>via-ir</code> mode</a></h2>
+<p>There are two different compilation pipelines available in <code>solc</code> and <a href="https://docs.soliditylang.org/en/latest/ir-breaking-changes.html">there are small differences between them</a>.</p>
+<p>Since <code>resolc</code> processes the YUL IR, always assume the <code>solc</code> IR based codegen behavior for contracts compiled with the <code>revive</code> compiler.</p>
 
                     </main>
 

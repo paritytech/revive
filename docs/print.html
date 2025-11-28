@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-89269fda.js";
+            window.path_to_searchindex_js = "searchindex-e98377f5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-29fc562a.js"></script>
@@ -182,10 +182,10 @@
 <li><strong>Solidity dApp developers</strong> should read the user guide. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>
 <li><strong>Contributors</strong> will find the contributor guide helpful for getting up to speed.</li>
 </ul>
-<h2 id="see-aloso"><a class="header" href="#see-aloso">See aloso</a></h2>
+<h2 id="other-polkadot-contracts-resources"><a class="header" href="#other-polkadot-contracts-resources">Other Polkadot contracts resources</a></h2>
 <p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
 <h2 id="about"><a class="header" href="#about">About</a></h2>
-<p>This <a href="https://github.com/rust-lang/mdBook">mdBook</a> is the comprehensive documentation resource of the revive Solidity compiler project. The content is found under <code>book/</code>. Run <code>make book</code> to observe the changes live.</p>
+<p>This <a href="https://github.com/rust-lang/mdBook">mdBook</a> documents resource the revive Solidity compiler project. The content is found under <code>book/</code>. Run <code>make book</code> to observe changes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> user guide</a></h1>
 <p>This chapter explains how to use <code>resolc</code> in different ways as well as some important aspects of compiling Solidity to PolkaVM with <code>resolc</code>.</p>
@@ -206,8 +206,6 @@
 <li><code>solc</code>: The <a href="https://github.com/ethereum/solidity/">Ethereum Solidity reference compiler</a> implemenation.</li>
 <li><code>resolc</code>: The revive Solidity compiler YUL frontend and PolkaVM code generator.</li>
 </ul>
-<h2 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h2>
-<p><code>resolc</code> uses <code>solc</code> during the compilation process, please refer to the <a href="https://docs.soliditylang.org/en/latest/installing-solidity.html">Ethereum Solidity documentation</a> for installation instructions.</p>
 <h2 id="resolc-binary-releases"><a class="header" href="#resolc-binary-releases"><code>resolc</code> binary releases</a></h2>
 <p><code>resolc</code>  is supported an all major operating systems and installation is straight forward.
 Please find our <a href="https://github.com/paritytech/revive/releases">binary releases</a> for the following platforms:</p>
@@ -217,6 +215,8 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li>Windows</li>
 <li>Wasm via emscripten</li>
 </ul>
+<h2 id="installing-the-solc-dependency"><a class="header" href="#installing-the-solc-dependency">Installing the <code>solc</code> dependency</a></h2>
+<p><code>resolc</code> uses <code>solc</code> during the compilation process, please refer to the <a href="https://docs.soliditylang.org/en/latest/installing-solidity.html">Ethereum Solidity documentation</a> for installation instructions.</p>
 <h2 id="revive-npm-package"><a class="header" href="#revive-npm-package"><code>revive</code> NPM package</a></h2>
 <p>We distribute the revive compiler as <a href="https://github.com/paritytech/js-revive">node.js module</a>.</p>
 <h2 id="buidling-resolc-from-source"><a class="header" href="#buidling-resolc-from-source">Buidling <code>resolc</code> from source</a></h2>
@@ -494,7 +494,7 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <h4 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h4>
 <p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please implement it there.</p>
 <p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
-<h4 id="dependencies-1"><a class="header" href="#dependencies-1">Dependencies</a></h4>
+<h4 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h4>
 <p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
 <p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
 <h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>

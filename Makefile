@@ -85,7 +85,7 @@ test-llvm-builder:
 	cargo test --package revive-llvm-builder -- --test-threads=1
 
 test-book:
-	cargo install mdbook --version 0.5.1
+	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
 	mdbook build book
 

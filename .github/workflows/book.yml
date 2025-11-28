@@ -1,0 +1,39 @@
+name: Check docs up-to-date
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'book/**'
+      - 'docs/**'
+      - '.gitignore'
+      - 'Makefile'
+      - '.github/workflows/book.yml'
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize]
+    paths:
+      - 'book/**'
+      - 'docs/**'
+      - '.gitignore'
+      - 'Makefile'
+      - '.github/workflows/book.yml'
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Install mdBook
+        run: make test-book
+
+      - name: Build book to tmp
+        run: mdbook build book -d docs-tmp
+
+      - name: Compare with committed docs
+        run: |
+          if ! diff -r docs-tmp docs >/dev/null; then
+            echo "docs/ is not up-to-date. Run make test-book and commit the docs/ directory"
+            exit 1
+          fi

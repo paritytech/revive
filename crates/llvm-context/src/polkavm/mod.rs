@@ -25,10 +25,7 @@ pub mod context;
 pub mod evm;
 
 /// Get a [Build] from contract bytecode and its auxilliary data.
-pub fn build(
-    bytecode: &[u8],
-    metadata_hash: Option<[u8; BYTE_LENGTH_WORD]>,
-) -> anyhow::Result<Build> {
+pub fn build(bytecode: &[u8], metadata_hash: Option<Vec<u8>>) -> anyhow::Result<Build> {
     Ok(Build::new(metadata_hash, bytecode.to_owned()))
 }
 

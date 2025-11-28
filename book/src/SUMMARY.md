@@ -15,6 +15,7 @@
   - [Compiler architecture](./developer_guide/architecture.md)
   - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
   - [Testing strategy](./developer_guide/testing.md)
+  - [Cross compilation](./developer_guide/cross_compilation.md)
 - [FAQ](./faq.md)
 - [Roadmap and Vision](./roadmap.md)
 

@@ -1,6 +1,6 @@
 # Contributor guide
 
-The `revive` compiler is an open source software project and we gladly accept contributions from anyone!
+The `revive` compiler is an open source software project and we gladly accept quality contributions from anyone!
 
 ## Getting started
 

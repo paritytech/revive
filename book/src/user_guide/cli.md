@@ -1,10 +1,10 @@
 # CLI usage
 
-We aim to keep the `resolc` CLI usage close to `solc`. However, due to fundamental differences of our contracts stack, there are a few things and options worthwhile to know about in `resolc` which do not exist in Ethereum. This chapter explains those.
+We aim to keep the `resolc` CLI usage close to `solc`. There are a few things and options worthwhile to know about in `resolc` which do not exist in the Ethereum world. This chapter explains those in more detail than the CLI help message.
 
 > **Tip**
 >
-> For a detailed reference about the CLI, please see `resolc --help`.
+> For the complete help about CLI options, please see `resolc --help`.
 
 ### LLVM optimization levels
 ```bash

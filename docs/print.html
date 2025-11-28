@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e98377f5.js";
+            window.path_to_searchindex_js = "searchindex-b2b82e7b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-29fc562a.js"></script>
+        <script src="toc-6f3f265e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,17 +188,15 @@
 <p>This <a href="https://github.com/rust-lang/mdBook">mdBook</a> documents resource the revive Solidity compiler project. The content is found under <code>book/</code>. Run <code>make book</code> to observe changes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> user guide</a></h1>
-<p>This chapter explains how to use <code>resolc</code> in different ways as well as some important aspects of compiling Solidity to PolkaVM with <code>resolc</code>.</p>
-<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
 <p><code>resolc</code> is a Solidity compiler for <a href="https://docs.polkadot.com/develop/smart-contracts/overview/#native-smart-contracts">Polkadot <code>native</code> smart contracts</a>. Quoting from the linked contract docs:</p>
 <blockquote>
 <p>Developers can utilize familiar Ethereum libraries for contract interactions and leverage industry-standard development environments for writing and testing smart contracts.</p>
 </blockquote>
-<p>The <code>resolc</code> compiler is enabling this by building Solidity source code as PVM contracts.</p>
+<p>The <code>resolc</code> compiler implements efficient Solidity support on Polkadot native contracts by compiling Solidity source to PVM.</p>
 <h2 id="revive-vs-resolc-nomenclature"><a class="header" href="#revive-vs-resolc-nomenclature"><code>revive</code> vs. <code>resolc</code> nomenclature</a></h2>
 <p><code>revive</code> is the name of the overarching “Solidity to PolkaVM” compiler project, which contains multiple components (for example the Yul parser, the code generation library, the <code>resolc</code> executable itself and many things more).</p>
-<p><code>resolc</code> is the name of the compiler driver executable, which transparently uses many <code>revive</code> components to produce compiled contract artifacts.</p>
-<p>In other words, <code>revive</code> is the full compiler infrastructure (more like <code>LLVM</code>) and <code>resolc</code> is a user-facing single-entrypoint compiler frontend (more like <code>clang</code>).</p>
+<p><code>resolc</code> is the name of the compiler driver executable, combining many <code>revive</code> components in a single and easy to use binary application.</p>
+<p>In other words, <code>revive</code> is the whole compiler infrastructure (more like <code>LLVM</code>) and <code>resolc</code> is a user-facing single-entrypoint compiler frontend (more like <code>clang</code>).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
 <p>Building Solidity contracts for PolkaVM requires installing the following two compilers:</p>
@@ -223,10 +221,10 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <p>Please follow the build <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">instructions in the revive <code>README.md</code></a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cli-usage"><a class="header" href="#cli-usage">CLI usage</a></h1>
-<p>We aim to keep the <code>resolc</code> CLI usage close to <code>solc</code>. However, due to fundamental differences of our contracts stack, there are a few things and options worthwhile to know about in <code>resolc</code> which do not exist in Ethereum. This chapter explains those.</p>
+<p>We aim to keep the <code>resolc</code> CLI usage close to <code>solc</code>. There are a few things and options worthwhile to know about in <code>resolc</code> which do not exist in the Ethereum world. This chapter explains those in more detail than the CLI help message.</p>
 <blockquote>
 <p><strong>Tip</strong></p>
-<p>For a detailed reference about the CLI, please see <code>resolc --help</code>.</p>
+<p>For the complete help about CLI options, please see <code>resolc --help</code>.</p>
 </blockquote>
 <h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
 <pre><code class="language-bash">  -O, --optimization &lt;OPTIMIZATION&gt;
@@ -478,7 +476,7 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <p>This chapter covers internal aspects of the compiler and helps contributors getting started with the <code>revive</code> codebase.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
-<p>The <code>revive</code> compiler is an open source software project and we gladly accept contributions from anyone!</p>
+<p>The <code>revive</code> compiler is an open source software project and we gladly accept quality contributions from anyone!</p>
 <h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
 <p>A quick reference on how to build the Solidity compiler is maintained in the projects <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
 <h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
@@ -634,6 +632,28 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
 <p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
 <p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follows the exact same strategy but implements a much more powerful test spec format, spec runner and reports. This allows differentially testing of much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cross-compilation"><a class="header" href="#cross-compilation">Cross compilation</a></h1>
+<p>We cross-compile the <code>resolc.js</code> frontend executable to Wasm for running it in a Node.js or browser environment.</p>
+<p>The <a href="https://www.musl-libc.org/">musl</a> target is used to obtain statically linked ELF binaries for Linux.</p>
+<h2 id="wasm-via-emscripten"><a class="header" href="#wasm-via-emscripten">Wasm via emscripten</a></h2>
+<p>The <code>REVIVE_LLVM_TARGET_PREFIX</code> environment variable is used to control the target environment LLVM dependency. Further, this requires a compatible LLVM built, obtainable via the <code>revive-llvm</code> build script. Example:</p>
+<pre><code class="language-sh"># Build the host LLVM dependency with PolkaVM target support
+make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+
+# Build the target LLVM dependency with PolkaVM target support
+revive-llvm emsdk
+source emsdk/emsdk_env.sh
+revive-llvm --target-env emscripten build --llvm-projects lld
+export REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final
+
+# Build the resolc frontend executable
+make install-wasm
+make test-wasm
+</code></pre>
+<h2 id="musl-libc"><a class="header" href="#musl-libc">musl libc</a></h2>
+<p><a href="https://github.com/rust-cross/rust-musl-cross">rust-musl-cross</a> is a straight-forward way to cross compile Rust to musl. The <a href="https://github.com/paritytech/revive/blob/main/Dockerfile">Dockerfile</a> is as an executable example for how to do that.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
 <h2 id="what-evm-version-do-you-support"><a class="header" href="#what-evm-version-do-you-support">What EVM version do you support?</a></h2>
 <p>We neither do or do not support any EVM version. We support Solidity versions, starting from <code>solc</code> version 0.8.0 onwards.</p>
@@ -679,22 +699,6 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

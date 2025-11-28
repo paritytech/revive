@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0f888317.js";
+            window.path_to_searchindex_js = "searchindex-08b5f20b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e2449b4d.js"></script>
@@ -459,6 +459,46 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <h1 id="pallet-revive-runtime-and-pvm"><a class="header" href="#pallet-revive-runtime-and-pvm">pallet-revive runtime and PVM</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
+<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
+<h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
+<p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
+<h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
+<p>A high level of bug compatibility with Ethereum is ensured through <a href="https://en.wikipedia.org/wiki/Differential_testing"><strong>differential testing</strong></a> with the Ethereum <code>solc</code> and EVM contracts stack. The <a href="https://crates.io/crates/revive-integration">revive-integration</a> library is the central integration test utility, providing a set of Solidity integration test cases. Further, it implements differential tests against the reference implementation by combining the <a href="https://crates.io/crates/revive-runner">revive-runner</a> sandbox, the <a href="https://github.com/ethereum/go-ethereum/tree/master/cmd/evm">go-ethereum EVM tool</a> and the <a href="https://crates.io/crates/revive-differential">revive-differential</a>.</p>
+<p>The <code>revive-runner</code> library provides a <a href="https://en.wikipedia.org/wiki/Declarative_programming"><strong>declarative</strong></a> test <a href="https://github.com/paritytech/revive/blob/main/crates/runner/src/specs.rs">specification format</a>. This vastly simplifies writing differential test cases and removes a lot of room for errors in test logic. Example:</p>
+<pre><code class="language-json">{
+    "differential": true,
+    "actions": [
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "Bitwise"
+                    }
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "3fa4f245"
+            }
+        }
+    ]
+}
+</code></pre>
+<p>Above example instantiates the <code>Bitwise</code> contract and calls it with some defined calldata. The <code>revive-runner</code> library implements a helper wrapper to execute test specs on the go-ethereum standalone <code>evm</code> tool. This allows the <code>revive-runner</code> to execute specs against the EVM and the <code>pallet-revive</code> runtime. Key to differential teststing is setting <code>"differential": true</code>, resulting in the following:</p>
+<ol>
+<li>The <code>Bitwise</code> contract is compiled to EVM and PVM code.</li>
+<li>The runner executes the defined <code>actions</code> on the EVM and collects all state changes (storage, balance) and execution results.</li>
+<li>The runner executes each action on the PVM. Observed state changes <em>after each step</em> as well as the final execution result is asserted to  match the EVM counterparts <strong>exactly</strong>.</li>
+</ol>
+<p><strong>Note how we never defined any expected outcome manually.</strong> Instead, we simply observe and collect the data defining the “correct” outcome.</p>
+<p>Differential testing in combination with declerative test specifications proved to be simple yet very effective in ensuring expected Ethereum Solidity semantics on <code>pallet-revive</code>.</p>
+<h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
+<p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
+<p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follows the exact same strategy but implements a much more powerful test spec format, spec runner and reports. This allows differentially testing of much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h1>
 <p>We require the official Rust formatter and clippy linters. In addition to that, please also consider the following best-effort aspects:</p>

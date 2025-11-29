@@ -1,0 +1,7 @@
+[book]
+title = "revive compiler book"
+authors = ["xermicus"]
+language = "en"
+
+[build]
+build-dir = "../docs"

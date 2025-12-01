@@ -33,7 +33,7 @@ jobs:
 
       - name: Compare with committed docs
         run: |
-          if ! diff -r docs-tmp docs >/dev/null; then
+          if ! diff -r docs-tmp docs 2>/dev/null; then
             echo "docs/ is not up-to-date. Run make test-book and commit the docs/ directory"
             exit 1
           fi

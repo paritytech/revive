@@ -80,6 +80,7 @@ jobs:
       - name: Install Dependencies
         if: ${{ matrix.host == 'linux' }}
         run: |
+          sudo snap refresh snap-store --channel=2/stable
           sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang-20 lld musl
 
       - name: Install Dependencies

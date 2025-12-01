@@ -23,13 +23,10 @@ pub fn build(
     crate::utils::check_presence("cmake")?;
     crate::utils::check_presence("ninja")?;
     crate::utils::check_presence("emsdk")?;
+    crate::utils::check_presence("clang")?;
+    crate::utils::check_presence("clang++")?;
     if cfg!(target_os = "linux") {
-        crate::utils::check_presence("gcc")?;
-        crate::utils::check_presence("g++")?;
         crate::utils::check_presence("lld")?;
-    } else {
-        crate::utils::check_presence("clang")?;
-        crate::utils::check_presence("clang++")?;
     }
 
     let llvm_module_llvm = crate::LLVMPath::llvm_module_llvm()?;
@@ -80,7 +77,7 @@ fn build_host(
     log::info!("building the LLVM Emscripten host utilities");
 
     let (c_compiler, cxx_compiler) = if cfg!(target_os = "linux") {
-        ("gcc", "g++")
+        ("clang", "clang++")
     } else {
         ("clang", "clang++")
     };

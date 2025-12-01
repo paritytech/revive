@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d2142e1.js";
+            window.path_to_searchindex_js = "../searchindex-756a6899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -177,7 +177,7 @@
                         <h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
 <p>The <code>revive</code> compiler is an open source software project and we gladly accept quality contributions from anyone!</p>
 <h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
-<p>A quick reference on how to build the Solidity compiler is maintained in the projects <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
+<p>A quick reference on how to build the Solidity compiler is maintained in the project’s <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
 <h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
 <p>The <a href="https://github.com/paritytech/revive/blob/main/Makefile">Makefile</a> comprehensively encapsulates all development aspects of this codebase. It is kept concise and readable. Please read and use it! You’ll learn for example:</p>
 <ul>
@@ -189,10 +189,10 @@
 <h3 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h3>
 <p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
 <h4 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h4>
-<p>All rust-crates live under the <code>crates/</code> directory. The workspace automatically consideres any crate found in there. If you need to add a new create, please implement it there.</p>
+<p>All Rust crates live under the <code>crates/</code> directory. The workspace automatically considers any crate found therein. If you need to add a new create, please implement it there.</p>
 <p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
 <h4 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h4>
-<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible to do so, add dev dependencies as <code>dev-dependencies</code> only.</p>
+<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible, add dev dependencies as <code>dev-dependencies</code> only.</p>
 <p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
 <h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>
 <ol>
@@ -200,21 +200,21 @@
 <li>Ensure that your branch passes <code>make test</code> locally when submitting a pull request.</li>
 <li>A PR must not be merged until CI fully passes. Exceptions can be made (for example to fix CI issues itself).</li>
 <li>No force pushes to the <code>main</code> branch and open PR branches.</li>
-<li>Maintainers can request changes or deny contributions to their own discretion.</li>
+<li>Maintainers can request changes or deny contributions at their own discretion.</li>
 </ol>
 <h2 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h2>
 <p>We require the official Rust formatter and clippy linter. In addition to that, please also consider the following best-effort aspects:</p>
 <ul>
 <li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
 <li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
-<li>Don’t write macros and don’t use thrid party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
+<li>Don’t write macros and don’t use third party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
 <li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
 <li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
 <li>Public items must have a meaningful doc comment.</li>
-<li>Provide a meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
+<li>Provide meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
 </ul>
 <h2 id="ai-policy"><a class="header" href="#ai-policy">AI policy</a></h2>
-<p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the follwing</strong>:</p>
+<p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the following</strong>:</p>
 <p><em>Project maintainers may reject any contribution (or portions of it) if the contribution shows signs of problematic involvement of generative AI</em>.</p>
 <p>Judgement of “problematic involvement” lies at the sole discretion of project maintainers. No proof (whether a contribution was in fact AI generated or not) is required. Rationale:</p>
 <ul>

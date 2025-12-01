@@ -33,7 +33,7 @@ The main compiler logic is implemented in the `revive-yul` and `revive-llvm-cont
 
 The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and our own `revive-llvm-context` compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).
 
-The Yul library also implements a simple [visitor](https://en.wikipedia.org/wiki/Visitor_pattern) interface (see [visitor.rs](https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs)). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated for historical reasons only.
+The Yul library also implements a simple [visitor](https://en.wikipedia.org/wiki/Visitor_pattern) interface (see [visitor.rs](https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs)). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated trait for historical reasons only.
 
 ## EVM heap memory
 

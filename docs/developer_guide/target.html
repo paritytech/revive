@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d2142e1.js";
+            window.path_to_searchindex_js = "../searchindex-756a6899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -178,20 +178,20 @@
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>
 <h2 id="target-cpu-configuration"><a class="header" href="#target-cpu-configuration">Target CPU configuration</a></h2>
 <p>The exact target CPU configuration can be found <a href="https://github.com/paritytech/revive/blob/8cd10a613625428956eb33c39c9022a91bfbf103/crates/llvm-context/src/target_machine/mod.rs#L22-L32">here</a>.</p>
-<blockquote>
-<p><strong>Note</strong></p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>The PVM linker requires fully relocatable ELF objects.</p>
 </blockquote>
 <h2 id="why-pvm"><a class="header" href="#why-pvm">Why PVM</a></h2>
-<p>PVM is a RISC-V based VM designed to overcome the flaws of <a href="https://webassembly.org/">WebAssebmly (Wasm)</a>. Wasm was believed to be a more efficient successor to the rather slow EVM. However, Wasm is far from an ideal target for smart contracts as some of its design decisions are unfavorable for short-lived workloads. The main problem is on-chain Wasm bytecode compilation or interpretation overhead. Prior benchmarks consistently ignoring this overhead seeded the blockchain industry with flawed assumptions: <em>Only when ignoring the startup overhead</em> Wasm is much faster than the slow computing EVM. In practice however, gains are nullified entirely and Wasm looses completely even against very slow VMs like the EVM. Executing Wasm contracts is in fact so inefficient that typical contract workloads are <em>orders of magnitude</em> more expensive than the equivalent EVM variant.</p>
+<p>PVM is a RISC-V based VM designed to overcome the flaws of <a href="https://webassembly.org/">WebAssebmly (Wasm)</a>. Wasm was believed to be a more efficient successor to the rather slow EVM. However, Wasm is far from an ideal target for smart contracts as some of its design decisions are unfavorable for short-lived workloads. The main problem is on-chain Wasm bytecode compilation or interpretation overhead. Prior benchmarks consistently ignoring this overhead seeded the blockchain industry with flawed assumptions: <em>Only when ignoring the startup overhead</em> Wasm is much faster than the slow computing EVM. In practice however, gains are nullified entirely and Wasm loses completely even against very slow VMs like the EVM. Executing Wasm contracts is in fact so inefficient that typical contract workloads are <em>orders of magnitude</em> more expensive than the equivalent EVM variant.</p>
 <p>On the other hand, since RISC-V is similar to CPUs found in validator hardware (x86 and ARM), bytecode translation mostly boils down to a linear mapping from one instruction to another. The <em>embedded</em> ISA specification reduces the number of general purpose registers, in turn removing the need for expensive register allocation. This guarantees single-pass <code>O(n)</code> JIT compilation of contract bytecode. The close proximity of PVM bytecode with actual validator CPU bytecode effectively allows to move all expensive compilation workload off-chain. Benchmarks (<a href="https://hackmd.io/@XXX9CM1uSSCWVNFRYaSB5g/HJarTUhJA#Results-execute">1</a>, <a href="https://github.com/paritytech/polkavm/blob/master/BENCHMARKS.md">2</a>) show that with the PVM JIT, sandboxed PVM code executes at around half the speed of native code, which falls into the same ballpark of the state-of-the-art <code>wasmtime</code> Wasm implementation (while EVM sits somewhere around 1/10 to less than 1/100 of native speed). However, the PVM JIT compiler only uses a fraction of the time <code>wasmtime</code> requires to compile the code.</p>
-<blockquote>
-<p><strong>Note</strong></p>
-<p>The PVM JIT isn’t available yet in <code>pallet-revive</code>. At the time of writing, the contract code is interpreted. Which is orders of magnitude slower than the JIT.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The PVM JIT isn’t available yet in <code>pallet-revive</code>. At the time of writing, the contract code is interpreted, which is orders of magnitude slower than the JIT.</p>
 </blockquote>
 <h2 id="host-environment-pallet-revive"><a class="header" href="#host-environment-pallet-revive">Host environment: <code>pallet-revive</code></a></h2>
 <p>The <code>revive</code> compiler targets the <a href="https://docs.rs/pallet-revive/"><code>pallet-revive</code> runtime environment</a>.</p>
-<p><code>pallet-revive</code> exposes a <a href="https://docs.rs/pallet-revive/0.10.1/pallet_revive/trait.SyscallDoc.html">syscall like interface</a> for contract interactions with the host environment. This is provided by the <a href="https://crates.io/crates/revive-runtime-api">revive-runtime-api</a> library.</p>
+<p><code>pallet-revive</code> exposes a <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html">syscall like interface</a> for contract interactions with the host environment. This is provided by the <a href="https://crates.io/crates/revive-runtime-api">revive-runtime-api</a> library.</p>
 <p>After the initial launch on the Polkadot Asset Hub blockchain, the runtime API is considered stable and backwards compatible indefinitively.</p>
 
                     </main>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d2142e1.js";
+            window.path_to_searchindex_js = "../searchindex-756a6899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -178,7 +178,7 @@
 <p>We cross-compile the <code>resolc.js</code> frontend executable to Wasm for running it in a Node.js or browser environment.</p>
 <p>The <a href="https://www.musl-libc.org/">musl</a> target is used to obtain statically linked ELF binaries for Linux.</p>
 <h2 id="wasm-via-emscripten"><a class="header" href="#wasm-via-emscripten">Wasm via emscripten</a></h2>
-<p>The <code>REVIVE_LLVM_TARGET_PREFIX</code> environment variable is used to control the target environment LLVM dependency. Further, this requires a compatible LLVM built, obtainable via the <code>revive-llvm</code> build script. Example:</p>
+<p>The <code>REVIVE_LLVM_TARGET_PREFIX</code> environment variable is used to control the target environment LLVM dependency. This requires a compatible LLVM build, obtainable via the <code>revive-llvm</code> build script. Example:</p>
 <pre><code class="language-sh"># Build the host LLVM dependency with PolkaVM target support
 make install-llvm
 export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
@@ -194,7 +194,7 @@ make install-wasm
 make test-wasm
 </code></pre>
 <h2 id="musl-libc"><a class="header" href="#musl-libc">musl libc</a></h2>
-<p><a href="https://github.com/rust-cross/rust-musl-cross">rust-musl-cross</a> is a straight-forward way to cross compile Rust to musl. The <a href="https://github.com/paritytech/revive/blob/main/Dockerfile">Dockerfile</a> is as an executable example for how to do that.</p>
+<p><a href="https://github.com/rust-cross/rust-musl-cross">rust-musl-cross</a> is a straightforward way to cross compile Rust to musl. The <a href="https://github.com/paritytech/revive/blob/main/Dockerfile">Dockerfile</a> is an executable example of how to do that.</p>
 
                     </main>
 

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0d2142e1.js";
+            window.path_to_searchindex_js = "../searchindex-756a6899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -175,8 +175,8 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="compiler-architecture-and-internals"><a class="header" href="#compiler-architecture-and-internals">Compiler architecture and internals</a></h1>
-<p><code>revive</code> relies on <code>solc</code>, the <a href="https://github.com/ethereum/solidity">Ethereum Solidity compiler</a>, as the Solidity frontend to process smart contracts written in Solidity. <a href="https://github.com/llvm/llvm-project">LLVM</a>, a popular and powerful compiler framework, is used as the compiler backend and does the heavy lifting in terms of optimizitations and RISC-V code generation.</p>
-<p><code>revive</code> mainly takes care of lowering the YUL intermediate representation (IR) produced by <code>solc</code> to LLVM IR. This approach provides a good balance between maintaining a high level of Ethereum compatibility, good contract performance and feasible engineering efforts.</p>
+<p><code>revive</code> relies on <code>solc</code>, the <a href="https://github.com/argotorg/solidity">Ethereum Solidity compiler</a>, as the Solidity frontend to process smart contracts written in Solidity. <a href="https://github.com/llvm/llvm-project">LLVM</a>, a popular and powerful compiler framework, is used as the compiler backend and does the heavy lifting in terms of optimizitations and RISC-V code generation.</p>
+<p><code>revive</code> mainly takes care of lowering the Yul intermediate representation (IR) produced by <code>solc</code> to LLVM IR. This approach provides a good balance between maintaining a high level of Ethereum compatibility, good contract performance and feasible engineering efforts.</p>
 <h2 id="resolc"><a class="header" href="#resolc"><code>resolc</code></a></h2>
 <p><code>resolc</code> is the overarching compiler driver library and binary.</p>
 <p>When compiling a Solidity source file with <code>resolc</code>, the following steps happen under the hood:</p>
@@ -189,26 +189,26 @@
 <p>This compilation process can be visualized as follows:</p>
 <p><img src="images/resolc.svg" alt="Architecture Overview"></p>
 <h2 id="reproducible-contract-builds"><a class="header" href="#reproducible-contract-builds">Reproducible contract builds</a></h2>
-<p>Because on-chain contract code is identified via it’s code blob hash, it is crucial to maintain reproducible contract builds. A given compiler version must reproduce the contract build <em>exactly</em> on every target plattform <code>resolc</code> supports via the official binary releases.</p>
+<p>Because on-chain contract code is identified via its code blob hash, it is crucial to maintain reproducible contract builds. A given compiler version must reproduce the contract build <em>exactly</em> on every target platform <code>resolc</code> supports via the official binary releases.</p>
 <p>To ensure this, we employ the following measures:</p>
 <ul>
-<li>The code generation must be fully deterministic. For example iterating over standard <code>HashMap</code> invalidates this due to it’s internal state, so it’s not a valid thing to do in <code>revive</code> (to counter that, for example a <code>BTreeMap</code> must be used instead).</li>
-<li>We release fully statically linked <code>resolc</code> binaries. This prevents dynamic linking of potentially differentiating libraries</li>
+<li>The code generation must be fully deterministic. For example iterating over standard <code>HashMap</code> invalidates this due to its internal state, making it an invalid operation in <code>revive</code>. To circumvent that, a <code>BTreeMap</code> can be used instead.</li>
+<li>We release fully statically linked <code>resolc</code> binaries. This prevents dynamic linking of potentially differentiating libraries.</li>
 <li>The only non-bundled dependency is the <code>solc</code> compiler. This is considered fine because the same properties apply to <code>solc</code>.</li>
 </ul>
 <h2 id="the-revive-compiler-libraries"><a class="header" href="#the-revive-compiler-libraries">The <code>revive</code> compiler libraries</a></h2>
 <p>The main compiler logic is implemented in the <code>revive-yul</code> and <code>revive-llvm-context</code> crates.</p>
-<p>The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and also our own <code>revive-llvm-context</code> compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).</p>
-<p>The Yul library also implements a simple <a href="https://en.wikipedia.org/wiki/Visitor_pattern">visitor</a> interface (see <a href="https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs">visitor.rs</a>). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated for historical reasons only.</p>
+<p>The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and our own <code>revive-llvm-context</code> compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).</p>
+<p>The Yul library also implements a simple <a href="https://en.wikipedia.org/wiki/Visitor_pattern">visitor</a> interface (see <a href="https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs">visitor.rs</a>). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated trait for historical reasons only.</p>
 <h2 id="evm-heap-memory"><a class="header" href="#evm-heap-memory">EVM heap memory</a></h2>
 <p>PVM doesn’t offer a similar API. Hence the emitted contract code emulates the linear EVM heap memory using a static byte buffer. Data inside this byte buffer is kept big endian for EVM compatibility reasons (unaligned access is allowed and makes optimizing this non-trivial).</p>
 <p>Unlike with the EVM, where heap memory usage is gas metered, our heap size is static (the size is user controllable via a setting flag). The compiler emits bound checks to prevent overflows.</p>
 <h2 id="the-llvm-dependency"><a class="header" href="#the-llvm-dependency">The LLVM dependency</a></h2>
 <p>LLVM is a special non Rust dependency. We interface its builder interface via the <a href="https://crates.io/crates/inkwell">inkwell</a> wrapper crate.</p>
-<p>We use upstream LLVM but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and leave assertions always on. Further we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-plattform build script and is used to build and release the LLVM dependency.</p>
-<p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process but we don’t want to distribute another binary.</p>
+<p>We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and always leave assertions on. Furthermore, we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-platform build script and is used to build and release the LLVM dependency.</p>
+<p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process, but we don’t want to distribute another binary.</p>
 <h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
-<p>At the moment, no significant custom optimizations are implemented. Thus we are missing some optimization opportunities that neither solc nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Further, solc optimizes for EVM gas and a target machine orthogonal to our target (BE 256bit stack machine EVM vs. 64bit LE RISC architecture PVM). We started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities.</p>
+<p>At the moment, no significant custom optimizations are implemented. Thus, we are missing some optimization opportunities that neither <code>solc</code> nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Furthermore, <code>solc</code> optimizes for EVM gas and a target machine orthogonal to our target (BE 256-bit stack machine EVM vs. 64-bit LE RISC architecture PVM). We have started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities, though.</p>
 
                     </main>
 

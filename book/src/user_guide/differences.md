@@ -51,24 +51,9 @@ Only supported in constructor code.
 
 Traps the contract but does not consume the remaining gas.
 
-### `call`, `delegatecall`, `staticcall`
-
-Calls ignore the supplied gas limit (if any) but forward all remaining resources.
-The reason is multifold, see [Differences to Ethereum](../differences_to_eth.md) (section `Cross-Contract Call Gas Limit`).
-
-Contract authors are strongly advised to [protect against re-entrancy attacks](https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy).
-
-> [!WARNING]
->
-> The `solc` compiler supplies a gas stipend of `2300` to calls resulting from `address payable.{send,transfer}`. This means: The resource limits `solc` injects for balance transfer calls will be ignored and not protect against re-entrancy attacks.
-
-`revive` uses a heuristic to detect this. If detected, the compiler will disable call re-entrancy to protect against re-entrancy attacks with balance transfers (child context resources still remain uncapped). But this is just a heuristic and not guaranteed behavior.
-
-Note: Using `address payable.{send,transfer}` [is considered deprecated since a long time ago](https://diligence.consensys.io/blog/2019/09/stop-using-soliditys-transfer-now/) anyways. There is a revive pre-compile planned for making safe balance transfers.
-
 ### `create`, `create2`
 
-Deployments on revive work different than on EVM, see also [Differences to Ethereum](../differences_to_eth.md) (section `PolkaVM instead of EVM`). In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the [revive runtime expects two pointers](https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate):
+Deployments on revive work different than on EVM. In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the [revive runtime expects two pointers](https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate):
 1. A buffer containing the code hash to deploy.
 2. The constructor arguments buffer.
 
@@ -88,10 +73,6 @@ Returns the contract hash.
 ### `datasize`
 
 Returns the contract hash size (constant value of `32`).
-
-### `gas`, `gaslimit`
-
-Instead of gas limits, contracts on Polkadot are subject to multi dimensional weight limits (see [Differences to Ethereum](../differences_to_eth.md), section `Gas Model`). These opcodes return the corresponding `ref_time` weight limit part only.
 
 ### `prevrandao`, `difficulty`
 

@@ -4,6 +4,10 @@
 
 We neither do or do not support any EVM version. We support Solidity versions, starting from `solc` version 0.8.0 onwards.
 
+## Is inline assembly supported
+
+Yes, almost all inline assembly features are supported ([see the differences in Yul translation chapter](user_guide/differences.md)).
+
 ## Do you support opcode `XY`?
 
 See above, the same applies.

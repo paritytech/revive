@@ -1,10 +1,6 @@
 # `resolc` user guide
 
-`resolc` is a Solidity compiler for [Polkadot `native` smart contracts](https://docs.polkadot.com/develop/smart-contracts/overview/#native-smart-contracts). Quoting from the linked contract docs:
-
-> Developers can utilize familiar Ethereum libraries for contract interactions and leverage industry-standard development environments for writing and testing smart contracts.
-
-The `resolc` compiler implements efficient Solidity support on Polkadot native contracts by compiling Solidity source to PVM.
+`resolc` is a Solidity `v0.8` compiler for [Polkadot `native` smart contracts](https://docs.polkadot.com/develop/smart-contracts/overview/#native-smart-contracts). Solidity compiled with `resolc` executes orders of magnitudes faster against the EVM. `resolc`  also supports almost all Solidity `v0.8` features including inline assembly, offering a high level of comptability with the Ethereum Solidity reference implementation.
 
 ## `revive` vs. `resolc` nomenclature
 

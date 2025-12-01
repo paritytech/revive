@@ -1,15 +1,15 @@
 # Installation
 
 Building Solidity contracts for PolkaVM requires installing the following two compilers:
-- `solc`: The [Ethereum Solidity reference compiler](https://github.com/ethereum/solidity/) implemenation. 
+- `solc`: The [Ethereum Solidity reference compiler](https://github.com/argotorg/solidity) implementation. 
 - `resolc`: The revive Solidity compiler YUL frontend and PolkaVM code generator.
 
 ## `resolc` binary releases
 
-`resolc`  is supported an all major operating systems and installation is straight forward.
+`resolc` is supported an all major operating systems and installation is straightforward.
 Please find our [binary releases](https://github.com/paritytech/revive/releases) for the following platforms:
 - Linux (MUSL)
-- MacOS (uinversal)
+- MacOS (universal)
 - Windows
 - Wasm via emscripten
 
@@ -19,7 +19,7 @@ Please find our [binary releases](https://github.com/paritytech/revive/releases)
 
 ## `revive` NPM package
 
-We distribute the revive compiler as [node.js module](https://github.com/paritytech/js-revive).
+We distribute the revive compiler as [node.js module](https://github.com/paritytech/revive/tree/main/js/resolc).
 
 ## Buidling `resolc` from source
 

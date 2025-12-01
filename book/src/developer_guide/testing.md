@@ -2,7 +2,7 @@
 
 Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the `revive` compiler implementation is tested for correctness and how we define correctness.
 
-> **Tip**
+> [!TIP]
 >
 > Running the integration tests require the `evm` tool from `go-ethereum` in your `$PATH`.
 >
@@ -49,7 +49,7 @@ The `revive-runner` library provides a [**declarative**](https://en.wikipedia.or
 }
 ```
 
-Above example instantiates the `Bitwise` contract and calls it with some defined calldata. The `revive-runner` library implements a helper wrapper to execute test specs on the go-ethereum standalone `evm` tool. This allows the `revive-runner` to execute specs against the EVM and the `pallet-revive` runtime. Key to differential teststing is setting `"differential": true`, resulting in the following:
+Above example instantiates the `Bitwise` contract and calls it with some defined calldata. The `revive-runner` library implements a helper wrapper to execute test specs on the go-ethereum standalone `evm` tool. This allows the `revive-runner` to execute specs against the EVM and the `pallet-revive` runtime. Key to differential testing is setting `"differential": true`, resulting in the following:
 
 1. The `Bitwise` contract is compiled to EVM and PVM code.
 2. The runner executes the defined `actions` on the EVM and collects all state changes (storage, balance) and execution results.
@@ -57,11 +57,11 @@ Above example instantiates the `Bitwise` contract and calls it with some defined
 
 __Note how we never defined any expected outcome manually.__ Instead, we simply observe and collect the data defining the "correct" outcome.
 
-Differential testing in combination with declerative test specifications proved to be simple yet very effective in ensuring expected Ethereum Solidity semantics on `pallet-revive`.
+Differential testing in combination with declarative test specifications proved to be simple, yet very effective, in ensuring expected Ethereum Solidity semantics on `pallet-revive`.
 
 ## The differential testing utility
 
-A lot of nuanced bugs caused by tiny implementation details inside the `revive` compiler _and_ the `pallet-revive` runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.
+A lot of nuanced bugs caused by tiny implementation details inside the `revive` compiler _and_ the `pallet-revive` runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus, we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.
 
-The [Revive Differential Tests](https://github.com/paritytech/revive-differential-tests/) follows the exact same strategy but implements a much more powerful test spec format, spec runner and reports. This allows differentially testing of much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.
+The [Revive Differential Tests](https://github.com/paritytech/revive-differential-tests/) follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.
 

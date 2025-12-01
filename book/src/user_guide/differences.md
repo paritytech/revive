@@ -8,9 +8,9 @@ Solidity developers deploying dApps to [`pallet-revive`](https://github.com/pari
 
 Our contract runtime does not differentiate between runtime code and deploy (constructor) code.
 Instead, both are emitted into a single PVM contract code blob and live on-chain.
-Therefor, in EVM termonology, the deploy code equals the runtime code.
+Therefore, in EVM terminology, the deploy code equals the runtime code.
 
-> **Tip**
+> [!TIP]
 >
 > In constructor code, the `codesize` instruction will return the call data size instead of the actual code blob size.
 
@@ -26,16 +26,16 @@ This returns the bytecode keccak256 hash instead.
 
 The below list contains noteworthy differences in the translation of YUL functions.
 
-> **Note**
+> [!NOTE]
 >
-> Many functions receive memory buffer offset pointer or size arguments. Since the PVM pointer size is 32 bit, supplying memory offset or buffer size values above `2^32-1` will trap the contract immediatly.
+> Many functions receive memory buffer offset pointer or size arguments. Since the PVM pointer size is 32 bit, supplying memory offset or buffer size values above `2^32-1` will trap the contract immediately.
 
 The `solc` compiler ought to always emit valid memory references, so Solidity dApp authors don't need to worry about this unless they deal with low level `assembly` code.
 
 ### `mload`, `mstore`, `msize`, `mcopy` (memory related functions) 
 
 In general, revive preserves the memory layout, meaning low level memory operations are supported. However, a few caveats apply:
-- The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefor variable).
+- The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefore varies).
 - Thus, accessing memory offsets larger than the fixed buffer size will trap the contract at runtime with an `OutOfBound` error.
 - The compiler might detect and optimize unused memory reads and writes, leading to a different `msize` compared to what the EVM would see. 
 
@@ -51,18 +51,18 @@ Only supported in constructor code.
 
 Traps the contract but does not consume the remaining gas.
 
-### `call`, `delegatecall`, `staticall`
+### `call`, `delegatecall`, `staticcall`
 
 Calls ignore the supplied gas limit (if any) but forward all remaining resources.
 The reason is multifold, see [Differences to Ethereum](../differences_to_eth.md) (section `Cross-Contract Call Gas Limit`).
 
 Contract authors are strongly advised to [protect against re-entrancy attacks](https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy).
 
-> **Warning**
+> [!WARNING]
 >
-> The `solc` compiler supplies a gas stipend of `2300` to calls resulting from `address payable.{send,transfer}`. Which means: The resource limits solc injects for balance transfer calls will be ignored and not protect against re-entrancy attacks.
+> The `solc` compiler supplies a gas stipend of `2300` to calls resulting from `address payable.{send,transfer}`. This means: The resource limits `solc` injects for balance transfer calls will be ignored and not protect against re-entrancy attacks.
 
-`revive` uses a heuristic to detect this. If detected, the compiler will disable call re-entrancy to protect against re-entrancy attacks with balance transfers (child context resources still remain uncapped). But this is just a heuristc and not guaranteed behavior.
+`revive` uses a heuristic to detect this. If detected, the compiler will disable call re-entrancy to protect against re-entrancy attacks with balance transfers (child context resources still remain uncapped). But this is just a heuristic and not guaranteed behavior.
 
 Note: Using `address payable.{send,transfer}` [is considered deprecated since a long time ago](https://diligence.consensys.io/blog/2019/09/stop-using-soliditys-transfer-now/) anyways. There is a revive pre-compile planned for making safe balance transfers.
 
@@ -77,7 +77,7 @@ To make contract instantiation using the `new` keyword in Solidity work seamless
 The hash is always of constant size.
 Thus, `revive` is able to supply the expected code hash and constructor arguments pointer to the runtime. 
 
-> **Warning**
+> [!WARNING]
 >
 > This might fall apart in code creating contracts inside `assembly` blocks. **We strongly discourage using the `create` family opcodes to manually craft deployments in `assembly` blocks!** Usually, the reason for using `assembly` blocks is to save gas, which is futile on revive anyways due to lower transaction costs.
 
@@ -99,7 +99,7 @@ Translates to a constant value of `2500000000000000`.
 
 ### `pc`, `extcodecopy`
 
-Only valid to use in EVM (they also have no use-case in PVM) and produce a compile time error.
+Only valid to use in EVM (they also have no use case in PVM) and produce a compile time error.
 
 ### `blobhash`, `blobbasefee`
 

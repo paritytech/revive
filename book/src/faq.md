@@ -2,7 +2,7 @@
 
 ## What EVM version do you support?
 
-We neither do or do not support any EVM version. We support Solidity versions, starting from `solc` version 0.8.0 onwards.
+We neither do nor don't support any EVM version. We support Solidity versions, starting from `solc` version 0.8.0 onwards.
 
 ## Is inline assembly supported
 
@@ -24,5 +24,5 @@ The 24kb code size restriction only exist for the EVM. Our limit is currently ar
 
 ## Is `resolc` a drop-in replacement for `solc`?
 
-No. `resolc` aims to work very familiar to `solc` but it's not considered a drop-in replacement.
+No. `resolc` aims to work similarly to `solc`, but it's not considered a drop-in replacement.
 

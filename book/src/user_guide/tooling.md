@@ -6,12 +6,12 @@
 
 Support for `resolc` is available in forks of the [hardhat](https://hardhat.org) and [foundry](https://getfoundry.sh) Solidity toolkits:
 
-- [The parity Hardhat fork](https://github.com/paritytech/hardhat-polkadot)
-- [The parity Foundry fork](https://github.com/paritytech/foundry-polkadot?tab=readme-ov-file#2-resolc-compiler-integration)
+- [The Parity Hardhat fork](https://github.com/paritytech/hardhat-polkadot)
+- [The Parity Foundry fork](https://github.com/paritytech/foundry-polkadot?tab=readme-ov-file#2-resolc-compiler-integration)
 
 ## Compiler explorer
 
-`resolc` is available on [godbolt.org](https://godbolt.org) for the Solidity and Yul input languages. See also the announcement post on the [forum](https://forum.polkadot.network/t/resolc-is-live-on-compiler-explorer).
+`resolc` is available on [godbolt.org](https://godbolt.org/z/6GM6n4Ka3) for the Solidity and Yul input languages. See also the announcement post on the [forum](https://forum.polkadot.network/t/resolc-is-live-on-compiler-explorer).
 
 ## Remix IDE
 

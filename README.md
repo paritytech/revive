@@ -5,7 +5,7 @@
 
 Yul recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
 
-Check the [docs](https://paritytech.github.io/revive/) or visit [contracts.polkadot.io](https://contracts.polkadot.io) to learn more about `revive` and contracts on Polkadot!
+Check the [docs](https://paritytech.github.io/revive/) or visit [contracts.polkadot.io](https://docs.polkadot.com/develop/smart-contracts/) to learn more about `revive` and contracts on Polkadot!
 
 ## Status
 
@@ -101,7 +101,7 @@ resolc --version
 
 ## Development
 
-Please consult the [Developer guide](https://paritytech.github.io/revive/developer_guide/contributing.html) to learn more about how contribute to the project.
+Please consult the [Developer Guide](https://paritytech.github.io/revive/developer_guide/contributing.html) to learn more about how contribute to the project.
 
 # Acknowledgements
 

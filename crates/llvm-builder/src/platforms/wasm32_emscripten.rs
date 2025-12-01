@@ -23,10 +23,13 @@ pub fn build(
     crate::utils::check_presence("cmake")?;
     crate::utils::check_presence("ninja")?;
     crate::utils::check_presence("emsdk")?;
-    crate::utils::check_presence("clang")?;
-    crate::utils::check_presence("clang++")?;
     if cfg!(target_os = "linux") {
+        crate::utils::check_presence("gcc")?;
+        crate::utils::check_presence("g++")?;
         crate::utils::check_presence("lld")?;
+    } else {
+        crate::utils::check_presence("clang")?;
+        crate::utils::check_presence("clang++")?;
     }
 
     let llvm_module_llvm = crate::LLVMPath::llvm_module_llvm()?;
@@ -76,6 +79,12 @@ fn build_host(
 ) -> anyhow::Result<()> {
     log::info!("building the LLVM Emscripten host utilities");
 
+    let (c_compiler, cxx_compiler) = if cfg!(target_os = "linux") {
+        ("gcc", "g++")
+    } else {
+        ("clang", "clang++")
+    };
+
     crate::utils::command(
         Command::new("cmake")
             .args([
@@ -90,6 +99,8 @@ fn build_host(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     target_directory.to_string_lossy()
                 ),
+                &format!("-DCMAKE_C_COMPILER='{}'", c_compiler),
+                &format!("-DCMAKE_CXX_COMPILER='{}'", cxx_compiler),
                 "-DLLVM_BUILD_SHARED_LIBS='Off'",
                 "-DCMAKE_BUILD_TYPE='Release'",
                 &format!(

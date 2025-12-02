@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-756a6899.js";
+            window.path_to_searchindex_js = "../searchindex-82723808.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -193,14 +193,14 @@
 <li><code>s</code>: Optimize for code size.</li>
 <li><code>z</code>: Aggressively optimize for code size.</li>
 </ul>
-<p>By default, <code>-O3</code> is applied.</p>
+<p>By default, <code>-Oz</code> is applied.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
 <pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
 </code></pre>
 <p>PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.</p>
 <p>You are incentivized to keep this value as small as possible:</p>
 <ol>
-<li>Increasing the stack size will increase startup costs.</li>
+<li>Increasing the stack size will increase gas costs due to increased startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contract’s code size.</li>
 </ol>
 <p>Default value: 32768</p>

@@ -80,7 +80,10 @@ jobs:
       - name: Install Dependencies
         if: ${{ matrix.host == 'linux' }}
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
+          cat /etc/apt/sources.list
+          sudo sed -i 's/jammy/noble/g' /etc/apt/sources.list
+          cat /etc/apt/sources.list
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils libc6-dev gcc-multilib
 
       - name: Install Dependencies
         if: ${{ matrix.host == 'macos' }}

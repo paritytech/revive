@@ -21,7 +21,7 @@ Valid levels are the following:
 - `s`: Optimize for code size.
 - `z`: Aggressively optimize for code size.
 
-By default, `-O3` is applied.
+By default, `-Oz` is applied.
 
 ### Stack size
 ```bash
@@ -31,11 +31,11 @@ By default, `-O3` is applied.
 PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.
           
 You are incentivized to keep this value as small as possible:
-1. Increasing the stack size will increase startup costs.
+1. Increasing the stack size will increase gas costs due to increased startup costs.
 2. The stack size contributes to the total memory size a contract can use, which includes the contract's code size.
 
 Default value: 32768
-          
+
 > [!WARNING]
 >
 > If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!
@@ -52,7 +52,7 @@ You are incentivized to keep this value as small as possible:
 2.The heap size contributes to the total memory size a contract can use, which includes the contract's code size
 
 Default value: 65536
-          
+
 > [!WARNING]
 >
 > If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!

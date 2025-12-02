@@ -45,7 +45,7 @@ Unlike with the EVM, where heap memory usage is gas metered, our heap size is st
 
 LLVM is a special non Rust dependency. We interface its builder interface via the [inkwell](https://crates.io/crates/inkwell) wrapper crate.
 
-We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and always leave assertions on. Furthermore, we need cross builds because `resolc` itself targets emscripten and musl. The [revive-llvm-builer](https://crates.io/crates/revive-llvm-builder) functions as a cross-platform build script and is used to build and release the LLVM dependency.
+We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM `rv64emacb` target and always leave assertions on. Furthermore, we need cross builds because `resolc` itself targets emscripten and musl. The [revive-llvm-builer](https://crates.io/crates/revive-llvm-builder) functions as a cross-platform build script and is used to build and release the LLVM dependency.
 
 We also maintain the [lld-sys crate](https://crates.io/crates/lld-sys) for interfacing with `LLD`. The LLVM linker is used during the compilation process, but we don't want to distribute another binary.
 

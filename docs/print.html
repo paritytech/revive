@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-756a6899.js";
+            window.path_to_searchindex_js = "searchindex-82723808.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6f3f265e.js"></script>
@@ -235,14 +235,14 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li><code>s</code>: Optimize for code size.</li>
 <li><code>z</code>: Aggressively optimize for code size.</li>
 </ul>
-<p>By default, <code>-O3</code> is applied.</p>
+<p>By default, <code>-Oz</code> is applied.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
 <pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
 </code></pre>
 <p>PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.</p>
 <p>You are incentivized to keep this value as small as possible:</p>
 <ol>
-<li>Increasing the stack size will increase startup costs.</li>
+<li>Increasing the stack size will increase gas costs due to increased startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contract’s code size.</li>
 </ol>
 <p>Default value: 32768</p>
@@ -539,7 +539,7 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <p>Unlike with the EVM, where heap memory usage is gas metered, our heap size is static (the size is user controllable via a setting flag). The compiler emits bound checks to prevent overflows.</p>
 <h2 id="the-llvm-dependency"><a class="header" href="#the-llvm-dependency">The LLVM dependency</a></h2>
 <p>LLVM is a special non Rust dependency. We interface its builder interface via the <a href="https://crates.io/crates/inkwell">inkwell</a> wrapper crate.</p>
-<p>We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and always leave assertions on. Furthermore, we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-platform build script and is used to build and release the LLVM dependency.</p>
+<p>We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM <code>rv64emacb</code> target and always leave assertions on. Furthermore, we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-platform build script and is used to build and release the LLVM dependency.</p>
 <p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process, but we don’t want to distribute another binary.</p>
 <h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
 <p>At the moment, no significant custom optimizations are implemented. Thus, we are missing some optimization opportunities that neither <code>solc</code> nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Furthermore, <code>solc</code> optimizes for EVM gas and a target machine orthogonal to our target (BE 256-bit stack machine EVM vs. 64-bit LE RISC architecture PVM). We have started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities, though.</p>

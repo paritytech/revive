@@ -1,0 +1,730 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>revive compiler book</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-756a6899.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-6f3f265e.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">revive compiler book</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="welcome"><a class="header" href="#welcome">Welcome</a></h1>
+<p>Hello and a warm welcome to the <code>revive</code> Solidity compiler book!</p>
+<h2 id="target-audience"><a class="header" href="#target-audience">Target audience</a></h2>
+<ul>
+<li><strong>Solidity dApp developers</strong> should read the <a href="#resolc-user-guide">user guide</a>. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>
+<li><strong>Contributors</strong> will find the <a href="#developer-guide">developer guide</a> helpful for getting up to speed.</li>
+</ul>
+<h2 id="other-polkadot-contracts-resources"><a class="header" href="#other-polkadot-contracts-resources">Other Polkadot contracts resources</a></h2>
+<p>Head to <a href="https://docs.polkadot.com/develop/smart-contracts/">contracts.polkadot.io</a> for more general information about contracts on Polkadot.</p>
+<h2 id="about"><a class="header" href="#about">About</a></h2>
+<p>This <a href="https://github.com/rust-lang/mdBook">mdBook</a> documents the revive Solidity compiler project. The content is found under <code>book/</code>. Run <code>make book</code> to observe changes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="resolc-user-guide"><a class="header" href="#resolc-user-guide"><code>resolc</code> user guide</a></h1>
+<p><code>resolc</code> is a Solidity <code>v0.8</code> compiler for <a href="https://docs.polkadot.com/develop/smart-contracts/overview/#native-smart-contracts">Polkadot <code>native</code> smart contracts</a>. Solidity compiled with <code>resolc</code> executes orders of magnitude faster than the EVM. <code>resolc</code>  also supports almost all Solidity <code>v0.8</code> features including inline assembly, offering a high level of comptability with the Ethereum Solidity reference implementation.</p>
+<h2 id="revive-vs-resolc-nomenclature"><a class="header" href="#revive-vs-resolc-nomenclature"><code>revive</code> vs. <code>resolc</code> nomenclature</a></h2>
+<p><code>revive</code> is the name of the overarching “Solidity to PolkaVM” compiler project, which contains multiple components (for example the Yul parser, the code generation library, the <code>resolc</code> executable itself, and many more things).</p>
+<p><code>resolc</code> is the name of the compiler driver executable, combining many <code>revive</code> components in a single and easy to use binary application.</p>
+<p>In other words, <code>revive</code> is the whole compiler infrastructure (more like <code>LLVM</code>) and <code>resolc</code> is a user-facing single-entrypoint compiler frontend (more like <code>clang</code>).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>Building Solidity contracts for PolkaVM requires installing the following two compilers:</p>
+<ul>
+<li><code>solc</code>: The <a href="https://github.com/argotorg/solidity">Ethereum Solidity reference compiler</a> implementation.</li>
+<li><code>resolc</code>: The revive Solidity compiler YUL frontend and PolkaVM code generator.</li>
+</ul>
+<h2 id="resolc-binary-releases"><a class="header" href="#resolc-binary-releases"><code>resolc</code> binary releases</a></h2>
+<p><code>resolc</code> is supported an all major operating systems and installation is straightforward.
+Please find our <a href="https://github.com/paritytech/revive/releases">binary releases</a> for the following platforms:</p>
+<ul>
+<li>Linux (MUSL)</li>
+<li>MacOS (universal)</li>
+<li>Windows</li>
+<li>Wasm via emscripten</li>
+</ul>
+<h2 id="installing-the-solc-dependency"><a class="header" href="#installing-the-solc-dependency">Installing the <code>solc</code> dependency</a></h2>
+<p><code>resolc</code> uses <code>solc</code> during the compilation process, please refer to the <a href="https://docs.soliditylang.org/en/latest/installing-solidity.html">Ethereum Solidity documentation</a> for installation instructions.</p>
+<h2 id="revive-npm-package"><a class="header" href="#revive-npm-package"><code>revive</code> NPM package</a></h2>
+<p>We distribute the revive compiler as <a href="https://github.com/paritytech/revive/tree/main/js/resolc">node.js module</a>.</p>
+<h2 id="buidling-resolc-from-source"><a class="header" href="#buidling-resolc-from-source">Buidling <code>resolc</code> from source</a></h2>
+<p>Please follow the build <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">instructions in the revive <code>README.md</code></a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli-usage"><a class="header" href="#cli-usage">CLI usage</a></h1>
+<p>We aim to keep the <code>resolc</code> CLI usage close to <code>solc</code>. There are a few things and options worthwhile to know about in <code>resolc</code> which do not exist in the Ethereum world. This chapter explains those in more detail than the CLI help message.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>For the complete help about CLI options, please see <code>resolc --help</code>.</p>
+</blockquote>
+<h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
+<pre><code class="language-bash">-O, --optimization &lt;OPTIMIZATION&gt;
+</code></pre>
+<p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.</p>
+<p>Valid levels are the following:</p>
+<ul>
+<li><code>0</code>: No optimizations are applied.</li>
+<li><code>1</code>: Basic optimizations for execution time.</li>
+<li><code>2</code>: Advanced optimizations for execution time.</li>
+<li><code>3</code>: Aggressive optimizations for execution time.</li>
+<li><code>s</code>: Optimize for code size.</li>
+<li><code>z</code>: Aggressively optimize for code size.</li>
+</ul>
+<p>By default, <code>-O3</code> is applied.</p>
+<h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
+<pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
+</code></pre>
+<p>PVM is a register machine with a traditional stack memory space for local variables. This controls the total amount of stack space the contract can use.</p>
+<p>You are incentivized to keep this value as small as possible:</p>
+<ol>
+<li>Increasing the stack size will increase startup costs.</li>
+<li>The stack size contributes to the total memory size a contract can use, which includes the contract’s code size.</li>
+</ol>
+<p>Default value: 32768</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
+<h3 id="heap-size"><a class="header" href="#heap-size">Heap size</a></h3>
+<pre><code class="language-bash">--heap-size &lt;HEAP_SIZE&gt;
+</code></pre>
+<p>Unlike the EVM, due to the lack of dynamic memory metering, PVM contracts emulate the EVM heap memory with a static buffer. Consequentially, instead of infinite memory with exponentially growing gas costs, PVM contracts have a finite amount of memory with constant gas costs available.</p>
+<p>You are incentivized to keep this value as small as possible:
+1.Increasing the heap size will increase startup costs.
+2.The heap size contributes to the total memory size a contract can use, which includes the contract’s code size</p>
+<p>Default value: 65536</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</p>
+</blockquote>
+<h3 id="solc"><a class="header" href="#solc">solc</a></h3>
+<pre><code class="language-bash">--solc &lt;SOLC&gt;
+</code></pre>
+<p>Specify the path to the <code>solc</code> executable. By default, the one in <code>${PATH}</code> is used.</p>
+<h3 id="debug-artifacts"><a class="header" href="#debug-artifacts">Debug artifacts</a></h3>
+<pre><code class="language-bash">--debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
+</code></pre>
+<p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. Useful for debugging and development purposes.</p>
+<h3 id="debug-info"><a class="header" href="#debug-info">Debug info</a></h3>
+<pre><code class="language-bash">-g
+</code></pre>
+<p>Generate source based debug information in the output code file. Useful for debugging and development purposes and disabled by default.</p>
+<h3 id="deploy-time-linking"><a class="header" href="#deploy-time-linking">Deploy time linking</a></h3>
+<pre><code class="language-bash">--link [--libraries &lt;LIBRARIES&gt;] &lt;INPUT_FILES&gt;
+</code></pre>
+<p>In Solidity, 3 things can happen with libraries:</p>
+<ol>
+<li>They are not <code>extern</code>ally callable and thus can be inlined.
+<ol>
+<li>The solc Solidity optimizer inlines those (usually the case). Note: <code>resolc</code> always activates the solc Solidity optimizer.</li>
+<li>If the solc Solidity optimizer is disabled or for some reason fails to inline them (both rare), they are not inlined and require linking.</li>
+</ol>
+</li>
+<li>They are <code>extern</code>ally callable but still linked at compile time. This is the case if at compile time the library address is known (i.e. <code>--libraries</code> supplied in CLI or the corresponding setting in STD JSON input).</li>
+<li>They are linked at deploy time. This happens when the compiler does not know the library address (i.e. <code>--libraries</code> flag is missing or the provided libraries are incomplete, same for STD JSON input). This case is rare because it’s discourage and should never be used by production dApps.</li>
+</ol>
+<p>In cases <code>1.2</code> and <code>3</code>:</p>
+<ul>
+<li>Some of the produced code blobs will be in the “unlinked” raw <code>ELF</code> object format and not yet deployable.</li>
+<li>To make them deployable, they need to be “linked” (done using the <code>resolc --link</code> linker mode explained below).</li>
+<li>The compiler emitted <code>DELEGATECALL</code> instructions to call non-inlined (unlinked) libraries. The contract deployer must make sure to deploy any libraries prior to contract deployment.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Using deploy time linking is officially <strong>discouraged</strong>. Mainly due to bytecode hashes changing after the fact. We decided to support it in <code>resolc</code> regardless, due to popular request.</p>
+</blockquote>
+<p>Similar to how it works in <code>solc</code>, <code>--libraries</code> may be used to provide libraries during linking mode.</p>
+<p>Unlike with <code>solc</code>, where linking implies a simple string substitution mechanism, <code>resolc</code> needs to resolve actual missing <code>ELF</code> symbols. This is due to how factory dependencies work in PVM. As a consequence, it isn’t sufficient to just provide the unlinked blobs to the linker. Instead, they must be provided in the exact same directory structure the Solidity source code was found during compile time.</p>
+<p>Example:</p>
+<ul>
+<li>The contract <code>src/foo/bar.sol:Bar</code> is involved in deploy time linking. It may be a factory dependency.</li>
+<li>The contract blob needs to be provided inside a relative <code>src/foo/</code> directory to <code>--link</code>. Otherwise symbol resolution may fail.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Tooling is supposed to take care of this. In the future, we may append explicit linkage data to simplify the deploy time linking feature.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="js-npm-package"><a class="header" href="#js-npm-package">JS NPM package</a></h1>
+<p>The <code>resolc</code> compiler driver is published as an NPM package under <a href="https://www.npmjs.com/package/@parity/resolc">@parity/resolc</a>.</p>
+<p>It’s usable from <code>Node.js</code> code or directly from the command line:</p>
+<pre><code class="language-shell">npx @parity/resolc@latest --bin crates/integration/contracts/flipper.sol -o /tmp/out
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>While the npm package makes a nice portable option, it doesn’t expose all options.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tooling-integration"><a class="header" href="#tooling-integration">Tooling integration</a></h1>
+<p><code>resolc</code> achieved successful integration with a variety of third party developer tools.</p>
+<h2 id="solidity-toolkits"><a class="header" href="#solidity-toolkits">Solidity toolkits</a></h2>
+<p>Support for <code>resolc</code> is available in forks of the <a href="https://hardhat.org">hardhat</a> and <a href="https://getfoundry.sh">foundry</a> Solidity toolkits:</p>
+<ul>
+<li><a href="https://github.com/paritytech/hardhat-polkadot">The Parity Hardhat fork</a></li>
+<li><a href="https://github.com/paritytech/foundry-polkadot?tab=readme-ov-file#2-resolc-compiler-integration">The Parity Foundry fork</a></li>
+</ul>
+<h2 id="compiler-explorer"><a class="header" href="#compiler-explorer">Compiler explorer</a></h2>
+<p><code>resolc</code> is available on <a href="https://godbolt.org/z/6GM6n4Ka3">godbolt.org</a> for the Solidity and Yul input languages. See also the announcement post on the <a href="https://forum.polkadot.network/t/resolc-is-live-on-compiler-explorer">forum</a>.</p>
+<h2 id="remix-ide"><a class="header" href="#remix-ide">Remix IDE</a></h2>
+<p>There is remix IDE fork with <code>resolc</code> support at <a href="https://remix.polkadot.io">remix.polkadot.io</a>. Unfortunately this is no longer actively maintained (there might be bugs and outdated <code>resolc</code> versions).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="standard-json-interface"><a class="header" href="#standard-json-interface">Standard JSON interface</a></h1>
+<p>The <code>revive</code> compiler is mostly compatible with the <code>solc</code> standard JSON interface. There are a few additional (PVM related) <strong>input</strong> configurations:</p>
+<h2 id="the-settingspolkavm-object"><a class="header" href="#the-settingspolkavm-object">The <code>settings.polkavm</code> object</a></h2>
+<p>Used to configure PVM specific compiler settings.</p>
+<h3 id="settingspolkavmdebuginformation"><a class="header" href="#settingspolkavmdebuginformation"><code>settings.polkavm.debugInformation</code></a></h3>
+<p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
+<h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
+<p>Used to apply PVM specific memory configuration settings.</p>
+<h4 id="settingspolkavmheapsize"><a class="header" href="#settingspolkavmheapsize"><code>settings.polkavm.heapSize</code></a></h4>
+<p>A numerical value allowing to configure the contract heap size. Corresponds to <code>resolc --heap-size</code>.</p>
+<h4 id="settingspolkavmstacksize"><a class="header" href="#settingspolkavmstacksize"><code>settings.polkavm.stackSize</code></a></h4>
+<p>A numerical value allowing to configure the contract stack size. Corresponds to <code>resolc --stack-size</code>.</p>
+<h2 id="the-settingsoptimizer-object"><a class="header" href="#the-settingsoptimizer-object">The <code>settings.optimizer</code> object</a></h2>
+<p>The <code>settings.optimizer</code> object is augmented with support for PVM specific optimization settings.</p>
+<h3 id="settingsoptimizermode"><a class="header" href="#settingsoptimizermode"><code>settings.optimizer.mode</code></a></h3>
+<p>A single char value to configure the LLVM optimizer settings. Corresponds to <code>resolc -O</code>.</p>
+<h2 id="settingsllvmarguments"><a class="header" href="#settingsllvmarguments"><code>settings.llvmArguments</code></a></h2>
+<p>Allows to specify arbitrary command line arguments to LLVM initialization. Used mainly for development and debugging purposes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="differences-to-evm"><a class="header" href="#differences-to-evm">Differences to EVM</a></h1>
+<p>This section highlights some potentially observable differences in the <a href="https://docs.soliditylang.org/en/latest/yul.html#evm-dialect">YUL EVM dialect</a> translation compared to Ethereum Solidity.</p>
+<p>Solidity developers deploying dApps to <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive"><code>pallet-revive</code></a> ought to read and understand this section well.</p>
+<h2 id="deploy-code-vs-runtime-code"><a class="header" href="#deploy-code-vs-runtime-code">Deploy code vs. runtime code</a></h2>
+<p>Our contract runtime does not differentiate between runtime code and deploy (constructor) code.
+Instead, both are emitted into a single PVM contract code blob and live on-chain.
+Therefore, in EVM terminology, the deploy code equals the runtime code.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>In constructor code, the <code>codesize</code> instruction will return the call data size instead of the actual code blob size.</p>
+</blockquote>
+<h2 id="solidity"><a class="header" href="#solidity">Solidity</a></h2>
+<p>We are aware of the following differences in the translation of Solidity code.</p>
+<h3 id="addresscreationcode"><a class="header" href="#addresscreationcode"><code>address.creationCode</code></a></h3>
+<p>This returns the bytecode keccak256 hash instead.</p>
+<h2 id="yul-functions"><a class="header" href="#yul-functions">YUL functions</a></h2>
+<p>The below list contains noteworthy differences in the translation of YUL functions.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Many functions receive memory buffer offset pointer or size arguments. Since the PVM pointer size is 32 bit, supplying memory offset or buffer size values above <code>2^32-1</code> will trap the contract immediately.</p>
+</blockquote>
+<p>The <code>solc</code> compiler ought to always emit valid memory references, so Solidity dApp authors don’t need to worry about this unless they deal with low level <code>assembly</code> code.</p>
+<h3 id="mload-mstore-msize-mcopy-memory-related-functions"><a class="header" href="#mload-mstore-msize-mcopy-memory-related-functions"><code>mload</code>, <code>mstore</code>, <code>msize</code>, <code>mcopy</code> (memory related functions)</a></h3>
+<p>In general, revive preserves the memory layout, meaning low level memory operations are supported. However, a few caveats apply:</p>
+<ul>
+<li>The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefore varies).</li>
+<li>Thus, accessing memory offsets larger than the fixed buffer size will trap the contract at runtime with an <code>OutOfBound</code> error.</li>
+<li>The compiler might detect and optimize unused memory reads and writes, leading to a different <code>msize</code> compared to what the EVM would see.</li>
+</ul>
+<h3 id="calldataload-calldatacopy"><a class="header" href="#calldataload-calldatacopy"><code>calldataload</code>, <code>calldatacopy</code></a></h3>
+<p>In the constructor code, the offset is ignored and this always returns <code>0</code>.</p>
+<h3 id="codecopy"><a class="header" href="#codecopy"><code>codecopy</code></a></h3>
+<p>Only supported in constructor code.</p>
+<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
+<p>Traps the contract but does not consume the remaining gas.</p>
+<h3 id="create-create2"><a class="header" href="#create-create2"><code>create</code>, <code>create2</code></a></h3>
+<p>Deployments on revive work different than on EVM. In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate">revive runtime expects two pointers</a>:</p>
+<ol>
+<li>A buffer containing the code hash to deploy.</li>
+<li>The constructor arguments buffer.</li>
+</ol>
+<p>To make contract instantiation using the <code>new</code> keyword in Solidity work seamlessly,
+<code>revive</code> translates the <code>dataoffset</code> and <code>datasize</code> instructions so that they assume the contract hash instead of the contract code.
+The hash is always of constant size.
+Thus, <code>revive</code> is able to supply the expected code hash and constructor arguments pointer to the runtime.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>This might fall apart in code creating contracts inside <code>assembly</code> blocks. <strong>We strongly discourage using the <code>create</code> family opcodes to manually craft deployments in <code>assembly</code> blocks!</strong> Usually, the reason for using <code>assembly</code> blocks is to save gas, which is futile on revive anyways due to lower transaction costs.</p>
+</blockquote>
+<h3 id="dataoffset"><a class="header" href="#dataoffset"><code>dataoffset</code></a></h3>
+<p>Returns the contract hash.</p>
+<h3 id="datasize"><a class="header" href="#datasize"><code>datasize</code></a></h3>
+<p>Returns the contract hash size (constant value of <code>32</code>).</p>
+<h3 id="prevrandao-difficulty"><a class="header" href="#prevrandao-difficulty"><code>prevrandao</code>, <code>difficulty</code></a></h3>
+<p>Translates to a constant value of <code>2500000000000000</code>.</p>
+<h3 id="pc-extcodecopy"><a class="header" href="#pc-extcodecopy"><code>pc</code>, <code>extcodecopy</code></a></h3>
+<p>Only valid to use in EVM (they also have no use case in PVM) and produce a compile time error.</p>
+<h3 id="blobhash-blobbasefee"><a class="header" href="#blobhash-blobbasefee"><code>blobhash</code>, <code>blobbasefee</code></a></h3>
+<p>Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.</p>
+<h2 id="difference-regarding-the-solc-via-ir-mode"><a class="header" href="#difference-regarding-the-solc-via-ir-mode">Difference regarding the <code>solc</code> <code>via-ir</code> mode</a></h2>
+<p>There are two different compilation pipelines available in <code>solc</code> and <a href="https://docs.soliditylang.org/en/latest/ir-breaking-changes.html">there are small differences between them</a>.</p>
+<p>Since <code>resolc</code> processes the YUL IR, always assume the <code>solc</code> IR based codegen behavior for contracts compiled with the <code>revive</code> compiler.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="rust-contract-libraries"><a class="header" href="#rust-contract-libraries">Rust contract libraries</a></h1>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>This is not yet implemented but something for consideration on the roadmap.</p>
+</blockquote>
+<p>Solidity - tightly coupled to the EVM - introduces some inherent inefficiencies that are by design and either needs to be followed or can’t be easily worked around, even with efforts like better optimized compiler and VM implementations. This represents a technical dead end. So far the EVM sees no adoption beyond the blockchain industry. Chances are that <a href="https://ethereum-magicians.org/t/long-term-l1-execution-layer-proposal-replace-the-evm-with-risc-v">the EVM end up deprecated</a> for technical reasons (or maybe not and the RISC-V idea gets abandoned, who knows).</p>
+<p>PVM, however, is a general purpose VM. It supports LLVM based mainstream programming languages like Rust. It’s a common software engineering practice to compose applications from pieces written in multiple languages, using each to their own strength. For example, AI solutions traditionally use the python scripting language for convenient developer experience, while the underlying AI models get implemented in a lower level language such as C++.</p>
+<p>The same pattern can of course be applied to dApps, where we’d expect application specific languages like Solidity mixed with libraries implementing computationally complex algorithms in a lower level language. Business logic and user interfaces are naturally implemented as regular Solidity dApps which can include (link against) Rust libraries. Rust is a fast, safe low level language and the Polkadot SDK is written in Rust itself, making it an excellent choice.</p>
+<p>For example, <a href="https://en.wikipedia.org/wiki/Zero-knowledge_proof">ZK proof verifiers</a> or expensive <a href="https://en.wikipedia.org/wiki/Decentralized_finance">DeFi</a> primitives would benefit greatly from Rust implementations.</p>
+<p><code>revive</code> provides tooling support and a small Rust contracts SDK for seamless integration with Rust libraries.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="revive-runner-sandbox"><a class="header" href="#revive-runner-sandbox"><code>revive-runner</code> sandbox</a></h1>
+<p>Running contract code usually requires a blockchain node. While local dev nodes can be used, sometimes it’s just not desirable to do so. Instead, it can be much more convenient to run and debug contract code with a stripped down environment.</p>
+<p>This is where the <code>revive-runner</code> comes in handy. In a nutshell, it is a single-binary no-blockchain <code>pallet-revive</code> runtime.</p>
+<h2 id="installation-and-usage"><a class="header" href="#installation-and-usage">Installation and usage</a></h2>
+<p>Inside the root <code>revive</code> repository directory, install it from source (requires Rust installed):</p>
+<pre><code class="language-bash">make install-revive-runner
+</code></pre>
+<p>After installing, see <code>revive-runner --help</code> for usage help.</p>
+<h2 id="trace-logs"><a class="header" href="#trace-logs">Trace logs</a></h2>
+<p>The standard <code>RUST_LOG</code> environment variable controls the log output from the contract execution. This includes <code>revive</code> runtime logs and PVM execution trace logs. Sometimes it’s convenient to have more fine granular insight. Some useful filters:</p>
+<ul>
+<li><code>RUST_LOG=runtime=trace</code>: The <code>pallet-revive</code> runtime trace logs.</li>
+<li><code>RUST_LOG=polkavm=trace</code>: Low level PolkaVM instruction tracing.</li>
+</ul>
+<h2 id="automatic-contract-instantiation"><a class="header" href="#automatic-contract-instantiation">Automatic contract instantiation</a></h2>
+<p>To avoid running the constract in an unitialized state, <code>revive-runner</code> automatically instantiates the contract before calling it (constructor arguments can be provided).</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>Suppose we want to trace the syscalls of the execution of a compiled contract file <code>Flipper.pvm</code>:</p>
+<pre><code class="language-bash">RUST_LOG=runtime=trace revive-runner -f Flipper.pvm
+[DEBUG runtime::revive] Contract memory usage: purgable=6144/3145728 KB baseline=103063/1572864
+[TRACE runtime::revive::strace] call_data_size() = Ok(0) gas_consumed: Weight { ref_time: 985209, proof_size: 0 }
+[TRACE runtime::revive::strace] value_transferred(out_ptr: 4294836096) = Ok(()) gas_consumed: Weight { ref_time: 2937634, proof_size: 0 }
+[TRACE runtime::revive::strace] call_data_copy(out_ptr: 131216, out_len: 0, offset: 0) = Ok(()) gas_consumed: Weight { ref_time: 4084483, proof_size: 0 }
+[TRACE runtime::revive::strace] seal_return(flags: 0, data_ptr: 131216, data_len: 0) = Err(TrapReason::Return(ReturnData { flags: 0, data: [] })) gas_consumed: Weight { ref_time: 5510615, proof_size: 0 }
+[TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: (empty), data: [] })
+[TRACE runtime::revive::strace] call_data_size() = Ok(0) gas_consumed: Weight { ref_time: 985209, proof_size: 0 }
+[TRACE runtime::revive::strace] seal_return(flags: 1, data_ptr: 131088, data_len: 0) = Err(TrapReason::Return(ReturnData { flags: 1, data: [] })) gas_consumed: Weight { ref_time: 2456669, proof_size: 0 }
+[TRACE runtime::revive] frame finished with: Ok(ExecReturnValue { flags: REVERT, data: [] })
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="developer-guide"><a class="header" href="#developer-guide">Developer guide</a></h1>
+<p>This chapter covers internal aspects of the compiler and helps contributors getting started with the <code>revive</code> codebase.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor guide</a></h1>
+<p>The <code>revive</code> compiler is an open source software project and we gladly accept quality contributions from anyone!</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h2>
+<p>A quick reference on how to build the Solidity compiler is maintained in the project’s <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">README.md</a>.</p>
+<h3 id="using-the-makefile"><a class="header" href="#using-the-makefile">Using the <code>Makefile</code></a></h3>
+<p>The <a href="https://github.com/paritytech/revive/blob/main/Makefile">Makefile</a> comprehensively encapsulates all development aspects of this codebase. It is kept concise and readable. Please read and use it! You’ll learn for example:</p>
+<ul>
+<li>How to build and install a <code>resolc</code> development version.</li>
+<li>How to run tests and benchmarks.</li>
+<li>How to cross-compile <code>resolc</code>.</li>
+</ul>
+<p>As a general rule-of-thumb: If <code>make test</code> runs fine locally, chances for green CI pipelines are good.</p>
+<h3 id="codebase-organization"><a class="header" href="#codebase-organization">Codebase organization</a></h3>
+<p>For the most parts, <code>revive</code> is a rather standard Rust workspace codebase. There are some non-Rust dependencies, which sometimes complicates things a little bit.</p>
+<h4 id="the-crates-dir"><a class="header" href="#the-crates-dir">The <code>crates/</code> dir</a></h4>
+<p>All Rust crates live under the <code>crates/</code> directory. The workspace automatically considers any crate found therein. If you need to add a new create, please implement it there.</p>
+<p>Compiler library crates should be named with the <code>revive-</code> prefix. The crate location doesn’t need the prefix.</p>
+<h4 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h4>
+<p>Dependencies should be added as workspace dependencies. Try to avoid pinning dependencies whenever possible. If possible, add dev dependencies as <code>dev-dependencies</code> only.</p>
+<p>Please do always include the <code>Cargo.lock</code> dependency lock file with your PR. Please don’t run <code>cargo update</code> together with other changes (it is preferred to update the lock file in a dedicated dependency update PR).</p>
+<h2 id="contribution-rules"><a class="header" href="#contribution-rules">Contribution rules</a></h2>
+<ol>
+<li>Changes must be submitted via a pull request (PR) to the github upstream repository.</li>
+<li>Ensure that your branch passes <code>make test</code> locally when submitting a pull request.</li>
+<li>A PR must not be merged until CI fully passes. Exceptions can be made (for example to fix CI issues itself).</li>
+<li>No force pushes to the <code>main</code> branch and open PR branches.</li>
+<li>Maintainers can request changes or deny contributions at their own discretion.</li>
+</ol>
+<h2 id="style-guide"><a class="header" href="#style-guide">Style guide</a></h2>
+<p>We require the official Rust formatter and clippy linter. In addition to that, please also consider the following best-effort aspects:</p>
+<ul>
+<li>Avoid <a href="https://en.wikipedia.org/wiki/Magic_number_(programming)">magic numbers</a> and strings. Instead, add them as module constants.</li>
+<li>Avoid abbreviated variable and function names. Always provide meaningful and readable symbols.</li>
+<li>Don’t write macros and don’t use third party macros for things that can easily be expressed in few lines of code or outlined into functions.</li>
+<li>Avoid import aliasing. Please use the parent or fully qualified path for conflicting symbols.</li>
+<li>Any inline comments must provide additional semantic meaning, explain counter-intuitive behavior or highlight non-obvious design decisions. In other words, try to make the code expressive enough to a degree it doesn’t need comments expressing the same thing again in the English language. Delete such comments if your AI assistant generated them.</li>
+<li>Public items must have a meaningful doc comment.</li>
+<li>Provide meaningful panic messages to <code>.expect()</code> or just use <code>.unwrap()</code>.</li>
+</ul>
+<h2 id="ai-policy"><a class="header" href="#ai-policy">AI policy</a></h2>
+<p>Contributors may use whatever AI assistance tools they wish to whatever degree they wish in the process of creating their contribution, <strong>given they acknowledge the following</strong>:</p>
+<p><em>Project maintainers may reject any contribution (or portions of it) if the contribution shows signs of problematic involvement of generative AI</em>.</p>
+<p>Judgement of “problematic involvement” lies at the sole discretion of project maintainers. No proof (whether a contribution was in fact AI generated or not) is required. Rationale:</p>
+<ul>
+<li>No one enjoys reading soulless and uncanny LLM slop. Please review and fix any AI slop yourself prior to submitting a PR.</li>
+<li>A Solidity compiler is security sensitive software. Even miniscule mistakes can ultimately lead to loss of funds. AI models are inherently stochastic. They regurarly fail to capture important nuances or produce straight hallucinations. Code that was “blindly” generated has no home here.</li>
+<li><code>revive</code> is a large codebase. Generative AI assistants may not have enough “context window” to sufficiently capture correctness, consistency and style aspects of the codebase. We’d like to keep this codebase maintainable <em>by humans</em> for the forseeable future.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="compiler-architecture-and-internals"><a class="header" href="#compiler-architecture-and-internals">Compiler architecture and internals</a></h1>
+<p><code>revive</code> relies on <code>solc</code>, the <a href="https://github.com/argotorg/solidity">Ethereum Solidity compiler</a>, as the Solidity frontend to process smart contracts written in Solidity. <a href="https://github.com/llvm/llvm-project">LLVM</a>, a popular and powerful compiler framework, is used as the compiler backend and does the heavy lifting in terms of optimizitations and RISC-V code generation.</p>
+<p><code>revive</code> mainly takes care of lowering the Yul intermediate representation (IR) produced by <code>solc</code> to LLVM IR. This approach provides a good balance between maintaining a high level of Ethereum compatibility, good contract performance and feasible engineering efforts.</p>
+<h2 id="resolc"><a class="header" href="#resolc"><code>resolc</code></a></h2>
+<p><code>resolc</code> is the overarching compiler driver library and binary.</p>
+<p>When compiling a Solidity source file with <code>resolc</code>, the following steps happen under the hood:</p>
+<ol>
+<li><code>solc</code> is used to lower the Solidity source code into <a href="https://docs.soliditylang.org/en/latest/yul.html">YUL intermediate representation</a>.</li>
+<li><code>revive</code> lowers the YUL IR into LLVM IR.</li>
+<li>LLVM optimizes the code and emits a RISC-V ELF shared object (through LLD).</li>
+<li>The <a href="https://github.com/paritytech/polkavm">PolkaVM</a> linker finally links the ELF shared object into a PolkaVM blob.</li>
+</ol>
+<p>This compilation process can be visualized as follows:</p>
+<p><img src="developer_guide/images/resolc.svg" alt="Architecture Overview"></p>
+<h2 id="reproducible-contract-builds"><a class="header" href="#reproducible-contract-builds">Reproducible contract builds</a></h2>
+<p>Because on-chain contract code is identified via its code blob hash, it is crucial to maintain reproducible contract builds. A given compiler version must reproduce the contract build <em>exactly</em> on every target platform <code>resolc</code> supports via the official binary releases.</p>
+<p>To ensure this, we employ the following measures:</p>
+<ul>
+<li>The code generation must be fully deterministic. For example iterating over standard <code>HashMap</code> invalidates this due to its internal state, making it an invalid operation in <code>revive</code>. To circumvent that, a <code>BTreeMap</code> can be used instead.</li>
+<li>We release fully statically linked <code>resolc</code> binaries. This prevents dynamic linking of potentially differentiating libraries.</li>
+<li>The only non-bundled dependency is the <code>solc</code> compiler. This is considered fine because the same properties apply to <code>solc</code>.</li>
+</ul>
+<h2 id="the-revive-compiler-libraries"><a class="header" href="#the-revive-compiler-libraries">The <code>revive</code> compiler libraries</a></h2>
+<p>The main compiler logic is implemented in the <code>revive-yul</code> and <code>revive-llvm-context</code> crates.</p>
+<p>The Yul library implements a lexer and parser and lowers the resulting tree into LLVM IR. It does so by emitting LL using the LLVM builder and our own <code>revive-llvm-context</code> compiler context crate. The revive LLVM context crate encapsulates code generation logic (decoupled from the parser).</p>
+<p>The Yul library also implements a simple <a href="https://en.wikipedia.org/wiki/Visitor_pattern">visitor</a> interface (see <a href="https://github.com/paritytech/revive/blob/main/crates/yul/src/visitor.rs">visitor.rs</a>). If you want to work with the AST, it is strongly recommended to implement visitors. The LLVM code generation is implemented using a dedicated trait for historical reasons only.</p>
+<h2 id="evm-heap-memory"><a class="header" href="#evm-heap-memory">EVM heap memory</a></h2>
+<p>PVM doesn’t offer a similar API. Hence the emitted contract code emulates the linear EVM heap memory using a static byte buffer. Data inside this byte buffer is kept big endian for EVM compatibility reasons (unaligned access is allowed and makes optimizing this non-trivial).</p>
+<p>Unlike with the EVM, where heap memory usage is gas metered, our heap size is static (the size is user controllable via a setting flag). The compiler emits bound checks to prevent overflows.</p>
+<h2 id="the-llvm-dependency"><a class="header" href="#the-llvm-dependency">The LLVM dependency</a></h2>
+<p>LLVM is a special non Rust dependency. We interface its builder interface via the <a href="https://crates.io/crates/inkwell">inkwell</a> wrapper crate.</p>
+<p>We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM rv64e target and always leave assertions on. Furthermore, we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-platform build script and is used to build and release the LLVM dependency.</p>
+<p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process, but we don’t want to distribute another binary.</p>
+<h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
+<p>At the moment, no significant custom optimizations are implemented. Thus, we are missing some optimization opportunities that neither <code>solc</code> nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Furthermore, <code>solc</code> optimizes for EVM gas and a target machine orthogonal to our target (BE 256-bit stack machine EVM vs. 64-bit LE RISC architecture PVM). We have started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities, though.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
+<p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>
+<h2 id="target-cpu-configuration"><a class="header" href="#target-cpu-configuration">Target CPU configuration</a></h2>
+<p>The exact target CPU configuration can be found <a href="https://github.com/paritytech/revive/blob/8cd10a613625428956eb33c39c9022a91bfbf103/crates/llvm-context/src/target_machine/mod.rs#L22-L32">here</a>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The PVM linker requires fully relocatable ELF objects.</p>
+</blockquote>
+<h2 id="why-pvm"><a class="header" href="#why-pvm">Why PVM</a></h2>
+<p>PVM is a RISC-V based VM designed to overcome the flaws of <a href="https://webassembly.org/">WebAssebmly (Wasm)</a>. Wasm was believed to be a more efficient successor to the rather slow EVM. However, Wasm is far from an ideal target for smart contracts as some of its design decisions are unfavorable for short-lived workloads. The main problem is on-chain Wasm bytecode compilation or interpretation overhead. Prior benchmarks consistently ignoring this overhead seeded the blockchain industry with flawed assumptions: <em>Only when ignoring the startup overhead</em> Wasm is much faster than the slow computing EVM. In practice however, gains are nullified entirely and Wasm loses completely even against very slow VMs like the EVM. Executing Wasm contracts is in fact so inefficient that typical contract workloads are <em>orders of magnitude</em> more expensive than the equivalent EVM variant.</p>
+<p>On the other hand, since RISC-V is similar to CPUs found in validator hardware (x86 and ARM), bytecode translation mostly boils down to a linear mapping from one instruction to another. The <em>embedded</em> ISA specification reduces the number of general purpose registers, in turn removing the need for expensive register allocation. This guarantees single-pass <code>O(n)</code> JIT compilation of contract bytecode. The close proximity of PVM bytecode with actual validator CPU bytecode effectively allows to move all expensive compilation workload off-chain. Benchmarks (<a href="https://hackmd.io/@XXX9CM1uSSCWVNFRYaSB5g/HJarTUhJA#Results-execute">1</a>, <a href="https://github.com/paritytech/polkavm/blob/master/BENCHMARKS.md">2</a>) show that with the PVM JIT, sandboxed PVM code executes at around half the speed of native code, which falls into the same ballpark of the state-of-the-art <code>wasmtime</code> Wasm implementation (while EVM sits somewhere around 1/10 to less than 1/100 of native speed). However, the PVM JIT compiler only uses a fraction of the time <code>wasmtime</code> requires to compile the code.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The PVM JIT isn’t available yet in <code>pallet-revive</code>. At the time of writing, the contract code is interpreted, which is orders of magnitude slower than the JIT.</p>
+</blockquote>
+<h2 id="host-environment-pallet-revive"><a class="header" href="#host-environment-pallet-revive">Host environment: <code>pallet-revive</code></a></h2>
+<p>The <code>revive</code> compiler targets the <a href="https://docs.rs/pallet-revive/"><code>pallet-revive</code> runtime environment</a>.</p>
+<p><code>pallet-revive</code> exposes a <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html">syscall like interface</a> for contract interactions with the host environment. This is provided by the <a href="https://crates.io/crates/revive-runtime-api">revive-runtime-api</a> library.</p>
+<p>After the initial launch on the Polkadot Asset Hub blockchain, the runtime API is considered stable and backwards compatible indefinitively.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
+<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Running the integration tests require the <code>evm</code> tool from <code>go-ethereum</code> in your <code>$PATH</code>.</p>
+<p>Either install it using your package manager or to build it from source:</p>
+<pre><code class="language-bash">git clone https://github.com/ethereum/go-ethereum/
+cd go-ethereum
+make all
+export PATH=/path/to/go-ethereum/build/bin/:$PATH
+</code></pre>
+</blockquote>
+<h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
+<p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
+<h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
+<p>A high level of bug compatibility with Ethereum is ensured through <a href="https://en.wikipedia.org/wiki/Differential_testing"><strong>differential testing</strong></a> with the Ethereum <code>solc</code> and EVM contracts stack. The <a href="https://crates.io/crates/revive-integration">revive-integration</a> library is the central integration test utility, providing a set of Solidity integration test cases. Further, it implements differential tests against the reference implementation by combining the <a href="https://crates.io/crates/revive-runner">revive-runner</a> sandbox, the <a href="https://github.com/ethereum/go-ethereum/tree/master/cmd/evm">go-ethereum EVM tool</a> and the <a href="https://crates.io/crates/revive-differential">revive-differential</a>.</p>
+<p>The <code>revive-runner</code> library provides a <a href="https://en.wikipedia.org/wiki/Declarative_programming"><strong>declarative</strong></a> test <a href="https://github.com/paritytech/revive/blob/main/crates/runner/src/specs.rs">specification format</a>. This vastly simplifies writing differential test cases and removes a lot of room for errors in test logic. Example:</p>
+<pre><code class="language-json">{
+    "differential": true,
+    "actions": [
+        {
+            "Instantiate": {
+                "code": {
+                    "Solidity": {
+                        "contract": "Bitwise"
+                    }
+                }
+            }
+        },
+        {
+            "Call": {
+                "dest": {
+                    "Instantiated": 0
+                },
+                "data": "3fa4f245"
+            }
+        }
+    ]
+}
+</code></pre>
+<p>Above example instantiates the <code>Bitwise</code> contract and calls it with some defined calldata. The <code>revive-runner</code> library implements a helper wrapper to execute test specs on the go-ethereum standalone <code>evm</code> tool. This allows the <code>revive-runner</code> to execute specs against the EVM and the <code>pallet-revive</code> runtime. Key to differential testing is setting <code>"differential": true</code>, resulting in the following:</p>
+<ol>
+<li>The <code>Bitwise</code> contract is compiled to EVM and PVM code.</li>
+<li>The runner executes the defined <code>actions</code> on the EVM and collects all state changes (storage, balance) and execution results.</li>
+<li>The runner executes each action on the PVM. Observed state changes <em>after each step</em> as well as the final execution result is asserted to  match the EVM counterparts <strong>exactly</strong>.</li>
+</ol>
+<p><strong>Note how we never defined any expected outcome manually.</strong> Instead, we simply observe and collect the data defining the “correct” outcome.</p>
+<p>Differential testing in combination with declarative test specifications proved to be simple, yet very effective, in ensuring expected Ethereum Solidity semantics on <code>pallet-revive</code>.</p>
+<h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
+<p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus, we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
+<p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cross-compilation"><a class="header" href="#cross-compilation">Cross compilation</a></h1>
+<p>We cross-compile the <code>resolc.js</code> frontend executable to Wasm for running it in a Node.js or browser environment.</p>
+<p>The <a href="https://www.musl-libc.org/">musl</a> target is used to obtain statically linked ELF binaries for Linux.</p>
+<h2 id="wasm-via-emscripten"><a class="header" href="#wasm-via-emscripten">Wasm via emscripten</a></h2>
+<p>The <code>REVIVE_LLVM_TARGET_PREFIX</code> environment variable is used to control the target environment LLVM dependency. This requires a compatible LLVM build, obtainable via the <code>revive-llvm</code> build script. Example:</p>
+<pre><code class="language-sh"># Build the host LLVM dependency with PolkaVM target support
+make install-llvm
+export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+
+# Build the target LLVM dependency with PolkaVM target support
+revive-llvm emsdk
+source emsdk/emsdk_env.sh
+revive-llvm --target-env emscripten build --llvm-projects lld
+export REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final
+
+# Build the resolc frontend executable
+make install-wasm
+make test-wasm
+</code></pre>
+<h2 id="musl-libc"><a class="header" href="#musl-libc">musl libc</a></h2>
+<p><a href="https://github.com/rust-cross/rust-musl-cross">rust-musl-cross</a> is a straightforward way to cross compile Rust to musl. The <a href="https://github.com/paritytech/revive/blob/main/Dockerfile">Dockerfile</a> is an executable example of how to do that.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
+<h2 id="what-evm-version-do-you-support"><a class="header" href="#what-evm-version-do-you-support">What EVM version do you support?</a></h2>
+<p>We neither do nor don’t support any EVM version. We support Solidity versions, starting from <code>solc</code> version 0.8.0 onwards.</p>
+<h2 id="is-inline-assembly-supported"><a class="header" href="#is-inline-assembly-supported">Is inline assembly supported</a></h2>
+<p>Yes, almost all inline assembly features are supported (<a href="#differences-to-evm">see the differences in Yul translation chapter</a>).</p>
+<h2 id="do-you-support-opcode-xy"><a class="header" href="#do-you-support-opcode-xy">Do you support opcode <code>XY</code>?</a></h2>
+<p>See above, the same applies.</p>
+<h2 id="in-what-solidity-version-should-i-write-my-dapp"><a class="header" href="#in-what-solidity-version-should-i-write-my-dapp">In what Solidity version should I write my dApp?</a></h2>
+<p>We generally recommend to always use the latest supported version to profit from latest bugfixes, features and performance improvements.</p>
+<p>Find out about the latest supported version by running <code>resolc --supported-solc-versions</code> or checking <a href="https://github.com/paritytech/resolc-bin">here</a>.</p>
+<h2 id="tool-xy-says-the-contract-size-is-larger-than-24kb-and-will-fail-to-deploy"><a class="header" href="#tool-xy-says-the-contract-size-is-larger-than-24kb-and-will-fail-to-deploy">Tool <code>XY</code> says the contract size is larger than 24kb and will fail to deploy?</a></h2>
+<p>The 24kb code size restriction only exist for the EVM. Our limit is currently around 1mb and may increase further in the future.</p>
+<h2 id="is-resolc-a-drop-in-replacement-for-solc"><a class="header" href="#is-resolc-a-drop-in-replacement-for-solc">Is <code>resolc</code> a drop-in replacement for <code>solc</code>?</a></h2>
+<p>No. <code>resolc</code> aims to work similarly to <code>solc</code>, but it’s not considered a drop-in replacement.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="roadmap-and-vision"><a class="header" href="#roadmap-and-vision">Roadmap and Vision</a></h1>
+<p>The <code>revive</code> compiler speeds up Solidity contracts by orders of magnitude. <code>revive</code> provides a decisive edge over other contract platforms. Notably, the compiler eliminates the need of rewriting Solidity dApps as single dApp parachains for scaling reasons. Retaining as high compatibility with Ethereum Solidity as possible keeps entry barriers low.</p>
+<p>We believe in Dr. Gavin Wood’s <a href="https://gavwood.com/dappsweb3.html">ĐApps: What Web 3.0 Looks Like</a> manifesto and the ecosystem of the Solidity programming language. Our motivation lies in the realization that for a <em>true</em> web3 revolution, significant scaling efforts, like the ones provided by the PVM and this project, are necessary to unfold.</p>
+<h2 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h2>
+<p>The first major release, <code>resolc</code> v1.0.0, emits functional PVM code from given Solidity sources. It relies on <code>solc</code> and LLVM for optimizations. The main priority of this release was delivering a mostly feature complete and safe Solidity v0.8.0 compiler.</p>
+<p>Focus for the second major release is on the custom optimization pipeline, which aims to significantly improve emitted code blob sizes.</p>
+<p>The below roadmap gives a rough overview of the project’s development timeline.</p>
+<p><img src="images/roadmap.svg" alt="Roadmap"></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

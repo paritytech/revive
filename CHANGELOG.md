@@ -6,6 +6,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2509.0.0`
 
+### Added
+- The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
+
 ### Changed
 - Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.

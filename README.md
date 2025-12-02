@@ -1,11 +1,11 @@
 ![CI](https://github.com/paritytech/revive/actions/workflows/test.yml/badge.svg)
-[![Docs](https://img.shields.io/badge/Docs-contracts.polkadot.io-brightgreen.svg)](https://contracts.polkadot.io/revive_compiler/)
+[![Docs](https://img.shields.io/badge/paritytech.github.io/revive-brightgreen.svg)](https://paritytech.github.io/revive/)
 
 # revive
 
-YUL recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
+Yul recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
 
-Visit [contracts.polkadot.io](https://contracts.polkadot.io) to learn more about contracts on Polkadot!
+Check the [docs](https://paritytech.github.io/revive/) or visit [contracts.polkadot.io](https://docs.polkadot.com/develop/smart-contracts/) to learn more about `revive` and contracts on Polkadot!
 
 ## Status
 
@@ -14,11 +14,13 @@ This is experimental software in active development and not ready just yet for p
 Discussion around the development is hosted on the [Polkadot Forum](https://forum.polkadot.network/t/contracts-update-solidity-on-polkavm/6949#a-new-solidity-compiler-1).
 
 ## Installation
+
 Building Solidity contracts for PolkaVM requires installing the following two compilers:
-- `resolc`: The revive Solidity compiler YUL frontend and PolkaVM code generator (provided by this repository).
+- `resolc`: The revive Solidity compiler Yul frontend and PolkaVM code generator (provided by this repository).
 - `solc`: The [Ethereum Solidity reference compiler](https://github.com/ethereum/solidity/) implemenation.`resolc` uses `solc` during the compilation process, please refer to the [Ethereum Solidity documentation](https://docs.soliditylang.org/en/latest/installing-solidity.html) for installation instructions.
 
 ### `resolc` binary releases
+
 `resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below.
 
 <details>
@@ -44,6 +46,7 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 
 
 ### `resolc` NPM package
+
 We distribute the revive compiler as [node.js module](https://www.npmjs.com/package/@parity/resolc) and [hardhat plugin](https://www.npmjs.com/package/@parity/hardhat-polkadot-resolc).
 
 Note: The `solc` dependency is bundled via NPM packaging and defaults to the latest supported version.
@@ -96,47 +99,10 @@ make install-bin
 resolc --version
 ```
 
-### Cross-compilation to Wasm
-
-Cross-compile the `resolc.js` frontend executable to Wasm for running it in a Node.js or browser environment. The `REVIVE_LLVM_TARGET_PREFIX` environment variable is used to control the target environment LLVM dependency.
-
-<details>
-  <summary>Instructions for cross-compilation to wasm32-unknown-emscripten</summary>
-
-```sh
-# Build the host LLVM dependency with PolkaVM target support
-make install-llvm
-export LLVM_SYS_211_PREFIX=${PWD}/target-llvm/gnu/target-final
-
-# Build the target LLVM dependency with PolkaVM target support
-revive-llvm --target-env emscripten clone
-source emsdk/emsdk_env.sh
-revive-llvm --target-env emscripten build --llvm-projects lld
-export REVIVE_LLVM_TARGET_PREFIX=${PWD}/target-llvm/emscripten/target-final
-
-# Build the resolc frontend executable
-make install-wasm
-make test-wasm
-```
-
-</details>
-
 ## Development
 
-Please consult the [Makefile](Makefile) targets to learn how to run tests and benchmarks. 
-Ensure that your branch passes `make test` locally when submitting a pull request.
+Please consult the [Developer Guide](https://paritytech.github.io/revive/developer_guide/contributing.html) to learn more about how contribute to the project.
 
-### Design overview
-See the [relevant section in our documentation](https://contracts.polkadot.io/revive_compiler/architecture) to learn more about how the compiler works. 
-
-### Tests
-
-Before running the tests, ensure that Geth (Go Ethereum) is installed on your system. Follow the installation guide here: [Installing Geth](https://geth.ethereum.org/docs/getting-started/installing-geth).
-Once Geth is installed, you can run the tests using the following command:
-
-```sh
-make test
-```
 # Acknowledgements
 
 The revive compiler project, after some early experiments with EVM bytecode translations, decided to fork the `era-compiler` framework.

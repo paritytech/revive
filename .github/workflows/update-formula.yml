@@ -1,0 +1,43 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install
+
+      - name: Update Formula
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the release version and SHA256
+          VERSION=$(echo ${{ github.ref }} | sed 's/refs\/tags\/v//')
+          SHA256=$(curl -sL https://github.com/paritytech/revive/archive/refs/tags/v${VERSION}.tar.gz | shasum -a 256 | cut -d' ' -f1)
+          
+          # Update the Formula file
+          sed -i "s/url .*/url \"https:\/\/github.com\/paritytech\/revive\/archive\/refs\/tags\/v${VERSION}.tar.gz\"/" Formula/resolc.rb
+          sed -i "s/sha256 .*/sha256 \"${SHA256}\"/" Formula/resolc.rb
+          
+          # Commit and push changes
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/resolc.rb
+          git commit -m "Update resolc to v${VERSION}"
+          git push 

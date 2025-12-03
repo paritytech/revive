@@ -15,6 +15,7 @@ Supported `polkadot-sdk` rev: `2509.0.0`
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.
+- The missing bounds check in the internal sbrk implementation.
 
 ## v0.5.0
 

@@ -90,8 +90,6 @@ fn build_host(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     target_directory.to_string_lossy()
                 ),
-                &format!("-DCMAKE_C_COMPILER='{}'", c_compiler),
-                &format!("-DCMAKE_CXX_COMPILER='{}'", cxx_compiler),
                 "-DLLVM_BUILD_SHARED_LIBS='Off'",
                 "-DCMAKE_BUILD_TYPE='Release'",
                 &format!(

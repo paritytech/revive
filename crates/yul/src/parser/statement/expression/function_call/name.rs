@@ -54,6 +54,8 @@ pub enum Name {
     Shr,
     /// signed arithmetic shift right `y` by `x` bits
     Sar,
+    /// number of leading zero bits of x, 256 if x == 0
+    Clz,
     /// `n`th byte of `x`, where the most significant byte is the `0`th byte
     Byte,
     /// discard value x
@@ -270,6 +272,7 @@ impl From<&str> for Name {
             "shl" => Self::Shl,
             "shr" => Self::Shr,
             "sar" => Self::Sar,
+            "clz" => Self::Clz,
             "byte" => Self::Byte,
             "pop" => Self::Pop,
 
@@ -393,6 +396,7 @@ impl fmt::Display for Name {
             Self::Shl => "shl",
             Self::Shr => "shr",
             Self::Sar => "sar",
+            Self::Clz => "clz",
             Self::Byte => "byte",
             Self::Pop => "pop",
 

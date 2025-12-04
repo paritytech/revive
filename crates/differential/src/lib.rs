@@ -386,6 +386,7 @@ impl Evm {
         if let Some(value) = self.value {
             command.args(["--value", &format!("{value}")]);
         }
+        dbg!(&command);
 
         // Run the evm subprocess and assert success return value
         let process = command.spawn().unwrap_or_else(|error| {

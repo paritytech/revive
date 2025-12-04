@@ -65,6 +65,7 @@ test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
 test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
+test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

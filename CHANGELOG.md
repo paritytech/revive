@@ -6,12 +6,16 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2509.0.0`
 
+### Added
+- The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
+
 ### Changed
 - Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.
+- The missing bounds check in the internal sbrk implementation.
 
 ## v0.5.0
 

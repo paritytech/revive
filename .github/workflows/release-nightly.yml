@@ -59,7 +59,7 @@ jobs:
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
       resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/download-artifact@v4
         with:

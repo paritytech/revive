@@ -619,3 +619,52 @@ fn code_block_with_nested_object_stops() {
     }
     .run();
 }
+
+#[test]
+fn sbrk_bounds_checks() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test" {
+    code {
+        return(0x4, 0xffffffff)
+        stop()
+    }
+    object "Test_deployed" {
+        code {
+            stop()
+        }
+    }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    let results = Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Instantiate { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert!(
+        format!("{result:?}").contains("ContractTrapped"),
+        "not seeing a trap means the contract did not catch the OOB"
+    );
+}

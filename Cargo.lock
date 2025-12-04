@@ -4521,14 +4521,9 @@ checksum = "8e04e2fd2b8188ea827b32ef11de88377086d690286ab35747ef7f9bf3ccb590"
 
 [[package]]
 name = "inkwell"
-<<<<<<< HEAD
-version = "0.7.1"
-source = "git+https://github.com/TheDan64/inkwell.git?branch=master#b9c53276e30935ccec841d12c9687a17e9199958"
-=======
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9600fe514cef87530b1ccea444dce1a6defab027c55c023a1466302694ffa439"
->>>>>>> 396da78 (Use 0.7.0 inkwell instead of a github repo)
 dependencies = [
  "inkwell_internals",
  "libc",
@@ -4541,12 +4536,8 @@ dependencies = [
 [[package]]
 name = "inkwell_internals"
 version = "0.12.0"
-<<<<<<< HEAD
-source = "git+https://github.com/TheDan64/inkwell.git?branch=master#b9c53276e30935ccec841d12c9687a17e9199958"
-=======
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad9a7dd586b00f2b20e0b9ae3c6faa351fbfd56d15d63bbce35b13bece682eda"
->>>>>>> 396da78 (Use 0.7.0 inkwell instead of a github repo)
 dependencies = [
  "proc-macro2",
  "quote",

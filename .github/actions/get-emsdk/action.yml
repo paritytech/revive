@@ -3,7 +3,7 @@ inputs:
   version:
     description: ""
     required: false
-    default: "4.0.20"
+    default: "4.0.9"
 
 
 runs:

@@ -261,3 +261,20 @@ pub fn byte<'ctx>(
 
     Ok(byte.as_basic_value_enum())
 }
+
+/// Translates the CLZ instruction.
+pub fn count_leading_zeros<'ctx>(
+    context: &mut Context<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    Ok(context
+        .builder()
+        .build_call(
+            context.intrinsics().count_leading_zeros.function_value(),
+            &[value.into(), context.bool_const(false).into()],
+            "clz",
+        )?
+        .try_as_basic_value()
+        .left()
+        .expect("the llvm.ctlz should return a value"))
+}

@@ -8,6 +8,8 @@ Supported `polkadot-sdk` rev: `2509.0.0`
 
 ### Added
 - The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
+- Support for solc v0.8.31.
+- Support for the `clz` Yul builtin.
 
 ### Changed
 - Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).

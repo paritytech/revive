@@ -348,6 +348,14 @@ impl FunctionCall {
                 )
                 .map(Some)
             }
+            Name::Clz => {
+                let arguments = self.pop_arguments_llvm::<1>(context)?;
+                revive_llvm_context::polkavm_evm_bitwise::count_leading_zeros(
+                    context,
+                    arguments[0].into_int_value(),
+                )
+                .map(Some)
+            }
             Name::Byte => {
                 let arguments = self.pop_arguments_llvm::<2>(context)?;
                 revive_llvm_context::polkavm_evm_bitwise::byte(

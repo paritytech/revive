@@ -26,11 +26,14 @@ runs:
             # Extract version from branch name (e.g., "18.x" from "release/18.x")
             VERSION_PREFIX=$(echo "$BRANCH" | sed 's|release/||' | sed 's|\.x$||')
             echo "Detected LLVM version prefix from submodule branch: $VERSION_PREFIX"
-            
+
             # Special case: pin LLVM 18 to specific version 18.1.8
             if [ "$VERSION_PREFIX" = "18" ]; then
               echo "Using pinned version for LLVM 18: llvm-18.1.8"
               echo "version_prefix=llvm-18.1.8" >> $GITHUB_OUTPUT
+            elif [ "$VERSION_PREFIX" = "21" ]; then
+              echo "Using pinned version for LLVM 21: llvm-21.1.6"
+              echo "version_prefix=llvm-21.1.6" >> $GITHUB_OUTPUT
             else
               echo "version_prefix=llvm-$VERSION_PREFIX" >> $GITHUB_OUTPUT
             fi
@@ -42,7 +45,7 @@ runs:
           echo "Using explicitly provided version: ${{ inputs.version }}"
           echo "version_prefix=${{ inputs.version }}" >> $GITHUB_OUTPUT
         fi
-    
+
     - name: find asset
       id: find
       uses: actions/github-script@v7
@@ -53,12 +56,15 @@ runs:
         result-encoding: string
         script: |
           let page = 1;
-          let releases = [];
+          let allReleases = [];
 
           let target = process.env.target
           let versionPrefix = process.env.version_prefix
 
-          do {
+          // Fetch all releases from all pages
+          core.info('Fetching releases from revive repository...');
+          let hasMorePages = true;
+          while (hasMorePages) {
             const res = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -66,43 +72,57 @@ runs:
               page,
             });
 
-            releases = res.data
-            releases.sort((a, b) => {
-              return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
-            });
-
-            let llvmRelease;
-            if (versionPrefix) {
-              // Search for latest release matching the version prefix
-              llvmRelease = releases.find(release => {
-                return release.tag_name.startsWith(versionPrefix);
-              });
-              if (llvmRelease) {
-                core.info(`Found LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
-              }
+            if (res.data.length > 0) {
+              core.info(`Page ${page}: Fetched ${res.data.length} releases`);
+              allReleases.push(...res.data);
+              page++;
             } else {
-              // Find latest LLVM release
-              llvmRelease = releases.find(release => {
-                return release.tag_name.startsWith('llvm-');
-              });
-              if (llvmRelease) {
-                core.info(`Found latest LLVM version: ${llvmRelease.tag_name}`);
-              }
+              hasMorePages = false;
             }
+          }
 
-            if (llvmRelease){
-                let asset = llvmRelease.assets.find(asset =>{
-                    return asset.name.includes(target);
-                });
-                if (!asset){
-                  core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
-                  process.exit();
-                }
-                return asset.browser_download_url;
+          core.info(`Total releases fetched: ${allReleases.length}`);
+
+          // Sort all releases by publication date (newest first)
+          allReleases.sort((a, b) => {
+            return (a.published_at < b.published_at) ? 1 : ((a.published_at > b.published_at) ? -1 : 0);
+          });
+
+          // Debug: Print all LLVM releases
+          const llvmReleases = allReleases.filter(r => r.tag_name.startsWith('llvm-'));
+          core.info(`Found ${llvmReleases.length} LLVM releases in total:`);
+          llvmReleases.forEach(r => {
+            core.info(`  - ${r.tag_name} (published: ${r.published_at})`);
+          });
+
+          // Find the appropriate LLVM release
+          let llvmRelease;
+          if (versionPrefix) {
+            // Search for latest release matching the version prefix
+            llvmRelease = llvmReleases.find(release => {
+              return release.tag_name.startsWith(versionPrefix);
+            });
+            if (llvmRelease) {
+              core.info(`Selected LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
             }
+          } else {
+            // Find latest LLVM release (first in sorted list)
+            llvmRelease = llvmReleases[0];
+            if (llvmRelease) {
+              core.info(`Selected latest LLVM version: ${llvmRelease.tag_name}`);
+            }
+          }
 
-            page++;
-          } while(releases.length > 0);
+          if (llvmRelease) {
+            let asset = llvmRelease.assets.find(asset => {
+              return asset.name.includes(target);
+            });
+            if (!asset) {
+              core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
+              process.exit();
+            }
+            return asset.browser_download_url;
+          }
 
           if (versionPrefix) {
             core.setFailed(`No LLVM releases matching prefix '${versionPrefix}' found! Please check the version.`);

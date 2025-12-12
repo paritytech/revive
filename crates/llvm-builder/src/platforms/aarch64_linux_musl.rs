@@ -132,6 +132,7 @@ fn build_crt(
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='aarch64'",
                 "-DCOMPILER_RT_BUILD_CRT='On'",
                 "-DCOMPILER_RT_BUILD_BUILTINS='On'",
+                "-DCOMPILER_RT_BUILD_SANITIZERS='Off'",
                 "-DCOMPILER_RT_BUILD_XRAY='Off'",
                 "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
                 "-DCOMPILER_RT_BUILD_PROFILE='Off'",
@@ -213,13 +214,14 @@ fn build_host(
                 "-DLIBUNWIND_ENABLE_STATIC='On'",
                 "-DLIBUNWIND_ENABLE_SHARED='Off'",
                 "-DCOMPILER_RT_BUILD_CRT='On'",
+                "-DCOMPILER_RT_BUILD_SANITIZERS='Off'",
                 "-DCOMPILER_RT_BUILD_XRAY='Off'",
                 "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
                 "-DCOMPILER_RT_BUILD_PROFILE='On'",
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='aarch64'",
-                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
+//                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::shared_build_opts_ccache(

@@ -59,7 +59,7 @@ pub const CHARLIE: H160 = H160([3u8; 20]);
 /// Default gas limit
 pub const GAS_LIMIT: Weight = Weight::from_parts(100_000_000_000_000, 3 * 1024 * 1024 * 1024);
 /// Default deposit limit
-pub const DEPOSIT_LIMIT: Balance = 10_000_000;
+pub const DEPOSIT_LIMIT: Balance = 10_000_000_000;
 /// The native to ETH balance factor.
 pub const ETH_RATIO: Balance = 1_000_000;
 
@@ -97,14 +97,19 @@ impl ExtBuilder {
         .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
+        let checking_account = Pallet::<Runtime>::account_id();
         ext.register_extension(KeystoreExt::new(MemoryKeystore::new()));
         ext.execute_with(|| {
             let _ = <Runtime as Config>::Currency::deposit_creating(
-                &Pallet::<Runtime>::account_id(),
-                <Runtime as Config>::Currency::minimum_balance(),
+                &checking_account,
+                1_000_000_000_000,
             );
 
             System::set_block_number(1);
+
+            assert_ok!(Pallet::<Runtime>::map_account(RuntimeOrigin::signed(
+                checking_account
+            )));
         });
 
         ext
@@ -115,7 +120,7 @@ impl ExtBuilder {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
-    pub gas_consumed: Option<Weight>,
+    pub gas_consumed: Option<u128>,
     /// When provided, the expected output
     #[serde(default, with = "hex")]
     pub output: OptionalHex<Vec<u8>>,
@@ -238,7 +243,7 @@ impl CallResult {
     }
 
     /// Get the gas consumed by the call
-    fn gas_consumed(&self) -> Weight {
+    fn gas_consumed(&self) -> u128 {
         match self {
             Self::Exec { result, .. } => result.gas_consumed,
             Self::Instantiate { result, .. } => result.gas_consumed,

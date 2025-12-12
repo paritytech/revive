@@ -1,6 +1,6 @@
 use std::{str::FromStr, time::Instant};
 
-use polkadot_sdk::pallet_revive::Pallet;
+use polkadot_sdk::pallet_revive::{ExecConfig, Pallet, TransactionLimits};
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -210,9 +210,9 @@ impl Default for Specs {
         Self {
             differential: false,
             balances: vec![
-                (ALICE, 1_000_000_000),
-                (BOB, 1_000_000_000),
-                (CHARLIE, 1_000_000_000),
+                (ALICE, 1_000_000_000_000),
+                (BOB, 1_000_000_000_000),
+                (CHARLIE, 1_000_000_000_000),
             ],
             actions: Default::default(),
         }
@@ -447,12 +447,14 @@ impl Specs {
                             let result = Contracts::bare_instantiate(
                                 origin,
                                 value.into(),
-                                gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                TransactionLimits::WeightAndDeposit {
+                                    weight_limit: gas_limit.unwrap_or(GAS_LIMIT),
+                                    deposit_limit: storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                },
                                 code,
                                 data,
                                 salt.0,
-                                pallet_revive::BumpNonce::No,
+                                ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -486,9 +488,12 @@ impl Specs {
                                 RuntimeOrigin::signed(origin.to_account_id(&results)),
                                 dest.to_eth_addr(&results),
                                 value.into(),
-                                gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                TransactionLimits::WeightAndDeposit {
+                                    weight_limit: gas_limit.unwrap_or(GAS_LIMIT),
+                                    deposit_limit: storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                },
                                 data,
+                                ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Exec {
                                 result,

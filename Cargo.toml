@@ -76,7 +76,7 @@ normpath = "1.5"
 # polkadot-sdk and friends
 codec = { version = "3.7.5", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { version = "2509.0.0" }
+polkadot-sdk = { version = "=2507.4.0" }
 
 # llvm
 [workspace.dependencies.inkwell]

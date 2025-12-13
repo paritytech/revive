@@ -69,9 +69,9 @@ Download the [latest LLVM build](https://github.com/paritytech/revive/releases?q
 > xattr -rc </path/to/the/extracted/archive>/target-llvm/gnu/target-final/bin/*
 > ```
 
-After extracting the archive, point `$LLVM_SYS_181_PREFIX` to it:
+After extracting the archive, point `$LLVM_SYS_211_PREFIX` to it:
 ```sh
-export LLVM_SYS_181_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/target-final
+export LLVM_SYS_211_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/target-final
 ```
 
 </details>
@@ -79,18 +79,18 @@ export LLVM_SYS_181_PREFIX=</path/to/the/extracted/archive>/target-llvm/gnu/targ
 <details>
   <summary>Building from source</summary>
 
-The `Makefile` provides a shortcut target to obtain a compatible LLVM build, using the provided [revive-llvm](crates/llvm-builder/README.md) utility. Once installed, point `$LLVM_SYS_181_PREFIX` to the installation afterwards:
+The `Makefile` provides a shortcut target to obtain a compatible LLVM build, using the provided [revive-llvm](crates/llvm-builder/README.md) utility. Once installed, point `$LLVM_SYS_211_PREFIX` to the installation afterwards:
 
 ```sh
 make install-llvm
-export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+export LLVM_SYS_211_PREFIX=${PWD}/target-llvm/gnu/target-final
 ```
 
 </details>
 
 ### The `resolc` Solidity frontend
 
-To build the `resolc` Solidity frontend executable, make sure you have obtained a compatible LLVM build and did export the `LLVM_SYS_181_PREFIX` environment variable pointing to it (see [above](#LLVM)).
+To build the `resolc` Solidity frontend executable, make sure you have obtained a compatible LLVM build and did export the `LLVM_SYS_211_PREFIX` environment variable pointing to it (see [above](#LLVM)).
 
 To install the `resolc` Solidity frontend executable:
 

@@ -85,7 +85,9 @@ jobs:
           cat /etc/apt/sources.list
           sudo sed -i 's/jammy/noble/g' /etc/apt/sources.list
           cat /etc/apt/sources.list
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils libc6-dev gcc-multilib g++
+          find / -name byteorder.h 2> /dev/null
+          find / -name unistd_64.h 2> /dev/null
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils libc6-dev gcc-multilib g++ build-essential linux-libc-dev
 
       - name: Install Dependencies
         if: ${{ matrix.host == 'macos' }}

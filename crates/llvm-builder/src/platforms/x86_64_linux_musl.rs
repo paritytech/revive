@@ -219,7 +219,6 @@ fn build_host(
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='x86_64'",
-//                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
                 "-DLIBCLANG_BUILD_STATIC='On'",
                 "-DBUILD_SHARED_LIBS='Off'",
             ])

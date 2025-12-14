@@ -2,7 +2,7 @@ use frame_support::{runtime, traits::FindAuthor, weights::constants::WEIGHT_REF_
 use pallet_revive::AccountId32Mapper;
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    polkadot_sdk_frame::{log, runtime::prelude::*},
+    polkadot_sdk_frame::runtime::prelude::*,
     sp_runtime::{AccountId32, Perbill},
 };
 

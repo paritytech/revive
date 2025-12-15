@@ -669,3 +669,48 @@ fn sbrk_bounds_checks() {
         "not seeing a trap means the contract did not catch the OOB"
     );
 }
+
+#[test]
+fn invalid_opcode_works() {
+    let code = &build_yul(&[(
+        "invalid.yul",
+        r#"object "Test" {
+    code {
+        invalid()
+    }
+    object "Test_deployed" {
+        code {
+            invalid()
+        }
+    }
+}"#,
+    )])
+    .unwrap()["invalid.yul:Test"];
+
+    let results = Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Instantiate { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
+}

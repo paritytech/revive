@@ -25,8 +25,11 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
-      - name: Install mdBook
+      - name: Install and test the mdBook
         run: make test-book
+
+      - name: Build book
+        run: mdbook build
 
       - name: Build book to tmp
         run: mdbook build book -d docs-tmp

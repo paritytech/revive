@@ -29,7 +29,7 @@ jobs:
         run: make test-book
 
       - name: Build book
-        run: mdbook build
+        run: mdbook build book
 
       - name: Build book to tmp
         run: mdbook build book -d docs-tmp

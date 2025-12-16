@@ -4,9 +4,8 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::Context;
 
-const STATIC_CALL_FLAG: u32 = 0b0001_0000;
-const REENTRANT_CALL_FLAG: u32 = 0b0000_1000;
-const SOLIDITY_TRANSFER_GAS_STIPEND_THRESHOLD: u64 = 2300;
+const STATIC_CALL_FLAG: u64 = 0b0001_0000;
+const REENTRANT_CALL_FLAG: u64 = 0b0000_1000;
 
 /// Translates a contract call.
 pub fn call<'ctx>(
@@ -38,33 +37,12 @@ pub fn call<'ctx>(
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
     context.build_store(output_length_pointer, output_length)?;
 
-    let (flags, deposit_limit_value) = if static_call {
-        let flags = REENTRANT_CALL_FLAG | STATIC_CALL_FLAG;
-        (
-            context.xlen_type().const_int(flags as u64, false),
-            context.word_type().const_zero(),
-        )
+    let flags = if static_call {
+        REENTRANT_CALL_FLAG | STATIC_CALL_FLAG
     } else {
-        call_reentrancy_heuristic(context, gas, input_length, output_length)?
+        REENTRANT_CALL_FLAG
     };
 
-    let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
-    context.build_store(deposit_pointer, deposit_limit_value)?;
-
-    let flags_and_callee = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        flags,
-        address_pointer.to_int(context),
-        "address_and_callee",
-    )?;
-    let deposit_and_value = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        deposit_pointer.to_int(context),
-        value_pointer.to_int(context),
-        "deposit_and_value",
-    )?;
     let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
         context.builder(),
         context.llvm(),
@@ -85,10 +63,10 @@ pub fn call<'ctx>(
         .build_runtime_call(
             name,
             &[
-                flags_and_callee.into(),
-                context.register_type().const_all_ones().into(),
-                context.register_type().const_all_ones().into(),
-                deposit_and_value.into(),
+                context.xlen_type().const_int(flags, false).into(),
+                address_pointer.to_int(context).into(),
+                value_pointer.to_int(context).into(),
+                clip_call_gas(context, gas)?,
                 input_data.into(),
                 output_data.into(),
             ],
@@ -111,7 +89,7 @@ pub fn call<'ctx>(
 
 pub fn delegate_call<'ctx>(
     context: &mut Context<'ctx>,
-    _gas: inkwell::values::IntValue<'ctx>,
+    gas: inkwell::values::IntValue<'ctx>,
     address: inkwell::values::IntValue<'ctx>,
     input_offset: inkwell::values::IntValue<'ctx>,
     input_length: inkwell::values::IntValue<'ctx>,
@@ -132,18 +110,6 @@ pub fn delegate_call<'ctx>(
     let output_length_pointer = context.build_alloca_at_entry(context.xlen_type(), "output_length");
     context.build_store(output_length_pointer, output_length)?;
 
-    let deposit_pointer = context.build_alloca_at_entry(context.word_type(), "deposit_pointer");
-    context.build_store(deposit_pointer, context.word_type().const_all_ones())?;
-
-    let flags = context.xlen_type().const_int(0u64, false);
-
-    let flags_and_callee = revive_runtime_api::calling_convention::pack_hi_lo_reg(
-        context.builder(),
-        context.llvm(),
-        flags,
-        address_pointer.to_int(context),
-        "address_and_callee",
-    )?;
     let input_data = revive_runtime_api::calling_convention::pack_hi_lo_reg(
         context.builder(),
         context.llvm(),
@@ -164,10 +130,9 @@ pub fn delegate_call<'ctx>(
         .build_runtime_call(
             name,
             &[
-                flags_and_callee.into(),
-                context.register_type().const_all_ones().into(),
-                context.register_type().const_all_ones().into(),
-                deposit_pointer.to_int(context).into(),
+                context.xlen_type().const_int(0u64, false).into(),
+                address_pointer.to_int(context).into(),
+                clip_call_gas(context, gas)?,
                 input_data.into(),
                 output_data.into(),
             ],
@@ -201,82 +166,22 @@ pub fn linker_symbol<'ctx>(
     context.build_load_address(context.get_global(path)?.into())
 }
 
-/// The Solidity `address.transfer` and `address.send` call detection heuristic.
-///
-/// # Why
-/// This heuristic is an additional security feature to guard against re-entrancy attacks
-/// in case contract authors violate Solidity best practices and use `address.transfer` or
-/// `address.send`.
-/// While contract authors are supposed to never use `address.transfer` or `address.send`,
-/// for a small cost we can be extra defensive about it.
-///
-/// # How
-/// The gas stipend emitted by solc for `transfer` and `send` is not static, thus:
-/// - Dynamically allow re-entrancy only for calls considered not transfer or send.
-/// - Detected balance transfers will supply 0 deposit limit instead of `u256::MAX`.
-///
-/// Calls are considered transfer or send if:
-/// - (Input length | Output lenght) == 0;
-/// - Gas <= 2300;
-///
-/// # Returns
-/// The call flags xlen `IntValue` and the deposit limit word `IntValue`.
-fn call_reentrancy_heuristic<'ctx>(
-    context: &mut Context<'ctx>,
+/// The runtime implements gas as `u64` so we clip the stipend to `u64::MAX`.
+fn clip_call_gas<'ctx>(
+    context: &Context<'ctx>,
     gas: inkwell::values::IntValue<'ctx>,
-    input_length: inkwell::values::IntValue<'ctx>,
-    output_length: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<(
-    inkwell::values::IntValue<'ctx>,
-    inkwell::values::IntValue<'ctx>,
-)> {
-    // Branch-free SSA implementation: First derive the heuristic boolean (int1) value.
-    let input_length_or_output_length =
-        context
-            .builder()
-            .build_or(input_length, output_length, "input_length_or_output_length")?;
-    let is_no_input_no_output = context.builder().build_int_compare(
-        inkwell::IntPredicate::EQ,
-        context.xlen_type().const_zero(),
-        input_length_or_output_length,
-        "is_no_input_no_output",
-    )?;
-    let gas_stipend = context
-        .word_type()
-        .const_int(SOLIDITY_TRANSFER_GAS_STIPEND_THRESHOLD, false);
-    let is_gas_stipend_for_transfer_or_send = context.builder().build_int_compare(
-        inkwell::IntPredicate::ULE,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let builder = context.builder();
+
+    let clipped = context.register_type().const_all_ones();
+    let is_overflow = builder.build_int_compare(
+        inkwell::IntPredicate::UGT,
         gas,
-        gas_stipend,
-        "is_gas_stipend_for_transfer_or_send",
+        builder.build_int_z_extend(clipped, context.word_type(), "gas_clipped")?,
+        "is_gas_overflow",
     )?;
-    let is_balance_transfer = context.builder().build_and(
-        is_no_input_no_output,
-        is_gas_stipend_for_transfer_or_send,
-        "is_balance_transfer",
-    )?;
-    let is_regular_call = context
-        .builder()
-        .build_not(is_balance_transfer, "is_balance_transfer_inverted")?;
+    let truncated = builder.build_int_truncate(gas, context.register_type(), "gas_truncated")?;
+    let call_gas = builder.build_select(is_overflow, clipped, truncated, "call_gas")?;
 
-    // Call flag: Left shift the heuristic boolean value.
-    let is_regular_call_xlen = context.builder().build_int_z_extend(
-        is_regular_call,
-        context.xlen_type(),
-        "is_balance_transfer_xlen",
-    )?;
-    let call_flags = context.builder().build_left_shift(
-        is_regular_call_xlen,
-        context.xlen_type().const_int(3, false),
-        "flags",
-    )?;
-
-    // Deposit limit value: Sign-extended the heuristic boolean value.
-    let deposit_limit_value = context.builder().build_int_s_extend(
-        is_regular_call,
-        context.word_type(),
-        "deposit_limit_value",
-    )?;
-
-    Ok((call_flags, deposit_limit_value))
+    Ok(call_gas)
 }

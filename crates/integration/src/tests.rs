@@ -452,50 +452,6 @@ fn ext_code_size() {
 }
 
 #[test]
-#[should_panic(expected = "ReentranceDenied")]
-fn send_denies_reentrancy() {
-    let value = 1000;
-    Specs {
-        actions: vec![
-            instantiate("contracts/Send.sol", "Send").remove(0),
-            Call {
-                origin: TestAddress::Alice,
-                dest: TestAddress::Instantiated(0),
-                value,
-                gas_limit: None,
-                storage_deposit_limit: None,
-                data: Contract::send_self(U256::from(value)).calldata,
-            },
-        ],
-        differential: false,
-        ..Default::default()
-    }
-    .run();
-}
-
-#[test]
-#[should_panic(expected = "ReentranceDenied")]
-fn transfer_denies_reentrancy() {
-    let value = 1000;
-    Specs {
-        actions: vec![
-            instantiate("contracts/Transfer.sol", "Transfer").remove(0),
-            Call {
-                origin: TestAddress::Alice,
-                dest: TestAddress::Instantiated(0),
-                value,
-                gas_limit: None,
-                storage_deposit_limit: None,
-                data: Contract::transfer_self(U256::from(value)).calldata,
-            },
-        ],
-        differential: false,
-        ..Default::default()
-    }
-    .run();
-}
-
-#[test]
 fn create2_salt() {
     let salt = U256::from(777);
     let predicted = Contract::predicted_constructor(salt).pvm_runtime;

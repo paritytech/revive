@@ -15,6 +15,7 @@ Supported `polkadot-sdk` rev: `unstable2507`
 - Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
 - The supported `polkadot-sdk` release is `unstable2507`.
+- The `INVALID` opcode and OOB memory accesses now consume all remaining gas.
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.

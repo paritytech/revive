@@ -48,6 +48,8 @@ pub static HASH_KECCAK_256: &str = "hash_keccak_256";
 
 pub static INSTANTIATE: &str = "instantiate";
 
+pub static INVALID: &str = "consume_all_gas";
+
 pub static NOW: &str = "now";
 
 pub static ORIGIN: &str = "origin";
@@ -70,7 +72,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 33] = [
+pub static IMPORTS: [&str; 34] = [
     ADDRESS,
     BALANCE,
     BALANCE_OF,
@@ -94,6 +96,7 @@ pub static IMPORTS: [&str; 33] = [
     GET_STORAGE,
     HASH_KECCAK_256,
     INSTANTIATE,
+    INVALID,
     NOW,
     ORIGIN,
     REF_TIME_LEFT,

@@ -66,6 +66,7 @@ test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
+test_spec!(call_gas, "CallGas", "CallGas.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

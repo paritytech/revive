@@ -235,6 +235,15 @@ sol!(
 case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Bytes);
 
 sol!(
+    contract MLoad {
+        constructor() payable;
+
+        function loadAt(uint _offset) public payable returns (uint m);
+    }
+);
+case!("MLoad.sol", MLoad, loadAtCall, load_at, _offset: U256);
+
+sol!(
     contract Call {
         function value_transfer(address payable destination) public payable;
 

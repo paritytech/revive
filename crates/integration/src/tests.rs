@@ -714,3 +714,41 @@ fn invalid_opcode_works() {
 
     assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
+
+/// Load from heap memory using an out of bounds offset and expect the
+/// contract to hit the `invalid` syscall to use all gas (like on EVM).
+///
+/// The offset is picked such that a regular truncate would be in bounds.
+#[test]
+fn safe_truncate_int_to_xlen_works() {
+    let offset = 0x10000000_00000000u64;
+    let data = Contract::load_at(Uint::from(offset)).calldata;
+    let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+
+    let results = Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Exec { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
+}

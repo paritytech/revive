@@ -20,7 +20,7 @@ pragma solidity ^0.8.28;
                 "dest": {
                     "Instantiated": 0
                 },
-                "data": "e2179b8e"
+                "data": "0be0e4a60000000000000000000000000000000000000000000000000000000000000000"
             }
         }
     ]
@@ -29,12 +29,12 @@ pragma solidity ^0.8.28;
 
 contract MLoad {
     constructor() payable {
-        assert(g() == 0);
+        assert(loadAt(0) == 0);
     }
 
-    function g() public payable returns (uint m) {
+    function loadAt(uint _offset) public payable returns (uint m) {
         assembly {
-            m := mload(0)
+            m := mload(_offset)
         }
     }
 }

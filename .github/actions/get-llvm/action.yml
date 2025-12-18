@@ -20,22 +20,23 @@ runs:
       shell: bash
       run: |
         if [ -z "${{ inputs.version }}" ]; then
-          # Extract branch from .gitmodules (e.g., "release/18.x")
-          BRANCH=$(git config -f .gitmodules submodule.llvm.branch)
-          if [ -n "$BRANCH" ]; then
-            # Extract version from branch name (e.g., "18.x" from "release/18.x")
-            VERSION_PREFIX=$(echo "$BRANCH" | sed 's|release/||' | sed 's|\.x$||')
-            echo "Detected LLVM version prefix from submodule branch: $VERSION_PREFIX"
-            
-            # Special case: pin LLVM 18 to specific version 18.1.8
-            if [ "$VERSION_PREFIX" = "18" ]; then
-              echo "Using pinned version for LLVM 18: llvm-18.1.8"
-              echo "version_prefix=llvm-18.1.8" >> $GITHUB_OUTPUT
+          # Get the full version from the LLVM submodule
+          if [ -d "llvm/.git" ]; then
+            cd llvm
+            # Try to get the most recent tag (e.g., "llvmorg-18.1.8")
+            LLVM_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
+            if [ -n "$LLVM_TAG" ]; then
+              # Convert "llvmorg-18.1.8" to "llvm-18.1.8"
+              LLVM_VERSION=$(echo "$LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
+              echo "Detected LLVM version from submodule: $LLVM_VERSION"
+              echo "version_prefix=$LLVM_VERSION" >> $GITHUB_OUTPUT
             else
-              echo "version_prefix=llvm-$VERSION_PREFIX" >> $GITHUB_OUTPUT
+              echo "Could not detect LLVM version from submodule, will use latest release"
+              echo "version_prefix=" >> $GITHUB_OUTPUT
             fi
+            cd ..
           else
-            echo "No branch found in .gitmodules, will use latest release"
+            echo "LLVM submodule not initialized, will use latest release"
             echo "version_prefix=" >> $GITHUB_OUTPUT
           fi
         else

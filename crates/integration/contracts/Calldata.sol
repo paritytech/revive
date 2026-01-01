@@ -8,10 +8,9 @@ pragma solidity ^0.8;
     "actions": [
         {
             "Instantiate": {
-                "value": 0,
                 "code": {
                     "Solidity": {
-                        "contract": "CalldataTester"
+                        "contract": "TestCalldata"
                     }
                 }
             }
@@ -28,13 +27,13 @@ pragma solidity ^0.8;
 }
 */
 
-contract Calldata {
-    function bad_func_dispatch(bytes memory data) public pure returns (uint256, bytes memory) {
-        uint256 result1;
+contract TestCalldata {
+    function bad_func_dispatch(bytes memory data) external payable returns (uint256) {
+        uint256 result;
         assembly {
             let ptr := mload(add(data, 0x20))
-            result1 := calldataload(ptr)
+            result := calldataload(ptr)
         }
-        return (result1, data);
+        return result;
     }
 }

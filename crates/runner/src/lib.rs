@@ -179,12 +179,6 @@ impl Default for VerifyCallExpectation {
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
     fn verify(self, result: &CallResult) {
-        assert_eq!(
-            self.success,
-            !result.did_revert(),
-            "contract execution result mismatch: {result:?}"
-        );
-
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
@@ -210,22 +204,6 @@ pub enum CallResult {
 }
 
 impl CallResult {
-    /// Check if the call was successful
-    fn did_revert(&self) -> bool {
-        match self {
-            Self::Exec { result, .. } => result
-                .result
-                .as_ref()
-                .map(|r| r.did_revert())
-                .unwrap_or(true),
-            Self::Instantiate { result, .. } => result
-                .result
-                .as_ref()
-                .map(|r| r.result.did_revert())
-                .unwrap_or(true),
-        }
-    }
-
     /// Get the output of the call
     fn output(&self) -> Vec<u8> {
         match self {

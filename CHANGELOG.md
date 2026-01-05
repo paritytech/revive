@@ -16,10 +16,12 @@ Supported `polkadot-sdk` rev: `unstable2507`
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
 - The supported `polkadot-sdk` release is `unstable2507`.
 - The `INVALID` opcode and OOB memory accesses now consume all remaining gas.
+- Emit the `call_evm` and `delegate_call_evm` syscalls for contract calls.
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.
 - The missing bounds check in the internal sbrk implementation.
+- The call gas is no longer ignored.
 
 ## v0.5.0
 

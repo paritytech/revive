@@ -23,7 +23,7 @@ pub mod version;
 pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
 /// The last supported version of `solc`.
-pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 31);
+pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 33);
 
 /// The Solidity compiler.
 pub trait Compiler {

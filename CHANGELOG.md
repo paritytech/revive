@@ -8,7 +8,7 @@ Supported `polkadot-sdk` rev: `unstable2507`
 
 ### Added
 - The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
-- Support for solc v0.8.31.
+- Support for solc v0.8.33.
 - Support for the `clz` Yul builtin.
 
 ### Changed

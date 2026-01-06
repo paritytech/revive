@@ -113,10 +113,9 @@ impl Error {
         let message = r#"
 Warning: It looks like you are using '<address payable>.send/transfer(<X>)'.
 Using '<address payable>.send/transfer(<X>)' is deprecated and strongly discouraged!
-The resolc compiler uses a heuristic to detect '<address payable>.send/transfer(<X>)' calls,
-which disables call re-entrancy and supplies all remaining gas instead of the 2300 gas stipend.
-However, detection is not guaranteed. You are advised to carefully test this, employ
-re-entrancy guards or use the withdrawal pattern instead!
+The revive runtime uses a heuristic to detect '<address payable>.send/transfer(<X>)' calls and
+the gas stipend used by the runtime is different from the EVM.
+You are advised to carefully test this, employ re-entrancy guards or use the withdrawal pattern instead!
 Learn more on https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy
 and https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from-contracts
 "#

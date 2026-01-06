@@ -77,6 +77,20 @@ impl RuntimeFunction for Sbrk {
         context.build_unreachable();
 
         context.set_basic_block(offset_in_bounds_block);
+        let size_in_bounds_block = context.append_basic_block("size_in_bounds");
+        let is_size_out_of_bounds = context.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            size,
+            context.heap_size(),
+            "size_in_bounds",
+        )?;
+        context.build_conditional_branch(
+            is_size_out_of_bounds,
+            trap_block,
+            size_in_bounds_block,
+        )?;
+
+        context.set_basic_block(size_in_bounds_block);
         let mask = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64 - 1, false);
@@ -88,20 +102,20 @@ impl RuntimeFunction for Sbrk {
             context.builder().build_not(mask, "mask_not")?,
             "memory_size",
         )?;
-        let size_in_bounds_block = context.append_basic_block("size_in_bounds");
-        let is_size_out_of_bounds = context.builder().build_int_compare(
+        let total_size_in_bounds_block = context.append_basic_block("total_size_in_bounds");
+        let is_total_size_out_of_bounds = context.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
             memory_size,
             context.heap_size(),
             "size_out_of_bounds",
         )?;
         context.build_conditional_branch(
-            is_size_out_of_bounds,
+            is_total_size_out_of_bounds,
             trap_block,
-            size_in_bounds_block,
+            total_size_in_bounds_block,
         )?;
 
-        context.set_basic_block(size_in_bounds_block);
+        context.set_basic_block(total_size_in_bounds_block);
         let new_size_block = context.append_basic_block("new_size");
         let is_new_size = context.builder().build_int_compare(
             inkwell::IntPredicate::UGT,

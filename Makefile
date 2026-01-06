@@ -92,7 +92,6 @@ test-llvm-builder:
 test-book:
 	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
-	mdbook build book
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

@@ -53,7 +53,7 @@ POLKAVM_IMPORT(void, block_hash, uint32_t, uint32_t)
 
 POLKAVM_IMPORT(void, block_number, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, call, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)
+POLKAVM_IMPORT(uint32_t, call_evm, uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, call_data_copy, uint32_t, uint32_t, uint32_t)
 
@@ -69,7 +69,9 @@ POLKAVM_IMPORT(uint64_t, code_size, uint32_t)
 
 POLKAVM_IMPORT(void, code_hash, uint32_t, uint32_t)
 
-POLKAVM_IMPORT(uint32_t, delegate_call, uint64_t, uint64_t, uint64_t, uint32_t, uint64_t, uint64_t)
+POLKAVM_IMPORT(void, consume_all_gas)
+
+POLKAVM_IMPORT(uint32_t, delegate_call_evm, uint32_t, uint32_t, uint64_t, uint64_t, uint64_t)
 
 POLKAVM_IMPORT(void, deposit_event, uint32_t, uint32_t, uint32_t, uint32_t)
 

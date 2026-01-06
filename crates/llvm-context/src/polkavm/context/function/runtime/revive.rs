@@ -51,11 +51,11 @@ impl RuntimeFunction for WordToPointer {
         )?;
 
         let block_continue = context.append_basic_block("offset_pointer_ok");
-        let block_trap = context.append_basic_block("offset_pointer_overflow");
-        context.build_conditional_branch(is_overflow, block_trap, block_continue)?;
+        let block_invalid = context.append_basic_block("offset_pointer_overflow");
+        context.build_conditional_branch(is_overflow, block_invalid, block_continue)?;
 
-        context.set_basic_block(block_trap);
-        context.build_call(context.intrinsics().trap, &[], "invalid_trap");
+        context.set_basic_block(block_invalid);
+        context.build_runtime_call(revive_runtime_api::polkavm_imports::INVALID, &[]);
         context.build_unreachable();
 
         context.set_basic_block(block_continue);

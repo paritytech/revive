@@ -52,12 +52,14 @@ pub fn stop(context: &mut Context) -> anyhow::Result<()> {
 /// Translates the `invalid` instruction.
 /// Burns all gas using an out-of-bounds memory store, causing a panic.
 pub fn invalid(context: &mut Context) -> anyhow::Result<()> {
-    crate::polkavm::evm::memory::store(
-        context,
-        context.word_type().const_all_ones(),
-        context.word_const(0),
-    )?;
-    context.build_call(context.intrinsics().trap, &[], "invalid_trap");
+    let invalid_block = context.append_basic_block("explicit_invalid");
+    context.build_unconditional_branch(invalid_block);
+    context.set_basic_block(invalid_block);
+    context.build_runtime_call(revive_runtime_api::polkavm_imports::INVALID, &[]);
+    context.build_unreachable();
+
+    context.set_basic_block(context.append_basic_block("dead_code"));
+
     Ok(())
 }
 

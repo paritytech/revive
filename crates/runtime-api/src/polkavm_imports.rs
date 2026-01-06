@@ -16,7 +16,7 @@ pub static BLOCK_HASH: &str = "block_hash";
 
 pub static BLOCK_NUMBER: &str = "block_number";
 
-pub static CALL: &str = "call";
+pub static CALL: &str = "call_evm";
 
 pub static CALL_DATA_COPY: &str = "call_data_copy";
 
@@ -32,7 +32,7 @@ pub static CODE_SIZE: &str = "code_size";
 
 pub static CODE_HASH: &str = "code_hash";
 
-pub static DELEGATE_CALL: &str = "delegate_call";
+pub static DELEGATE_CALL: &str = "delegate_call_evm";
 
 pub static DEPOSIT_EVENT: &str = "deposit_event";
 
@@ -47,6 +47,8 @@ pub static GET_STORAGE: &str = "get_storage_or_zero";
 pub static HASH_KECCAK_256: &str = "hash_keccak_256";
 
 pub static INSTANTIATE: &str = "instantiate";
+
+pub static INVALID: &str = "consume_all_gas";
 
 pub static NOW: &str = "now";
 
@@ -70,7 +72,7 @@ pub static VALUE_TRANSFERRED: &str = "value_transferred";
 
 /// All imported runtime API symbols.
 /// Useful for configuring common attributes and linkage.
-pub static IMPORTS: [&str; 33] = [
+pub static IMPORTS: [&str; 34] = [
     ADDRESS,
     BALANCE,
     BALANCE_OF,
@@ -94,6 +96,7 @@ pub static IMPORTS: [&str; 33] = [
     GET_STORAGE,
     HASH_KECCAK_256,
     INSTANTIATE,
+    INVALID,
     NOW,
     ORIGIN,
     REF_TIME_LEFT,

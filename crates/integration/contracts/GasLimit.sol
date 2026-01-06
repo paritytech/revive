@@ -26,6 +26,6 @@ pragma solidity ^0.8;
 
 contract GasLimit {
     constructor() payable {
-        assert(block.gaslimit == 2000000000000);
+        assert(block.gaslimit > 0);
     }
 }

@@ -21,7 +21,7 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 
 ### `resolc` binary releases
 
-`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below.
+`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below. We also provide [nightly builds](https://github.com/paritytech/resolc-bin/tree/main/nightly).
 
 <details>
   <summary>MacOS users</summary>
@@ -43,7 +43,6 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 > ```
 
 </details>
-
 
 ### `resolc` NPM package
 

@@ -61,6 +61,7 @@ impl pallet_timestamp::Config for Runtime {}
 
 parameter_types! {
     pub const UnstableInterface: bool = true;
+    pub const DebugFlag: bool = true;
     pub const DepositPerByte: Balance = 1;
     pub const DepositPerItem: Balance = 2;
     pub const CodeHashLockupDepositPercent: Perbill = Perbill::from_percent(0);
@@ -87,6 +88,7 @@ impl pallet_revive::Config for Runtime {
     type ChainId = ConstU64<420_420_420>;
     type FindAuthor = Self;
     type NativeToEthRatio = ConstU32<{ crate::ETH_RATIO as u32 }>;
+    type DebugEnabled = DebugFlag;
 }
 
 impl FindAuthor<<Runtime as frame_system::Config>::AccountId> for Runtime {

@@ -2,11 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_HEAP_SIZE: u32 = 64 * 1024;
-pub const DEFAULT_STACK_SIZE: u32 = 32 * 1024;
+pub const DEFAULT_HEAP_SIZE: u32 = 128 * 1024;
+pub const DEFAULT_STACK_SIZE: u32 = 64 * 1024;
 
 /// The PolkaVM memory configuration.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryConfig {
     /// The emulated EVM linear heap memory size in bytes.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   benchmark:
-    runs-on: ubuntu-24.04
+    runs-on: parity-large
     permissions:
       pull-requests: write
     steps:

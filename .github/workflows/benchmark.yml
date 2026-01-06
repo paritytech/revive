@@ -1,33 +1,47 @@
-# This workflow will run on the default branch when triggered by a `workflow_run` event.
-
 name: Benchmark
 
 on:
-  workflow_run:
-    workflows: [Test]
-    types: [completed]
+  workflow_dispatch:
+    inputs:
+      ref_before:
+        description: "Branch, tag, or SHA before changes"
+        default: "main"
+        type: string
+        required: true
+      ref_after:
+        description: "Branch, tag, or SHA after changes"
+        type: string
+        required: true
+      pr_number:
+        description: "PR number (for posting the result as a comment)"
+        type: number
+        required: false
 
+# Cancels in-progress runs for runs comparing the same refs if the workflow is re-triggered.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ inputs.ref_before }}-${{ inputs.ref_after }}
   cancel-in-progress: true
 
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
     permissions:
       pull-requests: write
     steps:
-      - name: Checkout PR Branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
       - name: Set Up Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # Without this it will override our rust flags.
           rustflags: ""
+
+      - name: Install Benchmarking Tools
+        run: |
+          cargo install critcmp
+
+      - name: Checkout Commit Before Changes
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref_before }}
 
       - name: Install Solc
         uses: ./.github/actions/get-solc
@@ -41,45 +55,57 @@ jobs:
         run: |
           echo "LLVM_SYS_181_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
 
-      - name: Install Benchmarking Tools
+      - name: Build resolc
         run: |
-          cargo install critcmp
-
-      - name: Checkout and Compile Main Branch
-        run: |
-          git fetch origin main
-          git checkout -f main
           make install
 
-      - name: Run Benchmarks on Main Branch
+      - name: Run Benchmarks on Commit Before Changes
         run: |
-          cargo bench --package resolc --bench compile -- --save-baseline main_resolc
-          cargo bench --package revive-yul --bench parse -- --save-baseline main_yul_parse
-          cargo bench --package revive-yul --bench lower -- --save-baseline main_yul_lower
+          cargo bench --package resolc --bench compile -- --save-baseline resolc_before
+          cargo bench --package revive-yul --bench parse -- --save-baseline yul_parse_before
+          cargo bench --package revive-yul --bench lower -- --save-baseline yul_lower_before
         timeout-minutes: 20
 
-      - name: Checkout and Compile PR Branch
+      - name: Checkout Commit After Changes
         run: |
-          git checkout -f ${{ github.event.workflow_run.head_sha }}
+          git fetch origin ${{ inputs.ref_after }}
+          git checkout -f ${{ inputs.ref_after }}
+
+      - name: Install Solc
+        uses: ./.github/actions/get-solc
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Build resolc
+        run: |
           make install
 
-      - name: Run Benchmarks on PR Branch
+      - name: Run Benchmarks on Commit After Changes
         run: |
-          cargo bench --package resolc --bench compile -- --save-baseline pr_resolc
-          cargo bench --package revive-yul --bench parse -- --save-baseline pr_yul_parse
-          cargo bench --package revive-yul --bench lower -- --save-baseline pr_yul_lower
+          cargo bench --package resolc --bench compile -- --save-baseline resolc_changes
+          cargo bench --package revive-yul --bench parse -- --save-baseline yul_parse_changes
+          cargo bench --package revive-yul --bench lower -- --save-baseline yul_lower_changes
         timeout-minutes: 20
 
       - name: Compare Benchmarks
         run: |
-          critcmp main_resolc pr_resolc > benchmarks_resolc
-          critcmp main_yul_parse pr_yul_parse > benchmarks_yul_parse
-          critcmp main_yul_lower pr_yul_lower > benchmarks_yul_lower
+          critcmp resolc_before resolc_changes > benchmarks_resolc
+          critcmp yul_parse_before yul_parse_changes > benchmarks_yul_parse
+          critcmp yul_lower_before yul_lower_changes > benchmarks_yul_lower
 
       - name: Create Report
+        env:
+          REF_BEFORE: ${{ inputs.ref_before }}
+          REF_AFTER: ${{ inputs.ref_after }}
         run: |
           cat > BENCHMARK_REPORT.md << EOF
           # Benchmarks
+
+          * **Ref Before:** \`$REF_BEFORE\`
+          * **Ref After:** \`$REF_AFTER\`
 
           ## Compile E2E
 
@@ -116,8 +142,17 @@ jobs:
           EOF
 
       - name: Post PR Comment with Benchmark Report
+        if: ${{ inputs.pr_number }}
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: benchmark
-          number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          number: ${{ inputs.pr_number }}
           path: BENCHMARK_REPORT.md
+
+      - name: Upload Benchmark Results
+        if: ${{ !inputs.pr_number }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: BENCHMARK_REPORT.md
+          retention-days: 7

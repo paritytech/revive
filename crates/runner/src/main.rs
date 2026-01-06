@@ -1,8 +1,18 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use clap::Parser;
 
-use revive_runner::{Code, OptionalHex, Specs, SpecsAction::*, TestAddress};
+use revive_runner::{Code, OptionalHex, Specs, SpecsAction::*, TestAddress, VerifyCallExpectation};
+
+/// The action which is expected to fail
+#[derive(clap::ValueEnum, Clone, PartialEq, Hash, Eq)]
+enum VerifyActionFailure {
+    /// The contract instantiation must fail
+    Instantiate,
+    /// The contract execution must fail
+    Call,
+}
 
 /// Execute revive PolkaVM contracts locally.
 #[derive(Parser)]
@@ -35,6 +45,14 @@ struct Arguments {
     /// The value the deploy transaction is endowed with.
     #[arg(long)]
     deploy_value: Option<u128>,
+
+    /// The expected call result of the contract execution.
+    #[arg(long, value_delimiter=',', num_args=1..2)]
+    verify_failure: Vec<VerifyActionFailure>,
+
+    /// The expected amount of consumed gas by the contract execution.
+    #[arg(long)]
+    verify_call_gas_consumed: Option<u128>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -62,6 +80,8 @@ fn main() -> anyhow::Result<()> {
     };
     let origin = arguments.origin.unwrap_or(TestAddress::Alice);
 
+    let verify_failure: HashSet<VerifyActionFailure> = HashSet::from_iter(arguments.verify_failure);
+
     let actions = vec![
         Instantiate {
             origin: origin.clone(),
@@ -72,6 +92,11 @@ fn main() -> anyhow::Result<()> {
             data: deploy_calldata,
             salt: OptionalHex::default(),
         },
+        VerifyCall(VerifyCallExpectation {
+            gas_consumed: None,
+            output: OptionalHex::default(),
+            success: !verify_failure.contains(&VerifyActionFailure::Instantiate),
+        }),
         Call {
             origin,
             dest: TestAddress::Instantiated(0),
@@ -80,6 +105,11 @@ fn main() -> anyhow::Result<()> {
             storage_deposit_limit: None,
             data: calldata,
         },
+        VerifyCall(VerifyCallExpectation {
+            gas_consumed: arguments.verify_call_gas_consumed,
+            output: OptionalHex::default(),
+            success: !verify_failure.contains(&VerifyActionFailure::Call),
+        }),
     ];
 
     Specs {

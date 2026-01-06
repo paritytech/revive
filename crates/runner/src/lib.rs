@@ -116,7 +116,7 @@ impl ExtBuilder {
     }
 }
 
-/// Expectation for a call
+/// Expectation for a call. These struct is initialized by the user and compared to the actual call result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
@@ -124,7 +124,7 @@ pub struct VerifyCallExpectation {
     /// When provided, the expected output
     #[serde(default, with = "hex")]
     pub output: OptionalHex<Vec<u8>>,
-    ///Expected call result
+    /// Expected call result
     pub success: bool,
 }
 
@@ -179,6 +179,13 @@ impl Default for VerifyCallExpectation {
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
     fn verify(self, result: &CallResult) {
+        // Check if the call was successful. Here `self.success` is an expectation given by the user and `result` is the actual call result.
+        assert_eq!(
+            self.success,
+            !result.did_revert(),
+            "contract execution result mismatch: {result:?}"
+        );
+
         if let Some(gas_consumed) = self.gas_consumed {
             assert_eq!(gas_consumed, result.gas_consumed());
         }
@@ -204,6 +211,22 @@ pub enum CallResult {
 }
 
 impl CallResult {
+    /// Check if the call was successful
+    fn did_revert(&self) -> bool {
+        match self {
+            Self::Exec { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.did_revert())
+                .unwrap_or(true),
+            Self::Instantiate { result, .. } => result
+                .result
+                .as_ref()
+                .map(|r| r.result.did_revert())
+                .unwrap_or(true),
+        }
+    }
+
     /// Get the output of the call
     fn output(&self) -> Vec<u8> {
         match self {

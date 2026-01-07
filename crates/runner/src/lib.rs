@@ -28,7 +28,7 @@ use std::time::Duration;
 use hex::{FromHex, ToHex};
 use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::frame_support::traits::Currency;
-use polkadot_sdk::pallet_revive::{Config, Pallet};
+use polkadot_sdk::pallet_revive::{Config, DebugSettings, Pallet};
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::ContractResult,
@@ -88,6 +88,17 @@ impl ExtBuilder {
         let mut t = frame_system::GenesisConfig::<Runtime>::default()
             .build_storage()
             .unwrap();
+
+        pallet_revive::GenesisConfig::<Runtime> {
+            debug_settings: Some(DebugSettings::new(
+                true, // allow unlimited contract size
+                true, // bypass EIP 3607
+                true, // enable PVM logs
+            )),
+            ..Default::default()
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
 
         pallet_balances::GenesisConfig::<Runtime> {
             balances: self.balance_genesis_config,

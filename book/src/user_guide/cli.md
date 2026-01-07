@@ -34,7 +34,7 @@ You are incentivized to keep this value as small as possible:
 1. Increasing the stack size will increase gas costs due to increased startup costs.
 2. The stack size contributes to the total memory size a contract can use, which includes the contract's code size.
 
-Default value: 32768
+Default value: 65536
 
 > [!WARNING]
 >
@@ -51,7 +51,7 @@ You are incentivized to keep this value as small as possible:
 1.Increasing the heap size will increase startup costs.
 2.The heap size contributes to the total memory size a contract can use, which includes the contract's code size
 
-Default value: 65536
+Default value: 131072
 
 > [!WARNING]
 >

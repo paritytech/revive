@@ -5,7 +5,9 @@ use clap::Parser;
 
 use revive_runner::{Code, OptionalHex, Specs, SpecsAction::*, TestAddress, VerifyCallExpectation};
 
-/// The action which is expected to fail
+/// The action which is expected to fail.
+///
+/// If neither is provided (default), instantiation and call are both expected to succeed.
 #[derive(clap::ValueEnum, Clone, PartialEq, Hash, Eq)]
 enum VerifyActionFailure {
     /// The contract instantiation must fail

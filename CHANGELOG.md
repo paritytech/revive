@@ -18,7 +18,7 @@ Supported `polkadot-sdk` rev: `unstable2507`
 - The `INVALID` opcode and OOB memory accesses now consume all remaining gas.
 - Emit the `call_evm` and `delegate_call_evm` syscalls for contract calls.
 - The `revive-runner` can execute arbitrarily large contract blobs.
-- Double the default stack and heap size values.
+- Set the default PolkaVM stack and heap size values to 128KB.
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_HEAP_SIZE: u32 = 128 * 1024;
-pub const DEFAULT_STACK_SIZE: u32 = 64 * 1024;
+pub const DEFAULT_STACK_SIZE: u32 = 128 * 1024;
 
 /// The PolkaVM memory configuration.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]

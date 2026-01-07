@@ -116,7 +116,7 @@ impl ExtBuilder {
     }
 }
 
-/// Expectation for a call. These struct is initialized by the user and compared to the actual call result
+/// Expectation for a call. This struct is initialized by the user and compared to the actual call result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed

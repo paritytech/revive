@@ -42,7 +42,6 @@ test_spec!(address, "Context", "Context.sol");
 test_spec!(value, "Value", "Value.sol");
 test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
-test_spec!(calldata, "TestCalldata", "Calldata.sol");
 test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");

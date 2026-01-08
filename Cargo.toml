@@ -16,7 +16,7 @@ rust-version = "1.85.0"
 [workspace.dependencies]
 lld-sys = { version = "0.1.0", path = "crates/lld-sys" }
 resolc = { version = "0.6.0", path = "crates/resolc", default-features = false }
-revive-benchmarks = { version = "0.2.0", path = "crates/benchmarks" }
+revive-benchmarks = { version = "0.3.0", path = "crates/benchmarks" }
 revive-build-utils = { version = "0.2.0", path = "crates/build-utils" }
 revive-builtins = { version = "0.1.0", path = "crates/builtins" }
 revive-common = { version = "0.3.0", path = "crates/common" }

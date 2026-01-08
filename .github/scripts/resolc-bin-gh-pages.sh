@@ -39,7 +39,7 @@ title: resolc-bin
 
 # resolc-bin
 
-Listed here are details about the `resolc` binary releases for the supported platforms.
+Listed here are details about the \`resolc\` binary releases for the supported platforms.
 The information is synced with the [resolc-bin GitHub repository](https://github.com/paritytech/resolc-bin).
 
 ## Linux

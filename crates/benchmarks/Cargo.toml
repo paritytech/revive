@@ -1,6 +1,6 @@
 [package]
 name = "revive-benchmarks"
-version.workspace = true
+version = "0.3.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -22,7 +22,19 @@ revive-runner = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+inkwell = { workspace = true }
+
+revive-llvm-context = { workspace = true }
+revive-yul = { workspace = true }
 
 [[bench]]
 name = "execute"
+harness = false
+
+[[bench]]
+name = "parse"
+harness = false
+
+[[bench]]
+name = "lower"
 harness = false

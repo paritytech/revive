@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-82723808.js";
+            window.path_to_searchindex_js = "../searchindex-8c3ce0af.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -203,7 +203,7 @@
 <li>Increasing the stack size will increase gas costs due to increased startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contract’s code size.</li>
 </ol>
-<p>Default value: 32768</p>
+<p>Default value: 131072</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</p>
@@ -215,7 +215,7 @@
 <p>You are incentivized to keep this value as small as possible:
 1.Increasing the heap size will increase startup costs.
 2.The heap size contributes to the total memory size a contract can use, which includes the contract’s code size</p>
-<p>Default value: 65536</p>
+<p>Default value: 131072</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</p>

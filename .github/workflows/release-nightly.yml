@@ -142,6 +142,11 @@ jobs:
           cd nightly
           python3 ../../revive/.github/scripts/json_generator_nightly.py
           cd ..
+
+          # Update GitHub Pages file with the JSON data.
+          export GH_PAGES_ROOT_DIR=$PWD
+          chmod +x ../revive/.github/scripts/resolc-bin-gh-pages.sh
+          bash ../revive/.github/scripts/resolc-bin-gh-pages.sh
           git status
 
           echo "${Green}Add new remote with gh app token${NC}"
@@ -154,7 +159,7 @@ jobs:
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"
 
-          git add nightly/
+          git add nightly/ index.md
           git commit -m "Update nightly json"
           git push origin main
 

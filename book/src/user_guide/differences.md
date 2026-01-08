@@ -47,10 +47,6 @@ In the constructor code, the offset is ignored and this always returns `0`.
 
 Only supported in constructor code.
 
-### `invalid`
-
-Traps the contract but does not consume the remaining gas.
-
 ### `create`, `create2`
 
 Deployments on revive work different than on EVM. In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the [revive runtime expects two pointers](https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate):

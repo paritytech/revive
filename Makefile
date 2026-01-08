@@ -110,10 +110,10 @@ bench-resolc: test-resolc
 	| criterion-table > crates/resolc/BENCHMARKS_M4PRO.md
 
 bench-yul: test-yul
-	cargo criterion --package revive-yul --bench parse --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS_PARSE_M4PRO.md
-	cargo criterion --package revive-yul --bench lower --message-format=json \
-	| criterion-table > crates/yul/BENCHMARKS_LOWER_M4PRO.md
+	cargo criterion --package revive-benchmarks --bench parse --message-format=json \
+	| criterion-table > crates/benchmarks/BENCHMARKS_PARSE_M4PRO.md
+	cargo criterion --package revive-benchmarks --bench lower --message-format=json \
+	| criterion-table > crates/benchmarks/BENCHMARKS_LOWER_M4PRO.md
 
 clean:
 	cargo clean ; \

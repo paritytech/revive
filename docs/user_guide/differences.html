@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4c7bbe7b.js";
+            window.path_to_searchindex_js = "../searchindex-8c3ce0af.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -207,8 +207,6 @@ Therefore, in EVM terminology, the deploy code equals the runtime code.</p>
 <p>In the constructor code, the offset is ignored and this always returns <code>0</code>.</p>
 <h3 id="codecopy"><a class="header" href="#codecopy"><code>codecopy</code></a></h3>
 <p>Only supported in constructor code.</p>
-<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
-<p>Traps the contract but does not consume the remaining gas.</p>
 <h3 id="create-create2"><a class="header" href="#create-create2"><code>create</code>, <code>create2</code></a></h3>
 <p>Deployments on revive work different than on EVM. In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate">revive runtime expects two pointers</a>:</p>
 <ol>

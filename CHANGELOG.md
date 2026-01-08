@@ -6,6 +6,12 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `unstable2507`
 
+## v0.6.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `unstable2507`
+
 ### Added
 - The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
 - Support for solc v0.8.33.
@@ -24,6 +30,7 @@ Supported `polkadot-sdk` rev: `unstable2507`
 - The missing `STOP` instruction at the end of `code` blocks.
 - The missing bounds check in the internal sbrk implementation.
 - The call gas is no longer ignored.
+- The `settings.polkavm.memoryConfig` object and its fields are now in camelCase.
 
 ## v0.5.0
 

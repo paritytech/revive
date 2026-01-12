@@ -6,6 +6,8 @@
 # `index.md` is the file served by GitHub Pages after being built by Jekyll
 # and the Markdown processed by kramdown.
 
+set -exo pipefail
+
 if [ $# -eq 0 ]; then
   echo "Error: The path to the GitHub Pages root directory must be passed"
   exit 1

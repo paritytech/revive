@@ -32,6 +32,22 @@ for file in "${build_info_files[@]}"; do
     fi
 done
 
+# Sort the data by version in descending order.
+sort_by_version_descending() {
+    local data_file="$1"
+    if [ -z "$data_file" ]; then
+        echo "Error: A data file argument is required for sorting"
+        return 1
+    fi
+
+    # Load the data and sort builds and releases with the latest version first.
+    data=$(jq '.' "$data_file")
+    sorted_data=$(echo "$data" | jq '.builds = (.builds | sort_by(.version) | reverse) |
+                                     .releases = (.releases | to_entries | sort_by(.key) | reverse | from_entries)')
+
+    echo "$sorted_data"
+}
+
 echo "Updating GitHub Pages index.md file..."
 
 cat > "$gh_pages_root_dir/index.md" << EOF
@@ -50,7 +66,7 @@ The information is synced with the [resolc-bin GitHub repository](https://github
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $linux)
+$(sort_by_version_descending $linux)
 {% endhighlight %}
 
 </details>
@@ -61,7 +77,7 @@ $(cat $linux)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $macos)
+$(sort_by_version_descending $macos)
 {% endhighlight %}
 
 </details>
@@ -74,7 +90,7 @@ $(cat $macos)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $nightly_linux)
+$(sort_by_version_descending $nightly_linux)
 {% endhighlight %}
 
 </details>
@@ -85,7 +101,7 @@ $(cat $nightly_linux)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $nightly_macos)
+$(sort_by_version_descending $nightly_macos)
 {% endhighlight %}
 
 </details>
@@ -96,7 +112,7 @@ $(cat $nightly_macos)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $nightly_wasm)
+$(sort_by_version_descending $nightly_wasm)
 {% endhighlight %}
 
 </details>
@@ -107,7 +123,7 @@ $(cat $nightly_wasm)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $nightly_windows)
+$(sort_by_version_descending $nightly_windows)
 {% endhighlight %}
 
 </details>
@@ -118,7 +134,7 @@ $(cat $nightly_windows)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $wasm)
+$(sort_by_version_descending $wasm)
 {% endhighlight %}
 
 </details>
@@ -129,7 +145,7 @@ $(cat $wasm)
     <summary>See builds</summary>
 
 {% highlight json %}
-$(cat $windows)
+$(sort_by_version_descending $windows)
 {% endhighlight %}
 
 </details>

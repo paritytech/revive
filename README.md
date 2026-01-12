@@ -21,7 +21,7 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 
 ### `resolc` binary releases
 
-`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below. We also provide [nightly builds](https://github.com/paritytech/resolc-bin/tree/main/nightly).
+`resolc` is distributed as a standalone binary (with `solc` as the only external dependency). Please download one of our [binary releases](https://github.com/paritytech/revive/releases) for your target platform and mind the platform specific instructions below. We also provide [nightly builds](https://paritytech.github.io/resolc-bin/#nightly).
 
 <details>
   <summary>MacOS users</summary>
@@ -106,4 +106,3 @@ Please consult the [Developer Guide](https://paritytech.github.io/revive/develop
 
 The revive compiler project, after some early experiments with EVM bytecode translations, decided to fork the `era-compiler` framework.
 [Frontend](https://github.com/matter-labs/era-compiler-solidity), [code generator](https://github.com/matter-labs/era-compiler-llvm-context) and some supporting libraries are based of ZKSync `zksolc`. I'd like to express my gratitude and thank the original authors for providing a useable code base under a generous license.
-

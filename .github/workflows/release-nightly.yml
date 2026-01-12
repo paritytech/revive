@@ -144,9 +144,8 @@ jobs:
           cd ..
 
           # Update GitHub Pages file with the JSON data.
-          export GH_PAGES_ROOT_DIR=$PWD
           chmod +x ../revive/.github/scripts/resolc-bin-gh-pages.sh
-          bash ../revive/.github/scripts/resolc-bin-gh-pages.sh
+          bash ../revive/.github/scripts/resolc-bin-gh-pages.sh $PWD
           git status
 
           echo "${Green}Add new remote with gh app token${NC}"

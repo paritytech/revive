@@ -48,9 +48,8 @@ jobs:
           python ../tmp/.github/scripts/json_generator.py ${GITHUB_REPOSITORY} ${{ github.event.release.tag_name }}
 
           # Update GitHub Pages file with the JSON data.
-          export GH_PAGES_ROOT_DIR=$PWD
           chmod +x ../tmp/.github/scripts/resolc-bin-gh-pages.sh
-          bash ../tmp/.github/scripts/resolc-bin-gh-pages.sh
+          bash ../tmp/.github/scripts/resolc-bin-gh-pages.sh $PWD
 
           echo "${Green}Add new remote with gh app token${NC}"
           git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")

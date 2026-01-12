@@ -1,24 +1,26 @@
 #!/bin/bash
 
-# This script updates `index.md` in the directory provided by the required
-# `GH_PAGES_ROOT_DIR` environment variable. The file will be updated to
+# This script updates `index.md` in the GitHub Pages root directory provided
+# by the required argument to be passed. The file will be updated to simply
 # render the `resolc-bin` JSON data for each of the supported platforms.
 # `index.md` is the file served by GitHub Pages after being built by Jekyll
 # and the Markdown processed by kramdown.
 
-if [ -z "$GH_PAGES_ROOT_DIR" ]; then
-    echo "Error: GH_PAGES_ROOT_DIR environment variable is not set."
-    exit 1
+if [ $# -eq 0 ]; then
+  echo "Error: The path to the GitHub Pages root directory must be passed"
+  exit 1
 fi
 
-linux="$GH_PAGES_ROOT_DIR/linux/list.json"
-macos="$GH_PAGES_ROOT_DIR/macos/list.json"
-nightly_linux="$GH_PAGES_ROOT_DIR/nightly/linux/list.json"
-nightly_macos="$GH_PAGES_ROOT_DIR/nightly/macos/list.json"
-nightly_wasm="$GH_PAGES_ROOT_DIR/nightly/wasm/list.json"
-nightly_windows="$GH_PAGES_ROOT_DIR/nightly/windows/list.json"
-wasm="$GH_PAGES_ROOT_DIR/wasm/list.json"
-windows="$GH_PAGES_ROOT_DIR/windows/list.json"
+gh_pages_root_dir="$1"
+
+linux="$gh_pages_root_dir/linux/list.json"
+macos="$gh_pages_root_dir/macos/list.json"
+nightly_linux="$gh_pages_root_dir/nightly/linux/list.json"
+nightly_macos="$gh_pages_root_dir/nightly/macos/list.json"
+nightly_wasm="$gh_pages_root_dir/nightly/wasm/list.json"
+nightly_windows="$gh_pages_root_dir/nightly/windows/list.json"
+wasm="$gh_pages_root_dir/wasm/list.json"
+windows="$gh_pages_root_dir/windows/list.json"
 
 build_info_files=("$linux" "$macos" "$nightly_linux" "$nightly_macos"
                   "$nightly_wasm" "$nightly_windows" "$wasm" "$windows")
@@ -32,7 +34,7 @@ done
 
 echo "Updating GitHub Pages index.md file..."
 
-cat > "$GH_PAGES_ROOT_DIR/index.md" << EOF
+cat > "$gh_pages_root_dir/index.md" << EOF
 ---
 title: resolc-bin
 ---

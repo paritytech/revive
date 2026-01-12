@@ -14,8 +14,8 @@ To create a new pre-release:
 4. The release workflow will attempt to build and publish a new pre-release if the latest tag does match the cargo package version.
 5. Wait for the `Release` workflow to finish. It should create the pre-release with the same name.
 6. Check that pre-release was created on the [Releases page](https://github.com/paritytech/revive/releases) with all artifacts.
-7. After the release is published, another workflow should start automatically and update json files in https://github.com/paritytech/resolc-bin. Check the changes.
-8. Update the [contract-docs](https://github.com/paritytech/contract-docs/) accordingly
+7. After the release is published, another workflow should start automatically and update JSON files in the [resolc-bin repository](https://github.com/paritytech/resolc-bin) as well as render the JSON on its [GitHub Pages website](https://paritytech.github.io/resolc-bin/). Check the changes.
+8. Update the [revive compiler book](https://github.com/paritytech/revive/tree/main/book) accordingly.
 
 # `resolc` NPM package release
 

@@ -7,7 +7,7 @@ This is a development pre-release.
 Supported `polkadot-sdk` rev: `unstable2507`
 
 ### Fixed
-- OOB access in call data load and copy should always produce zero values instead of consuming all gas.
+- OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
 
 ## v0.6.0
 

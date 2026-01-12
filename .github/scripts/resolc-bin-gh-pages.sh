@@ -16,15 +16,15 @@ fi
 
 linux="$gh_pages_root_dir/linux/list.json"
 macos="$gh_pages_root_dir/macos/list.json"
+wasm="$gh_pages_root_dir/wasm/list.json"
+windows="$gh_pages_root_dir/windows/list.json"
 nightly_linux="$gh_pages_root_dir/nightly/linux/list.json"
 nightly_macos="$gh_pages_root_dir/nightly/macos/list.json"
 nightly_wasm="$gh_pages_root_dir/nightly/wasm/list.json"
 nightly_windows="$gh_pages_root_dir/nightly/windows/list.json"
-wasm="$gh_pages_root_dir/wasm/list.json"
-windows="$gh_pages_root_dir/windows/list.json"
 
-build_info_files=("$linux" "$macos" "$nightly_linux" "$nightly_macos"
-                  "$nightly_wasm" "$nightly_windows" "$wasm" "$windows")
+build_info_files=("$linux" "$macos" "$wasm" "$windows" "$nightly_linux"
+                  "$nightly_macos" "$nightly_wasm" "$nightly_windows")
 
 for file in "${build_info_files[@]}"; do
     if [ ! -f "$file" ]; then
@@ -83,6 +83,28 @@ $(sort_by_version_descending $macos)
 
 </details>
 
+## Wasm
+
+<details>
+    <summary>See builds</summary>
+
+{% highlight json %}
+$(sort_by_version_descending $wasm)
+{% endhighlight %}
+
+</details>
+
+## Windows
+
+<details>
+    <summary>See builds</summary>
+
+{% highlight json %}
+$(sort_by_version_descending $windows)
+{% endhighlight %}
+
+</details>
+
 ## Nightly
 
 ### Linux
@@ -125,28 +147,6 @@ $(sort_by_version_descending $nightly_wasm)
 
 {% highlight json %}
 $(sort_by_version_descending $nightly_windows)
-{% endhighlight %}
-
-</details>
-
-## Wasm
-
-<details>
-    <summary>See builds</summary>
-
-{% highlight json %}
-$(sort_by_version_descending $wasm)
-{% endhighlight %}
-
-</details>
-
-## Windows
-
-<details>
-    <summary>See builds</summary>
-
-{% highlight json %}
-$(sort_by_version_descending $windows)
 {% endhighlight %}
 
 </details>

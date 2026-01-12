@@ -46,7 +46,7 @@ sort_by_version_descending() {
     sorted_data=$(echo "$data" | jq '.builds = (.builds | sort_by(.version) | reverse) |
                                      .releases = (.releases | to_entries | sort_by(.key) | reverse | from_entries)')
 
-    echo "$sorted_data"
+    echo "$sorted_data" | jq .
 }
 
 echo "Updating GitHub Pages index.md file..."

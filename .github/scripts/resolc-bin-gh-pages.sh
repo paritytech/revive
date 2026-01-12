@@ -8,12 +8,11 @@
 
 set -exo pipefail
 
-if [ $# -eq 0 ]; then
+gh_pages_root_dir="$1"
+if [ -z "$gh_pages_root_dir" ]; then
   echo "Error: The path to the GitHub Pages root directory must be passed"
   exit 1
 fi
-
-gh_pages_root_dir="$1"
 
 linux="$gh_pages_root_dir/linux/list.json"
 macos="$gh_pages_root_dir/macos/list.json"
@@ -36,14 +35,14 @@ done
 
 # Sort the data by version in descending order.
 sort_by_version_descending() {
-    local data_file="$1"
-    if [ -z "$data_file" ]; then
-        echo "Error: A data file argument is required for sorting"
+    local build_info_file="$1"
+    if [ -z "$build_info_file" ]; then
+        echo "Error: A file path argument is required for sorting"
         return 1
     fi
 
     # Load the data and sort builds and releases with the latest version first.
-    data=$(jq '.' "$data_file")
+    data=$(jq '.' "$build_info_file")
     sorted_data=$(echo "$data" | jq '.builds = (.builds | sort_by(.version) | reverse) |
                                      .releases = (.releases | to_entries | sort_by(.key) | reverse | from_entries)')
 

@@ -7,7 +7,7 @@ Building Solidity contracts for PolkaVM requires installing the following two co
 ## `resolc` binary releases
 
 `resolc` is supported an all major operating systems and installation is straightforward.
-Please find our [binary releases](https://github.com/paritytech/revive/releases) for the following platforms:
+Please find our [binary releases](https://paritytech.github.io/resolc-bin/) for the following platforms:
 - Linux (MUSL)
 - MacOS (universal)
 - Windows
@@ -24,4 +24,3 @@ We distribute the revive compiler as [node.js module](https://github.com/parityt
 ## Buidling `resolc` from source
 
 Please follow the build [instructions in the revive `README.md`](https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source).
-

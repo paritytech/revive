@@ -16,7 +16,7 @@ pub static BLOCK_HASH: &str = "block_hash";
 
 pub static BLOCK_NUMBER: &str = "block_number";
 
-pub static CALL: &str = "call";
+pub static CALL: &str = "call_evm";
 
 pub static CALL_DATA_COPY: &str = "call_data_copy";
 
@@ -32,7 +32,7 @@ pub static CODE_SIZE: &str = "code_size";
 
 pub static CODE_HASH: &str = "code_hash";
 
-pub static DELEGATE_CALL: &str = "delegate_call";
+pub static DELEGATE_CALL: &str = "delegate_call_evm";
 
 pub static DEPOSIT_EVENT: &str = "deposit_event";
 

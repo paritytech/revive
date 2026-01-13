@@ -33,6 +33,10 @@ pub const STANDARD_JSON_CONTRACTS_PATH: &str =
 /// selection flags, it should compile fine regardless.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen.json";
+/// This is a complex contract from a real dApp, triggering the
+/// infamous "Stack too deep" error in the EVM codegen.
+pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
+    "src/tests/data/standard_json/no_evm_codegen_complex.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

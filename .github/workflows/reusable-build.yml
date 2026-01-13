@@ -177,7 +177,7 @@ jobs:
       - name: Basic Sanity Check
         run: |
           mkdir -p solc
-          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.31/soljson.js
+          curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
           node -e "
           const soljson = require('solc/soljson');
           const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');

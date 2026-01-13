@@ -28,7 +28,7 @@ use std::time::Duration;
 use hex::{FromHex, ToHex};
 use pallet_revive::{AddressMapper, ExecReturnValue, InstantiateReturnValue};
 use polkadot_sdk::frame_support::traits::Currency;
-use polkadot_sdk::pallet_revive::{Config, Pallet};
+use polkadot_sdk::pallet_revive::{Config, DebugSettings, Pallet};
 use polkadot_sdk::*;
 use polkadot_sdk::{
     pallet_revive::ContractResult,
@@ -89,6 +89,17 @@ impl ExtBuilder {
             .build_storage()
             .unwrap();
 
+        pallet_revive::GenesisConfig::<Runtime> {
+            debug_settings: Some(DebugSettings::new(
+                true, // allow unlimited contract size
+                true, // bypass EIP 3607
+                true, // enable PVM logs
+            )),
+            ..Default::default()
+        }
+        .assimilate_storage(&mut t)
+        .unwrap();
+
         pallet_balances::GenesisConfig::<Runtime> {
             balances: self.balance_genesis_config,
             dev_accounts: None,
@@ -116,7 +127,7 @@ impl ExtBuilder {
     }
 }
 
-/// Expectation for a call
+/// Expectation for a call. This struct is initialized by the user and compared to the actual call result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
@@ -124,7 +135,7 @@ pub struct VerifyCallExpectation {
     /// When provided, the expected output
     #[serde(default, with = "hex")]
     pub output: OptionalHex<Vec<u8>>,
-    ///Expected call result
+    /// Expected call result
     pub success: bool,
 }
 
@@ -179,6 +190,7 @@ impl Default for VerifyCallExpectation {
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
     fn verify(self, result: &CallResult) {
+        // Check if the call was successful. Here `self.success` is an expectation given by the user and `result` is the actual call result.
         assert_eq!(
             self.success,
             !result.did_revert(),

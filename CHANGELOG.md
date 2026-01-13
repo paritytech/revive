@@ -6,9 +6,21 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `unstable2507`
 
+### Changed
+- Removed the `revive-explorer` utility.
+
+### Fixed
+- OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
+
+## v0.6.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `unstable2507`
+
 ### Added
 - The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
-- Support for solc v0.8.31.
+- Support for solc v0.8.33.
 - Support for the `clz` Yul builtin.
 
 ### Changed
@@ -16,10 +28,15 @@ Supported `polkadot-sdk` rev: `unstable2507`
 - Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
 - The supported `polkadot-sdk` release is `unstable2507`.
 - The `INVALID` opcode and OOB memory accesses now consume all remaining gas.
+- Emit the `call_evm` and `delegate_call_evm` syscalls for contract calls.
+- The `revive-runner` can execute arbitrarily large contract blobs.
+- Set the default PolkaVM stack and heap size values to 128KB.
 
 ### Fixed:
 - The missing `STOP` instruction at the end of `code` blocks.
 - The missing bounds check in the internal sbrk implementation.
+- The call gas is no longer ignored.
+- The `settings.polkavm.memoryConfig` object and its fields are now in camelCase.
 
 ## v0.5.0
 

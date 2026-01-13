@@ -92,6 +92,44 @@ fn invalid_extra_arguments() {
             arguments: vec![JSON_OPTION, "--metadata-hash", "keccak256"],
             error_message: "Metadata hash mode must be specified in standard JSON input settings",
         },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--asm"],
+            error_message: "Cannot output assembly or binary outside of JSON in standard JSON mode",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--bin"],
+            error_message: "Cannot output assembly or binary outside of JSON in standard JSON mode",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--libraries", "myLib=0x0000"],
+            error_message: "Libraries must be passed via standard JSON input",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--evm-version", "osaka"],
+            error_message: "EVM version must be passed via standard JSON input",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--output-dir", "tmp"],
+            error_message: "Output directory cannot be used in standard JSON mode",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--overwrite"],
+            error_message: "Overwriting flag cannot be used in standard JSON mode",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--disable-solc-optimizer"],
+            error_message:
+                "Disabling the solc optimizer must be specified in standard JSON input settings",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "-g"],
+            error_message: "Debug info must be requested in standard JSON input polkavm settings",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--llvm-arg=-riscv"],
+            error_message:
+                "LLVM arguments must be configured in standard JSON input polkavm settings",
+        },
     ];
 
     for case in cases {

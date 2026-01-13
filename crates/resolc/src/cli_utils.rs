@@ -6,6 +6,8 @@ use std::{
     process::{Command, Stdio},
 };
 
+use revive_solc_json_interface::SolcStandardJsonOutput;
+
 use crate::SolcCompiler;
 
 /// The simple Solidity contract test fixture path.
@@ -156,6 +158,22 @@ pub fn assert_command_failure(result: &CommandResult, error_message_prefix: &str
         revive_common::EXIT_CODE_FAILURE,
         result.code
     );
+}
+
+/// Asserts that the standard JSON output has at least one error with the given `error_message`.
+pub fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_message: &str) {
+    assert!(
+        output
+            .errors
+            .iter()
+            .any(|error| error.is_error() && error.message.contains(error_message)),
+        "the standard JSON output should contain the error message `{error_message}`"
+    );
+}
+
+/// Converts valid JSON text to `SolcStandardJsonOutput`.
+pub fn to_solc_standard_json_output(json_text: &str) -> SolcStandardJsonOutput {
+    serde_json::from_str(json_text).unwrap()
 }
 
 /// Gets the absolute path of a file. The `relative_path` must

@@ -8,7 +8,7 @@ pub fn load<'ctx>(
     offset: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     let output_pointer = context.build_alloca_at_entry(context.word_type(), "call_data_output");
-    let offset = context.safe_truncate_int_to_xlen(offset)?;
+    let offset = context.clip_to_xlen(offset)?;
 
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::CALL_DATA_LOAD,
@@ -40,9 +40,9 @@ pub fn copy<'ctx>(
     source_offset: inkwell::values::IntValue<'ctx>,
     size: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
-    let source_offset = context.safe_truncate_int_to_xlen(source_offset)?;
-    let size = context.safe_truncate_int_to_xlen(size)?;
-    let destination_offset = context.safe_truncate_int_to_xlen(destination_offset)?;
+    let source_offset = context.clip_to_xlen(source_offset)?;
+    let size = context.clip_to_xlen(size)?;
+    let destination_offset = context.clip_to_xlen(destination_offset)?;
     let output_pointer = context.build_heap_gep(destination_offset, size)?;
 
     context.build_runtime_call(

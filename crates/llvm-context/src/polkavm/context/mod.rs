@@ -1054,6 +1054,28 @@ impl<'ctx> Context<'ctx> {
             .into_int_value())
     }
 
+    /// Clip a memory offset to the maximum value that fits into a register.
+    pub fn clip_to_xlen(
+        &self,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let clipped = self.xlen_type().const_all_ones();
+        let is_overflow = self.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            value,
+            self.builder()
+                .build_int_z_extend(clipped, self.word_type(), "value_clipped")?,
+            "is_value_overflow",
+        )?;
+        let truncated =
+            self.builder()
+                .build_int_truncate(value, self.xlen_type(), "value_truncated")?;
+        Ok(self
+            .builder()
+            .build_select(is_overflow, clipped, truncated, "value")?
+            .into_int_value())
+    }
+
     /// Build a call to PolkaVM `sbrk` for extending the heap from offset by `size`.
     /// The allocation is aligned to 32 bytes.
     ///

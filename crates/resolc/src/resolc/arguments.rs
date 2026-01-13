@@ -410,16 +410,16 @@ impl Arguments {
         messages
     }
 
-    /// Checks whether the value from the argument with the given `id` came from
-    /// the configured default value.
+    /// Checks whether the value from the argument with the given `argument_id`
+    /// came from the preconfigured default value.
     ///
     /// This can be used for determining if a user has explicitly set a value for
     /// an argument, even if it is the same value as the default one.
     ///
     /// Panics if the `id` is not a valid argument id.
-    fn came_from_default_value(id: &str, argument_matches: &ArgMatches) -> bool {
+    fn came_from_default_value(argument_id: &str, argument_matches: &ArgMatches) -> bool {
         argument_matches
-            .value_source(id)
+            .value_source(argument_id)
             .is_some_and(|source| source == ValueSource::DefaultValue)
     }
 

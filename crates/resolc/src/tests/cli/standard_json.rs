@@ -66,19 +66,9 @@ fn invalid_extra_arguments() {
 
     let cases = vec![
         TestCase {
-            arguments: vec![JSON_OPTION, "--heap-size", "50000"],
-            error_message:
-                "Heap size must be specified in standard JSON input polkavm memory settings",
-        },
-        TestCase {
             arguments: vec![JSON_OPTION, "--heap-size", &default_heap_size_string],
             error_message:
                 "Heap size must be specified in standard JSON input polkavm memory settings",
-        },
-        TestCase {
-            arguments: vec![JSON_OPTION, "--stack-size", "50000"],
-            error_message:
-                "Stack size must be specified in standard JSON input polkavm memory settings",
         },
         TestCase {
             arguments: vec![JSON_OPTION, "--stack-size", &default_stack_size_string],

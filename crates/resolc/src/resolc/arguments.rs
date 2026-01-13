@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
-use clap::{command, parser::ValueSource, ArgMatches, CommandFactory, Parser};
+use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
 use resolc::SolcCompiler;
 use revive_common::MetadataHash;

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use clap::{command, parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
+use resolc::SolcCompiler;
 use revive_common::MetadataHash;
 use revive_solc_json_interface::{
     PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutputError,
@@ -71,8 +72,8 @@ pub struct Arguments {
     /// Specify the path to the `solc` executable. By default, the one in `${PATH}` is used.
     /// Yul mode: `solc` is used for source code validation, as `resolc` itself assumes that the input Yul is valid.
     /// LLVM IR mode: `solc` is unused.
-    #[arg(long = "solc")]
-    pub solc: Option<String>,
+    #[arg(long = "solc", default_value = SolcCompiler::DEFAULT_EXECUTABLE_NAME)]
+    pub solc: String,
 
     /// The EVM target version to generate IR for.
     /// See https://github.com/paritytech/revive/blob/main/crates/common/src/evm_version.rs for reference.

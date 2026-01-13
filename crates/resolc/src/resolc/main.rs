@@ -154,7 +154,11 @@ fn main_inner(
         }
         #[cfg(not(target_os = "emscripten"))]
         {
-            resolc::SolcCompiler::new(arguments.solc)?
+            resolc::SolcCompiler::new(
+                arguments
+                    .solc
+                    .unwrap_or_else(|| resolc::SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()),
+            )?
         }
     };
 

@@ -6,6 +6,9 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `unstable2507`
 
+### Changed
+- Removed the `revive-explorer` utility.
+
 ### Fixed
 - OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
 

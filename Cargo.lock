@@ -9036,16 +9036,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "revive-explorer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "num_cpus",
- "revive-yul",
-]
-
-[[package]]
 name = "revive-integration"
 version = "0.4.0"
 dependencies = [

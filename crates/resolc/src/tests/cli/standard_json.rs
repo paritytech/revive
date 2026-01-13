@@ -109,6 +109,15 @@ fn invalid_extra_arguments() {
             arguments: vec![JSON_OPTION, "-Oz"],
             error_message: "LLVM optimizations must be specified in standard JSON input settings",
         },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--metadata-hash", "ipfs"],
+            error_message:
+                "`ipfs` metadata hash type is not supported. Please use `keccak256` instead",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--metadata-hash", "keccak256"],
+            error_message: "Metadata hash mode must be specified in standard JSON input settings",
+        },
     ];
 
     for case in cases {

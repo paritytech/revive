@@ -119,9 +119,8 @@ pub struct Arguments {
 
     /// Set the metadata hash type.
     /// Available types: `none`, `ipfs`, `keccak256`.
-    /// The default is `keccak256`.
-    #[arg(long)]
-    pub metadata_hash: Option<String>,
+    #[arg(long, default_value_t = MetadataHash::Keccak256)]
+    pub metadata_hash: MetadataHash,
 
     /// Output PolkaVM assembly of the contracts.
     #[arg(long = "asm")]
@@ -230,9 +229,13 @@ impl Arguments {
             ));
         }
 
-        if self.metadata_hash == Some(MetadataHash::IPFS.to_string()) {
+        if self.metadata_hash == MetadataHash::IPFS {
             messages.push(SolcStandardJsonOutputError::new_error(
-                "`IPFS` metadata hash type is not supported. Please use `keccak256` instead.",
+                format!(
+                    "`{}` metadata hash type is not supported. Please use `{}` instead.",
+                    MetadataHash::IPFS,
+                    MetadataHash::Keccak256,
+                ),
                 None,
                 None,
             ));
@@ -366,7 +369,7 @@ impl Arguments {
                     None,
                 ));
             }
-            if self.metadata_hash.is_some() {
+            if !Self::came_from_default_value("metadata_hash", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Metadata hash mode must be specified in standard JSON input settings.",
                     None,

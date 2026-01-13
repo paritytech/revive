@@ -1,13 +1,10 @@
 //! Solidity to PolkaVM compiler binary.
 
-use std::str::FromStr;
 use std::{io::Write, path::PathBuf};
 
 use clap::error::ErrorKind;
 use resolc::Process;
-use revive_common::{
-    deserialize_from_str, EVMVersion, MetadataHash, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS,
-};
+use revive_common::{deserialize_from_str, EVMVersion, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS};
 use revive_llvm_context::{initialize_llvm, DebugConfig, OptimizerSettings, PolkaVMTarget};
 use revive_solc_json_interface::{
     ResolcWarning, SolcStandardJsonInputSettingsPolkaVMMemory,
@@ -170,10 +167,7 @@ fn main_inner(
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
-    let metadata_hash = match arguments.metadata_hash {
-        Some(ref hash_type) => MetadataHash::from_str(hash_type.as_str())?,
-        None => MetadataHash::Keccak256,
-    };
+    let metadata_hash = arguments.metadata_hash;
 
     let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
         Some(arguments.heap_size),

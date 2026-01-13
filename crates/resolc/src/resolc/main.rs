@@ -166,10 +166,7 @@ fn main_inner(
         None => None,
     };
 
-    let mut optimizer_settings = match arguments.optimization {
-        Some(mode) => OptimizerSettings::try_from_cli(mode)?,
-        None => OptimizerSettings::size(),
-    };
+    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 

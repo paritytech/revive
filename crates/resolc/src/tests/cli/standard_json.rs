@@ -101,6 +101,14 @@ fn invalid_extra_arguments() {
             error_message:
                 "Stack size must be specified in standard JSON input polkavm memory settings",
         },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--optimization", "z"],
+            error_message: "LLVM optimizations must be specified in standard JSON input settings",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "-Oz"],
+            error_message: "LLVM optimizations must be specified in standard JSON input settings",
+        },
     ];
 
     for case in cases {

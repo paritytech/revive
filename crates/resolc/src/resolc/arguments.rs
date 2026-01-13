@@ -60,8 +60,8 @@ pub struct Arguments {
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[arg(short = 'O', long = "optimization")]
-    pub optimization: Option<char>,
+    #[arg(short = 'O', long = "optimization", default_value = "z")]
+    pub optimization: char,
 
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
@@ -354,21 +354,21 @@ impl Arguments {
             }
             if self.disable_solc_optimizer {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "Disabling the solc optimizer must specified in standard JSON input settings.",
+                    "Disabling the solc optimizer must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
-            if self.optimization.is_some() {
+            if !Self::came_from_default_value("optimization", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "LLVM optimizations must specified in standard JSON input settings.",
+                    "LLVM optimizations must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
             if self.metadata_hash.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "Metadata hash mode must specified in standard JSON input settings.",
+                    "Metadata hash mode must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));

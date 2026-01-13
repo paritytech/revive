@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     let is_standard_json = arguments.standard_json.is_some();
     let mut messages = arguments.validate();
-    if messages.iter().all(|error| error.severity != "error") {
+    if messages.iter().all(|error| !error.is_error()) {
         if !is_standard_json {
             std::io::stderr()
                 .write_all(
@@ -182,8 +182,10 @@ fn main_inner(
         None => MetadataHash::Keccak256,
     };
 
-    let memory_config =
-        SolcStandardJsonInputSettingsPolkaVMMemory::new(arguments.heap_size, arguments.stack_size);
+    let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
+        Some(arguments.heap_size),
+        Some(arguments.stack_size),
+    );
 
     let build = if arguments.yul {
         resolc::yul(

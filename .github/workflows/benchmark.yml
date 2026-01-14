@@ -39,6 +39,11 @@ jobs:
           # Without this it will override our rust flags.
           rustflags: ""
 
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+
       - name: Install Benchmarking Tools
         run: |
           sudo apt-get update

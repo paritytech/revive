@@ -127,7 +127,7 @@ impl ExtBuilder {
     }
 }
 
-/// Expectation for a call
+/// Expectation for a call. This struct is initialized by the user and compared to the actual call result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyCallExpectation {
     /// When provided, the expected gas consumed
@@ -135,7 +135,7 @@ pub struct VerifyCallExpectation {
     /// When provided, the expected output
     #[serde(default, with = "hex")]
     pub output: OptionalHex<Vec<u8>>,
-    ///Expected call result
+    /// Expected call result
     pub success: bool,
 }
 
@@ -190,6 +190,7 @@ impl Default for VerifyCallExpectation {
 impl VerifyCallExpectation {
     /// Verify that the expectations are met
     fn verify(self, result: &CallResult) {
+        // Check if the call was successful. Here `self.success` is an expectation given by the user and `result` is the actual call result.
         assert_eq!(
             self.success,
             !result.did_revert(),

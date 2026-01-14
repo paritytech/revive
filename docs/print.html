@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-82723808.js";
+            window.path_to_searchindex_js = "searchindex-8c3ce0af.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6f3f265e.js"></script>
@@ -202,7 +202,7 @@
 </ul>
 <h2 id="resolc-binary-releases"><a class="header" href="#resolc-binary-releases"><code>resolc</code> binary releases</a></h2>
 <p><code>resolc</code> is supported an all major operating systems and installation is straightforward.
-Please find our <a href="https://github.com/paritytech/revive/releases">binary releases</a> for the following platforms:</p>
+Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releases</a> for the following platforms:</p>
 <ul>
 <li>Linux (MUSL)</li>
 <li>MacOS (universal)</li>
@@ -245,7 +245,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <li>Increasing the stack size will increase gas costs due to increased startup costs.</li>
 <li>The stack size contributes to the total memory size a contract can use, which includes the contract’s code size.</li>
 </ol>
-<p>Default value: 32768</p>
+<p>Default value: 131072</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>If the contract uses more stack memory than configured, it will compile fine but eventually revert execution at runtime!</p>
@@ -257,7 +257,7 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <p>You are incentivized to keep this value as small as possible:
 1.Increasing the heap size will increase startup costs.
 2.The heap size contributes to the total memory size a contract can use, which includes the contract’s code size</p>
-<p>Default value: 65536</p>
+<p>Default value: 131072</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>If the contract uses more heap memory than configured, it will compile fine but eventually revert execution at runtime!</p>
@@ -341,9 +341,9 @@ Please find our <a href="https://github.com/paritytech/revive/releases">binary r
 <p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
 <h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
 <p>Used to apply PVM specific memory configuration settings.</p>
-<h4 id="settingspolkavmheapsize"><a class="header" href="#settingspolkavmheapsize"><code>settings.polkavm.heapSize</code></a></h4>
+<h4 id="settingspolkavmmemoryconifgheapsize"><a class="header" href="#settingspolkavmmemoryconifgheapsize"><code>settings.polkavm.memoryConifg.heapSize</code></a></h4>
 <p>A numerical value allowing to configure the contract heap size. Corresponds to <code>resolc --heap-size</code>.</p>
-<h4 id="settingspolkavmstacksize"><a class="header" href="#settingspolkavmstacksize"><code>settings.polkavm.stackSize</code></a></h4>
+<h4 id="settingspolkavmmemoryconifgstacksize"><a class="header" href="#settingspolkavmmemoryconifgstacksize"><code>settings.polkavm.memoryConifg.stackSize</code></a></h4>
 <p>A numerical value allowing to configure the contract stack size. Corresponds to <code>resolc --stack-size</code>.</p>
 <h2 id="the-settingsoptimizer-object"><a class="header" href="#the-settingsoptimizer-object">The <code>settings.optimizer</code> object</a></h2>
 <p>The <code>settings.optimizer</code> object is augmented with support for PVM specific optimization settings.</p>
@@ -385,8 +385,6 @@ Therefore, in EVM terminology, the deploy code equals the runtime code.</p>
 <p>In the constructor code, the offset is ignored and this always returns <code>0</code>.</p>
 <h3 id="codecopy"><a class="header" href="#codecopy"><code>codecopy</code></a></h3>
 <p>Only supported in constructor code.</p>
-<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
-<p>Traps the contract but does not consume the remaining gas.</p>
 <h3 id="create-create2"><a class="header" href="#create-create2"><code>create</code>, <code>create2</code></a></h3>
 <p>Deployments on revive work different than on EVM. In a nutshell: Instead of supplying the deploy code concatenated with the constructor arguments (the EVM deploy model), the <a href="https://docs.rs/pallet-revive/latest/pallet_revive/trait.SyscallDoc.html#tymethod.instantiate">revive runtime expects two pointers</a>:</p>
 <ol>
@@ -647,7 +645,7 @@ make test-wasm
 <p>See above, the same applies.</p>
 <h2 id="in-what-solidity-version-should-i-write-my-dapp"><a class="header" href="#in-what-solidity-version-should-i-write-my-dapp">In what Solidity version should I write my dApp?</a></h2>
 <p>We generally recommend to always use the latest supported version to profit from latest bugfixes, features and performance improvements.</p>
-<p>Find out about the latest supported version by running <code>resolc --supported-solc-versions</code> or checking <a href="https://github.com/paritytech/resolc-bin">here</a>.</p>
+<p>Find out about the latest supported version by running <code>resolc --supported-solc-versions</code> or checking <a href="https://paritytech.github.io/resolc-bin/">here</a>.</p>
 <h2 id="tool-xy-says-the-contract-size-is-larger-than-24kb-and-will-fail-to-deploy"><a class="header" href="#tool-xy-says-the-contract-size-is-larger-than-24kb-and-will-fail-to-deploy">Tool <code>XY</code> says the contract size is larger than 24kb and will fail to deploy?</a></h2>
 <p>The 24kb code size restriction only exist for the EVM. Our limit is currently around 1mb and may increase further in the future.</p>
 <h2 id="is-resolc-a-drop-in-replacement-for-solc"><a class="header" href="#is-resolc-a-drop-in-replacement-for-solc">Is <code>resolc</code> a drop-in replacement for <code>solc</code>?</a></h2>

@@ -16,7 +16,7 @@ See above, the same applies.
 
 We generally recommend to always use the latest supported version to profit from latest bugfixes, features and performance improvements.
 
-Find out about the latest supported version by running `resolc --supported-solc-versions` or checking [here](https://github.com/paritytech/resolc-bin).
+Find out about the latest supported version by running `resolc --supported-solc-versions` or checking [here](https://paritytech.github.io/resolc-bin/).
 
 ## Tool `XY` says the contract size is larger than 24kb and will fail to deploy?
 
@@ -25,4 +25,3 @@ The 24kb code size restriction only exist for the EVM. Our limit is currently ar
 ## Is `resolc` a drop-in replacement for `solc`?
 
 No. `resolc` aims to work similarly to `solc`, but it's not considered a drop-in replacement.
-

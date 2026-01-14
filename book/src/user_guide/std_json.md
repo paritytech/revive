@@ -14,11 +14,11 @@ A boolean value allowing to enable debug information. Corresponds to `resolc -g`
 
 Used to apply PVM specific memory configuration settings.
 
-#### `settings.polkavm.heapSize`
+#### `settings.polkavm.memoryConifg.heapSize`
 
 A numerical value allowing to configure the contract heap size. Corresponds to `resolc --heap-size`.
 
-#### `settings.polkavm.stackSize`
+#### `settings.polkavm.memoryConifg.stackSize`
 
 A numerical value allowing to configure the contract stack size. Corresponds to `resolc --stack-size`.
 

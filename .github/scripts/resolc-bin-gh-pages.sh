@@ -72,6 +72,8 @@ $(render_builds_table $linux)
 
 </details>
 
+[JSON](https://paritytech.github.io/resolc-bin/linux/list.json)
+
 ## MacOS
 
 <details>
@@ -80,6 +82,8 @@ $(render_builds_table $linux)
 $(render_builds_table $macos)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/macos/list.json)
 
 ## Wasm
 
@@ -90,6 +94,8 @@ $(render_builds_table $wasm)
 
 </details>
 
+[JSON](https://paritytech.github.io/resolc-bin/wasm/list.json)
+
 ## Windows
 
 <details>
@@ -98,6 +104,8 @@ $(render_builds_table $wasm)
 $(render_builds_table $windows)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/windows/list.json)
 
 ## Nightly
 
@@ -110,6 +118,8 @@ $(render_builds_table $nightly_linux)
 
 </details>
 
+[JSON](https://paritytech.github.io/resolc-bin/nightly/linux/list.json)
+
 ### MacOS
 
 <details>
@@ -118,6 +128,8 @@ $(render_builds_table $nightly_linux)
 $(render_builds_table $nightly_macos)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/macos/list.json)
 
 ### Wasm
 
@@ -128,6 +140,8 @@ $(render_builds_table $nightly_wasm)
 
 </details>
 
+[JSON](https://paritytech.github.io/resolc-bin/nightly/wasm/list.json)
+
 ### Windows
 
 <details>
@@ -136,6 +150,8 @@ $(render_builds_table $nightly_wasm)
 $(render_builds_table $nightly_windows)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/windows/list.json)
 EOF
 
 echo "File has been updated!"

@@ -64,14 +64,7 @@ impl Settings {
     /// Creates settings from a CLI optimization parameter.
     pub fn try_from_cli(value: char) -> anyhow::Result<Self> {
         Ok(match value {
-            '0' => Self::new(
-                // The middle-end optimization level.
-                inkwell::OptimizationLevel::None,
-                // The middle-end size optimization level.
-                SizeLevel::Zero,
-                // The back-end optimization level.
-                inkwell::OptimizationLevel::None,
-            ),
+            '0' => Self::none(),
             '1' => Self::new(
                 inkwell::OptimizationLevel::Less,
                 SizeLevel::Zero,
@@ -84,23 +77,14 @@ impl Settings {
                 // The back-end does not currently distinguish between O1, O2, and O3.
                 inkwell::OptimizationLevel::Default,
             ),
-            '3' => Self::new(
-                inkwell::OptimizationLevel::Aggressive,
-                SizeLevel::Zero,
-                inkwell::OptimizationLevel::Aggressive,
-            ),
+            '3' => Self::cycles(),
             's' => Self::new(
                 // The middle-end optimization level is ignored when SizeLevel is set.
                 inkwell::OptimizationLevel::Default,
                 SizeLevel::S,
                 inkwell::OptimizationLevel::Aggressive,
             ),
-            'z' => Self::new(
-                // The middle-end optimization level is ignored when SizeLevel is set.
-                inkwell::OptimizationLevel::Default,
-                SizeLevel::Z,
-                inkwell::OptimizationLevel::Aggressive,
-            ),
+            'z' => Self::size(),
             char => anyhow::bail!("Unexpected optimization option '{}'", char),
         })
     }
@@ -126,6 +110,7 @@ impl Settings {
     /// Returns the settings for the optimal size.
     pub fn size() -> Self {
         Self::new(
+            // The middle-end optimization level is ignored when SizeLevel is set.
             inkwell::OptimizationLevel::Default,
             SizeLevel::Z,
             inkwell::OptimizationLevel::Aggressive,

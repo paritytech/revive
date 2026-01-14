@@ -4,10 +4,12 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
 use revive_common::MetadataHash;
-use revive_solc_json_interface::SolcStandardJsonOutputError;
+use revive_solc_json_interface::{
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutputError,
+};
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
 /// are given or "-" is specified as a file name). Outputs the components based on the
@@ -57,8 +59,8 @@ pub struct Arguments {
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[arg(short = 'O', long = "optimization")]
-    pub optimization: Option<char>,
+    #[arg(short = 'O', long = "optimization", default_value = "z")]
+    pub optimization: char,
 
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
@@ -116,9 +118,8 @@ pub struct Arguments {
 
     /// Set the metadata hash type.
     /// Available types: `none`, `ipfs`, `keccak256`.
-    /// The default is `keccak256`.
-    #[arg(long)]
-    pub metadata_hash: Option<String>,
+    #[arg(long, default_value_t = MetadataHash::Keccak256)]
+    pub metadata_hash: MetadataHash,
 
     /// Output PolkaVM assembly of the contracts.
     #[arg(long = "asm")]
@@ -185,9 +186,9 @@ pub struct Arguments {
     /// You are incentiviced to keep this value as small as possible:
     /// 1.Increasing the heap size will increase startup costs.
     /// 2.The heap size contributes to the total memory size a contract can use,
-    ///   which includes the contracts code size
-    #[arg(long = "heap-size")]
-    pub heap_size: Option<u32>,
+    ///   which includes the contracts code size.
+    #[arg(long = "heap-size", default_value_t = PolkaVMDefaultHeapMemorySize)]
+    pub heap_size: u32,
 
     /// The contracts total stack size in bytes.
     ///
@@ -198,16 +199,17 @@ pub struct Arguments {
     /// eventually revert execution at runtime!
     ///
     /// You are incentiviced to keep this value as small as possible:
-    /// 1.Increasing the heap size will increase startup costs.
+    /// 1.Increasing the stack size will increase startup costs.
     /// 2.The stack size contributes to the total memory size a contract can use,
-    ///   which includes the contracts code size
-    #[arg(long = "stack-size")]
-    pub stack_size: Option<u32>,
+    ///   which includes the contracts code size.
+    #[arg(long = "stack-size", default_value_t = PolkaVMDefaultStackMemorySize)]
+    pub stack_size: u32,
 }
 
 impl Arguments {
     /// Validates the arguments.
     pub fn validate(&self) -> Vec<SolcStandardJsonOutputError> {
+        let argument_matches = Self::command().get_matches();
         let mut messages = Vec::new();
 
         if self.version && std::env::args().count() > 2 {
@@ -226,9 +228,13 @@ impl Arguments {
             ));
         }
 
-        if self.metadata_hash == Some(MetadataHash::IPFS.to_string()) {
+        if self.metadata_hash == MetadataHash::IPFS {
             messages.push(SolcStandardJsonOutputError::new_error(
-                "`IPFS` metadata hash type is not supported. Please use `keccak256` instead.",
+                format!(
+                    "`{}` metadata hash type is not supported. Please use `{}` instead.",
+                    MetadataHash::IPFS,
+                    MetadataHash::Keccak256,
+                ),
                 None,
                 None,
             ));
@@ -350,34 +356,34 @@ impl Arguments {
             }
             if self.disable_solc_optimizer {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "Disabling the solc optimizer must specified in standard JSON input settings.",
+                    "Disabling the solc optimizer must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
-            if self.optimization.is_some() {
+            if Self::is_argument("optimization", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "LLVM optimizations must specified in standard JSON input settings.",
+                    "LLVM optimizations must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
-            if self.metadata_hash.is_some() {
+            if Self::is_argument("metadata_hash", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
-                    "Metadata hash mode must specified in standard JSON input settings.",
+                    "Metadata hash mode must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
 
-            if self.heap_size.is_some() {
+            if Self::is_argument("heap_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Heap size must be specified in standard JSON input polkavm memory settings.",
                     None,
                     None,
                 ));
             }
-            if self.stack_size.is_some() {
+            if Self::is_argument("stack_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Stack size must be specified in standard JSON input polkavm memory settings.",
                     None,
@@ -401,6 +407,19 @@ impl Arguments {
         }
 
         messages
+    }
+
+    /// Checks whether the value from the argument with the given `argument_id`
+    /// came from the command line.
+    ///
+    /// This can be used for determining if a user has explicitly provided an
+    /// argument, even if it is the same value as the default one.
+    ///
+    /// Panics if the `id` is not a valid argument id.
+    fn is_argument(argument_id: &str, argument_matches: &ArgMatches) -> bool {
+        argument_matches
+            .value_source(argument_id)
+            .is_some_and(|source| source == ValueSource::CommandLine)
     }
 
     /// Returns remappings from input paths.

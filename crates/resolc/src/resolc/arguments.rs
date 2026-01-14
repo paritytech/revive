@@ -209,7 +209,7 @@ pub struct Arguments {
 impl Arguments {
     /// Validates the arguments.
     pub fn validate(&self) -> Vec<SolcStandardJsonOutputError> {
-        let argument_matches = Arguments::command().get_matches();
+        let argument_matches = Self::command().get_matches();
         let mut messages = Vec::new();
 
         if self.version && std::env::args().count() > 2 {
@@ -361,14 +361,14 @@ impl Arguments {
                     None,
                 ));
             }
-            if !Self::came_from_default_value("optimization", &argument_matches) {
+            if Self::is_explicit_argument("optimization", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "LLVM optimizations must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
-            if !Self::came_from_default_value("metadata_hash", &argument_matches) {
+            if Self::is_explicit_argument("metadata_hash", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Metadata hash mode must be specified in standard JSON input settings.",
                     None,
@@ -376,14 +376,14 @@ impl Arguments {
                 ));
             }
 
-            if !Self::came_from_default_value("heap_size", &argument_matches) {
+            if Self::is_explicit_argument("heap_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Heap size must be specified in standard JSON input polkavm memory settings.",
                     None,
                     None,
                 ));
             }
-            if !Self::came_from_default_value("stack_size", &argument_matches) {
+            if Self::is_explicit_argument("stack_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Stack size must be specified in standard JSON input polkavm memory settings.",
                     None,
@@ -410,16 +410,16 @@ impl Arguments {
     }
 
     /// Checks whether the value from the argument with the given `argument_id`
-    /// came from the preconfigured default value.
+    /// came from the command line.
     ///
-    /// This can be used for determining if a user has explicitly set a value for
-    /// an argument, even if it is the same value as the default one.
+    /// This can be used for determining if a user has explicitly provided an
+    /// argument, even if it is the same value as the default one.
     ///
     /// Panics if the `id` is not a valid argument id.
-    fn came_from_default_value(argument_id: &str, argument_matches: &ArgMatches) -> bool {
+    fn is_explicit_argument(argument_id: &str, argument_matches: &ArgMatches) -> bool {
         argument_matches
             .value_source(argument_id)
-            .is_some_and(|source| source == ValueSource::DefaultValue)
+            .is_some_and(|source| source == ValueSource::CommandLine)
     }
 
     /// Returns remappings from input paths.

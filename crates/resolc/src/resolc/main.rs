@@ -171,8 +171,6 @@ fn main_inner(
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
-    let metadata_hash = arguments.metadata_hash;
-
     let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
         Some(arguments.heap_size),
         Some(arguments.stack_size),
@@ -183,7 +181,7 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             optimizer_settings,
             debug_config,
@@ -193,7 +191,7 @@ fn main_inner(
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &solc,
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             standard_json.map(PathBuf::from),
             arguments.base_path,
@@ -208,7 +206,7 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             evm_version,
             format,
@@ -233,7 +231,7 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             evm_version,
             !arguments.disable_solc_optimizer,

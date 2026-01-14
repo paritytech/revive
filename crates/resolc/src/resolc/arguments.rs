@@ -361,14 +361,14 @@ impl Arguments {
                     None,
                 ));
             }
-            if Self::is_explicit_argument("optimization", &argument_matches) {
+            if Self::is_argument("optimization", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "LLVM optimizations must be specified in standard JSON input settings.",
                     None,
                     None,
                 ));
             }
-            if Self::is_explicit_argument("metadata_hash", &argument_matches) {
+            if Self::is_argument("metadata_hash", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Metadata hash mode must be specified in standard JSON input settings.",
                     None,
@@ -376,14 +376,14 @@ impl Arguments {
                 ));
             }
 
-            if Self::is_explicit_argument("heap_size", &argument_matches) {
+            if Self::is_argument("heap_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Heap size must be specified in standard JSON input polkavm memory settings.",
                     None,
                     None,
                 ));
             }
-            if Self::is_explicit_argument("stack_size", &argument_matches) {
+            if Self::is_argument("stack_size", &argument_matches) {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Stack size must be specified in standard JSON input polkavm memory settings.",
                     None,
@@ -416,7 +416,7 @@ impl Arguments {
     /// argument, even if it is the same value as the default one.
     ///
     /// Panics if the `id` is not a valid argument id.
-    fn is_explicit_argument(argument_id: &str, argument_matches: &ArgMatches) -> bool {
+    fn is_argument(argument_id: &str, argument_matches: &ArgMatches) -> bool {
         argument_matches
             .value_source(argument_id)
             .is_some_and(|source| source == ValueSource::CommandLine)

@@ -1,6 +1,7 @@
 //! The Solidity compiler unit tests.
 
 mod factory_dependency;
+mod ipfs_metadata;
 mod ir_artifacts;
 mod libraries;
 mod messages;

@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use path_slash::PathExt;
-use revive_common::MetadataHash;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
@@ -221,14 +220,6 @@ impl Arguments {
         if self.supported_solc_versions && std::env::args().count() > 2 {
             messages.push(SolcStandardJsonOutputError::new_error(
                 "No other options are allowed while getting the supported `solc` version.",
-                None,
-                None,
-            ));
-        }
-
-        if self.metadata_hash == Some(MetadataHash::IPFS.to_string()) {
-            messages.push(SolcStandardJsonOutputError::new_error(
-                "`IPFS` metadata hash type is not supported. Please use `keccak256` instead.",
                 None,
                 None,
             ));

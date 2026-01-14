@@ -1,15 +1,32 @@
 //! The tests for running resolc with standard JSON option.
 
-use revive_solc_json_interface::{PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize};
+use revive_solc_json_interface::{
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutput,
+};
 
 use crate::cli_utils::{
-    assert_command_success, assert_equal_exit_codes, assert_standard_json_errors_contain,
-    execute_resolc_with_stdin_input, execute_solc_with_stdin_input, to_solc_standard_json_output,
-    STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_PATH,
+    assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
+    execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
+
+/// Asserts that the standard JSON output has at least one error with the given `error_message`.
+fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_message: &str) {
+    assert!(
+        output
+            .errors
+            .iter()
+            .any(|error| error.is_error() && error.message.contains(error_message)),
+        "the standard JSON output should contain the error message `{error_message}`"
+    );
+}
+
+/// Converts valid JSON text to `SolcStandardJsonOutput`.
+fn to_solc_standard_json_output(json_text: &str) -> SolcStandardJsonOutput {
+    serde_json::from_str(json_text).unwrap()
+}
 
 #[test]
 fn runs_with_valid_input_file() {

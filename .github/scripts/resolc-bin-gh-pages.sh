@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # This script updates `index.md` in the GitHub Pages root directory provided
-# by the required argument to be passed. The file will be updated to simply
-# render the `resolc-bin` JSON data for each of the supported platforms.
+# by the required argument to be passed. The file will be updated to render
+# the `resolc-bin` release data as a formatted table for each supported platform.
 # `index.md` is the file served by GitHub Pages after being built by Jekyll
 # and the Markdown processed by kramdown.
 
@@ -33,20 +33,22 @@ for file in "${build_info_files[@]}"; do
     fi
 done
 
-# Sort the data by version in descending order.
-sort_by_version_descending() {
+# Render builds as a markdown table with clickable links
+render_builds_table() {
     local build_info_file="$1"
     if [ -z "$build_info_file" ]; then
-        echo "Error: A file path argument is required for sorting"
+        echo "Error: A file path argument is required"
         return 1
     fi
 
-    # Load the data and sort builds and releases with the latest version first.
-    data=$(jq '.' "$build_info_file")
-    sorted_data=$(echo "$data" | jq '.builds = (.builds | sort_by(.version) | reverse) |
-                                     .releases = (.releases | to_entries | sort_by(.key) | reverse | from_entries)')
-
-    echo "$sorted_data" | jq .
+    # Sort builds by version descending and render as markdown table
+    jq -r '
+        .builds | sort_by(.version) | reverse |
+        ["| Release | Solc Versions | SHA256 |", "|---------|---------------|--------|"] +
+        [.[] |
+            "| [\(.name) \(.longVersion)](\(.url)) | \(.firstSolcVersion) - \(.lastSolcVersion) | `\(.sha256[0:16])...` |"
+        ] | .[]
+    ' "$build_info_file"
 }
 
 echo "Updating GitHub Pages index.md file..."
@@ -64,92 +66,92 @@ The information is synced with the [resolc-bin GitHub repository](https://github
 ## Linux
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $linux)
-{% endhighlight %}
+$(render_builds_table $linux)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/linux/list.json)
 
 ## MacOS
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $macos)
-{% endhighlight %}
+$(render_builds_table $macos)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/macos/list.json)
 
 ## Wasm
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $wasm)
-{% endhighlight %}
+$(render_builds_table $wasm)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/wasm/list.json)
 
 ## Windows
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $windows)
-{% endhighlight %}
+$(render_builds_table $windows)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/windows/list.json)
 
 ## Nightly
 
 ### Linux
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $nightly_linux)
-{% endhighlight %}
+$(render_builds_table $nightly_linux)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/linux/list.json)
 
 ### MacOS
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $nightly_macos)
-{% endhighlight %}
+$(render_builds_table $nightly_macos)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/macos/list.json)
 
 ### Wasm
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $nightly_wasm)
-{% endhighlight %}
+$(render_builds_table $nightly_wasm)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/wasm/list.json)
 
 ### Windows
 
 <details>
-    <summary>See builds</summary>
+<summary>See builds</summary>
 
-{% highlight json %}
-$(sort_by_version_descending $nightly_windows)
-{% endhighlight %}
+$(render_builds_table $nightly_windows)
 
 </details>
+
+[JSON](https://paritytech.github.io/resolc-bin/nightly/windows/list.json)
 EOF
 
 echo "File has been updated!"

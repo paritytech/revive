@@ -221,7 +221,6 @@ fn build_host(
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='aarch64'",
-                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::shared_build_opts_ccache(

@@ -17,6 +17,9 @@ fn runs_with_valid_input_file() {
     let resolc_result = execute_resolc_with_stdin_input(arguments, STANDARD_JSON_CONTRACTS_PATH);
     assert_command_success(&resolc_result, "Providing a valid input file to stdin");
 
+    let resolc_output = to_solc_standard_json_output(&resolc_result.stdout);
+    assert!(!resolc_output.errors.iter().any(|error| error.is_error()));
+
     assert!(
         resolc_result.stdout.contains("contracts"),
         "Expected the output to contain a `contracts` field."

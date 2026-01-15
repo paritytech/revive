@@ -38,6 +38,8 @@ use polkadot_sdk::{
     sp_keystore::{testing::MemoryKeystore, KeystoreExt},
     sp_runtime::AccountId32,
 };
+#[cfg(feature = "resolc")]
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use serde::{Deserialize, Serialize};
 
 use crate::runtime::*;
@@ -271,6 +273,8 @@ pub enum Code {
         path: Option<std::path::PathBuf>,
         solc_optimizer: Option<bool>,
         contract: String,
+        #[serde(default)]
+        libraries: SolcStandardJsonInputSettingsLibraries,
     },
     /// Read the contract blob from disk
     Path(std::path::PathBuf),
@@ -294,6 +298,7 @@ impl From<Code> for pallet_revive::Code {
                 path,
                 contract,
                 solc_optimizer,
+                libraries,
             } => {
                 let Some(path) = path else {
                     panic!("Solidity source of contract '{contract}' missing path");
@@ -306,6 +311,7 @@ impl From<Code> for pallet_revive::Code {
                     &source_code,
                     solc_optimizer.unwrap_or(true),
                     revive_llvm_context::OptimizerSettings::cycles(),
+                    libraries,
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),

@@ -11,6 +11,7 @@ Supported `polkadot-sdk` rev: `unstable2507`
 
 ### Fixed
 - OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
+- The superfluous byte swap in `linkersymbol`.
 
 ## v0.6.0
 

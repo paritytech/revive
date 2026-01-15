@@ -28,20 +28,27 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - name: Checkout Commit Before Changes
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref_before }}
+
       - name: Set Up Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # Without this it will override our rust flags.
           rustflags: ""
 
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+
       - name: Install Benchmarking Tools
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
           cargo install critcmp
-
-      - name: Checkout Commit Before Changes
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref_before }}
 
       - name: Install Solc
         uses: ./.github/actions/get-solc

@@ -17,7 +17,7 @@ path = "src/main.rs"
 [features]
 std = ["polkadot-sdk/std"]
 default = ["solidity"]
-solidity = ["resolc", "revive-differential", "revive-llvm-context"]
+solidity = ["resolc", "revive-differential", "revive-llvm-context", "revive-solc-json-interface"]
 
 [dependencies]
 env_logger = { workspace = true }
@@ -42,3 +42,4 @@ polkadot-sdk.features = [
 resolc = { workspace = true, optional = true }
 revive-differential = { workspace = true, optional = true }
 revive-llvm-context = { workspace = true, optional = true }
+revive-solc-json-interface = { workspace = true, optional = true }

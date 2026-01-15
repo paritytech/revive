@@ -59,7 +59,7 @@ alloy-genesis = "1.1.2"
 alloy-serde = "1.1"
 env_logger = { version = "0.11.8", default-features = false }
 serde_stacker = "0.1.14"
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 log = { version = "0.4.28" }
 git2 = { version = "0.20.2", default-features = false }
 downloader = "0.2.8"
@@ -79,7 +79,7 @@ polkadot-sdk = { version = "=2507.4.0" }
 
 # llvm
 [workspace.dependencies.inkwell]
-version = "0.6.0"
+version = "0.8.0"
 default-features = false
 features = ["serde", "llvm18-1", "no-libffi-linking", "target-riscv"]
 

@@ -59,99 +59,63 @@ title: resolc-bin
 ---
 
 # resolc-bin
+{:.no_toc}
 
 Listed here are details about the \`resolc\` binary releases for the supported platforms.
 The information is synced with the [resolc-bin GitHub repository](https://github.com/paritytech/resolc-bin).
 
-## Linux
+* TOC
+{:toc}
 
-<details>
-<summary>See builds</summary>
+## Linux
 
 $(render_builds_table $linux)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/linux/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/linux/list.json)
 
 ## MacOS
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $macos)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/macos/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/macos/list.json)
 
 ## Wasm
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $wasm)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/wasm/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/wasm/list.json)
 
 ## Windows
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $windows)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/windows/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/windows/list.json)
 
 ## Nightly
 
 ### Linux
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $nightly_linux)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/nightly/linux/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/nightly/linux/list.json)
 
 ### MacOS
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $nightly_macos)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/nightly/macos/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/nightly/macos/list.json)
 
 ### Wasm
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $nightly_wasm)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/nightly/wasm/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/nightly/wasm/list.json)
 
 ### Windows
 
-<details>
-<summary>See builds</summary>
-
 $(render_builds_table $nightly_windows)
 
-</details>
-
-[JSON](https://paritytech.github.io/resolc-bin/nightly/windows/list.json)
+[Full JSON](https://paritytech.github.io/resolc-bin/nightly/windows/list.json)
 EOF
 
 echo "File has been updated!"

@@ -67,6 +67,7 @@ test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
 test_spec!(call_gas, "CallGas", "CallGas.sol");
+test_spec!(linker_symbol, "Linked", "Linked.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -78,6 +79,7 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
             path: Some(path.into()),
             contract: contract.to_string(),
             solc_optimizer: None,
+            libraries: Default::default(),
         },
         data: vec![],
         salt: OptionalHex::default(),
@@ -372,6 +374,7 @@ fn ext_code_size() {
                     path: Some("contracts/Baseline.sol".into()),
                     contract: "Baseline".to_string(),
                     solc_optimizer: None,
+                    libraries: Default::default(),
                 },
                 data: vec![],
                 salt: OptionalHex::from([0; 32]),

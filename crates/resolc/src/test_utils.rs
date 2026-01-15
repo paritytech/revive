@@ -337,6 +337,7 @@ pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
         source_code,
         true,
         OptimizerSettings::cycles(),
+        Default::default(),
     )
 }
 
@@ -346,6 +347,7 @@ pub fn compile_blob_with_options(
     source_code: &str,
     solc_optimizer_enabled: bool,
     optimizer_settings: OptimizerSettings,
+    libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
@@ -364,7 +366,7 @@ pub fn compile_blob_with_options(
             file_name.to_owned(),
             SolcStandardJsonInputSource::from(source_code.to_owned()),
         )]),
-        Default::default(),
+        libraries,
         Default::default(),
         optimizer_settings,
         solc_optimizer_enabled,
@@ -391,8 +393,12 @@ pub fn compile_blob_with_options(
 
 /// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
 /// The `solc` optimizer will be enabled
-pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, true, true)
+pub fn compile_evm_bin_runtime(
+    contract_name: &str,
+    source_code: &str,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+) -> Vec<u8> {
+    compile_evm(contract_name, source_code, true, true, libraries)
 }
 
 /// Compile the EVM bin of `contract_name` found in given `source_code`.
@@ -400,8 +406,15 @@ pub fn compile_evm_deploy_code(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
+    libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
-    compile_evm(contract_name, source_code, solc_optimizer_enabled, false)
+    compile_evm(
+        contract_name,
+        source_code,
+        solc_optimizer_enabled,
+        false,
+        libraries,
+    )
 }
 
 /// Convert `(path, solidity)` tuples to a standard JSON input source.
@@ -434,6 +447,7 @@ fn compile_evm(
     source_code: &str,
     solc_optimizer_enabled: bool,
     runtime: bool,
+    libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
@@ -457,7 +471,7 @@ fn compile_evm(
             file_name.into(),
             SolcStandardJsonInputSource::from(source_code.to_owned()),
         )]),
-        Default::default(),
+        libraries,
         Default::default(),
         solc_optimizer_enabled,
     )

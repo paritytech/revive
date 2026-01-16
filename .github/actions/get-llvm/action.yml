@@ -21,7 +21,7 @@ runs:
       run: |
         if [ -z "${{ inputs.version }}" ]; then
           # Get the full version from the LLVM submodule.
-          git submodule update --init --recursive
+          git submodule update --init --recursive --depth 1
           cd llvm
           # Try to get the most recent tag (e.g., "llvmorg-18.1.8")
           LLVM_TAG=$(git describe --tags --abbrev=0 2>/dev/null)

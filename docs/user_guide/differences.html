@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8c3ce0af.js";
+            window.path_to_searchindex_js = "../searchindex-4ae832c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6f3f265e.js"></script>
@@ -199,7 +199,7 @@ Therefore, in EVM terminology, the deploy code equals the runtime code.</p>
 <h3 id="mload-mstore-msize-mcopy-memory-related-functions"><a class="header" href="#mload-mstore-msize-mcopy-memory-related-functions"><code>mload</code>, <code>mstore</code>, <code>msize</code>, <code>mcopy</code> (memory related functions)</a></h3>
 <p>In general, revive preserves the memory layout, meaning low level memory operations are supported. However, a few caveats apply:</p>
 <ul>
-<li>The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefore varies).</li>
+<li>The EVM linear heap memory is emulated using a fixed byte buffer of 128kb. This implies that the maximum memory a contract can use is limited to 128kb (on Ethereum, contract memory is capped by gas and therefore varies).</li>
 <li>Thus, accessing memory offsets larger than the fixed buffer size will trap the contract at runtime with an <code>OutOfBound</code> error.</li>
 <li>The compiler might detect and optimize unused memory reads and writes, leading to a different <code>msize</code> compared to what the EVM would see.</li>
 </ul>
@@ -219,7 +219,7 @@ The hash is always of constant size.
 Thus, <code>revive</code> is able to supply the expected code hash and constructor arguments pointer to the runtime.</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>This might fall apart in code creating contracts inside <code>assembly</code> blocks. <strong>We strongly discourage using the <code>create</code> family opcodes to manually craft deployments in <code>assembly</code> blocks!</strong> Usually, the reason for using <code>assembly</code> blocks is to save gas, which is futile on revive anyways due to lower transaction costs.</p>
+<p>This might fall apart in code creating contracts inside <code>assembly</code> blocks. <strong>We strongly discourage using the <code>create</code> family opcodes to manually craft deployments in <code>assembly</code> blocks!</strong> Usually, the reason for using <code>assembly</code> blocks is to save gas, which is likely futile on revive due to the underlying differences in the VM architectures, gas models and transaction costs.</p>
 </blockquote>
 <h3 id="dataoffset"><a class="header" href="#dataoffset"><code>dataoffset</code></a></h3>
 <p>Returns the contract hash.</p>
@@ -234,6 +234,32 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <h2 id="difference-regarding-the-solc-via-ir-mode"><a class="header" href="#difference-regarding-the-solc-via-ir-mode">Difference regarding the <code>solc</code> <code>via-ir</code> mode</a></h2>
 <p>There are two different compilation pipelines available in <code>solc</code> and <a href="https://docs.soliditylang.org/en/latest/ir-breaking-changes.html">there are small differences between them</a>.</p>
 <p>Since <code>resolc</code> processes the YUL IR, always assume the <code>solc</code> IR based codegen behavior for contracts compiled with the <code>revive</code> compiler.</p>
+<h3 id="example-state-variable-initialization-order-in-inheritance"><a class="header" href="#example-state-variable-initialization-order-in-inheritance">Example: State variable initialization order in inheritance</a></h3>
+<p>With <code>via-ir</code>, base constructors run before derived state variables are initialized:</p>
+<pre><code class="language-solidity">contract InnerContract {
+    uint public innerConstructedStartTokenId;
+
+    constructor() {
+        innerConstructedStartTokenId = _startTokenId();
+    }
+
+    function _startTokenId() internal view virtual returns (uint) {
+        return 0;
+    }
+}
+
+contract Test is InnerContract {
+    uint public START_TOKEN_ID = 1;
+
+    constructor() InnerContract() {
+    }
+
+    function _startTokenId() internal view virtual override returns (uint) {
+        return START_TOKEN_ID;
+    }
+}
+</code></pre>
+<p>Here, <code>innerConstructedStartTokenId</code> in <code>Test</code> returns <code>0</code> (with legacy EVM codegen it’d return <code>1</code>).</p>
 
                     </main>
 

@@ -35,7 +35,7 @@ The `solc` compiler ought to always emit valid memory references, so Solidity dA
 ### `mload`, `mstore`, `msize`, `mcopy` (memory related functions) 
 
 In general, revive preserves the memory layout, meaning low level memory operations are supported. However, a few caveats apply:
-- The EVM linear heap memory is emulated using a fixed byte buffer of 64kb. This implies that the maximum memory a contract can use is limited to 64kbit (on Ethereum, contract memory is capped by gas and therefore varies).
+- The EVM linear heap memory is emulated using a fixed byte buffer of 128kb. This implies that the maximum memory a contract can use is limited to 128kb (on Ethereum, contract memory is capped by gas and therefore varies).
 - Thus, accessing memory offsets larger than the fixed buffer size will trap the contract at runtime with an `OutOfBound` error.
 - The compiler might detect and optimize unused memory reads and writes, leading to a different `msize` compared to what the EVM would see. 
 
@@ -60,7 +60,7 @@ Thus, `revive` is able to supply the expected code hash and constructor argument
 
 > [!WARNING]
 >
-> This might fall apart in code creating contracts inside `assembly` blocks. **We strongly discourage using the `create` family opcodes to manually craft deployments in `assembly` blocks!** Usually, the reason for using `assembly` blocks is to save gas, which is futile on revive anyways due to lower transaction costs.
+> This might fall apart in code creating contracts inside `assembly` blocks. **We strongly discourage using the `create` family opcodes to manually craft deployments in `assembly` blocks!** Usually, the reason for using `assembly` blocks is to save gas, which is likely futile on revive due to the underlying differences in the VM architectures, gas models and transaction costs.
 
 ### `dataoffset`
 
@@ -87,4 +87,35 @@ Related to the Ethereum rollup model and produce a compile time error. Polkadot 
 There are two different compilation pipelines available in `solc` and [there are small differences between them](https://docs.soliditylang.org/en/latest/ir-breaking-changes.html).
 
 Since `resolc` processes the YUL IR, always assume the `solc` IR based codegen behavior for contracts compiled with the `revive` compiler.
+
+### Example: State variable initialization order in inheritance
+
+With `via-ir`, base constructors run before derived state variables are initialized:
+
+```solidity
+contract InnerContract {
+    uint public innerConstructedStartTokenId;
+
+    constructor() {
+        innerConstructedStartTokenId = _startTokenId();
+    }
+
+    function _startTokenId() internal view virtual returns (uint) {
+        return 0;
+    }
+}
+
+contract Test is InnerContract {
+    uint public START_TOKEN_ID = 1;
+
+    constructor() InnerContract() {
+    }
+
+    function _startTokenId() internal view virtual override returns (uint) {
+        return START_TOKEN_ID;
+    }
+}
+```
+
+Here, `innerConstructedStartTokenId` in `Test` returns `0` (with legacy EVM codegen it'd return `1`).
 

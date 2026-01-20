@@ -68,6 +68,11 @@ test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
 test_spec!(call_gas, "CallGas", "CallGas.sol");
 test_spec!(linker_symbol, "Linked", "Linked.sol");
+test_spec!(
+    struct_delete_storage,
+    "StructDeleteStorage",
+    "StructDeleteStorage.sol"
+);
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

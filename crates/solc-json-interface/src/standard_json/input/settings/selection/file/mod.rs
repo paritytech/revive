@@ -93,7 +93,7 @@ impl File {
         }
     }
 
-    /// Checks whether the `flag` is selected.
+    /// Checks whether the `flag` is requested.
     pub fn contains(&self, flag: &SelectionFlag) -> bool {
         match flag {
             flag @ SelectionFlag::AST => self.per_file.contains(flag),
@@ -101,7 +101,7 @@ impl File {
         }
     }
 
-    /// Checks whether any of the `flags` is selected.
+    /// Checks whether any of the `flags` is requested.
     pub fn contains_any(&self, flags: &[&SelectionFlag]) -> bool {
         flags.iter().any(|flag| self.contains(flag))
     }

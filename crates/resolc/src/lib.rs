@@ -26,7 +26,6 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
-use revive_solc_json_interface::SolcStandardJsonInputSettingsSelectionFileFlag;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
@@ -212,13 +211,8 @@ pub fn standard_json<T: Compiler>(
         .debug_information
         .unwrap_or(false);
 
-    let codegen_requested = solc_input.settings.output_selection.contains_any(&[
-        &SolcStandardJsonInputSettingsSelectionFileFlag::EVM,
-        &SolcStandardJsonInputSettingsSelectionFileFlag::EVMBC,
-        &SolcStandardJsonInputSettingsSelectionFileFlag::EVMDBC,
-        &SolcStandardJsonInputSettingsSelectionFileFlag::Assembly,
-    ]);
-    if codegen_requested {
+    let requests_codegen = solc_input.settings.output_selection.requests_codegen();
+    if requests_codegen {
         solc_input
             .extend_selection(SolcStandardJsonInputSettingsSelection::new_required_for_codegen());
     }
@@ -233,7 +227,7 @@ pub fn standard_json<T: Compiler>(
 
     let (mut solc_output, project) = match language {
         SolcStandardJsonInputLanguage::Solidity => {
-            if !codegen_requested {
+            if !requests_codegen {
                 solc_output.write_and_exit(prune_output);
             }
             let project = Project::try_from_standard_json_output(
@@ -246,7 +240,7 @@ pub fn standard_json<T: Compiler>(
         }
         SolcStandardJsonInputLanguage::Yul => {
             let mut solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
-            if !codegen_requested || solc_output.has_errors() {
+            if !requests_codegen || solc_output.has_errors() {
                 solc_output.write_and_exit(prune_output);
             }
             let project = Project::try_from_yul_sources(

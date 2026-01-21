@@ -132,16 +132,21 @@ impl Selection {
         }
     }
 
-    /// Checks whether the `flag` is selected.
+    /// Checks whether the `flag` is requested.
     pub fn contains(&self, path: &String, flag: &Flag) -> bool {
         self.files
             .contains(path, flag)
             .unwrap_or(self.all.contains(flag))
     }
 
-    /// Checks whether any of the `flags` is selected in any of the files.
+    /// Checks whether any of the `flags` is requested in any of the files.
     pub fn contains_any(&self, flags: &[&Flag]) -> bool {
         self.all.contains_any(flags) || self.files.contains_any(flags)
+    }
+
+    /// Checks whether code generation is requested.
+    pub fn requests_codegen(&self) -> bool {
+        self.contains_any(&[&Flag::EVM, &Flag::EVMBC, &Flag::EVMDBC, &Flag::Assembly])
     }
 
     /// Removes unneeded selections.

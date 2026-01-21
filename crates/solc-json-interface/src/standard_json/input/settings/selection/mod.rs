@@ -44,7 +44,7 @@ impl PerFileSelection {
         Self { files }
     }
 
-    /// Returns whether `path` contains the `flag` or `None` if there is no selection for `path`.
+    /// Checks whether `path` contains the `flag` or `None` if there is no selection for `path`.
     pub fn contains(&self, path: &String, flag: &Flag) -> Option<bool> {
         if let Some(file) = self.files.get(path) {
             return Some(file.contains(flag));
@@ -52,7 +52,12 @@ impl PerFileSelection {
         None
     }
 
-    /// Returns whether this is the empty per file selection.
+    /// Checks whether any of the `flags` is selected in any of the files.
+    pub fn contains_any(&self, flags: &[&Flag]) -> bool {
+        self.files.values().any(|file| file.contains_any(flags))
+    }
+
+    /// Checks whether this is the empty per file selection.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
@@ -71,8 +76,8 @@ impl PerFileSelection {
 pub struct Selection {
     /// Only the 'all' wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
-    /// Individual file selection configuration, required for foundry.
     pub all: FileSelection,
+    /// Individual file selection configuration, required for foundry.
     #[serde(skip_serializing_if = "PerFileSelection::is_empty", flatten)]
     files: PerFileSelection,
 }
@@ -87,7 +92,7 @@ impl Selection {
     }
 
     /// Creates the selection required by our compilation process.
-    pub fn new_required() -> Self {
+    pub fn new_required_for_codegen() -> Self {
         Self::new(vec![
             Flag::AST,
             Flag::MethodIdentifiers,
@@ -127,11 +132,16 @@ impl Selection {
         }
     }
 
-    /// Whether the flag is requested.
+    /// Checks whether the `flag` is selected.
     pub fn contains(&self, path: &String, flag: &Flag) -> bool {
         self.files
             .contains(path, flag)
             .unwrap_or(self.all.contains(flag))
+    }
+
+    /// Checks whether any of the `flags` is selected in any of the files.
+    pub fn contains_any(&self, flags: &[&Flag]) -> bool {
+        self.all.contains_any(flags) || self.files.contains_any(flags)
     }
 
     /// Removes unneeded selections.

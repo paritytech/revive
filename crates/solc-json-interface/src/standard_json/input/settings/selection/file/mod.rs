@@ -92,12 +92,18 @@ impl File {
             per_contract: unset_per_contract,
         }
     }
-    /// Whether the flag is requested.
+
+    /// Checks whether the `flag` is selected.
     pub fn contains(&self, flag: &SelectionFlag) -> bool {
         match flag {
             flag @ SelectionFlag::AST => self.per_file.contains(flag),
             flag => self.per_contract.contains(flag),
         }
+    }
+
+    /// Checks whether any of the `flags` is selected.
+    pub fn contains_any(&self, flags: &[&SelectionFlag]) -> bool {
+        flags.iter().any(|flag| self.contains(flag))
     }
 
     /// Checks whether the selection is empty.

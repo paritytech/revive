@@ -26,6 +26,7 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsSelectionFileFlag;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
 
@@ -130,7 +131,7 @@ pub fn standard_output<T: Compiler>(
         input_files,
         libraries,
         remappings,
-        SolcStandardJsonInputSettingsSelection::new_required(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_codegen(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
             SolcStandardJsonInputSettingsOptimizer::default_mode(),
@@ -210,7 +211,17 @@ pub fn standard_json<T: Compiler>(
         .polkavm
         .debug_information
         .unwrap_or(false);
-    solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
+
+    let codegen_requested = solc_input.settings.output_selection.contains_any(&[
+        &SolcStandardJsonInputSettingsSelectionFileFlag::EVM,
+        &SolcStandardJsonInputSettingsSelectionFileFlag::EVMBC,
+        &SolcStandardJsonInputSettingsSelectionFileFlag::EVMDBC,
+        &SolcStandardJsonInputSettingsSelectionFileFlag::Assembly,
+    ]);
+    if codegen_requested {
+        solc_input
+            .extend_selection(SolcStandardJsonInputSettingsSelection::new_required_for_codegen());
+    }
     solc_input.retain_output_selection();
     let mut solc_output = solc.standard_json(
         &mut solc_input,
@@ -222,6 +233,9 @@ pub fn standard_json<T: Compiler>(
 
     let (mut solc_output, project) = match language {
         SolcStandardJsonInputLanguage::Solidity => {
+            if !codegen_requested {
+                solc_output.write_and_exit(prune_output);
+            }
             let project = Project::try_from_standard_json_output(
                 &mut solc_output,
                 solc_input.settings.libraries,
@@ -232,7 +246,7 @@ pub fn standard_json<T: Compiler>(
         }
         SolcStandardJsonInputLanguage::Yul => {
             let mut solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
-            if solc_output.has_errors() {
+            if !codegen_requested || solc_output.has_errors() {
                 solc_output.write_and_exit(prune_output);
             }
             let project = Project::try_from_yul_sources(

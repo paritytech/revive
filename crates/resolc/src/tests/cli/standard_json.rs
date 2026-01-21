@@ -8,6 +8,7 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
@@ -23,6 +24,11 @@ fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_me
     );
 }
 
+/// Asserts that the standard JSON output has no errors with severity `error`.
+fn assert_no_errors(output: &SolcStandardJsonOutput) {
+    assert!(!output.errors.iter().any(|error| error.is_error()));
+}
+
 /// Converts valid JSON text to `SolcStandardJsonOutput`.
 fn to_solc_standard_json_output(json_text: &str) -> SolcStandardJsonOutput {
     serde_json::from_str(json_text).unwrap()
@@ -35,7 +41,7 @@ fn runs_with_valid_input_file() {
     assert_command_success(&resolc_result, "Providing a valid input file to stdin");
 
     let resolc_output = to_solc_standard_json_output(&resolc_result.stdout);
-    assert!(!resolc_output.errors.iter().any(|error| error.is_error()));
+    assert_no_errors(&resolc_output);
 
     assert!(
         resolc_result.stdout.contains("contracts"),
@@ -52,7 +58,7 @@ fn no_evm_codegen_requested() {
     assert_command_success(&result, "EVM codegen std json input fixture should build");
 
     let output = to_solc_standard_json_output(&result.stdout);
-    assert!(!output.errors.iter().any(|msg| msg.severity == "error"))
+    assert_no_errors(&output);
 }
 
 /// A variant with more complex contracts.
@@ -71,7 +77,85 @@ fn no_evm_codegen_requested_complex() {
     );
 
     let output = to_solc_standard_json_output(&result.stdout);
-    assert!(!output.errors.iter().any(|msg| msg.severity == "error"))
+    assert_no_errors(&output);
+}
+
+/// Asserts that no PVM codegen output has been generated.
+///
+/// This assert is specific to the files `STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH`
+/// and `STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH`.
+fn assert_no_pvm_codegen(output: &SolcStandardJsonOutput) {
+    // Assert that no extra file-level output required for codegen exist.
+    for (path, source) in output.sources.iter() {
+        assert!(
+            source.ast.is_none(),
+            "the AST for the file `{path}` should not be generated",
+        );
+    }
+
+    assert!(
+        !output.contracts.is_empty(),
+        "contracts should be generated"
+    );
+
+    for (_, contracts) in output.contracts.iter() {
+        for (name, contract) in contracts.iter() {
+            // Assert that no codegen output exist.
+            let evm = contract.evm.as_ref().unwrap();
+            assert!(
+                evm.bytecode.is_none(),
+                "the bytecode for the contract `{name}` should not be generated",
+            );
+            assert!(
+                evm.deployed_bytecode.is_none(),
+                "the deployed bytecode for the contract `{name}` should not be generated",
+            );
+            assert!(
+                evm.assembly_text.is_none(),
+                "the assembly for the contract `{name}` should not be generated",
+            );
+
+            // Assert that no extra contract-level output required for codegen exist.
+            assert!(
+                contract.ir_optimized.is_empty(),
+                "the Yul for the contract `{name}` should not be generated",
+            );
+
+            // Assert that the requested output exists.
+            assert!(
+                !contract.abi.is_null(),
+                "the abi for the contract `{name}` should be generated",
+            );
+            assert!(
+                !contract.metadata.is_null(),
+                "the metadata for the contract `{name}` should be generated",
+            );
+        }
+    }
+}
+
+#[test]
+fn no_pvm_codegen_requested_per_file() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH);
+    assert_command_success(&result, "the no PVM codegen std JSON input fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert_no_pvm_codegen(&output);
+}
+
+#[test]
+fn no_pvm_codegen_requested_for_all_files() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH,
+    );
+    assert_command_success(&result, "the no PVM codegen std JSON input fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert_no_pvm_codegen(&output);
 }
 
 #[test]

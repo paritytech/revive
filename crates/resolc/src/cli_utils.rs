@@ -37,6 +37,22 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
 /// infamous "Stack too deep" error in the EVM codegen.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen_complex.json";
+/// The standard JSON no PVM codegen per file test fixture path.
+///
+/// This omits EVM bytecode selection flags in the per-file output
+/// selection, which should thereby prevent PVM bytecode generation.
+///
+/// These contracts are similar to ones used in an example project.
+pub const STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH: &str =
+    "src/tests/data/standard_json/no_pvm_codegen_per_file.json";
+/// The standard JSON no PVM codegen for all contracts test fixture path.
+///
+/// This omits EVM bytecode selection flags in the `all` (`*`) wildcard
+/// output selection, which should thereby prevent PVM bytecode generation.
+///
+/// These contracts are similar to ones used in an example project.
+pub const STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
+    "src/tests/data/standard_json/no_pvm_codegen_all_wildcard.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

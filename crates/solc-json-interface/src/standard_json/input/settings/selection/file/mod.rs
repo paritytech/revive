@@ -62,31 +62,31 @@ impl File {
         self
     }
 
-    /// Returns flags that are going to be automatically added by the compiler,
-    /// but were not explicitly requested by the user.
+    /// Returns flags that were not explicitly requested by the user.
     ///
-    /// Afterwards, the flags are used to prune JSON output before returning it.
+    /// These flags are used to prune JSON output before returning it,
+    /// removing any output that was automatically added but not requested.
     pub fn selection_to_prune(&self) -> Self {
-        let required_per_file = vec![SelectionFlag::AST];
-        let required_per_contract = vec![
-            SelectionFlag::MethodIdentifiers,
-            SelectionFlag::Metadata,
-            SelectionFlag::Yul,
-        ];
+        let unset_per_file = SelectionFlag::all()
+            .iter()
+            .filter(|flag| !self.per_file.contains(flag))
+            .copied()
+            .collect();
 
-        let mut unset_per_file = HashSet::with_capacity(required_per_file.len());
-        let mut unset_per_contract = HashSet::with_capacity(required_per_contract.len());
+        let mut unset_per_contract: HashSet<_> = SelectionFlag::all()
+            .iter()
+            .filter(|flag| !self.per_contract.contains(flag))
+            .copied()
+            .collect();
 
-        for flag in required_per_file {
-            if !self.per_file.contains(&flag) {
-                unset_per_file.insert(flag);
-            }
+        // The entire EVM output should only be pruned if none of its children are requested.
+        let requests_evm_child = SelectionFlag::evm_children()
+            .iter()
+            .any(|flag| self.per_contract.contains(flag));
+        if requests_evm_child {
+            unset_per_contract.remove(&SelectionFlag::EVM);
         }
-        for flag in required_per_contract {
-            if !self.per_contract.contains(&flag) {
-                unset_per_contract.insert(flag);
-            }
-        }
+
         Self {
             per_file: unset_per_file,
             per_contract: unset_per_contract,

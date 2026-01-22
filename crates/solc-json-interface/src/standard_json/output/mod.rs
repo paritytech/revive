@@ -102,24 +102,9 @@ impl Output {
     ) -> ! {
         for (path, contracts) in self.contracts.iter_mut() {
             for contract in contracts.values_mut() {
-                if selection_to_prune.contains(
-                    path,
-                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata,
-                ) {
-                    contract.metadata = serde_json::Value::Null;
-                }
-                if selection_to_prune.contains(
-                    path,
-                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Yul,
-                ) {
-                    contract.ir_optimized = String::new();
-                }
-                if let Some(ref mut evm) = contract.evm {
-                    if selection_to_prune.contains(
-                        path,
-                        &crate::SolcStandardJsonInputSettingsSelectionFileFlag::MethodIdentifiers,
-                    ) {
-                        evm.method_identifiers.clear();
+                for flag in crate::SolcStandardJsonInputSettingsSelectionFileFlag::all() {
+                    if selection_to_prune.contains(path, flag) {
+                        contract.reset_field_by_flag(flag);
                     }
                 }
             }

@@ -121,10 +121,10 @@ impl Selection {
         self
     }
 
-    /// Returns flags that are going to be automatically added by the compiler,
-    /// but were not explicitly requested by the user.
+    /// Returns flags that were not explicitly requested by the user.
     ///
-    /// Afterwards, the flags are used to prune JSON output before returning it.
+    /// These flags are used to prune JSON output before returning it,
+    /// removing any output that was automatically added but not requested.
     pub fn selection_to_prune(&self) -> Self {
         Self {
             all: self.all.selection_to_prune(),

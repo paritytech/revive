@@ -49,6 +49,37 @@ pub enum Flag {
 }
 
 impl Flag {
+    /// Returns all flag variants.
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::ABI,
+            Self::Metadata,
+            Self::Devdoc,
+            Self::Userdoc,
+            Self::MethodIdentifiers,
+            Self::StorageLayout,
+            Self::AST,
+            Self::Yul,
+            Self::EVM,
+            Self::EVMLA,
+            Self::EVMBC,
+            Self::EVMDBC,
+            Self::Assembly,
+            Self::Ir,
+        ]
+    }
+
+    /// Returns the EVM child flag variants.
+    pub fn evm_children() -> &'static [Self] {
+        &[
+            Self::MethodIdentifiers,
+            Self::EVMLA,
+            Self::EVMBC,
+            Self::EVMDBC,
+            Self::Assembly,
+        ]
+    }
+
     /// Whether this selection flag is required for the revive codegen.
     ///
     /// Specifically, EVM bytecode and related flags should never be requested.

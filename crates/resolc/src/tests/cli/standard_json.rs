@@ -1,7 +1,8 @@
 //! The tests for running resolc with standard JSON option.
 
 use revive_solc_json_interface::{
-    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutput,
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize,
+    SolcStandardJsonInputSettingsSelectionFileFlag, SolcStandardJsonOutput,
 };
 
 use crate::cli_utils::{
@@ -12,6 +13,101 @@ use crate::cli_utils::{
 };
 
 const JSON_OPTION: &str = "--standard-json";
+
+/// A subset of contracts expected to exist in the output.
+struct ExpectedOutput {
+    contracts: Vec<ExpectedContract>,
+}
+
+/// A contract with specific fields, such as `metadata`, `evm.bytecode`,
+/// `irOptimized`, etc., expected to exist in the output.
+struct ExpectedContract {
+    path: &'static str,
+    name: &'static str,
+    fields: Vec<&'static str>,
+}
+
+/// Asserts that the `expected` contracts match the ones in the `actual` output.
+fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
+    assert!(
+        !expected.contracts.is_empty(),
+        "select which contracts should be validated"
+    );
+    assert!(
+        !actual.contracts.is_empty(),
+        "contracts should be generated"
+    );
+
+    // Verify that the provided contract-level output exists.
+    for expected_contract in expected.contracts.iter() {
+        let actual_contract = actual
+            .contracts
+            .get(expected_contract.path)
+            .expect(&format!(
+                "the file `{}` should exist",
+                expected_contract.path
+            ))
+            .get(expected_contract.name)
+            .expect(&format!(
+                "the contract `{}` in file `{}` should exist",
+                expected_contract.name, expected_contract.path
+            ));
+        let actual_contract_json = serde_json::to_value(actual_contract).unwrap();
+
+        // Verify that every requested output exists (e.g. `evm.bytecode`).
+        for field in expected_contract.fields.iter() {
+            let mut parts = field.split('.');
+            let (parent_field, child_field) = (parts.nth(0).unwrap(), parts.nth(1));
+            let parent_output = actual_contract_json.get(parent_field);
+
+            assert!(
+                parent_output.is_some(),
+                "the `{parent_field}` for the contract `{}` should be generated",
+                expected_contract.name,
+            );
+            if let Some(child_field) = child_field {
+                assert!(
+                    parent_output.unwrap().get(child_field).is_some(),
+                    "the `{child_field}` for the contract `{}` should be generated",
+                    expected_contract.name,
+                );
+            }
+        }
+
+        // Verify that every non-requested output is omitted.
+        for field in get_remaining_contract_fields(&expected_contract.fields) {
+            let mut parts = field.split('.');
+            let (parent_field, child_field) = (parts.nth(0).unwrap(), parts.nth(1));
+            let parent_output = actual_contract_json.get(parent_field);
+
+            if let Some(child_field) = child_field {
+                assert!(
+                    parent_output.is_none_or(|p| p.get(child_field).is_none()),
+                    "the `{child_field}` for the contract `{}` should not be generated",
+                    expected_contract.name,
+                );
+            } else {
+                assert!(
+                    parent_output.is_none(),
+                    "the `{parent_field}` for the contract `{}` should not be generated",
+                    expected_contract.name,
+                );
+            }
+        }
+    }
+}
+
+/// Gets the remaining JSON contract fields that are not in the given `fields_subset`.
+fn get_remaining_contract_fields(fields_subset: &Vec<&'static str>) -> Vec<String> {
+    SolcStandardJsonInputSettingsSelectionFileFlag::all()
+        .iter()
+        .filter(|flag| {
+            let flag_string = serde_json::to_string(flag).unwrap();
+            !fields_subset.contains(&&flag_string.as_str())
+        })
+        .map(|flag| serde_json::to_string(flag).unwrap())
+        .collect()
+}
 
 /// Asserts that the standard JSON output has at least one error with the given `error_message`.
 fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_message: &str) {
@@ -80,82 +176,71 @@ fn no_evm_codegen_requested_complex() {
     assert_no_errors(&output);
 }
 
-/// Asserts that no PVM codegen output has been generated.
-///
-/// This assert is specific to the files `STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH`
-/// and `STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH`.
-fn assert_no_pvm_codegen(output: &SolcStandardJsonOutput) {
-    // Assert that no extra file-level output required for codegen exist.
-    for (path, source) in output.sources.iter() {
-        assert!(
-            source.ast.is_none(),
-            "the AST for the file `{path}` should not be generated",
-        );
-    }
-
-    assert!(
-        !output.contracts.is_empty(),
-        "contracts should be generated"
-    );
-
-    for (_, contracts) in output.contracts.iter() {
-        for (name, contract) in contracts.iter() {
-            // Assert that no codegen output exist.
-            let evm = contract.evm.as_ref().unwrap();
-            assert!(
-                evm.bytecode.is_none(),
-                "the bytecode for the contract `{name}` should not be generated",
-            );
-            assert!(
-                evm.deployed_bytecode.is_none(),
-                "the deployed bytecode for the contract `{name}` should not be generated",
-            );
-            assert!(
-                evm.assembly_text.is_none(),
-                "the assembly for the contract `{name}` should not be generated",
-            );
-
-            // Assert that no extra contract-level output required for codegen exist.
-            assert!(
-                contract.ir_optimized.is_empty(),
-                "the Yul for the contract `{name}` should not be generated",
-            );
-
-            // Assert that the requested output exists.
-            assert!(
-                !contract.abi.is_null(),
-                "the abi for the contract `{name}` should be generated",
-            );
-            assert!(
-                !contract.metadata.is_null(),
-                "the metadata for the contract `{name}` should be generated",
-            );
-        }
-    }
-}
-
 #[test]
-fn no_pvm_codegen_requested_per_file() {
-    let result =
-        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH);
-    assert_command_success(&result, "the no PVM codegen std JSON input fixture");
-
-    let output = to_solc_standard_json_output(&result.stdout);
-    assert_no_errors(&output);
-    assert_no_pvm_codegen(&output);
-}
-
-#[test]
-fn no_pvm_codegen_requested_for_all_files() {
-    let result = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
+fn no_pvm_codegen_requested() {
+    let files = &[
+        STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
         STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH,
-    );
-    assert_command_success(&result, "the no PVM codegen std JSON input fixture");
+    ];
+
+    for file in files {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], file);
+        assert_command_success(&result, &format!("the `{file}` input fixture"));
+
+        let output = to_solc_standard_json_output(&result.stdout);
+        assert_no_errors(&output);
+
+        let expected = ExpectedOutput {
+            contracts: vec![
+                ExpectedContract {
+                    path: "lib/forge-std/src/interfaces/IERC165.sol",
+                    name: "IERC165",
+                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                },
+                ExpectedContract {
+                    path: "src/common/GasService.sol",
+                    name: "GasService",
+                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                },
+                ExpectedContract {
+                    path: "src/common/MessageDispatcher.sol",
+                    name: "MessageDispatcher",
+                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                },
+            ],
+        };
+        assert_output_matches(&output, &expected);
+    }
+}
+
+#[test]
+fn pvm_codegen_requested() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_CONTRACTS_PATH);
+    assert_command_success(&result, "the PVM codegen std JSON input fixture");
 
     let output = to_solc_standard_json_output(&result.stdout);
     assert_no_errors(&output);
-    assert_no_pvm_codegen(&output);
+
+    let expected = ExpectedOutput {
+        contracts: vec![
+            ExpectedContract {
+                path: "src/Counter.sol",
+                name: "Counter",
+                fields: vec!["evm.bytecode"],
+            },
+            ExpectedContract {
+                path: "test/Counter.t.sol",
+                name: "CounterTest",
+                fields: vec!["evm.bytecode"],
+            },
+            ExpectedContract {
+                path: "lib/forge-std/src/mocks/MockERC20.sol",
+                name: "MockERC20",
+                fields: vec!["evm.bytecode"],
+            },
+        ],
+    };
+    assert_output_matches(&output, &expected);
 }
 
 #[test]

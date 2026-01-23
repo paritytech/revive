@@ -7,7 +7,7 @@ use revive_solc_json_interface::{
 
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
+    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUT_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
@@ -15,9 +15,10 @@ use crate::cli_utils::{
 
 const JSON_OPTION: &str = "--standard-json";
 
-/// A subset of contracts expected to exist in the output.
+/// A subset of contracts and sources expected to exist in the output.
 struct ExpectedOutput {
     contracts: Vec<ExpectedContract>,
+    sources: Vec<ExpectedSource>,
 }
 
 /// A contract with specific fields, such as `metadata`, `evm.bytecode`,
@@ -28,35 +29,89 @@ struct ExpectedContract {
     fields: Vec<&'static str>,
 }
 
-/// Asserts that the `expected` contracts match the ones in the `actual` output.
+/// A source with specific fields, such as `ast`, expected to exist in the output.
+struct ExpectedSource {
+    path: &'static str,
+    fields: Vec<&'static str>,
+}
+
+/// Asserts that the `expected` subset of contracts and sources match the ones in the `actual` output.
+/// If expected sources or contracts are empty, asserts that the respective actual output is also empty.
 fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
-    if !expected.contracts.is_empty() {
+    if expected.sources.is_empty() {
+        assert!(actual.sources.is_empty(), "sources should not be generated");
+    }
+    if expected.contracts.is_empty() {
         assert!(
-            !actual.contracts.is_empty(),
-            "contracts should be generated"
+            actual.contracts.is_empty(),
+            "contracts should not be generated"
         );
     }
 
-    // Verify that the provided contract-level output exists.
-    for expected_contract in expected.contracts.iter() {
+    assert!(
+        actual.sources.len() >= expected.sources.len(),
+        "at least {} sources should be generated",
+        expected.sources.len()
+    );
+
+    assert!(
+        actual.contracts.len() >= expected.contracts.len(),
+        "at least {} contracts should be generated",
+        expected.contracts.len()
+    );
+
+    // Verify file-level output.
+    for expected_source in &expected.sources {
+        let actual_source = actual
+            .sources
+            .get(expected_source.path)
+            .unwrap_or_else(|| panic!("the file `{}` should exist", expected_source.path));
+        let actual_source_json = serde_json::to_value(actual_source).unwrap();
+
+        // Verify that every expected output exists.
+        for field in &expected_source.fields {
+            assert!(
+                actual_source_json.get(field).is_some(),
+                "the `{field}` for the file `{}` should be generated",
+                expected_source.path
+            );
+        }
+
+        // Verify that every unexpected output is omitted.
+        let file_level_fields = &["ast", "id"];
+        let remaining_fields: Vec<_> = file_level_fields
+            .iter()
+            .copied()
+            .filter(|field| !expected_source.fields.contains(field))
+            .collect();
+        for field in remaining_fields {
+            assert!(
+                actual_source_json.get(field).is_none(),
+                "the `{field}` for the file `{}` should not be generated",
+                expected_source.path
+            );
+        }
+    }
+
+    // Verify contract-level output.
+    for expected_contract in &expected.contracts {
         let actual_contract = actual
             .contracts
             .get(expected_contract.path)
-            .expect(&format!(
-                "the file `{}` should exist",
-                expected_contract.path
-            ))
+            .unwrap_or_else(|| panic!("the file `{}` should exist", expected_contract.path))
             .get(expected_contract.name)
-            .expect(&format!(
-                "the contract `{}` in file `{}` should exist",
-                expected_contract.name, expected_contract.path
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "the contract `{}` in file `{}` should exist",
+                    expected_contract.name, expected_contract.path
+                )
+            });
         let actual_contract_json = serde_json::to_value(actual_contract).unwrap();
 
-        // Verify that every requested output exists (e.g. `evm.bytecode`).
-        for field in expected_contract.fields.iter() {
+        // Verify that every expected output exists (e.g. `evm.bytecode`).
+        for field in &expected_contract.fields {
             let mut parts = field.split('.');
-            let (parent_field, child_field) = (parts.nth(0).unwrap(), parts.nth(1));
+            let (parent_field, child_field) = (parts.next().unwrap(), parts.next());
             let parent_output = actual_contract_json.get(parent_field);
 
             assert!(
@@ -73,10 +128,10 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
             }
         }
 
-        // Verify that every non-requested output is omitted.
+        // Verify that every unexpected output is omitted.
         for field in get_remaining_contract_fields(&expected_contract.fields) {
             let mut parts = field.split('.');
-            let (parent_field, child_field) = (parts.nth(0).unwrap(), parts.nth(1));
+            let (parent_field, child_field) = (parts.next().unwrap(), parts.next());
             let parent_output = actual_contract_json.get(parent_field);
 
             if let Some(child_field) = child_field {
@@ -173,6 +228,64 @@ fn no_evm_codegen_requested_complex() {
 }
 
 #[test]
+fn all_outputs_requested() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_ALL_OUTPUT_PATH);
+    assert_command_success(&result, "the all output std JSON input fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let expected_contract_fields = &[
+        "abi",
+        "metadata",
+        "devdoc",
+        "userdoc",
+        "storageLayout",
+        "irOptimized",
+        "ir",
+        "evm",
+        "evm.methodIdentifiers",
+        "evm.bytecode",
+        "evm.deployedBytecode",
+        "evm.assembly",
+    ];
+    let expected = ExpectedOutput {
+        contracts: vec![
+            ExpectedContract {
+                path: "src/Counter.sol",
+                name: "Counter",
+                fields: expected_contract_fields.to_vec(),
+            },
+            ExpectedContract {
+                path: "script/Counter.s.sol",
+                name: "CounterScript",
+                fields: expected_contract_fields.to_vec(),
+            },
+            ExpectedContract {
+                path: "lib/forge-std/src/mocks/MockERC20.sol",
+                name: "MockERC20",
+                fields: expected_contract_fields.to_vec(),
+            },
+        ],
+        sources: vec![
+            ExpectedSource {
+                path: "src/Counter.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "script/Counter.s.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "lib/forge-std/src/mocks/MockERC20.sol",
+                fields: vec!["id", "ast"],
+            },
+        ],
+    };
+    assert_output_matches(&output, &expected);
+}
+
+#[test]
 fn no_pvm_codegen_requested() {
     let files = &[
         STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
@@ -202,6 +315,20 @@ fn no_pvm_codegen_requested() {
                     path: "src/common/MessageDispatcher.sol",
                     name: "MessageDispatcher",
                     fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                },
+            ],
+            sources: vec![
+                ExpectedSource {
+                    path: "lib/forge-std/src/interfaces/IERC165.sol",
+                    fields: vec!["id"],
+                },
+                ExpectedSource {
+                    path: "src/common/GasService.sol",
+                    fields: vec!["id"],
+                },
+                ExpectedSource {
+                    path: "src/common/MessageDispatcher.sol",
+                    fields: vec!["id"],
                 },
             ],
         };
@@ -235,6 +362,20 @@ fn pvm_codegen_requested() {
                 fields: vec!["evm.bytecode"],
             },
         ],
+        sources: vec![
+            ExpectedSource {
+                path: "src/Counter.sol",
+                fields: vec!["id"],
+            },
+            ExpectedSource {
+                path: "test/Counter.t.sol",
+                fields: vec!["id"],
+            },
+            ExpectedSource {
+                path: "lib/forge-std/src/mocks/MockERC20.sol",
+                fields: vec!["id"],
+            },
+        ],
     };
     assert_output_matches(&output, &expected);
 }
@@ -254,6 +395,7 @@ fn yul_pvm_codegen_requested() {
             name: "Return",
             fields: vec!["evm.bytecode", "evm.deployedBytecode", "evm.assembly"],
         }],
+        sources: vec![],
     };
     assert_output_matches(&output, &expected);
 }
@@ -270,7 +412,10 @@ fn yul_no_pvm_codegen_requested() {
     let output = to_solc_standard_json_output(&result.stdout);
     assert_no_errors(&output);
 
-    let expected = ExpectedOutput { contracts: vec![] };
+    let expected = ExpectedOutput {
+        contracts: vec![],
+        sources: vec![],
+    };
     assert_output_matches(&output, &expected);
 }
 

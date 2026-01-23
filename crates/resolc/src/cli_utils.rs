@@ -26,6 +26,8 @@ pub const YUL_RETURN_CONTRACT_PATH: &str = "src/tests/data/yul/return.yul";
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
+/// The standard JSON contracts test fixture path that requests every single output.
+pub const STANDARD_JSON_ALL_OUTPUT_PATH: &str = "src/tests/data/standard_json/all_output.json";
 /// The standard JSON no EVM codegen test fixture path.
 ///
 /// This contains EVM bytecode selection flags with provided code

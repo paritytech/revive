@@ -87,7 +87,7 @@ impl Contract {
 
     /// Sets the field corresponding to the given `flag` to its default value,
     /// resulting in the field being skipped during serialization.
-    pub fn reset_field_by_flag(&mut self, flag: &SolcStandardJsonInputSettingsSelectionFileFlag) {
+    pub fn reset_field_by_flag(&mut self, flag: SolcStandardJsonInputSettingsSelectionFileFlag) {
         match flag {
             SolcStandardJsonInputSettingsSelectionFileFlag::ABI => {
                 self.abi = Default::default();
@@ -133,7 +133,11 @@ impl Contract {
                     evm.method_identifiers = Default::default();
                 }
             }
-            _ => {}
+            SolcStandardJsonInputSettingsSelectionFileFlag::AST
+            | SolcStandardJsonInputSettingsSelectionFileFlag::EVMLA => {
+                // Ignore AST (a per-file flag) and EVMLA
+                // as they have no contract field mappings.
+            }
         }
     }
 }

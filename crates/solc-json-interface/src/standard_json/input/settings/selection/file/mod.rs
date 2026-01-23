@@ -73,7 +73,7 @@ impl File {
             .filter(|flag| !self.per_file.contains(flag))
             .collect();
 
-        let requests_evm = self.contains(&SelectionFlag::EVM);
+        let requests_evm = self.contains(SelectionFlag::EVM);
         let evm_children = SelectionFlag::evm_children();
         let requests_evm_child = self.contains_any(evm_children);
 
@@ -100,16 +100,16 @@ impl File {
     }
 
     /// Checks whether the `flag` is requested.
-    pub fn contains(&self, flag: &SelectionFlag) -> bool {
+    pub fn contains(&self, flag: SelectionFlag) -> bool {
         match flag {
-            flag @ SelectionFlag::AST => self.per_file.contains(flag),
-            flag => self.per_contract.contains(flag),
+            SelectionFlag::AST => self.per_file.contains(&flag),
+            _ => self.per_contract.contains(&flag),
         }
     }
 
     /// Checks whether any of the `flags` is requested.
     pub fn contains_any(&self, flags: &[SelectionFlag]) -> bool {
-        flags.iter().any(|flag| self.contains(flag))
+        flags.iter().any(|&flag| self.contains(flag))
     }
 
     /// Checks whether the selection is empty.

@@ -45,7 +45,7 @@ impl PerFileSelection {
     }
 
     /// Checks whether `path` contains the `flag` or `None` if there is no selection for `path`.
-    pub fn contains(&self, path: &String, flag: &Flag) -> Option<bool> {
+    pub fn contains(&self, path: &String, flag: Flag) -> Option<bool> {
         if let Some(file) = self.files.get(path) {
             return Some(file.contains(flag));
         };
@@ -133,7 +133,7 @@ impl Selection {
     }
 
     /// Checks whether the `flag` is requested.
-    pub fn contains(&self, path: &String, flag: &Flag) -> bool {
+    pub fn contains(&self, path: &String, flag: Flag) -> bool {
         self.files
             .contains(path, flag)
             .unwrap_or(self.all.contains(flag))

@@ -100,9 +100,18 @@ impl Output {
         mut self,
         selection_to_prune: SolcStandardJsonInputSettingsSelection,
     ) -> ! {
+        for (path, source) in self.sources.iter_mut() {
+            if selection_to_prune.contains(
+                path,
+                crate::SolcStandardJsonInputSettingsSelectionFileFlag::AST,
+            ) {
+                source.ast = None;
+            }
+        }
+
         for (path, contracts) in self.contracts.iter_mut() {
             for contract in contracts.values_mut() {
-                for flag in crate::SolcStandardJsonInputSettingsSelectionFileFlag::all() {
+                for &flag in crate::SolcStandardJsonInputSettingsSelectionFileFlag::all() {
                     if selection_to_prune.contains(path, flag) {
                         contract.reset_field_by_flag(flag);
                     }

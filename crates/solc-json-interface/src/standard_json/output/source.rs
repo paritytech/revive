@@ -20,6 +20,7 @@ pub struct Source {
     /// The source code ID.
     pub id: usize,
     /// The source code AST.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ast: Option<serde_json::Value>,
 }
 

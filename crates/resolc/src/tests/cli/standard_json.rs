@@ -38,14 +38,16 @@ struct ExpectedSource {
 /// Asserts that the `expected` subset of contracts and sources match the ones in the `actual` output.
 /// If expected sources or contracts are empty, asserts that the respective actual output is also empty.
 fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
+    assert_sources_output_matches(actual, expected);
+    assert_contracts_output_matches(actual, expected);
+}
+
+/// Asserts that the `expected` subset of sources match the ones in the `actual` output.
+/// If expected sources is empty, asserts that the actual output is also empty.
+fn assert_sources_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
     if expected.sources.is_empty() {
         assert!(actual.sources.is_empty(), "sources should not be generated");
-    }
-    if expected.contracts.is_empty() {
-        assert!(
-            actual.contracts.is_empty(),
-            "contracts should not be generated"
-        );
+        return;
     }
 
     assert!(
@@ -54,13 +56,6 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
         expected.sources.len()
     );
 
-    assert!(
-        actual.contracts.len() >= expected.contracts.len(),
-        "at least {} contracts should be generated",
-        expected.contracts.len()
-    );
-
-    // Verify file-level output.
     for expected_source in &expected.sources {
         let actual_source = actual
             .sources
@@ -92,8 +87,25 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
             );
         }
     }
+}
 
-    // Verify contract-level output.
+/// Asserts that the `expected` subset of contracts match the ones in the `actual` output.
+/// If expected contracts is empty, asserts that the actual output is also empty.
+fn assert_contracts_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
+    if expected.contracts.is_empty() {
+        assert!(
+            actual.contracts.is_empty(),
+            "contracts should not be generated"
+        );
+        return;
+    }
+
+    assert!(
+        actual.contracts.len() >= expected.contracts.len(),
+        "at least {} contracts should be generated",
+        expected.contracts.len()
+    );
+
     for expected_contract in &expected.contracts {
         let actual_contract = actual
             .contracts
@@ -129,7 +141,12 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
         }
 
         // Verify that every unexpected output is omitted.
-        for field in get_remaining_contract_fields(&expected_contract.fields) {
+        let remaining_fields: Vec<_> = SolcStandardJsonInputSettingsSelectionFileFlag::all()
+            .iter()
+            .map(|flag| serde_json::to_string(flag).unwrap())
+            .filter(|flag| !expected_contract.fields.contains(&flag.as_str()))
+            .collect();
+        for field in remaining_fields {
             let mut parts = field.split('.');
             let (parent_field, child_field) = (parts.next().unwrap(), parts.next());
             let parent_output = actual_contract_json.get(parent_field);
@@ -149,15 +166,6 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
             }
         }
     }
-}
-
-/// Gets the remaining JSON contract fields that are not in the given `fields_subset`.
-fn get_remaining_contract_fields(fields_subset: &Vec<&'static str>) -> Vec<String> {
-    SolcStandardJsonInputSettingsSelectionFileFlag::all()
-        .iter()
-        .map(|flag| serde_json::to_string(flag).unwrap())
-        .filter(|flag| !fields_subset.contains(&flag.as_str()))
-        .collect()
 }
 
 /// Asserts that the standard JSON output has at least one error with the given `error_message`.

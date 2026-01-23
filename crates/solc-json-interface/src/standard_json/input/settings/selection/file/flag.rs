@@ -70,10 +70,10 @@ impl Flag {
     }
 
     /// Returns the EVM child flag variants.
+    /// Excludes the EVM legacy assembly as it does not have a PVM equivalent.
     pub fn evm_children() -> &'static [Self] {
         &[
             Self::MethodIdentifiers,
-            Self::EVMLA,
             Self::EVMBC,
             Self::EVMDBC,
             Self::Assembly,

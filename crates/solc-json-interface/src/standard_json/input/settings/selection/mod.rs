@@ -53,7 +53,7 @@ impl PerFileSelection {
     }
 
     /// Checks whether any of the `flags` is selected in any of the files.
-    pub fn contains_any(&self, flags: &[&Flag]) -> bool {
+    pub fn contains_any(&self, flags: &[Flag]) -> bool {
         self.files.values().any(|file| file.contains_any(flags))
     }
 
@@ -140,13 +140,13 @@ impl Selection {
     }
 
     /// Checks whether any of the `flags` is requested in any of the files.
-    pub fn contains_any(&self, flags: &[&Flag]) -> bool {
+    pub fn contains_any(&self, flags: &[Flag]) -> bool {
         self.all.contains_any(flags) || self.files.contains_any(flags)
     }
 
     /// Checks whether code generation is requested.
     pub fn requests_codegen(&self) -> bool {
-        self.contains_any(&[&Flag::EVM, &Flag::EVMBC, &Flag::EVMDBC, &Flag::Assembly])
+        self.contains_any(&[Flag::EVM, Flag::EVMBC, Flag::EVMDBC, Flag::Assembly])
     }
 
     /// Removes unneeded selections.

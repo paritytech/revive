@@ -69,23 +69,29 @@ impl File {
     pub fn selection_to_prune(&self) -> Self {
         let unset_per_file = SelectionFlag::all()
             .iter()
+            .copied()
             .filter(|flag| !self.per_file.contains(flag))
-            .copied()
             .collect();
 
-        let mut unset_per_contract: HashSet<_> = SelectionFlag::all()
-            .iter()
-            .filter(|flag| !self.per_contract.contains(flag))
-            .copied()
-            .collect();
+        let requests_evm = self.contains(&SelectionFlag::EVM);
+        let evm_children = SelectionFlag::evm_children();
+        let requests_evm_child = self.contains_any(evm_children);
 
-        // The entire EVM output should only be pruned if none of its children are requested.
-        let requests_evm_child = SelectionFlag::evm_children()
+        let unset_per_contract: HashSet<_> = SelectionFlag::all()
             .iter()
-            .any(|flag| self.per_contract.contains(flag));
-        if requests_evm_child {
-            unset_per_contract.remove(&SelectionFlag::EVM);
-        }
+            .copied()
+            .filter(|flag| {
+                // Never prune EVM children when the EVM parent is requested.
+                if requests_evm && evm_children.contains(flag) {
+                    return false;
+                }
+                // Never prune the EVM parent when any of its children are requested.
+                if requests_evm_child && *flag == SelectionFlag::EVM {
+                    return false;
+                }
+                !self.per_contract.contains(flag)
+            })
+            .collect();
 
         Self {
             per_file: unset_per_file,
@@ -102,7 +108,7 @@ impl File {
     }
 
     /// Checks whether any of the `flags` is requested.
-    pub fn contains_any(&self, flags: &[&SelectionFlag]) -> bool {
+    pub fn contains_any(&self, flags: &[SelectionFlag]) -> bool {
         flags.iter().any(|flag| self.contains(flag))
     }
 

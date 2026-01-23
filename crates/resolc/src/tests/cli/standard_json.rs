@@ -10,6 +10,7 @@ use crate::cli_utils::{
     execute_solc_with_stdin_input, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
@@ -29,14 +30,12 @@ struct ExpectedContract {
 
 /// Asserts that the `expected` contracts match the ones in the `actual` output.
 fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
-    assert!(
-        !expected.contracts.is_empty(),
-        "select which contracts should be validated"
-    );
-    assert!(
-        !actual.contracts.is_empty(),
-        "contracts should be generated"
-    );
+    if !expected.contracts.is_empty() {
+        assert!(
+            !actual.contracts.is_empty(),
+            "contracts should be generated"
+        );
+    }
 
     // Verify that the provided contract-level output exists.
     for expected_contract in expected.contracts.iter() {
@@ -101,11 +100,8 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
 fn get_remaining_contract_fields(fields_subset: &Vec<&'static str>) -> Vec<String> {
     SolcStandardJsonInputSettingsSelectionFileFlag::all()
         .iter()
-        .filter(|flag| {
-            let flag_string = serde_json::to_string(flag).unwrap();
-            !fields_subset.contains(&&flag_string.as_str())
-        })
         .map(|flag| serde_json::to_string(flag).unwrap())
+        .filter(|flag| !fields_subset.contains(&flag.as_str()))
         .collect()
 }
 
@@ -240,6 +236,41 @@ fn pvm_codegen_requested() {
             },
         ],
     };
+    assert_output_matches(&output, &expected);
+}
+
+#[test]
+fn yul_pvm_codegen_requested() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_PVM_CODEGEN_PATH);
+    assert_command_success(&result, "the PVM codegen from Yul std JSON input fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let expected = ExpectedOutput {
+        contracts: vec![ExpectedContract {
+            path: "Test",
+            name: "Return",
+            fields: vec!["evm.bytecode", "evm.deployedBytecode", "evm.assembly"],
+        }],
+    };
+    assert_output_matches(&output, &expected);
+}
+
+#[test]
+fn yul_no_pvm_codegen_requested() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH);
+    assert_command_success(
+        &result,
+        "the no PVM codegen from Yul std JSON input fixture",
+    );
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let expected = ExpectedOutput { contracts: vec![] };
     assert_output_matches(&output, &expected);
 }
 

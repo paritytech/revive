@@ -53,6 +53,18 @@ pub const STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH: &str =
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
     "src/tests/data/standard_json/no_pvm_codegen_all_wildcard.json";
+/// The standard JSON Yul contract PVM codegen test fixture path.
+///
+/// This requests the full EVM output object, which should thereby
+/// generate PVM bytecode, deployedBytecode, and assembly.
+pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
+    "src/tests/data/standard_json/yul_pvm_codegen.json";
+/// The standard JSON Yul contract no PVM codegen test fixture path.
+///
+/// This omits EVM bytecode selection flags, which should thereby prevent
+/// PVM bytecode generation and only validate the Yul.
+pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
+    "src/tests/data/standard_json/yul_no_pvm_codegen.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

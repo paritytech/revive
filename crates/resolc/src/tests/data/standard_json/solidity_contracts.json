@@ -91,11 +91,19 @@
     "viaIR": true,
     "outputSelection": {
       "*": {
-        "": [],
-        "*": ["evm.bytecode"]
+        "": ["ast"],
+        "*": [
+          "abi",
+          "metadata",
+          "irOptimized",
+          "evm.methodIdentifiers",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.assembly"
+        ]
       }
     },
-    "evmVersion": "berlin",
+    "evmVersion": "cancun",
     "remappings": ["forge-std/=lib/forge-std/src/"]
   }
 }

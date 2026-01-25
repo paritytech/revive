@@ -13,7 +13,8 @@ use resolc::{
     cli_utils::{
         absolute_path, execute_command, ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
         SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH,
-        STANDARD_JSON_CONTRACTS_PATH, YUL_MEMSET_CONTRACT_PATH, YUL_RETURN_CONTRACT_PATH,
+        STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH,
+        YUL_MEMSET_CONTRACT_PATH, YUL_RETURN_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -79,7 +80,7 @@ fn bench_dependency(c: &mut Criterion) {
     let mut group = group(c, "Dependency");
     group
         .sample_size(50)
-        .measurement_time(Duration::from_secs(9));
+        .measurement_time(Duration::from_secs(10));
     let path = absolute_path(SOLIDITY_DEPENDENCY_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
@@ -114,10 +115,10 @@ fn bench_large_div_rem(c: &mut Criterion) {
 }
 
 fn bench_memset(c: &mut Criterion) {
-    let mut group = group(c, "Memset (`--yul`)");
+    let mut group = group(c, "Yul Memset");
     group
         .sample_size(100)
-        .measurement_time(Duration::from_secs(7));
+        .measurement_time(Duration::from_secs(8));
     let path = absolute_path(YUL_MEMSET_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
@@ -133,10 +134,10 @@ fn bench_memset(c: &mut Criterion) {
 }
 
 fn bench_return(c: &mut Criterion) {
-    let mut group = group(c, "Return (`--yul`)");
+    let mut group = group(c, "Yul Return");
     group
         .sample_size(100)
-        .measurement_time(Duration::from_secs(6));
+        .measurement_time(Duration::from_secs(7));
     let path = absolute_path(YUL_RETURN_CONTRACT_PATH);
     let resolc_arguments = &[&path, "--yul", "--bin", ResolcOptSettings::PERFORMANCE];
     let solc_arguments = &[
@@ -151,12 +152,24 @@ fn bench_return(c: &mut Criterion) {
     bench(group, resolc_arguments, solc_arguments, None);
 }
 
-fn bench_standard_json_contracts(c: &mut Criterion) {
-    let mut group = group(c, "Multiple Contracts (`--standard-json`)");
+fn bench_standard_json_codegen(c: &mut Criterion) {
+    let mut group = group(c, "Std JSON Codegen");
     group
         .sample_size(20)
-        .measurement_time(Duration::from_secs(35));
+        .measurement_time(Duration::from_secs(45));
     let path = absolute_path(STANDARD_JSON_CONTRACTS_PATH);
+    let resolc_arguments = &["--standard-json"];
+    let solc_arguments = &["--standard-json"];
+
+    bench(group, resolc_arguments, solc_arguments, Some(&path));
+}
+
+fn bench_standard_json_no_codegen_many_files(c: &mut Criterion) {
+    let mut group = group(c, "Std JSON No Codegen Many Files");
+    group
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(100));
+    let path = absolute_path(STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH);
     let resolc_arguments = &["--standard-json"];
     let solc_arguments = &["--standard-json"];
 
@@ -172,6 +185,7 @@ criterion_group!(
         bench_large_div_rem,
         bench_memset,
         bench_return,
-        bench_standard_json_contracts,
+        bench_standard_json_codegen,
+        bench_standard_json_no_codegen_many_files,
 );
 criterion_main!(benches);

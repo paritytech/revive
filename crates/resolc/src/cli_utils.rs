@@ -39,31 +39,34 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
 /// infamous "Stack too deep" error in the EVM codegen.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen_complex.json";
-/// The standard JSON no PVM codegen per file test fixture path.
-///
-/// This omits EVM bytecode selection flags in the per-file output
-/// selection, which should thereby prevent PVM bytecode generation.
+/// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
-pub const STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH: &str =
-    "src/tests/data/standard_json/no_pvm_codegen_per_file.json";
-/// The standard JSON no PVM codegen for all contracts test fixture path.
-///
-/// This omits EVM bytecode selection flags in the `all` (`*`) wildcard
-/// output selection, which should thereby prevent PVM bytecode generation.
+pub const STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
+    "src/tests/data/standard_json/pvm_codegen_all_wildcard.json";
+/// The standard JSON PVM codegen per file test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
-pub const STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
-    "src/tests/data/standard_json/no_pvm_codegen_all_wildcard.json";
+pub const STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH: &str =
+    "src/tests/data/standard_json/pvm_codegen_per_file.json";
+/// The standard JSON no PVM codegen test fixture path with
+/// lots of files included.
+///
+/// This omits `evm` bytecode selection flags, which should thereby
+/// prevent PVM bytecode generation.
+///
+/// These contracts are similar to ones used in an example project.
+pub const STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH: &str =
+    "src/tests/data/standard_json/no_pvm_codegen_many_files.json";
 /// The standard JSON Yul contract PVM codegen test fixture path.
 ///
-/// This requests the full EVM output object, which should thereby
-/// generate PVM bytecode, deployedBytecode, and assembly.
+/// This requests the full `evm` output object, which should thereby
+/// generate all `evm` child fields.
 pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_pvm_codegen.json";
 /// The standard JSON Yul contract no PVM codegen test fixture path.
 ///
-/// This omits EVM bytecode selection flags, which should thereby prevent
+/// This omits `evm` bytecode selection flags, which should thereby prevent
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";

@@ -9,29 +9,37 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUT_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
-    STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
 
-/// A subset of contracts and sources expected to exist in the output.
+/// A subset of contracts and sources expected to exist in the JSON output.
 struct ExpectedOutput {
     contracts: Vec<ExpectedContract>,
     sources: Vec<ExpectedSource>,
 }
 
-/// A contract with specific fields, such as `metadata`, `evm.bytecode`,
-/// `irOptimized`, etc., expected to exist in the output.
+/// A contract expected to exist in the JSON output.
 struct ExpectedContract {
+    /// The file path.
     path: &'static str,
+    /// The contract name.
     name: &'static str,
+    /// All contract-level fields of the JSON output selection expected to exist,
+    /// such as `metadata`, `irOptimized`, etc. If `evm.bytecode` was requested,
+    /// `evm` and `evm.bytecode` should be expected.
     fields: Vec<&'static str>,
 }
 
-/// A source with specific fields, such as `ast`, expected to exist in the output.
+/// A source expected to exist in the JSON output.
 struct ExpectedSource {
+    /// The file path.
     path: &'static str,
+    /// All file-level fields of the JSON output selection expected to exist,
+    /// such as `ast`, as well as the `id` field.
     fields: Vec<&'static str>,
 }
 
@@ -73,18 +81,15 @@ fn assert_sources_output_matches(actual: &SolcStandardJsonOutput, expected: &Exp
         }
 
         // Verify that every unexpected output is omitted.
-        let file_level_fields = &["ast", "id"];
-        let remaining_fields: Vec<_> = file_level_fields
-            .iter()
-            .copied()
-            .filter(|field| !expected_source.fields.contains(field))
-            .collect();
-        for field in remaining_fields {
-            assert!(
-                actual_source_json.get(field).is_none(),
-                "the `{field}` for the file `{}` should not be generated",
-                expected_source.path
-            );
+        let all_fields = &["id", "ast"];
+        for field in all_fields {
+            if !expected_source.fields.contains(field) {
+                assert!(
+                    actual_source_json.get(field).is_none(),
+                    "the `{field}` for the file `{}` should not be generated",
+                    expected_source.path
+                );
+            }
         }
     }
 }
@@ -134,35 +139,36 @@ fn assert_contracts_output_matches(actual: &SolcStandardJsonOutput, expected: &E
             if let Some(child_field) = child_field {
                 assert!(
                     parent_output.unwrap().get(child_field).is_some(),
-                    "the `{child_field}` for the contract `{}` should be generated",
+                    "the `{field}` for the contract `{}` should be generated",
                     expected_contract.name,
                 );
             }
         }
 
         // Verify that every unexpected output is omitted.
-        let remaining_fields: Vec<_> = SolcStandardJsonInputSettingsSelectionFileFlag::all()
-            .iter()
-            .map(|flag| serde_json::to_string(flag).unwrap())
-            .filter(|flag| !expected_contract.fields.contains(&flag.as_str()))
-            .collect();
-        for field in remaining_fields {
-            let mut parts = field.split('.');
-            let (parent_field, child_field) = (parts.next().unwrap(), parts.next());
-            let parent_output = actual_contract_json.get(parent_field);
+        for flag in SolcStandardJsonInputSettingsSelectionFileFlag::all() {
+            let field = serde_json::to_string(flag)
+                .unwrap()
+                .trim_matches('"')
+                .to_owned();
+            if !expected_contract.fields.contains(&field.as_str()) {
+                let mut parts = field.split('.');
+                let (parent_field, child_field) = (parts.next().unwrap(), parts.next());
+                let parent_output = actual_contract_json.get(parent_field);
 
-            if let Some(child_field) = child_field {
-                assert!(
-                    parent_output.is_none_or(|p| p.get(child_field).is_none()),
-                    "the `{child_field}` for the contract `{}` should not be generated",
-                    expected_contract.name,
-                );
-            } else {
-                assert!(
-                    parent_output.is_none(),
-                    "the `{parent_field}` for the contract `{}` should not be generated",
-                    expected_contract.name,
-                );
+                if let Some(child_field) = child_field {
+                    assert!(
+                        parent_output.is_none_or(|p| p.get(child_field).is_none()),
+                        "the `{field}` for the contract `{}` should not be generated",
+                        expected_contract.name,
+                    );
+                } else {
+                    assert!(
+                        parent_output.is_none(),
+                        "the `{parent_field}` for the contract `{}` should not be generated",
+                        expected_contract.name,
+                    );
+                }
             }
         }
     }
@@ -262,17 +268,17 @@ fn all_outputs_requested() {
             ExpectedContract {
                 path: "src/Counter.sol",
                 name: "Counter",
-                fields: expected_contract_fields.to_vec(),
+                fields: expected_contract_fields.into(),
             },
             ExpectedContract {
                 path: "script/Counter.s.sol",
                 name: "CounterScript",
-                fields: expected_contract_fields.to_vec(),
+                fields: expected_contract_fields.into(),
             },
             ExpectedContract {
                 path: "lib/forge-std/src/mocks/MockERC20.sol",
                 name: "MockERC20",
-                fields: expected_contract_fields.to_vec(),
+                fields: expected_contract_fields.into(),
             },
         ],
         sources: vec![
@@ -294,10 +300,10 @@ fn all_outputs_requested() {
 }
 
 #[test]
-fn no_pvm_codegen_requested() {
+fn pvm_codegen_requested() {
     let files = &[
-        STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
-        STANDARD_JSON_NO_PVM_CODEGEN_ALL_WILDCARD_PATH,
+        STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
+        STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
     ];
 
     for file in files {
@@ -307,27 +313,34 @@ fn no_pvm_codegen_requested() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_no_errors(&output);
 
+        let expected_contract_fields = &[
+            "abi",
+            "metadata",
+            "evm",
+            "evm.bytecode",
+            "evm.methodIdentifiers",
+        ];
         let expected = ExpectedOutput {
             contracts: vec![
                 ExpectedContract {
-                    path: "lib/forge-std/src/interfaces/IERC165.sol",
-                    name: "IERC165",
-                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                    path: "src/common/Gateway.sol",
+                    name: "Gateway",
+                    fields: expected_contract_fields.into(),
                 },
                 ExpectedContract {
                     path: "src/common/GasService.sol",
                     name: "GasService",
-                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                    fields: expected_contract_fields.into(),
                 },
                 ExpectedContract {
                     path: "src/common/MessageDispatcher.sol",
                     name: "MessageDispatcher",
-                    fields: vec!["abi", "evm.methodIdentifiers", "metadata"],
+                    fields: expected_contract_fields.into(),
                 },
             ],
             sources: vec![
                 ExpectedSource {
-                    path: "lib/forge-std/src/interfaces/IERC165.sol",
+                    path: "src/common/Gateway.sol",
                     fields: vec!["id"],
                 },
                 ExpectedSource {
@@ -345,9 +358,15 @@ fn no_pvm_codegen_requested() {
 }
 
 #[test]
-fn pvm_codegen_requested() {
-    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_CONTRACTS_PATH);
-    assert_command_success(&result, "the PVM codegen std JSON input fixture");
+fn no_pvm_codegen_requested() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the no PVM codegen std JSON with many files input fixture",
+    );
 
     let output = to_solc_standard_json_output(&result.stdout);
     assert_no_errors(&output);
@@ -355,32 +374,32 @@ fn pvm_codegen_requested() {
     let expected = ExpectedOutput {
         contracts: vec![
             ExpectedContract {
-                path: "src/Counter.sol",
-                name: "Counter",
-                fields: vec!["evm.bytecode"],
+                path: "lib/forge-std/src/StdAssertions.sol",
+                name: "StdAssertions",
+                fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
             },
             ExpectedContract {
-                path: "test/Counter.t.sol",
-                name: "CounterTest",
-                fields: vec!["evm.bytecode"],
+                path: "src/common/GasService.sol",
+                name: "GasService",
+                fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
             },
             ExpectedContract {
-                path: "lib/forge-std/src/mocks/MockERC20.sol",
-                name: "MockERC20",
-                fields: vec!["evm.bytecode"],
+                path: "test/common/mocks/Mock.sol",
+                name: "Mock",
+                fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
             },
         ],
         sources: vec![
             ExpectedSource {
-                path: "src/Counter.sol",
+                path: "lib/forge-std/src/StdAssertions.sol",
                 fields: vec!["id"],
             },
             ExpectedSource {
-                path: "test/Counter.t.sol",
+                path: "src/common/GasService.sol",
                 fields: vec!["id"],
             },
             ExpectedSource {
-                path: "lib/forge-std/src/mocks/MockERC20.sol",
+                path: "test/common/mocks/Mock.sol",
                 fields: vec!["id"],
             },
         ],
@@ -401,7 +420,12 @@ fn yul_pvm_codegen_requested() {
         contracts: vec![ExpectedContract {
             path: "Test",
             name: "Return",
-            fields: vec!["evm.bytecode", "evm.deployedBytecode", "evm.assembly"],
+            fields: vec![
+                "evm",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.assembly",
+            ],
         }],
         sources: vec![],
     };

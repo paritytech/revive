@@ -357,15 +357,360 @@
       "chimera/=lib/chimera/src/",
       "ds-test/=lib/chimera/lib/forge-std/lib/ds-test/src/"
     ],
-    "optimizer": { "enabled": false, "runs": 1 },
+    "optimizer": { "enabled": true, "runs": 1 },
     "metadata": {
       "useLiteralContent": false,
       "bytecodeHash": "none",
       "appendCBOR": true
     },
     "outputSelection": {
-      "*": {
-        "*": ["abi", "evm.methodIdentifiers", "metadata"]
+      "lib/forge-std/src/interfaces/IERC165.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/GasService.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/Gateway.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/Guardian.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/MessageDispatcher.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/MessageProcessor.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/Root.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/TokenRecoverer.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/adapters/AxelarAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/adapters/WormholeAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IAxelarAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGasService.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGateway.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGatewayHandlers.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGatewaySenders.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGuardian.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IGuardianActions.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IHook.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IMessageDispatcher.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IMessageHandler.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IMessageProcessor.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IMessageProperties.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IMessageSender.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IRoot.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/ITokenRecoverer.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/interfaces/IWormholeAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/libraries/MessageLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/libraries/MessageProofLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/libraries/PricingLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/types/AccountId.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/types/AssetId.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/types/PoolId.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/common/types/ShareClassId.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hooks/FreezeOnly.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hooks/FullRestrictions.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hooks/RedemptionRestrictions.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hooks/interfaces/IFreezable.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hooks/interfaces/IMemberlist.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/Accounting.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/Holdings.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/Hub.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/HubRegistry.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/ShareClassManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/interfaces/IAccounting.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/interfaces/IHoldings.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/interfaces/IHub.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/interfaces/IHubRegistry.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/hub/interfaces/IShareClassManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/Auth.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/BaseValuation.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/ERC20.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/IdentityValuation.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/Multicall.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/Recoverable.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/ReentrancyProtection.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IAuth.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IBaseValuation.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IERC20.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IERC6909.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IERC7540.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IERC7575.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IERC7726.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IIdentityValuation.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IMulticall.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/interfaces/IRecoverable.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/ArrayLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/BitmapLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/BytesLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/CastLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/EIP712Lib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/MathLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/SafeTransferLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/SignatureLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/StringLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/TransientArrayLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/TransientBytesLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/libraries/TransientStorageLib.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/misc/types/D18.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/AsyncRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/AsyncVault.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/BalanceSheet.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/BaseRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/BaseVaults.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/Escrow.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/PoolManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/SyncDepositVault.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/SyncRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/VaultRouter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/factories/AsyncVaultFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/factories/PoolEscrowFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/factories/SyncDepositVaultFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/factories/TokenFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IBalanceSheet.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IBaseVaults.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IEscrow.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IPoolManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IUpdateContract.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/IVaultRouter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/factories/IPoolEscrowFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/factories/ITokenFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/factories/IVaultFactory.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IAsyncDepositManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IAsyncRedeemManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IAsyncRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IBaseRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IDepositManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/IRedeemManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/ISyncDepositManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/investments/ISyncRequestManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/interfaces/token/IShareToken.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/legacy/LegacyVaultAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/legacy/interfaces/IInvestmentManager.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/legacy/interfaces/ILegacyVault.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/legacy/interfaces/ILegacyVaultAdapter.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
+      },
+      "src/vaults/token/ShareToken.sol": {
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"]
       }
     },
     "evmVersion": "cancun",

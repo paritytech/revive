@@ -27,7 +27,7 @@ pub const YUL_RETURN_CONTRACT_PATH: &str = "src/tests/data/yul/return.yul";
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
 /// The standard JSON contracts test fixture path that requests every single output.
-pub const STANDARD_JSON_ALL_OUTPUT_PATH: &str = "src/tests/data/standard_json/all_output.json";
+pub const STANDARD_JSON_ALL_OUTPUTS_PATH: &str = "src/tests/data/standard_json/all_outputs.json";
 /// The standard JSON no EVM codegen test fixture path.
 ///
 /// This contains EVM bytecode selection flags with provided code
@@ -49,6 +49,11 @@ pub const STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH: &str =
     "src/tests/data/standard_json/pvm_codegen_per_file.json";
+/// The standard JSON PVM codegen for one out of many files test fixture path.
+///
+/// These contracts are similar to ones used in an example project.
+pub const STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH: &str =
+    "src/tests/data/standard_json/pvm_codegen_one_file.json";
 /// The standard JSON no PVM codegen test fixture path with
 /// lots of files included.
 ///

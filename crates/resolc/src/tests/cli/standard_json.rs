@@ -7,11 +7,11 @@ use revive_solc_json_interface::{
 
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
-    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 
 const JSON_OPTION: &str = "--standard-json";
@@ -54,13 +54,13 @@ fn assert_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOut
 /// If expected sources is empty, asserts that the actual output is also empty.
 fn assert_sources_output_matches(actual: &SolcStandardJsonOutput, expected: &ExpectedOutput) {
     if expected.sources.is_empty() {
-        assert!(actual.sources.is_empty(), "sources should not be generated");
+        assert!(actual.sources.is_empty(), "sources should not be populated");
         return;
     }
 
     assert!(
         actual.sources.len() >= expected.sources.len(),
-        "at least {} sources should be generated",
+        "at least {} sources should be populated",
         expected.sources.len()
     );
 
@@ -100,14 +100,14 @@ fn assert_contracts_output_matches(actual: &SolcStandardJsonOutput, expected: &E
     if expected.contracts.is_empty() {
         assert!(
             actual.contracts.is_empty(),
-            "contracts should not be generated"
+            "contracts should not be populated"
         );
         return;
     }
 
     assert!(
         actual.contracts.len() >= expected.contracts.len(),
-        "at least {} contracts should be generated",
+        "at least {} contracts should be populated",
         expected.contracts.len()
     );
 
@@ -243,7 +243,7 @@ fn no_evm_codegen_requested_complex() {
 
 #[test]
 fn all_outputs_requested() {
-    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_ALL_OUTPUT_PATH);
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_ALL_OUTPUTS_PATH);
     assert_command_success(&result, "the all output std JSON input fixture");
 
     let output = to_solc_standard_json_output(&result.stdout);
@@ -304,6 +304,7 @@ fn pvm_codegen_requested() {
     let files = &[
         STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
         STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+        STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
     ];
 
     for file in files {
@@ -313,38 +314,51 @@ fn pvm_codegen_requested() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_no_errors(&output);
 
-        let expected_contract_fields = &[
+        let requests_codegen_for_one_file = *file == STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH;
+        let expected_contract_fields_with_codegen = &[
             "abi",
             "metadata",
             "evm",
             "evm.bytecode",
             "evm.methodIdentifiers",
         ];
+        let expected_contract_fields_without_codegen =
+            &["abi", "metadata", "evm", "evm.methodIdentifiers"];
+
         let expected = ExpectedOutput {
             contracts: vec![
                 ExpectedContract {
-                    path: "src/common/Gateway.sol",
-                    name: "Gateway",
-                    fields: expected_contract_fields.into(),
-                },
-                ExpectedContract {
                     path: "src/common/GasService.sol",
                     name: "GasService",
-                    fields: expected_contract_fields.into(),
+                    // This is the contract expected to have codegen for all files tested here.
+                    fields: expected_contract_fields_with_codegen.into(),
+                },
+                ExpectedContract {
+                    path: "src/common/Gateway.sol",
+                    name: "Gateway",
+                    fields: if requests_codegen_for_one_file {
+                        expected_contract_fields_without_codegen.into()
+                    } else {
+                        expected_contract_fields_with_codegen.into()
+                    },
                 },
                 ExpectedContract {
                     path: "src/common/MessageDispatcher.sol",
                     name: "MessageDispatcher",
-                    fields: expected_contract_fields.into(),
+                    fields: if requests_codegen_for_one_file {
+                        expected_contract_fields_without_codegen.into()
+                    } else {
+                        expected_contract_fields_with_codegen.into()
+                    },
                 },
             ],
             sources: vec![
                 ExpectedSource {
-                    path: "src/common/Gateway.sol",
+                    path: "src/common/GasService.sol",
                     fields: vec!["id"],
                 },
                 ExpectedSource {
-                    path: "src/common/GasService.sol",
+                    path: "src/common/Gateway.sol",
                     fields: vec!["id"],
                 },
                 ExpectedSource {

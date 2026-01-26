@@ -14,7 +14,8 @@ use resolc::{
         absolute_path, execute_command, ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
         SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH,
         STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH,
-        YUL_MEMSET_CONTRACT_PATH, YUL_RETURN_CONTRACT_PATH,
+        STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, YUL_MEMSET_CONTRACT_PATH,
+        YUL_RETURN_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -164,11 +165,23 @@ fn bench_standard_json_codegen(c: &mut Criterion) {
     bench(group, resolc_arguments, solc_arguments, Some(&path));
 }
 
+fn bench_standard_json_codegen_one_file(c: &mut Criterion) {
+    let mut group = group(c, "Std JSON Codegen One of Some Files");
+    group
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(15));
+    let path = absolute_path(STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH);
+    let resolc_arguments = &["--standard-json"];
+    let solc_arguments = &["--standard-json"];
+
+    bench(group, resolc_arguments, solc_arguments, Some(&path));
+}
+
 fn bench_standard_json_no_codegen_many_files(c: &mut Criterion) {
     let mut group = group(c, "Std JSON No Codegen Many Files");
     group
         .sample_size(20)
-        .measurement_time(Duration::from_secs(100));
+        .measurement_time(Duration::from_secs(45));
     let path = absolute_path(STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH);
     let resolc_arguments = &["--standard-json"];
     let solc_arguments = &["--standard-json"];
@@ -186,6 +199,7 @@ criterion_group!(
         bench_memset,
         bench_return,
         bench_standard_json_codegen,
+        bench_standard_json_codegen_one_file,
         bench_standard_json_no_codegen_many_files,
 );
 criterion_main!(benches);

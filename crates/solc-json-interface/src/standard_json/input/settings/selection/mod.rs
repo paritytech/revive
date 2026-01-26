@@ -65,8 +65,8 @@ impl PerFileSelection {
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
         for file in self.files.values_mut() {
-            file.per_contract.retain(Flag::is_required_for_codegen);
-            file.per_file.retain(Flag::is_required_for_codegen);
+            file.per_contract.retain(|flag| !flag.is_solc_backend());
+            file.per_file.retain(|flag| !flag.is_solc_backend());
         }
     }
 }
@@ -74,7 +74,7 @@ impl PerFileSelection {
 /// The `solc --standard-json` output selection.
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
 pub struct Selection {
-    /// Only the 'all' wildcard is available for robustness reasons.
+    /// Common configuration for all files.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
     pub all: FileSelection,
     /// Individual file selection configuration, required for foundry.
@@ -83,25 +83,44 @@ pub struct Selection {
 }
 
 impl Selection {
-    /// Creates the selection with arbitrary flags.
-    pub fn new(flags: Vec<Flag>) -> Self {
+    /// Creates the selection for all contracts in all files with arbitrary `flags`.
+    pub fn new_all(flags: Vec<Flag>) -> Self {
         Self {
             all: FileSelection::new(flags),
             files: Default::default(),
         }
     }
 
-    /// Creates the selection required by our compilation process.
-    pub fn new_required_for_codegen() -> Self {
-        Self::new(vec![
-            Flag::AST,
-            Flag::MethodIdentifiers,
-            Flag::Metadata,
-            Flag::Yul,
-        ])
+    /// Creates the selection required by our compilation process for all contracts in all files.
+    pub fn new_required_for_codegen_all() -> Self {
+        Self::new_all(Flag::codegen_requirements().into())
     }
 
-    /// Creates the selection required for test compilation (includes EVM bytecode).
+    /// Creates the selection required by our compilation process for each contract in
+    /// `output_selection` requesting code generation.
+    pub fn new_required_for_codegen(output_selection: &Self) -> Self {
+        if output_selection.all.requests_codegen() {
+            return Self::new_required_for_codegen_all();
+        }
+
+        let mut files = PerFileSelection::default();
+        for (file_name, file_selection) in &output_selection.files.files {
+            if file_selection.requests_codegen() {
+                files.files.insert(
+                    file_name.to_owned(),
+                    FileSelection::new_required_for_codegen(),
+                );
+            }
+        }
+
+        Self {
+            all: Default::default(),
+            files,
+        }
+    }
+
+    /// Creates the selection required for test compilation (includes EVM bytecode) for all
+    /// contracts in all files.
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),
@@ -111,7 +130,7 @@ impl Selection {
 
     /// Creates the selection required by Yul validation process.
     pub fn new_yul_validation() -> Self {
-        Self::new(vec![Flag::EVM])
+        Self::new_all(vec![Flag::EVM])
     }
 
     /// Extends the output selection with another one.
@@ -139,20 +158,10 @@ impl Selection {
             .unwrap_or(self.all.contains(flag))
     }
 
-    /// Checks whether any of the `flags` is requested in any of the files.
-    pub fn contains_any(&self, flags: &[Flag]) -> bool {
-        self.all.contains_any(flags) || self.files.contains_any(flags)
-    }
-
-    /// Checks whether code generation is requested.
-    pub fn requests_codegen(&self) -> bool {
-        self.contains_any(&[Flag::EVM, Flag::EVMBC, Flag::EVMDBC, Flag::Assembly])
-    }
-
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
-        self.all.per_file.retain(Flag::is_required_for_codegen);
-        self.all.per_contract.retain(Flag::is_required_for_codegen);
+        self.all.per_file.retain(|flag| !flag.is_solc_backend());
+        self.all.per_contract.retain(|flag| !flag.is_solc_backend());
         self.files.retain();
     }
 }

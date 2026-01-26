@@ -49,7 +49,7 @@ pub enum Flag {
 }
 
 impl Flag {
-    /// Returns all flag variants.
+    /// Returns all flags.
     pub fn all() -> &'static [Self] {
         &[
             Self::ABI,
@@ -69,7 +69,7 @@ impl Flag {
         ]
     }
 
-    /// Returns the EVM child flag variants.
+    /// Returns the EVM child flags.
     /// Excludes the EVM legacy assembly as it does not have a PVM equivalent.
     pub fn evm_children() -> &'static [Self] {
         &[
@@ -80,12 +80,22 @@ impl Flag {
         ]
     }
 
-    /// Whether this selection flag is required for the revive codegen.
+    /// Returns the flags required by our compilation process.
+    pub fn codegen_requirements() -> &'static [Self] {
+        &[
+            Self::AST,
+            Self::MethodIdentifiers,
+            Self::Metadata,
+            Self::Yul,
+        ]
+    }
+
+    /// Whether this selection flag is specific for the solc backend only.
     ///
     /// Specifically, EVM bytecode and related flags should never be requested.
     /// It will be replaced by PVM code anyways.
-    pub fn is_required_for_codegen(&self) -> bool {
-        !matches!(
+    pub fn is_solc_backend(&self) -> bool {
+        matches!(
             self,
             Flag::EVMBC | Flag::EVMDBC | Flag::EVMLA | Flag::EVM | Flag::Assembly
         )

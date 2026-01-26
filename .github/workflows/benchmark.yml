@@ -42,7 +42,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 'lts/*'
+          node-version: "lts/*"
 
       - name: Install Benchmarking Tools
         run: |
@@ -71,7 +71,7 @@ jobs:
           cargo bench --package resolc --bench compile -- --save-baseline resolc_before
           cargo bench --package revive-benchmarks --bench parse -- --save-baseline yul_parse_before
           cargo bench --package revive-benchmarks --bench lower -- --save-baseline yul_lower_before
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Checkout Commit After Changes
         run: |
@@ -95,7 +95,7 @@ jobs:
           cargo bench --package resolc --bench compile -- --save-baseline resolc_changes
           cargo bench --package revive-benchmarks --bench parse -- --save-baseline yul_parse_changes
           cargo bench --package revive-benchmarks --bench lower -- --save-baseline yul_lower_changes
-        timeout-minutes: 20
+        timeout-minutes: 30
 
       - name: Compare Benchmarks
         run: |

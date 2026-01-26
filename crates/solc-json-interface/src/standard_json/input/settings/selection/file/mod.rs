@@ -15,13 +15,14 @@ pub struct File {
     /// The per-file output selections.
     #[serde(default, rename = "", skip_serializing_if = "HashSet::is_empty")]
     pub per_file: HashSet<SelectionFlag>,
-    /// The per-contract output selections.
+    /// The per-contract output selections, common for all contracts.
+    /// Only the "all" (`*`) wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "HashSet::is_empty")]
     pub per_contract: HashSet<SelectionFlag>,
 }
 
 impl File {
-    /// A shortcut constructor.
+    /// Creates the selection for all contracts with arbitrary `flags`.
     pub fn new(flags: Vec<SelectionFlag>) -> Self {
         let mut per_file = HashSet::new();
         let mut per_contract = HashSet::new();
@@ -39,6 +40,11 @@ impl File {
             per_file,
             per_contract,
         }
+    }
+
+    /// Creates the selection required by our compilation process.
+    pub fn new_required_for_codegen() -> Self {
+        Self::new(SelectionFlag::codegen_requirements().into())
     }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
@@ -110,6 +116,16 @@ impl File {
     /// Checks whether any of the `flags` is requested.
     pub fn contains_any(&self, flags: &[SelectionFlag]) -> bool {
         flags.iter().any(|&flag| self.contains(flag))
+    }
+
+    /// Checks whether code generation is requested.
+    pub fn requests_codegen(&self) -> bool {
+        self.contains_any(&[
+            SelectionFlag::EVM,
+            SelectionFlag::EVMBC,
+            SelectionFlag::EVMDBC,
+            SelectionFlag::Assembly,
+        ])
     }
 
     /// Checks whether the selection is empty.

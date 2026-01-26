@@ -41,7 +41,8 @@ contract RevertDataOob {
             mstore(0, 0xcc572cf9)
             mstore(32, offset)
             mstore(64, len)
-            let success := call(mul(div(gas(), 64), 63), address(), 0, 28, 68, 0, 0)
+            let stipend := mul(div(gas(), 64), 63) // On EVM this isn't necessary
+            let success := call(stipend, address(), 0, 28, 68, 0, 0)
             mstore(0, 0xdeadbeef)
             return(0, 32)
         }

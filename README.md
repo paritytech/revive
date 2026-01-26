@@ -7,11 +7,15 @@ Yul recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/
 
 Check the [docs](https://paritytech.github.io/revive/) or visit [contracts.polkadot.io](https://docs.polkadot.com/develop/smart-contracts/) to learn more about `revive` and contracts on Polkadot!
 
-## Status
-
-This is experimental software in active development and not ready just yet for production usage. Please do report any compiler related issues or missing features that are [not yet known to us](https://contracts.polkadot.io/known_issues/) here.
-
 Discussion around the development is hosted on the [Polkadot Forum](https://forum.polkadot.network/t/contracts-update-solidity-on-polkavm/6949#a-new-solidity-compiler-1).
+
+> [!WARNING]
+>
+> Solidity on PVM is running on the `pallet-revive` runtime. This introduces **observable semantic differences** in comparison with the EVM.
+> 
+> Study the [differences](https://paritytech.github.io/revive/user_guide/differences.html) section carefully. **Ignoring these differences may lead to serious security bugs in your contract code.**
+> 
+> Notable examples: The 63/64 gas rule isn't implemented in the pallet (introduces DoS vectors), contract instantiation works differently and the gas model is different.
 
 ## Installation
 

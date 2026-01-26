@@ -44,6 +44,7 @@ test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
 test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
+test_spec!(revert_data_oob, "RevertDataOob", "RevertDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
 test_spec!(block_hash, "BlockHash", "BlockHash.sol");

@@ -6,9 +6,13 @@ Hello and a warm welcome to the `revive` Solidity compiler book!
 >
 > Solidity on PVM is running on the `pallet-revive` runtime. This introduces **observable semantic differences** in comparison with the EVM.
 > 
->  Study the [differences](./user_guide/differences.md) section carefully. **Ignoring these differences may lead to serious security bugs in your contract code.**
+> Study the [differences](https://paritytech.github.io/revive/user_guide/differences.html) section carefully. **Ignoring these differences may lead to defunct contracts.**
 > 
-> Notable examples: The 63/64 gas rule isn't implemented in the pallet (introduces DoS vectors), contract instantiation works differently and the gas model is different.
+> Notable examples:
+> - The 63/64 gas rule isn't implemented in the pallet (introduces potential DoS vector when calling other contracts)
+> - Contract instantiation works differently (by hash instead of by code)
+> - The gas model implemented by `pallet-revive` differs from Ethereum 
+> - The heap size is fixed instead of gas-metered and there's a fixed amount of stack size (contracts working fine on EVM may trap on PVM)
 
 ## Target audience
 

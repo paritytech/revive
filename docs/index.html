@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4ae832c1.js";
+            window.path_to_searchindex_js = "searchindex-c7304031.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6f3f265e.js"></script>
@@ -176,6 +176,18 @@
                     <main>
                         <h1 id="welcome"><a class="header" href="#welcome">Welcome</a></h1>
 <p>Hello and a warm welcome to the <code>revive</code> Solidity compiler book!</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Solidity on PVM is running on the <code>pallet-revive</code> runtime. This introduces <strong>observable semantic differences</strong> in comparison with the EVM.</p>
+<p>Study the <a href="https://paritytech.github.io/revive/user_guide/differences.html">differences</a> section carefully. <strong>Ignoring these differences may lead to defunct contracts.</strong></p>
+<p>Notable examples:</p>
+<ul>
+<li>The 63/64 gas rule isn’t implemented in the pallet (introduces potential DoS vector when calling other contracts)</li>
+<li>Contract instantiation works differently (by hash instead of by code)</li>
+<li>The gas model implemented by <code>pallet-revive</code> differs from Ethereum</li>
+<li>The heap size is fixed instead of gas-metered and there’s a fixed amount of stack size (contracts working fine on EVM may trap on PVM)</li>
+</ul>
+</blockquote>
 <h2 id="target-audience"><a class="header" href="#target-audience">Target audience</a></h2>
 <ul>
 <li><strong>Solidity dApp developers</strong> should read the <a href="./user_guide.html">user guide</a>. Solidity on PolkaVM introduces important differences to EVM which should be well understood.</li>

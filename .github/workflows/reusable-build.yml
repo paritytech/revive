@@ -199,8 +199,8 @@ jobs:
             settings: {
               optimizer: { enabled: false },
               outputSelection: {
-              '*': {
-                '*': ['evm.bytecode']
+                '*': {
+                  '*': ['evm.bytecode']
                 }
               }
             }

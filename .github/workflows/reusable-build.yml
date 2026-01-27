@@ -196,7 +196,14 @@ jobs:
                 content: 'pragma solidity ^0.8.0; contract MyContract { function greet() public pure returns (string memory) { return \'Hello\'; } }',
               },
             },
-            settings: { optimizer: { enabled: false } }
+            settings: {
+              optimizer: { enabled: false },
+              outputSelection: {
+              '*': {
+                '*': ['evm.bytecode']
+                }
+              }
+            }
           };
 
           compiler.writeToStdin(JSON.stringify(standardJsonInput));

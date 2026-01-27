@@ -79,7 +79,7 @@ impl File {
             .filter(|flag| !self.per_file.contains(flag))
             .collect();
 
-        let requests_evm = self.contains(SelectionFlag::EVM);
+        let requests_evm_parent = self.contains(SelectionFlag::EVM);
         let evm_children = SelectionFlag::evm_children();
         let requests_evm_child = self.contains_any(evm_children);
 
@@ -88,7 +88,7 @@ impl File {
             .copied()
             .filter(|flag| {
                 // Never prune EVM children when the EVM parent is requested.
-                if requests_evm && evm_children.contains(flag) {
+                if requests_evm_parent && evm_children.contains(flag) {
                     return false;
                 }
                 // Never prune the EVM parent when any of its children are requested.

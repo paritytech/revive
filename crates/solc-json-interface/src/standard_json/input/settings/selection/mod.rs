@@ -79,7 +79,7 @@ pub struct Selection {
     pub all: FileSelection,
     /// Individual file selection configuration, required for foundry.
     #[serde(skip_serializing_if = "PerFileSelection::is_empty", flatten)]
-    files: PerFileSelection,
+    pub files: PerFileSelection,
 }
 
 impl Selection {

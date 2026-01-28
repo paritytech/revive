@@ -12,7 +12,7 @@
     },
     "outputSelection": {
       "*": {
-        "*": ["abi"]
+        "*": ["abi", "evm.bytecode"]
       }
     }
   }

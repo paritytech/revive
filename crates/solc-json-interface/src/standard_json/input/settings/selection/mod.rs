@@ -44,15 +44,15 @@ impl PerFileSelection {
         Self { files }
     }
 
-    /// Returns whether `path` contains the `flag` or `None` if there is no selection for `path`.
-    pub fn contains(&self, path: &String, flag: &Flag) -> Option<bool> {
+    /// Checks whether `path` contains the `flag` or `None` if there is no selection for `path`.
+    pub fn contains(&self, path: &String, flag: Flag) -> Option<bool> {
         if let Some(file) = self.files.get(path) {
             return Some(file.contains(flag));
         };
         None
     }
 
-    /// Returns whether this is the empty per file selection.
+    /// Checks whether this is the empty per file selection.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
@@ -60,8 +60,8 @@ impl PerFileSelection {
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
         for file in self.files.values_mut() {
-            file.per_contract.retain(Flag::is_required_for_codegen);
-            file.per_file.retain(Flag::is_required_for_codegen);
+            file.per_contract.retain(|flag| !flag.is_evm_codegen());
+            file.per_file.retain(|flag| !flag.is_evm_codegen());
         }
     }
 }
@@ -69,34 +69,53 @@ impl PerFileSelection {
 /// The `solc --standard-json` output selection.
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
 pub struct Selection {
-    /// Only the 'all' wildcard is available for robustness reasons.
+    /// Common configuration for all files.
     #[serde(default, rename = "*", skip_serializing_if = "FileSelection::is_empty")]
-    /// Individual file selection configuration, required for foundry.
     pub all: FileSelection,
+    /// Individual file selection configuration, required for foundry.
     #[serde(skip_serializing_if = "PerFileSelection::is_empty", flatten)]
-    files: PerFileSelection,
+    pub files: PerFileSelection,
 }
 
 impl Selection {
-    /// Creates the selection with arbitrary flags.
-    pub fn new(flags: Vec<Flag>) -> Self {
+    /// Creates the selection for all contracts in all files with arbitrary `flags`.
+    pub fn new_all(flags: Vec<Flag>) -> Self {
         Self {
             all: FileSelection::new(flags),
             files: Default::default(),
         }
     }
 
-    /// Creates the selection required by our compilation process.
-    pub fn new_required() -> Self {
-        Self::new(vec![
-            Flag::AST,
-            Flag::MethodIdentifiers,
-            Flag::Metadata,
-            Flag::Yul,
-        ])
+    /// Creates the selection required by our compilation process for all contracts in all files.
+    pub fn new_required_for_codegen_all() -> Self {
+        Self::new_all(Flag::codegen_requirements().into())
     }
 
-    /// Creates the selection required for test compilation (includes EVM bytecode).
+    /// Creates the selection required by our compilation process for each contract in
+    /// `output_selection` requesting code generation.
+    pub fn new_required_for_codegen(output_selection: &Self) -> Self {
+        if output_selection.all.requests_codegen() {
+            return Self::new_required_for_codegen_all();
+        }
+
+        let mut files = PerFileSelection::default();
+        for (file_name, file_selection) in &output_selection.files.files {
+            if file_selection.requests_codegen() {
+                files.files.insert(
+                    file_name.to_owned(),
+                    FileSelection::new_required_for_codegen(),
+                );
+            }
+        }
+
+        Self {
+            all: Default::default(),
+            files,
+        }
+    }
+
+    /// Creates the selection required for test compilation (includes EVM bytecode) for all
+    /// contracts in all files.
     pub fn new_required_for_tests() -> Self {
         Self {
             all: FileSelection::new_required_for_tests(),
@@ -106,7 +125,7 @@ impl Selection {
 
     /// Creates the selection required by Yul validation process.
     pub fn new_yul_validation() -> Self {
-        Self::new(vec![Flag::EVM])
+        Self::new_all(vec![Flag::EVM])
     }
 
     /// Extends the output selection with another one.
@@ -116,10 +135,10 @@ impl Selection {
         self
     }
 
-    /// Returns flags that are going to be automatically added by the compiler,
-    /// but were not explicitly requested by the user.
+    /// Returns flags that were not explicitly requested by the user.
     ///
-    /// Afterwards, the flags are used to prune JSON output before returning it.
+    /// These flags are used to prune JSON output before returning it,
+    /// removing any output that was automatically added but not requested.
     pub fn selection_to_prune(&self) -> Self {
         Self {
             all: self.all.selection_to_prune(),
@@ -127,8 +146,8 @@ impl Selection {
         }
     }
 
-    /// Whether the flag is requested.
-    pub fn contains(&self, path: &String, flag: &Flag) -> bool {
+    /// Checks whether the `flag` is requested.
+    pub fn contains(&self, path: &String, flag: Flag) -> bool {
         self.files
             .contains(path, flag)
             .unwrap_or(self.all.contains(flag))
@@ -136,8 +155,8 @@ impl Selection {
 
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
-        self.all.per_file.retain(Flag::is_required_for_codegen);
-        self.all.per_contract.retain(Flag::is_required_for_codegen);
+        self.all.per_file.retain(|flag| !flag.is_evm_codegen());
+        self.all.per_contract.retain(|flag| !flag.is_evm_codegen());
         self.files.retain();
     }
 }

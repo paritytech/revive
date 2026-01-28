@@ -15,13 +15,14 @@ pub struct File {
     /// The per-file output selections.
     #[serde(default, rename = "", skip_serializing_if = "HashSet::is_empty")]
     pub per_file: HashSet<SelectionFlag>,
-    /// The per-contract output selections.
+    /// The per-contract output selections, common for all contracts.
+    /// Only the "all" (`*`) wildcard is available for robustness reasons.
     #[serde(default, rename = "*", skip_serializing_if = "HashSet::is_empty")]
     pub per_contract: HashSet<SelectionFlag>,
 }
 
 impl File {
-    /// A shortcut constructor.
+    /// Creates the selection for all contracts with arbitrary `flags`.
     pub fn new(flags: Vec<SelectionFlag>) -> Self {
         let mut per_file = HashSet::new();
         let mut per_contract = HashSet::new();
@@ -39,6 +40,11 @@ impl File {
             per_file,
             per_contract,
         }
+    }
+
+    /// Creates the selection required by our compilation process.
+    pub fn new_required_for_codegen() -> Self {
+        Self::new(SelectionFlag::codegen_requirements().into())
     }
 
     /// Creates the selection required for test compilation (includes EVM bytecode).
@@ -62,42 +68,64 @@ impl File {
         self
     }
 
-    /// Returns flags that are going to be automatically added by the compiler,
-    /// but were not explicitly requested by the user.
+    /// Returns flags that were not explicitly requested by the user.
     ///
-    /// Afterwards, the flags are used to prune JSON output before returning it.
+    /// These flags are used to prune JSON output before returning it,
+    /// removing any output that was automatically added but not requested.
     pub fn selection_to_prune(&self) -> Self {
-        let required_per_file = vec![SelectionFlag::AST];
-        let required_per_contract = vec![
-            SelectionFlag::MethodIdentifiers,
-            SelectionFlag::Metadata,
-            SelectionFlag::Yul,
-        ];
+        let unset_per_file = SelectionFlag::all()
+            .iter()
+            .copied()
+            .filter(|flag| !self.per_file.contains(flag))
+            .collect();
 
-        let mut unset_per_file = HashSet::with_capacity(required_per_file.len());
-        let mut unset_per_contract = HashSet::with_capacity(required_per_contract.len());
+        let requests_evm_parent = self.contains(SelectionFlag::EVM);
+        let evm_children = SelectionFlag::evm_children();
+        let requests_evm_child = self.contains_any(evm_children);
 
-        for flag in required_per_file {
-            if !self.per_file.contains(&flag) {
-                unset_per_file.insert(flag);
-            }
-        }
-        for flag in required_per_contract {
-            if !self.per_contract.contains(&flag) {
-                unset_per_contract.insert(flag);
-            }
-        }
+        let unset_per_contract: HashSet<_> = SelectionFlag::all()
+            .iter()
+            .copied()
+            .filter(|flag| {
+                // Never prune EVM children when the EVM parent is requested.
+                if requests_evm_parent && evm_children.contains(flag) {
+                    return false;
+                }
+                // Never prune the EVM parent when any of its children are requested.
+                if requests_evm_child && *flag == SelectionFlag::EVM {
+                    return false;
+                }
+                !self.per_contract.contains(flag)
+            })
+            .collect();
+
         Self {
             per_file: unset_per_file,
             per_contract: unset_per_contract,
         }
     }
-    /// Whether the flag is requested.
-    pub fn contains(&self, flag: &SelectionFlag) -> bool {
+
+    /// Checks whether the `flag` is requested.
+    pub fn contains(&self, flag: SelectionFlag) -> bool {
         match flag {
-            flag @ SelectionFlag::AST => self.per_file.contains(flag),
-            flag => self.per_contract.contains(flag),
+            SelectionFlag::AST => self.per_file.contains(&flag),
+            _ => self.per_contract.contains(&flag),
         }
+    }
+
+    /// Checks whether any of the `flags` is requested.
+    pub fn contains_any(&self, flags: &[SelectionFlag]) -> bool {
+        flags.iter().any(|&flag| self.contains(flag))
+    }
+
+    /// Checks whether code generation is requested.
+    pub fn requests_codegen(&self) -> bool {
+        self.contains_any(&[
+            SelectionFlag::EVM,
+            SelectionFlag::EVMBC,
+            SelectionFlag::EVMDBC,
+            SelectionFlag::Assembly,
+        ])
     }
 
     /// Checks whether the selection is empty.

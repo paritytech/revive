@@ -18,6 +18,10 @@ Therefore, in EVM terminology, the deploy code equals the runtime code.
 
 We are aware of the following differences in the translation of Solidity code.
 
+### The `63/64` gas rule
+
+`pallet-revive` **doesn't apply the `63/64` gas rule**. We strongly advice to change any code calling untrusted contracts to supply a limited amount of gas only!
+
 ### `address.creationCode`
 
 This returns the bytecode keccak256 hash instead.
@@ -28,7 +32,7 @@ The below list contains noteworthy differences in the translation of YUL functio
 
 > [!NOTE]
 >
-> Many functions receive memory buffer offset pointer or size arguments. Since the PVM pointer size is 32 bit, supplying memory offset or buffer size values above `2^32-1` will trap the contract immediately.
+> Many functions receive memory buffer offset pointer or size arguments. The PVM pointer size is 32 bit, supplying memory offset or buffer size values above `2^32-1` may lead to `OutOfGas` errors trap contract execution.
 
 The `solc` compiler ought to always emit valid memory references, so Solidity dApp authors don't need to worry about this unless they deal with low level `assembly` code.
 
@@ -42,6 +46,10 @@ In general, revive preserves the memory layout, meaning low level memory operati
 ### `calldataload`, `calldatacopy`
 
 In the constructor code, the offset is ignored and this always returns `0`.
+
+> [!WARNING]
+>
+> `pallet-revive` restricts the calldata size (to 128kb at the time of writing).
 
 ### `codecopy`
 
@@ -69,6 +77,10 @@ Returns the contract hash.
 ### `datasize`
 
 Returns the contract hash size (constant value of `32`).
+
+### `revert`, `return`
+
+`pallet-revive` restricts the returndata size (to 128kb at the time of writing).
 
 ### `prevrandao`, `difficulty`
 

@@ -63,7 +63,10 @@ impl Output {
                     path.to_owned(),
                     Source {
                         id: index,
-                        ast: source.content().map(|x| serde_json::to_value(x).unwrap()),
+                        ast: source
+                            .content()
+                            .map(|x| serde_json::to_value(x).unwrap())
+                            .unwrap_or_default(),
                     },
                 )
             })
@@ -105,7 +108,7 @@ impl Output {
                 path,
                 crate::SolcStandardJsonInputSettingsSelectionFileFlag::AST,
             ) {
-                source.ast = None;
+                source.ast = Default::default();
             }
         }
 
@@ -147,11 +150,7 @@ impl Output {
 
         let messages: Vec<SolcStandardJsonOutputError> = iter
             .flat_map(|(_path, source)| {
-                source
-                    .ast
-                    .as_ref()
-                    .map(|ast| Source::get_messages(ast, &id_paths, sources, suppressed_warnings))
-                    .unwrap_or_default()
+                Source::get_messages(&source.ast, &id_paths, sources, suppressed_warnings)
             })
             .collect();
         self.errors.extend(messages);

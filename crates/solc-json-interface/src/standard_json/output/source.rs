@@ -20,8 +20,8 @@ pub struct Source {
     /// The source code ID.
     pub id: usize,
     /// The source code AST.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ast: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub ast: serde_json::Value,
 }
 
 #[cfg(feature = "resolc")]
@@ -30,7 +30,10 @@ impl Source {
     ///
     /// Is used for projects compiled without `solc`.
     pub fn new(id: usize) -> Self {
-        Self { id, ast: None }
+        Self {
+            id,
+            ast: Default::default(),
+        }
     }
 
     /// Checks the AST node for the usage of send or transfer address methods.

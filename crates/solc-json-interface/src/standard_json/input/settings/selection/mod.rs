@@ -52,11 +52,6 @@ impl PerFileSelection {
         None
     }
 
-    /// Checks whether any of the `flags` is selected in any of the files.
-    pub fn contains_any(&self, flags: &[Flag]) -> bool {
-        self.files.values().any(|file| file.contains_any(flags))
-    }
-
     /// Checks whether this is the empty per file selection.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()

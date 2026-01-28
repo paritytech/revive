@@ -9,7 +9,7 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
-    STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
+    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
     STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
@@ -373,13 +373,11 @@ fn pvm_codegen_requested() {
 
 #[test]
 fn no_pvm_codegen_requested() {
-    let result = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
-        STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH,
-    );
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH);
     assert_command_success(
         &result,
-        "the no PVM codegen std JSON with many files input fixture",
+        "the no PVM codegen std JSON per file input fixture",
     );
 
     let output = to_solc_standard_json_output(&result.stdout);
@@ -388,32 +386,32 @@ fn no_pvm_codegen_requested() {
     let expected = ExpectedOutput {
         contracts: vec![
             ExpectedContract {
-                path: "lib/forge-std/src/StdAssertions.sol",
-                name: "StdAssertions",
-                fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
-            },
-            ExpectedContract {
                 path: "src/common/GasService.sol",
                 name: "GasService",
                 fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
             },
             ExpectedContract {
-                path: "test/common/mocks/Mock.sol",
-                name: "Mock",
+                path: "src/common/Gateway.sol",
+                name: "Gateway",
+                fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
+            },
+            ExpectedContract {
+                path: "src/common/MessageDispatcher.sol",
+                name: "MessageDispatcher",
                 fields: vec!["abi", "evm", "evm.methodIdentifiers", "metadata"],
             },
         ],
         sources: vec![
             ExpectedSource {
-                path: "lib/forge-std/src/StdAssertions.sol",
-                fields: vec!["id"],
-            },
-            ExpectedSource {
                 path: "src/common/GasService.sol",
                 fields: vec!["id"],
             },
             ExpectedSource {
-                path: "test/common/mocks/Mock.sol",
+                path: "src/common/Gateway.sol",
+                fields: vec!["id"],
+            },
+            ExpectedSource {
+                path: "src/common/MessageDispatcher.sol",
                 fields: vec!["id"],
             },
         ],

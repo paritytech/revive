@@ -8,9 +8,9 @@
     - [LargeDivRem](#largedivrem)
     - [Yul Memset](#yul-memset)
     - [Yul Return](#yul-return)
-    - [Std JSON Codegen](#std-json-codegen)
-    - [Std JSON Codegen One of Some Files](#std-json-codegen-one-of-some-files)
-    - [Std JSON No Codegen Many Files](#std-json-no-codegen-many-files)
+    - [Std JSON Codegen All Files](#std-json-codegen-all-files)
+    - [Std JSON Codegen One of Many Files](#std-json-codegen-one-of-many-files)
+    - [Std JSON No Codegen](#std-json-no-codegen)
 
 ## Benchmark Results
 
@@ -44,24 +44,23 @@
 |:-------|:-------------------------|:------------------------------- |
 |        | `53.55 ms` (✅ **1.00x**) | `8.95 ms` (🚀 **5.99x faster**)  |
 
-### Std JSON Codegen
+### Std JSON Codegen All Files
 
-|        | `resolc`               | `solc`                         |
-|:-------|:-----------------------|:------------------------------ |
-|        | `1.51 s` (✅ **1.00x**) | `1.11 s` (✅ **1.37x faster**)  |
+|        | `resolc`                | `solc`                          |
+|:-------|:------------------------|:------------------------------- |
+|        | `14.59 s` (✅ **1.00x**) | `13.86 s` (✅ **1.05x faster**)  |
 
-
-### Std JSON Codegen One of Some Files
+### Std JSON Codegen One of Many Files
 
 |        | `resolc`                  | `solc`                           |
 |:-------|:--------------------------|:-------------------------------- |
-|        | `454.24 ms` (✅ **1.00x**) | `13.82 s` (❌ *30.42x slower*)    |
+|        | `456.07 ms` (✅ **1.00x**) | `13.78 s` (❌ *30.22x slower*)    |
 
-### Std JSON No Codegen Many Files
+### Std JSON No Codegen
 
-|        | `resolc`               | `solc`                         |
-|:-------|:-----------------------|:------------------------------ |
-|        | `1.71 s` (✅ **1.00x**) | `1.63 s` (✅ **1.05x faster**)  |
+|        | `resolc`                  | `solc`                            |
+|:-------|:--------------------------|:--------------------------------- |
+|        | `365.40 ms` (✅ **1.00x**) | `354.96 ms` (✅ **1.03x faster**)  |
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)

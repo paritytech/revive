@@ -44,7 +44,7 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
     "src/tests/data/standard_json/pvm_codegen_all_wildcard.json";
-/// The standard JSON PVM codegen per file test fixture path.
+/// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH: &str =
@@ -54,15 +54,14 @@ pub const STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH: &str =
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH: &str =
     "src/tests/data/standard_json/pvm_codegen_one_file.json";
-/// The standard JSON no PVM codegen test fixture path with
-/// lots of files included.
+/// The standard JSON no PVM codegen for any file on a per-file basis test fixture path.
 ///
 /// This omits `evm` bytecode selection flags, which should thereby
 /// prevent PVM bytecode generation.
 ///
 /// These contracts are similar to ones used in an example project.
-pub const STANDARD_JSON_NO_PVM_CODEGEN_MANY_FILES_PATH: &str =
-    "src/tests/data/standard_json/no_pvm_codegen_many_files.json";
+pub const STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH: &str =
+    "src/tests/data/standard_json/no_pvm_codegen_per_file.json";
 /// The standard JSON Yul contract PVM codegen test fixture path.
 ///
 /// This requests the full `evm` output object, which should thereby

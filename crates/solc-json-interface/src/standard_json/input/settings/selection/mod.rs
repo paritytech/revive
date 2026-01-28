@@ -65,8 +65,8 @@ impl PerFileSelection {
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
         for file in self.files.values_mut() {
-            file.per_contract.retain(|flag| !flag.is_solc_backend());
-            file.per_file.retain(|flag| !flag.is_solc_backend());
+            file.per_contract.retain(|flag| !flag.is_evm_codegen());
+            file.per_file.retain(|flag| !flag.is_evm_codegen());
         }
     }
 }
@@ -160,8 +160,8 @@ impl Selection {
 
     /// Removes unneeded selections.
     pub fn retain(&mut self) {
-        self.all.per_file.retain(|flag| !flag.is_solc_backend());
-        self.all.per_contract.retain(|flag| !flag.is_solc_backend());
+        self.all.per_file.retain(|flag| !flag.is_evm_codegen());
+        self.all.per_contract.retain(|flag| !flag.is_evm_codegen());
         self.files.retain();
     }
 }

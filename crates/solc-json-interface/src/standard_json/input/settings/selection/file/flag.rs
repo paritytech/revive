@@ -94,7 +94,7 @@ impl Flag {
     ///
     /// Specifically, EVM bytecode and related flags should never be requested.
     /// It will be replaced by PVM code anyways.
-    pub fn is_solc_backend(&self) -> bool {
+    pub fn is_evm_codegen(&self) -> bool {
         matches!(
             self,
             Flag::EVMBC | Flag::EVMDBC | Flag::EVMLA | Flag::EVM | Flag::Assembly

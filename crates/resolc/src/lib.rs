@@ -218,23 +218,20 @@ pub fn standard_json<T: Compiler>(
     );
     solc_input.retain_output_selection();
 
-    let solc_output = solc.standard_json(
+    let mut solc_output = solc.standard_json(
         &mut solc_input,
         messages,
         base_path,
         include_paths,
         allow_paths,
     )?;
-    let mut solc_output = match language {
-        SolcStandardJsonInputLanguage::Solidity => solc_output,
-        SolcStandardJsonInputLanguage::Yul => {
-            let solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
-            if solc_output.has_errors() {
-                solc_output.write_and_exit(prune_output);
-            }
-            solc_output
+
+    if language == SolcStandardJsonInputLanguage::Yul {
+        let solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
+        if solc_output.has_errors() {
+            solc_output.write_and_exit(prune_output);
         }
-    };
+    }
 
     let project = Project::try_from_standard_json_output(
         &mut solc_output,

@@ -59,7 +59,7 @@ alloy-genesis = "1.1.2"
 alloy-serde = "1.1"
 env_logger = { version = "0.11.8", default-features = false }
 serde_stacker = "0.1.14"
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 log = { version = "0.4.28" }
 git2 = { version = "0.20.2", default-features = false }
 downloader = "0.2.8"

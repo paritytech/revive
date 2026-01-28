@@ -17,7 +17,7 @@ impl Contract {
     pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
+            evm_runtime: compile_evm_bin_runtime(name, code, Default::default()),
             pvm_runtime: compile_blob(name, code),
             calldata,
             yul: compile_to_yul(name, code, true),
@@ -27,8 +27,14 @@ impl Contract {
     pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
         Self {
             name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
+            evm_runtime: compile_evm_bin_runtime(name, code, Default::default()),
+            pvm_runtime: compile_blob_with_options(
+                name,
+                code,
+                true,
+                OptimizerSettings::size(),
+                Default::default(),
+            ),
             calldata,
             yul: compile_to_yul(name, code, true),
         }

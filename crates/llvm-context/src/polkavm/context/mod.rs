@@ -748,7 +748,7 @@ impl<'ctx> Context<'ctx> {
         &self,
         pointer: Pointer<'ctx>,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let address = self.build_byte_swap(self.build_load(pointer, "address_pointer")?)?;
+        let address = self.build_byte_swap(self.build_load(pointer, "address_value")?)?;
         Ok(self
             .builder()
             .build_int_z_extend(address.into_int_value(), self.word_type(), "address_zext")?

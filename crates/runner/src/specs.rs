@@ -316,6 +316,7 @@ impl Specs {
                         path: Some(path),
                         solc_optimizer,
                         contract,
+                        libraries,
                     } = code
                     else {
                         panic!("the differential runner requires Code::Solidity source");
@@ -335,6 +336,7 @@ impl Specs {
                             &contract,
                             &solidity_source,
                             solc_optimizer.unwrap_or(true),
+                            libraries,
                         )),
                         Err(err) => panic!(
                             "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",

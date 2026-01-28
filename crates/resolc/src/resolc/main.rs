@@ -1,13 +1,10 @@
 //! Solidity to PolkaVM compiler binary.
 
-use std::str::FromStr;
 use std::{io::Write, path::PathBuf};
 
 use clap::error::ErrorKind;
 use resolc::Process;
-use revive_common::{
-    deserialize_from_str, EVMVersion, MetadataHash, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS,
-};
+use revive_common::{deserialize_from_str, EVMVersion, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS};
 use revive_llvm_context::{initialize_llvm, DebugConfig, OptimizerSettings, PolkaVMTarget};
 use revive_solc_json_interface::{
     ResolcWarning, SolcStandardJsonInputSettingsPolkaVMMemory,
@@ -32,7 +29,7 @@ fn main() -> anyhow::Result<()> {
 
     let is_standard_json = arguments.standard_json.is_some();
     let mut messages = arguments.validate();
-    if messages.iter().all(|error| error.severity != "error") {
+    if messages.iter().all(|error| !error.is_error()) {
         if !is_standard_json {
             std::io::stderr()
                 .write_all(
@@ -170,27 +167,21 @@ fn main_inner(
         None => None,
     };
 
-    let mut optimizer_settings = match arguments.optimization {
-        Some(mode) => OptimizerSettings::try_from_cli(mode)?,
-        None => OptimizerSettings::size(),
-    };
+    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
-    let metadata_hash = match arguments.metadata_hash {
-        Some(ref hash_type) => MetadataHash::from_str(hash_type.as_str())?,
-        None => MetadataHash::Keccak256,
-    };
-
-    let memory_config =
-        SolcStandardJsonInputSettingsPolkaVMMemory::new(arguments.heap_size, arguments.stack_size);
+    let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
+        Some(arguments.heap_size),
+        Some(arguments.stack_size),
+    );
 
     let build = if arguments.yul {
         resolc::yul(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             optimizer_settings,
             debug_config,
@@ -200,7 +191,7 @@ fn main_inner(
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &solc,
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             standard_json.map(PathBuf::from),
             arguments.base_path,
@@ -215,7 +206,7 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             evm_version,
             format,
@@ -240,7 +231,7 @@ fn main_inner(
             &solc,
             input_files.as_slice(),
             arguments.libraries.as_slice(),
-            metadata_hash,
+            arguments.metadata_hash,
             messages,
             evm_version,
             !arguments.disable_solc_optimizer,

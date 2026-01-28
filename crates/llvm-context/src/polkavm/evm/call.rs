@@ -163,7 +163,16 @@ pub fn linker_symbol<'ctx>(
         context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
         Default::default(),
     );
-    context.build_load_address(context.get_global(path)?.into())
+
+    let symbol = context.get_global(path)?;
+    let value = context.build_load(symbol.into(), path)?;
+    let value = context.builder().build_int_z_extend(
+        value.into_int_value(),
+        context.word_type(),
+        &format!("{path}_zext"),
+    )?;
+
+    Ok(value.into())
 }
 
 /// The runtime implements gas as `u64` so we clip the stipend to `u64::MAX`.

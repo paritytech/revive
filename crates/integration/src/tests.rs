@@ -44,6 +44,7 @@ test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
 test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
+test_spec!(revert_data_oob, "RevertDataOob", "RevertDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
 test_spec!(block_hash, "BlockHash", "BlockHash.sol");
@@ -67,6 +68,12 @@ test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
 test_spec!(call_gas, "CallGas", "CallGas.sol");
+test_spec!(linker_symbol, "Linked", "Linked.sol");
+test_spec!(
+    struct_delete_storage,
+    "StructDeleteStorage",
+    "StructDeleteStorage.sol"
+);
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -78,6 +85,7 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
             path: Some(path.into()),
             contract: contract.to_string(),
             solc_optimizer: None,
+            libraries: Default::default(),
         },
         data: vec![],
         salt: OptionalHex::default(),
@@ -372,6 +380,7 @@ fn ext_code_size() {
                     path: Some("contracts/Baseline.sol".into()),
                     contract: "Baseline".to_string(),
                     solc_optimizer: None,
+                    libraries: Default::default(),
                 },
                 data: vec![],
                 salt: OptionalHex::from([0; 32]),

@@ -42,7 +42,7 @@ mimalloc = { version = "0.1.46", default-features = false }
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 libc = { workspace = true }
-inkwell = { workspace = true, features = ["target-riscv", "llvm18-1-no-llvm-linking"]}
+inkwell = { workspace = true, features = ["target-riscv", "llvm21-1-no-llvm-linking"]}
 
 [build-dependencies]
 git2 = { workspace = true, default-features = false }

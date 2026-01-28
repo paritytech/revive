@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-29a3e18e.js";
+            window.path_to_searchindex_js = "searchindex-575cfd18.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6f3f265e.js"></script>
@@ -367,7 +367,7 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <p>Used to select desired outputs.</p>
 <h3 id="the-all--wildcard"><a class="header" href="#the-all--wildcard">The “all” (<code>*</code>) wildcard</a></h3>
 <p>Resolc supports the “all” (<code>*</code>) wildcard for the file-level (first-level) and contract-level (second-level) keys. A file-level key can be either the wildcard or a specific file name, whereas the contract-level key can only be the wildcard for robustness reasons.</p>
-<p>Thus, output can be requested 2 ways:</p>
+<p>Thus, output can be requested in 2 ways:</p>
 <pre><code class="language-json">// All files and all contracts:
 {
   "settings": {
@@ -393,7 +393,11 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
   }
 }
 </code></pre>
-<h3 id="requesting-code-generation"><a class="header" href="#requesting-code-generation">Requesting Code Generation</a></h3>
+<h3 id="the-contract-level-evm-output-selection"><a class="header" href="#the-contract-level-evm-output-selection">The contract-level <code>evm</code> output selection</a></h3>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Currently, resolc supports requesting either the full <code>evm</code> output, or one more level of specificity, such as <code>evm.bytecode</code>.</p>
+</blockquote>
 <p>When requesting code generation, such as <code>evm.bytecode</code> or <code>evm.assembly</code>, the resolc compilation process additionally needs <code>ast</code>, <code>metadata</code>, <code>irOptimized</code>, and <code>evm.methodIdentifiers</code> selectors. These selectors will be automatically added if code generation is needed, but will only be included in the output if explicitly requested.</p>
 <pre><code class="language-json">{
   "settings": {

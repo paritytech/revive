@@ -30,7 +30,7 @@ struct ExpectedContract {
     name: &'static str,
     /// All contract-level fields of the JSON output selection expected to exist,
     /// such as `metadata`, `irOptimized`, etc. If `evm.bytecode` was requested,
-    /// `evm` and `evm.bytecode` should be expected.
+    /// both `evm` and `evm.bytecode` should be expected.
     fields: Vec<&'static str>,
 }
 

@@ -42,7 +42,7 @@ Used to select desired outputs.
 
 Resolc supports the "all" (`*`) wildcard for the file-level (first-level) and contract-level (second-level) keys. A file-level key can be either the wildcard or a specific file name, whereas the contract-level key can only be the wildcard for robustness reasons.
 
-Thus, output can be requested 2 ways:
+Thus, output can be requested in 2 ways:
 
 ```json
 // All files and all contracts:
@@ -71,7 +71,11 @@ Thus, output can be requested 2 ways:
 }
 ```
 
-### Requesting Code Generation
+### The contract-level `evm` output selection
+
+> [!NOTE]
+>
+> Currently, resolc supports requesting either the full `evm` output, or one more level of specificity, such as `evm.bytecode`.
 
 When requesting code generation, such as `evm.bytecode` or `evm.assembly`, the resolc compilation process additionally needs `ast`, `metadata`, `irOptimized`, and `evm.methodIdentifiers` selectors. These selectors will be automatically added if code generation is needed, but will only be included in the output if explicitly requested.
 

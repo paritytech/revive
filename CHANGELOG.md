@@ -4,6 +4,8 @@
 
 This is a development pre-release.
 
+## v1.0.0
+
 Supported `polkadot-sdk` rev: `unstable2507`
 
 ### Changed

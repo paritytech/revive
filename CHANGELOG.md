@@ -4,6 +4,8 @@
 
 This is a development pre-release.
 
+## v1.0.0
+
 Supported `polkadot-sdk` rev: `unstable2507`
 
 ### Changed
@@ -12,6 +14,32 @@ Supported `polkadot-sdk` rev: `unstable2507`
 ### Fixed
 - OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
 - The superfluous byte swap in `linkersymbol`.
+- Compiling with `--standard-json` now compiles to PolkaVM bytecode _only_ for the contracts explicitly requested in the `outputSelection`, significantly improving compilation time when none or a subset of files requests bytecode. [PR#461](https://github.com/paritytech/revive/pull/461)
+- Compiling with `--standard-json` now outputs _only_ the explicitly requested output (e.g. `evm.assembly`, `evm.bytecode`, `ast`, etc.). [PR#461](https://github.com/paritytech/revive/pull/461)
+```jsonc
+// Example:
+{
+  "settings": {
+    // ...
+    "outputSelection": {
+      "path/to/my/file1.sol": {
+        // Contracts in this file will generate bytecode.
+        // Only these fields of the JSON output selection will be in the `contracts` output.
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"],
+        // Only this field of the JSON output selection will be in the `sources` output.
+        "": ["ast"]
+      },
+      "path/to/my/file2.sol": {
+        // No contracts in this file will generate bytecode.
+        "*": ["abi", "evm.methodIdentifiers", "metadata"],
+        // No `ast` will be in the `sources` output (only the automatically added `id`,
+        // similar to solc as this is not a configurable output selection).
+        "": []
+      },
+    }
+  }
+}
+```
 
 ## v0.6.0
 

@@ -130,7 +130,7 @@ pub fn standard_output<T: Compiler>(
         input_files,
         libraries,
         remappings,
-        SolcStandardJsonInputSettingsSelection::new_required(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_codegen_all(),
         SolcStandardJsonInputSettingsOptimizer::new(
             solc_optimizer_enabled,
             SolcStandardJsonInputSettingsOptimizer::default_mode(),
@@ -210,8 +210,14 @@ pub fn standard_json<T: Compiler>(
         .polkavm
         .debug_information
         .unwrap_or(false);
-    solc_input.extend_selection(SolcStandardJsonInputSettingsSelection::new_required());
+
+    solc_input.extend_selection(
+        SolcStandardJsonInputSettingsSelection::new_required_for_codegen(
+            &solc_input.settings.output_selection,
+        ),
+    );
     solc_input.retain_output_selection();
+
     let mut solc_output = solc.standard_json(
         &mut solc_input,
         messages,
@@ -220,31 +226,19 @@ pub fn standard_json<T: Compiler>(
         allow_paths,
     )?;
 
-    let (mut solc_output, project) = match language {
-        SolcStandardJsonInputLanguage::Solidity => {
-            let project = Project::try_from_standard_json_output(
-                &mut solc_output,
-                solc_input.settings.libraries,
-                &solc_version,
-                &debug_config,
-            )?;
-            (solc_output, project)
+    if language == SolcStandardJsonInputLanguage::Yul {
+        let solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
+        if solc_output.has_errors() {
+            solc_output.write_and_exit(prune_output);
         }
-        SolcStandardJsonInputLanguage::Yul => {
-            let mut solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;
-            if solc_output.has_errors() {
-                solc_output.write_and_exit(prune_output);
-            }
-            let project = Project::try_from_yul_sources(
-                solc_input.sources,
-                solc_input.settings.libraries,
-                Some(&mut solc_output),
-                &debug_config,
-            )?;
+    }
 
-            (solc_output, project)
-        }
-    };
+    let project = Project::try_from_standard_json_output(
+        &mut solc_output,
+        solc_input.settings.libraries,
+        &solc_version,
+        &debug_config,
+    )?;
 
     if solc_output.has_errors() {
         solc_output.write_and_exit(prune_output);

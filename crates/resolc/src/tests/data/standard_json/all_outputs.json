@@ -91,19 +91,25 @@
     "viaIR": true,
     "outputSelection": {
       "*": {
-        "": ["ast"],
         "*": [
           "abi",
           "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
           "irOptimized",
+          "ir",
+          "evm",
           "evm.methodIdentifiers",
+          "evm.legacyAssembly",
           "evm.bytecode",
           "evm.deployedBytecode",
           "evm.assembly"
-        ]
+        ],
+        "": ["ast"]
       }
     },
-    "evmVersion": "cancun",
+    "evmVersion": "berlin",
     "remappings": ["forge-std/=lib/forge-std/src/"]
   }
 }

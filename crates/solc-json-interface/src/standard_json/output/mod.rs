@@ -63,7 +63,10 @@ impl Output {
                     path.to_owned(),
                     Source {
                         id: index,
-                        ast: source.content().map(|x| serde_json::to_value(x).unwrap()),
+                        ast: source
+                            .content()
+                            .map(|x| serde_json::to_value(x).unwrap())
+                            .unwrap_or_default(),
                     },
                 )
             })
@@ -100,26 +103,20 @@ impl Output {
         mut self,
         selection_to_prune: SolcStandardJsonInputSettingsSelection,
     ) -> ! {
+        for (path, source) in self.sources.iter_mut() {
+            if selection_to_prune.contains(
+                path,
+                crate::SolcStandardJsonInputSettingsSelectionFileFlag::AST,
+            ) {
+                source.ast = Default::default();
+            }
+        }
+
         for (path, contracts) in self.contracts.iter_mut() {
             for contract in contracts.values_mut() {
-                if selection_to_prune.contains(
-                    path,
-                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Metadata,
-                ) {
-                    contract.metadata = serde_json::Value::Null;
-                }
-                if selection_to_prune.contains(
-                    path,
-                    &crate::SolcStandardJsonInputSettingsSelectionFileFlag::Yul,
-                ) {
-                    contract.ir_optimized = String::new();
-                }
-                if let Some(ref mut evm) = contract.evm {
-                    if selection_to_prune.contains(
-                        path,
-                        &crate::SolcStandardJsonInputSettingsSelectionFileFlag::MethodIdentifiers,
-                    ) {
-                        evm.method_identifiers.clear();
+                for &flag in crate::SolcStandardJsonInputSettingsSelectionFileFlag::all() {
+                    if selection_to_prune.contains(path, flag) {
+                        contract.reset_field_by_flag(flag);
                     }
                 }
             }
@@ -153,11 +150,7 @@ impl Output {
 
         let messages: Vec<SolcStandardJsonOutputError> = iter
             .flat_map(|(_path, source)| {
-                source
-                    .ast
-                    .as_ref()
-                    .map(|ast| Source::get_messages(ast, &id_paths, sources, suppressed_warnings))
-                    .unwrap_or_default()
+                Source::get_messages(&source.ast, &id_paths, sources, suppressed_warnings)
             })
             .collect();
         self.errors.extend(messages);

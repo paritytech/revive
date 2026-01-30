@@ -138,6 +138,8 @@ fn build_crt(
                 "-DCOMPILER_RT_BUILD_PROFILE='Off'",
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
+                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
+                "-DCMAKE_C_COMPILER_TARGET='x86_64-pc-linux-musl'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::shared_build_opts_ccache(
@@ -293,6 +295,8 @@ fn build_target(
                 "-DBUILD_SHARED_LIBS='Off'",
                 "-DLIBCLANG_BUILD_STATIC='On'",
                 "-DLLVM_BUILD_STATIC='On'",
+                "-DLLVM_TOOL_LTO_BUILD='Off'",
+                "-DLLVM_USE_LINKER='lld'",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
                 format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",

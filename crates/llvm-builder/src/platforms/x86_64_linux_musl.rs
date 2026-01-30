@@ -295,7 +295,6 @@ fn build_target(
                 "-DBUILD_SHARED_LIBS='Off'",
                 "-DLIBCLANG_BUILD_STATIC='On'",
                 "-DLLVM_BUILD_STATIC='On'",
-                "-DLLVM_TOOL_LTO_BUILD='Off'",
                 "-DLLVM_USE_LINKER='lld'",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
                 format!(

@@ -295,7 +295,6 @@ fn build_target(
                 "-G",
                 "Ninja",
                 "-DBUILD_SHARED_LIBS='Off'",
-                "-DLLVM_TOOL_LTO_BUILD='Off'",
                 "-DLLVM_USE_LINKER='lld'",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
                 format!(

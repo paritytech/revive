@@ -111,7 +111,7 @@ export async function compile(
       optimizer,
       outputSelection: {
         '*': {
-          '*': ['abi'],
+          '*': ['abi', 'evm.bytecode'],
         },
       },
     },

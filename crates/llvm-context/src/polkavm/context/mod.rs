@@ -1103,13 +1103,7 @@ impl<'ctx> Context<'ctx> {
 
         Ok(call_site_value
             .try_as_basic_value()
-            .basic()
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <PolkaVMSbrkFunction as RuntimeFunction>::NAME,
-                )
-            })
+            .unwrap_basic()
             .into_pointer_value())
     }
 
@@ -1298,7 +1292,7 @@ impl<'ctx> Context<'ctx> {
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
                     self.llvm
-                        .create_enum_attribute(Attribute::NoCapture as u32, 0),
+                        .create_enum_attribute(Attribute::Captures as u32, 0), // captures(none)
                 );
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),

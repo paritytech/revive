@@ -12,11 +12,11 @@
 # (the script `compile-and-hash.sh` can generate such files):
 #       - <platform>
 #           - O0.txt
-#               <contract>:<hash>
+#               <path>:<ContractName>:<hash>
 #           - O3.txt
-#               <contract>:<hash>
+#               <path>:<ContractName>:<hash>
 #           - Oz.txt
-#               <contract>:<hash>
+#               <path>:<ContractName>:<hash>
 #
 # If the platform subdirectory names have a prefix (e.g. "hashes-" in "hashes-linux-musl"),
 # the prefix can be provided in order for outputs to show the platform name without the prefix.
@@ -66,7 +66,7 @@ for opt in O0 O3 Oz; do
         continue
     fi
 
-    REF_COUNT=$(grep -c ':' "$REF_FILE" 2>/dev/null) || REF_COUNT=0
+    REF_COUNT=$(($(wc -l < "$REF_FILE")))
     echo "Reference platform: $REF_PLATFORM ($REF_COUNT hashes)"
 
     OPT_LEVEL_MISMATCHES=0
@@ -84,7 +84,7 @@ for opt in O0 O3 Oz; do
             continue
         fi
 
-        OTHER_COUNT=$(grep -c ':' "$OTHER_FILE" 2>/dev/null) || OTHER_COUNT=0
+        OTHER_COUNT=$(($(wc -l < "$OTHER_FILE")))
 
         # Compare sorted hash files.
         DIFF_OUTPUT=$(diff <(grep ':' "$REF_FILE" | sort) <(grep ':' "$OTHER_FILE" | sort) 2>/dev/null || true)
@@ -105,19 +105,19 @@ for opt in O0 O3 Oz; do
             # Example output:
             #   Oz: linux-musl vs macos-universal: 2 mismatches
             #   Mismatched contracts (first 10):
-            #      - contract: path/to/my_contract1.sol
+            #      - contract: path/to/my_contract.sol:MyContract1
             #        macos-universal: abcd1234
             #        linux-musl: aaaa1111
-            #      - contract: path/to/my_contract2.sol
+            #      - contract: path/to/my_contract.sol:MyContract2
             #        macos-universal: efgh5678
             #        linux-musl: MISSING
             CURRENT_DETAILS=$(printf "%s\n%s\n%s" \
                 "${opt}: ${REF_PLATFORM} vs ${platform}: ${MISMATCH_COUNT} mismatches" \
                 "Mismatched contracts (first 10):" \
                 "$(echo "$DIFF_OUTPUT" | grep '^<' | head -10 | while read line; do
-                CONTRACT=$(echo "$line" | sed 's/^< //' | cut -d':' -f1)
-                REF_HASH=$(echo "$line" | sed 's/^< //' | cut -d':' -f2)
-                OTHER_HASH=$(grep "^${CONTRACT}:" "$OTHER_FILE" | cut -d':' -f2)
+                CONTRACT=$(echo "$line" | sed 's/^< //' | cut -d':' -f1,2)
+                REF_HASH=$(echo "$line" | sed 's/^< //' | cut -d':' -f3)
+                OTHER_HASH=$(grep "^${CONTRACT}:" "$OTHER_FILE" | cut -d':' -f3)
                 echo "    - contract: $CONTRACT"
                 echo "      $REF_PLATFORM: $REF_HASH"
                 echo "      $platform: ${OTHER_HASH:-MISSING}"

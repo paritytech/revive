@@ -5,14 +5,14 @@
 # resolc binary. For each compiled contract, it extracts the bytecode and computes
 # a SHA256 hash. These hashes are stored in files per optimization level:
 #       - <output-dir>/O0.txt
-#           solidity/simple/loop/array/simple.sol:<hash>
-#           yul/instructions/byte.yul:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/O3.txt
-#           solidity/simple/loop/array/simple.sol:<hash>
-#           yul/instructions/byte.yul:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/Oz.txt
-#           solidity/simple/loop/array/simple.sol:<hash>
-#           yul/instructions/byte.yul:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #
 # Usage: compile-and-hash.sh <resolc-binary> <solidity-contracts-dir> <yul-contracts-dir> <output-dir>
 
@@ -47,7 +47,6 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Create an output file for each optimization level if it does not exist, otherwise truncate it.
-# Each file will later contain lines in the format: "relative/path/to/contract.sol:hash"
 for opt in O0 O3 Oz; do
     echo -n > "$OUTPUT_DIR/${opt}.txt"
 done
@@ -79,6 +78,7 @@ compile_and_hash() {
 
     # Convert to relative path with prefix for consistent naming across platforms.
     # Example:
+    #     * prefix = solidity
     #     * base_dir = /path/to/contracts/fixtures/solidity
     #     * file = /path/to/contracts/fixtures/solidity/simple/loop/array/simple.sol
     #     * relative_path = solidity/simple/loop/array/simple.sol
@@ -86,10 +86,11 @@ compile_and_hash() {
 
     # Compile the contract.
     local exit_code=0
+    local output
     if [ "$is_yul" = "true" ]; then
-        OUTPUT=$($RESOLC -O${opt} --yul --bin "$file" 2>&1) || exit_code=$?
+        output=$($RESOLC -O${opt} --yul --bin "$file" 2>&1) || exit_code=$?
     else
-        OUTPUT=$($RESOLC -O${opt} --bin "$file" 2>&1) || exit_code=$?
+        output=$($RESOLC -O${opt} --bin "$file" 2>&1) || exit_code=$?
     fi
 
     # Track contracts that failed to compile.
@@ -101,16 +102,28 @@ compile_and_hash() {
         esac
     fi
 
-    # Extract the bytecode from the output by taking the first occurrence of the
-    # pattern starting with "50564d" (the starting magic bytes which is "PVM").
-    BYTECODE=$(echo "$OUTPUT" | grep -oE '50564d[0-9a-fA-F]+' | head -1 || true)
-
-    # If compilation succeeded and produced valid bytecode, calculate and store its hash.
-    # If a contract compiles on one platform but not another, the hash files will store this mismatch.
-    if [ -n "$BYTECODE" ]; then
-        HASH=$(echo -n "$BYTECODE" | sha256sum | awk '{print $1}')
-        echo "${relative_path}:${HASH}" >> "$OUTPUT_DIR/O${opt}.txt"
-    fi
+    # Parse each contract section from the output and compute hashes.
+    # Output format:
+    #   ======= <file>:<ContractName> =======
+    #   Binary:
+    #   <bytecode starting with 50564d>
+    #
+    # For each contract, output a line: <relative_path>:<ContractName>:<hash>
+    local contract_name=""
+    while IFS= read -r line; do
+        # If it is the header, extract the contract name.
+        if [[ "$line" =~ \.(sol|yul):([^ ]+) ]]; then
+            contract_name="${BASH_REMATCH[2]}"
+        # If it is the bytecode, compute its hash.
+        # (If a contract compiles on one platform but not another, the hash files will also reveal this mismatch.)
+        elif [[ "$line" =~ ^50564d[0-9a-fA-F]+$ ]]; then
+            if [ -n "$contract_name" ]; then
+                local hash
+                hash=$(echo -n "$line" | sha256sum | awk '{print $1}')
+                echo "${relative_path}:${contract_name}:${hash}" >> "$OUTPUT_DIR/O${opt}.txt"
+            fi
+        fi
+    done <<< "$output"
 }
 
 # Compile all Solidity contracts.
@@ -122,10 +135,10 @@ while IFS= read -r -d '' file; do
     done
     ((++SOLIDITY_COUNT))
     if [ $((SOLIDITY_COUNT % 200)) -eq 0 ]; then
-        echo "Processed $SOLIDITY_COUNT contracts..."
+        echo "Processed $SOLIDITY_COUNT files..."
     fi
 done < <(find "$SOLIDITY_CONTRACTS_DIR" -name "*.sol" -print0 2>/dev/null | sort -z)
-echo "Total Solidity contracts compiled: $SOLIDITY_COUNT"
+echo "Total Solidity files compiled: $SOLIDITY_COUNT"
 
 # Compile all Yul contracts.
 echo ""
@@ -137,10 +150,10 @@ while IFS= read -r -d '' file; do
     done
     ((++YUL_COUNT))
     if [ $((YUL_COUNT % 200)) -eq 0 ]; then
-        echo "Processed $YUL_COUNT contracts..."
+        echo "Processed $YUL_COUNT files..."
     fi
 done < <(find "$YUL_CONTRACTS_DIR" -name "*.yul" -print0 2>/dev/null | sort -z)
-echo "Total Yul contracts compiled: $YUL_COUNT"
+echo "Total Yul files compiled: $YUL_COUNT"
 
 # Sort hash files for deterministic comparison across platforms.
 # This ensures that the same contracts appear in the same order
@@ -151,23 +164,23 @@ done
 
 # Show final summary.
 # Example output:
-#   O0: 120 hashes generated, 143/145 contracts compiled
-#       2 contracts failed to compile:
+#   O0: 120 hashes generated, 143/145 files compiled
+#       2 files failed to compile:
 #         - solidity/simple/loop/array/simple.sol
 #         - yul/instructions/byte.yul
 #
-#   O3: 121 hashes generated, 144/145 contracts compiled
-#       1 contracts failed to compile:
+#   O3: 121 hashes generated, 144/145 files compiled
+#       1 files failed to compile:
 #         - solidity/simple/loop/array/simple.sol
 #
-#   Oz: 122 hashes generated, 145/145 contracts compiled
+#   Oz: 122 hashes generated, 145/145 files compiled
 echo ""
 echo "==========================================="
 echo "SUMMARY"
 echo "==========================================="
 TOTAL_COUNT=$((SOLIDITY_COUNT + YUL_COUNT))
 for opt in O0 O3 Oz; do
-    HASH_COUNT=$(grep -c ':' "$OUTPUT_DIR/${opt}.txt") || HASH_COUNT=0
+    HASH_COUNT=$(($(wc -l < "$OUTPUT_DIR/${opt}.txt")))
     case "$opt" in
         O0) FAILED="$FAILED_O0" ;;
         O3) FAILED="$FAILED_O3" ;;
@@ -176,9 +189,9 @@ for opt in O0 O3 Oz; do
     FAILED_COUNT=$(echo -e "$FAILED" | grep -c .) || FAILED_COUNT=0
     SUCCESSFUL_COUNT=$((TOTAL_COUNT - FAILED_COUNT))
 
-    echo "${opt}: $HASH_COUNT hashes generated, $SUCCESSFUL_COUNT/$TOTAL_COUNT contracts compiled"
+    echo "${opt}: $HASH_COUNT hashes generated, $SUCCESSFUL_COUNT/$TOTAL_COUNT files compiled"
     if [ "$FAILED_COUNT" -gt 0 ]; then
-        echo "    $FAILED_COUNT contracts failed to compile:"
+        echo "    $FAILED_COUNT files failed to compile:"
         echo -e "$FAILED" | grep . | sort | sed 's/^/      - /'
         echo ""
     fi

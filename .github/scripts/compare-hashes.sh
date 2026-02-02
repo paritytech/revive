@@ -104,16 +104,16 @@ for opt in O0 O3 Oz; do
             # Collect details of the first 10 mismatched contracts.
             # Example output:
             #   Oz: linux-musl vs macos-universal: 2 mismatches
-            #   Mismatched contracts (first 10):
-            #      - contract: path/to/my_contract.sol:MyContract1
-            #        macos-universal: abcd1234
-            #        linux-musl: aaaa1111
-            #      - contract: path/to/my_contract.sol:MyContract2
-            #        macos-universal: efgh5678
-            #        linux-musl: MISSING
+            #       Mismatched contracts (first 10):
+            #       - contract: path/to/my_contract.sol:MyContract1
+            #         macos-universal: abcd1234
+            #         linux-musl: aaaa1111
+            #       - contract: path/to/my_contract.sol:MyContract2
+            #         macos-universal: efgh5678
+            #         linux-musl: MISSING
             CURRENT_DETAILS=$(printf "%s\n%s\n%s" \
                 "${opt}: ${REF_PLATFORM} vs ${platform}: ${MISMATCH_COUNT} mismatches" \
-                "Mismatched contracts (first 10):" \
+                "    Mismatched contracts (first 10):" \
                 "$(echo "$DIFF_OUTPUT" | grep '^<' | head -10 | while read line; do
                 CONTRACT=$(echo "$line" | sed 's/^< //' | cut -d':' -f1,2)
                 REF_HASH=$(echo "$line" | sed 's/^< //' | cut -d':' -f3)

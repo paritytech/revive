@@ -5,14 +5,14 @@
 # resolc binary. For each compiled contract, it extracts the bytecode and computes
 # a SHA256 hash. These hashes are stored in files per optimization level:
 #       - <output-dir>/O0.txt
-#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
-#           yul/instructions/byte.yul:ContractName:<hash>
+#           simple/loop/array/simple.sol:ContractName:<hash>
+#           instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/O3.txt
-#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
-#           yul/instructions/byte.yul:ContractName:<hash>
+#           simple/loop/array/simple.sol:ContractName:<hash>
+#           instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/Oz.txt
-#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
-#           yul/instructions/byte.yul:ContractName:<hash>
+#           simple/loop/array/simple.sol:ContractName:<hash>
+#           instructions/byte.yul:ContractName:<hash>
 #
 # Usage: compile-and-hash.sh <resolc-binary> <solidity-contracts-dir> <yul-contracts-dir> <output-dir>
 
@@ -62,35 +62,35 @@ FAILED_Oz=""
 #   $2 - Optimization level (0, 3, or z).
 #   $3 - "true" if Yul contract, "false" if Solidity.
 compile_and_hash() {
-    local file="$1"
+    local file_path="$1"
     local opt="$2"
     local is_yul="$3"
 
-    local prefix
     local base_dir
     if [ "$is_yul" = "true" ]; then
-        prefix="yul"
         base_dir="$YUL_CONTRACTS_DIR"
     else
-        prefix="solidity"
         base_dir="$SOLIDITY_CONTRACTS_DIR"
     fi
 
-    # Convert to relative path with prefix for consistent naming across platforms.
+    # To ensure that the file path added as part of a hash entry is consistent, and thus
+    # comparable, across platforms it is normalized (potential backslashes are replaced
+    # with forward slashes) and converted to a path relative to the `base_dir`.
     # Example:
-    #     * prefix = solidity
     #     * base_dir = /path/to/contracts/fixtures/solidity
-    #     * file = /path/to/contracts/fixtures/solidity/simple/loop/array/simple.sol
-    #     * relative_path = solidity/simple/loop/array/simple.sol
-    local relative_path="${prefix}/${file#$base_dir/}"
+    #     * file_path = /path/to/contracts/fixtures/solidity/simple/loop/array/simple.sol
+    #     * relative_path = simple/loop/array/simple.sol
+    local normalized_file_path="${file_path//\\//}"
+    local normalized_base_dir="${base_dir//\\//}"
+    local relative_path="${normalized_file_path#$normalized_base_dir/}"
 
     # Compile the contract.
     local exit_code=0
     local output
     if [ "$is_yul" = "true" ]; then
-        output=$($RESOLC -O${opt} --yul --bin "$file" 2>&1) || exit_code=$?
+        output=$($RESOLC -O${opt} --yul --bin "$file_path" 2>&1) || exit_code=$?
     else
-        output=$($RESOLC -O${opt} --bin "$file" 2>&1) || exit_code=$?
+        output=$($RESOLC -O${opt} --bin "$file_path" 2>&1) || exit_code=$?
     fi
 
     # Track contracts that failed to compile.
@@ -166,12 +166,12 @@ done
 # Example output:
 #   O0: 120 hashes generated, 143/145 files compiled
 #       2 files failed to compile:
-#         - solidity/simple/loop/array/simple.sol
-#         - yul/instructions/byte.yul
+#         - simple/loop/array/simple.sol
+#         - instructions/byte.yul
 #
 #   O3: 121 hashes generated, 144/145 files compiled
 #       1 files failed to compile:
-#         - solidity/simple/loop/array/simple.sol
+#         - simple/loop/array/simple.sol
 #
 #   Oz: 122 hashes generated, 145/145 files compiled
 echo ""

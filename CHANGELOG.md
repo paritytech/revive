@@ -4,6 +4,10 @@
 
 This is a development pre-release.
 
+### Fixed
+
+- npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
+
 ## v1.0.0
 
 Supported `polkadot-sdk` rev: `unstable2507`

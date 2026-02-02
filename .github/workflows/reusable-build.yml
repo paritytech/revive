@@ -238,7 +238,10 @@ jobs:
           mkdir -p solc
           curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
           node -e "
-          const soljson = require('solc/soljson');
+          // Make sure to require './solc/soljson' and not 'solc/soljson' in order to use
+          // the explicitly downloaded solc, rather than resolving an npm package potentially
+          // installed in prior workflow jobs.
+          const soljson = require('./solc/soljson');
           const createRevive = require('./resolc-wasm32-unknown-emscripten/resolc.js');
 
           const compiler = createRevive();

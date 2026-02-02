@@ -1,0 +1,130 @@
+name: Verify Reproducible Builds
+
+on:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: false
+      retention_days: 1
+
+  create-macos-universal:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - name: Download MacOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create MacOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: 1
+
+  compile-and-hash:
+    needs: [build, create-macos-universal]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-musl
+            artifact: resolc-x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            binary: resolc-x86_64-unknown-linux-musl
+          - platform: macos-universal
+            artifact: resolc-universal-apple-darwin
+            runner: macos-15
+            binary: resolc-universal-apple-darwin
+          - platform: windows
+            artifact: resolc-x86_64-pc-windows-msvc
+            runner: windows-2022
+            binary: resolc-x86_64-pc-windows-msvc.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-compiler-tests
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-compiler-tests
+          path: resolc-compiler-tests
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: resolc-bin
+
+      - name: Install Solc
+        uses: ./revive/.github/actions/get-solc
+
+      - name: Compile Contracts and Collect Hashes
+        id: compile
+        shell: bash
+        run: |
+          RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"
+          SOLIDITY_CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures/solidity"
+          YUL_CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures/yul"
+          OUTPUT_DIR="$PWD/hashes"
+
+          chmod +x "$RESOLC_BIN"
+          chmod +x ./revive/.github/scripts/compile-and-hash.sh
+          bash ./revive/.github/scripts/compile-and-hash.sh \
+              "$RESOLC_BIN" \
+              "$SOLIDITY_CONTRACTS_DIR" \
+              "$YUL_CONTRACTS_DIR" \
+              "$OUTPUT_DIR"
+          echo "hashes_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: hashes-${{ matrix.platform }}
+          path: ${{ steps.compile.outputs.hashes_dir }}
+          retention-days: 1
+
+  # TODO: Add compile-and-hash-wasm job.
+
+  verify-reproducible-builds:
+    needs: [compile-and-hash] # TODO: Add compile-and-hash-wasm to list.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Download All Hashes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: hashes-*
+          path: all-hashes
+          merge-multiple: false
+
+      - name: Compare Hashes Across Platforms
+        run: |
+          HASHES_DIR="$PWD/all-hashes"
+          PLATFORM_PREFIX="hashes-"
+
+          chmod +x ./revive/.github/scripts/compare-hashes.sh
+          bash ./revive/.github/scripts/compare-hashes.sh "$HASHES_DIR" "$PLATFORM_PREFIX"

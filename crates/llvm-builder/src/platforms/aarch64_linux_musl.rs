@@ -33,7 +33,7 @@ pub fn build(
     crate::utils::check_presence("lld")?;
     crate::utils::check_presence("ninja")?;
 
-    let musl_name = "musl-1.2.3";
+    let musl_name = "musl-1.2.5";
     let musl_build = LLVMPath::musl_build(musl_name)?;
     let musl_target = LLVMPath::musl_target()?;
 

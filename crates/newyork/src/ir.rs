@@ -1,0 +1,539 @@
+//! IR data structures for the newyork intermediate representation.
+//!
+//! This module defines the core IR types based on an SSA form with structured
+//! control flow, similar to MLIR's SCF dialect. The design preserves high-level
+//! structure from Yul while enabling domain-specific optimizations.
+
+use num::BigUint;
+use std::collections::BTreeMap;
+
+/// Bit width for integer types.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum BitWidth {
+    I1 = 1,
+    I8 = 8,
+    I32 = 32,
+    I64 = 64,
+    I160 = 160,
+    I256 = 256,
+}
+
+impl BitWidth {
+    /// Returns the bit width as a u32 for LLVM type construction.
+    pub fn bits(self) -> u32 {
+        self as u32
+    }
+
+    /// Determines the minimum bit width that can hold the given value.
+    pub fn from_max_value(value: &BigUint) -> Self {
+        if *value <= BigUint::from(1u8) {
+            BitWidth::I1
+        } else if *value <= BigUint::from(u8::MAX) {
+            BitWidth::I8
+        } else if *value <= BigUint::from(u32::MAX) {
+            BitWidth::I32
+        } else if *value <= BigUint::from(u64::MAX) {
+            BitWidth::I64
+        } else if *value <= BigUint::from(2u8).pow(160) - 1u8 {
+            BitWidth::I160
+        } else {
+            BitWidth::I256
+        }
+    }
+}
+
+/// Address space for pointers - distinguishes memory regions.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum AddressSpace {
+    /// EVM heap memory (linear, big-endian).
+    Heap,
+    /// Native stack allocations (little-endian, optimizable).
+    Stack,
+    /// Contract storage (key-value, 256-bit slots).
+    Storage,
+    /// Code/data segment (read-only).
+    Code,
+}
+
+/// Type of a value in the IR.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Type {
+    /// Integer with specific bit width.
+    Int(BitWidth),
+    /// Pointer with address space.
+    Ptr(AddressSpace),
+    /// No value (for statements/void returns).
+    Void,
+}
+
+impl Default for Type {
+    fn default() -> Self {
+        Type::Int(BitWidth::I256)
+    }
+}
+
+/// Memory region annotation for heap operations.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum MemoryRegion {
+    /// Scratch space: addresses 0x00-0x3f (64 bytes).
+    Scratch,
+    /// Free memory pointer location: address 0x40.
+    FreePointerSlot,
+    /// Dynamic allocation region: 0x80+.
+    Dynamic,
+    /// Unknown region (conservative).
+    #[default]
+    Unknown,
+}
+
+impl MemoryRegion {
+    /// Determines the memory region from a statically known address.
+    pub fn from_address(addr: &BigUint) -> Self {
+        let addr_u64 = addr.to_u64_digits();
+        if addr_u64.is_empty() || (addr_u64.len() == 1 && addr_u64[0] < 0x40) {
+            MemoryRegion::Scratch
+        } else if addr_u64.len() == 1 && addr_u64[0] >= 0x40 && addr_u64[0] < 0x60 {
+            MemoryRegion::FreePointerSlot
+        } else if addr_u64.len() == 1 && addr_u64[0] >= 0x80 {
+            MemoryRegion::Dynamic
+        } else {
+            MemoryRegion::Unknown
+        }
+    }
+}
+
+/// An SSA value reference (index into value table).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct ValueId(pub u32);
+
+impl ValueId {
+    /// Creates a new value ID.
+    pub fn new(id: u32) -> Self {
+        ValueId(id)
+    }
+}
+
+/// A typed SSA value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Value {
+    pub id: ValueId,
+    pub ty: Type,
+}
+
+impl Value {
+    /// Creates a new typed value.
+    pub fn new(id: ValueId, ty: Type) -> Self {
+        Value { id, ty }
+    }
+
+    /// Creates an integer value with default I256 type.
+    pub fn int(id: ValueId) -> Self {
+        Value::new(id, Type::Int(BitWidth::I256))
+    }
+}
+
+/// Binary operation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BinOp {
+    // Arithmetic
+    Add,
+    Sub,
+    Mul,
+    Div,
+    SDiv,
+    Mod,
+    SMod,
+    Exp,
+    AddMod,
+    MulMod,
+    // Bitwise
+    And,
+    Or,
+    Xor,
+    Shl,
+    Shr,
+    Sar,
+    // Comparison (result is I1)
+    Lt,
+    Gt,
+    Slt,
+    Sgt,
+    Eq,
+    // Byte operations
+    Byte,
+    SignExtend,
+}
+
+/// Unary operation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UnaryOp {
+    /// Zero check - result is I1.
+    IsZero,
+    /// Bitwise NOT.
+    Not,
+}
+
+/// External call kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CallKind {
+    Call,
+    CallCode,
+    DelegateCall,
+    StaticCall,
+}
+
+/// Contract creation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CreateKind {
+    Create,
+    Create2,
+}
+
+/// Function identifier.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct FunctionId(pub u32);
+
+impl FunctionId {
+    /// Creates a new function ID.
+    pub fn new(id: u32) -> Self {
+        FunctionId(id)
+    }
+}
+
+/// Pure expressions that produce values without side effects.
+#[derive(Clone, Debug)]
+pub enum Expr {
+    /// Literal constant.
+    Literal { value: BigUint, ty: Type },
+
+    /// Reference to an SSA value.
+    Var(ValueId),
+
+    /// Binary operation.
+    Binary { op: BinOp, lhs: Value, rhs: Value },
+
+    /// Ternary operation (addmod, mulmod).
+    Ternary {
+        op: BinOp,
+        a: Value,
+        b: Value,
+        n: Value,
+    },
+
+    /// Unary operation.
+    Unary { op: UnaryOp, operand: Value },
+
+    // EVM builtins (pure getters)
+    CallDataLoad { offset: Value },
+    CallValue,
+    Caller,
+    Origin,
+    CallDataSize,
+    CodeSize,
+    GasPrice,
+    ExtCodeSize { address: Value },
+    ReturnDataSize,
+    ExtCodeHash { address: Value },
+    BlockHash { number: Value },
+    Coinbase,
+    Timestamp,
+    Number,
+    Difficulty,
+    GasLimit,
+    ChainId,
+    SelfBalance,
+    BaseFee,
+    BlobHash { index: Value },
+    BlobBaseFee,
+    Gas,
+    MSize,
+    Address,
+    Balance { address: Value },
+
+    /// Memory load with region annotation.
+    MLoad { offset: Value, region: MemoryRegion },
+
+    /// Storage load with optional static slot.
+    SLoad {
+        key: Value,
+        /// If key is a compile-time constant, store it here for analysis.
+        static_slot: Option<BigUint>,
+    },
+
+    /// Transient storage load.
+    TLoad { key: Value },
+
+    /// Function call.
+    Call {
+        function: FunctionId,
+        args: Vec<Value>,
+    },
+
+    // Type conversions (explicit)
+    Truncate { value: Value, to: BitWidth },
+    ZeroExtend { value: Value, to: BitWidth },
+    SignExtendTo { value: Value, to: BitWidth },
+
+    /// Keccak256 hash (pure but expensive).
+    Keccak256 { offset: Value, length: Value },
+
+    /// Data offset (for deployed bytecode).
+    DataOffset { id: String },
+
+    /// Data size (for deployed bytecode).
+    DataSize { id: String },
+}
+
+/// Switch case.
+#[derive(Clone, Debug)]
+pub struct SwitchCase {
+    pub value: BigUint,
+    pub body: Region,
+}
+
+/// A region is a block that can yield values.
+#[derive(Clone, Debug, Default)]
+pub struct Region {
+    /// Statements in this region.
+    pub statements: Vec<Statement>,
+    /// Values yielded by this region (for structured control flow).
+    pub yields: Vec<Value>,
+}
+
+impl Region {
+    /// Creates a new empty region.
+    pub fn new() -> Self {
+        Region::default()
+    }
+
+    /// Adds a statement to this region.
+    pub fn push(&mut self, stmt: Statement) {
+        self.statements.push(stmt);
+    }
+}
+
+/// A basic block of statements (no yields - for function bodies).
+#[derive(Clone, Debug, Default)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+}
+
+impl Block {
+    /// Creates a new empty block.
+    pub fn new() -> Self {
+        Block::default()
+    }
+
+    /// Adds a statement to this block.
+    pub fn push(&mut self, stmt: Statement) {
+        self.statements.push(stmt);
+    }
+}
+
+/// Statements with effects and structured control flow.
+#[derive(Clone, Debug)]
+pub enum Statement {
+    // SSA binding
+    /// SSA binding: let x, y, z = expr
+    Let { bindings: Vec<ValueId>, value: Expr },
+
+    // Memory operations
+    /// Memory store with region annotation.
+    MStore {
+        offset: Value,
+        value: Value,
+        region: MemoryRegion,
+    },
+
+    /// Memory store (single byte).
+    MStore8 {
+        offset: Value,
+        value: Value,
+        region: MemoryRegion,
+    },
+
+    /// Memory copy.
+    MCopy {
+        dest: Value,
+        src: Value,
+        length: Value,
+    },
+
+    // Storage operations
+    /// Storage store with optional static slot.
+    SStore {
+        key: Value,
+        value: Value,
+        /// If key is a compile-time constant, store it here for analysis.
+        static_slot: Option<BigUint>,
+    },
+
+    /// Transient storage store.
+    TStore { key: Value, value: Value },
+
+    // Structured control flow (with explicit value flow)
+    /// Structured if with explicit yields.
+    If {
+        condition: Value,
+        /// Input values passed into regions (for SSA).
+        inputs: Vec<Value>,
+        /// Then region.
+        then_region: Region,
+        /// Optional else region (defaults to yielding inputs unchanged).
+        else_region: Option<Region>,
+        /// Output value bindings (SSA values defined by this If).
+        outputs: Vec<ValueId>,
+    },
+
+    /// Switch statement with explicit yields.
+    Switch {
+        scrutinee: Value,
+        inputs: Vec<Value>,
+        cases: Vec<SwitchCase>,
+        default: Option<Region>,
+        outputs: Vec<ValueId>,
+    },
+
+    /// For loop with structured regions and explicit loop-carried values.
+    For {
+        /// Initial values for loop-carried variables.
+        init_values: Vec<Value>,
+        /// Loop-carried variable bindings (visible in condition, body, post).
+        loop_vars: Vec<ValueId>,
+        /// Condition expression (evaluated each iteration).
+        condition: Expr,
+        /// Loop body.
+        body: Region,
+        /// Post-iteration block (yields updated loop vars).
+        post: Region,
+        /// Final values after loop exits.
+        outputs: Vec<ValueId>,
+    },
+
+    /// Loop control.
+    Break,
+    Continue,
+    Leave,
+
+    // Terminating statements
+    Revert { offset: Value, length: Value },
+    Return { offset: Value, length: Value },
+    Stop,
+    Invalid,
+    SelfDestruct { address: Value },
+
+    // External calls
+    ExternalCall {
+        kind: CallKind,
+        gas: Value,
+        address: Value,
+        value: Option<Value>,
+        args_offset: Value,
+        args_length: Value,
+        ret_offset: Value,
+        ret_length: Value,
+        result: ValueId,
+    },
+
+    Create {
+        kind: CreateKind,
+        value: Value,
+        offset: Value,
+        length: Value,
+        salt: Option<Value>,
+        result: ValueId,
+    },
+
+    // Logging
+    Log {
+        offset: Value,
+        length: Value,
+        topics: Vec<Value>,
+    },
+
+    // Data operations
+    CodeCopy {
+        dest: Value,
+        offset: Value,
+        length: Value,
+    },
+    ExtCodeCopy {
+        address: Value,
+        dest: Value,
+        offset: Value,
+        length: Value,
+    },
+    ReturnDataCopy {
+        dest: Value,
+        offset: Value,
+        length: Value,
+    },
+    DataCopy {
+        dest: Value,
+        offset: Value,
+        length: Value,
+    },
+    CallDataCopy {
+        dest: Value,
+        offset: Value,
+        length: Value,
+    },
+
+    /// Nested block scope.
+    Block(Region),
+
+    /// Expression evaluated for side effects only (result discarded).
+    Expr(Expr),
+}
+
+/// Function definition.
+#[derive(Clone, Debug)]
+pub struct Function {
+    pub id: FunctionId,
+    pub name: String,
+    pub params: Vec<(ValueId, Type)>,
+    pub returns: Vec<Type>,
+    pub body: Block,
+    /// Number of call sites (for inlining decisions).
+    pub call_count: usize,
+    /// Instruction count estimate (for inlining decisions).
+    pub size_estimate: usize,
+}
+
+impl Function {
+    /// Creates a new function.
+    pub fn new(id: FunctionId, name: String) -> Self {
+        Function {
+            id,
+            name,
+            params: Vec::new(),
+            returns: Vec::new(),
+            body: Block::new(),
+            call_count: 0,
+            size_estimate: 0,
+        }
+    }
+}
+
+/// Top-level object (contract).
+#[derive(Clone, Debug)]
+pub struct Object {
+    pub name: String,
+    pub code: Block,
+    pub functions: BTreeMap<FunctionId, Function>,
+    pub subobjects: Vec<Object>,
+    pub data: BTreeMap<String, Vec<u8>>,
+}
+
+impl Object {
+    /// Creates a new object.
+    pub fn new(name: String) -> Self {
+        Object {
+            name,
+            code: Block::new(),
+            functions: BTreeMap::new(),
+            subobjects: Vec::new(),
+            data: BTreeMap::new(),
+        }
+    }
+}

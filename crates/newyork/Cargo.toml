@@ -1,0 +1,25 @@
+[package]
+name = "revive-newyork"
+description = "NEW Yul OptimziR Kit - Custom IR layer for domain-specific optimizations"
+version = "1.0.0"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+anyhow = { workspace = true }
+num = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+inkwell = { workspace = true }
+
+revive-common = { workspace = true }
+revive-yul = { workspace = true }
+revive-llvm-context = { workspace = true }
+
+[dev-dependencies]

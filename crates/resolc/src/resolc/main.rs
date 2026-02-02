@@ -176,7 +176,13 @@ fn main_inner(
         Some(arguments.stack_size),
     );
 
-    let build = if arguments.yul {
+    let build = if arguments.newyork {
+        // NewYork pipeline is experimental and not yet implemented
+        anyhow::bail!(
+            "The NewYork IR pipeline (--newyork) is experimental and not yet implemented. \
+            This option exists for development purposes only."
+        );
+    } else if arguments.yul {
         resolc::yul(
             &solc,
             input_files.as_slice(),

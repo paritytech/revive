@@ -106,6 +106,12 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
+    /// Switch to NewYork IR pipeline mode (experimental).
+    /// Uses the new newyork IR layer instead of direct Yul-to-LLVM translation.
+    /// This is experimental and currently not functional.
+    #[arg(long = "newyork", hide = true)]
+    pub newyork: bool,
+
     /// Switch to linker mode, ignoring all options apart from `--libraries` and modify binaries in place.
     ///
     /// Unlinked contract binaries (caused by missing libraries or missing factory dependencies in turn)
@@ -242,6 +248,7 @@ impl Arguments {
 
         let modes = [
             self.yul,
+            self.newyork,
             self.combined_json.is_some(),
             self.standard_json.is_some(),
             self.link,
@@ -252,7 +259,7 @@ impl Arguments {
         let acceptable_count = 1 + self.standard_json.is_some() as usize;
         if modes > acceptable_count {
             messages.push(SolcStandardJsonOutputError::new_error(
-            "Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.",None,None));
+            "Only one mode is allowed at the same time: Yul, NewYork, combined JSON, standard JSON, link.",None,None));
         }
 
         if self.yul && !self.libraries.is_empty() {

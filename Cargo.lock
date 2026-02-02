@@ -9155,6 +9155,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "revive-newyork"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "inkwell",
+ "num",
+ "revive-common",
+ "revive-llvm-context",
+ "revive-yul",
+ "serde",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "revive-runner"
 version = "1.0.0"
 dependencies = [

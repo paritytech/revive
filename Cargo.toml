@@ -24,6 +24,7 @@ revive-differential = { version = "1.0.0", path = "crates/differential" }
 revive-integration = { version = "1.0.0", path = "crates/integration" }
 revive-linker = { version = "1.0.0", path = "crates/linker" }
 revive-llvm-context = { version = "1.0.0", path = "crates/llvm-context" }
+revive-newyork = { version = "1.0.0", path = "crates/newyork" }
 revive-runner = { version = "1.0.0", path = "crates/runner" }
 revive-runtime-api = { version = "1.0.0", path = "crates/runtime-api" }
 revive-solc-json-interface = { version = "1.0.0", path = "crates/solc-json-interface", default-features = false }

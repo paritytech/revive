@@ -51,6 +51,22 @@ jobs:
       resolc-x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-x86_64-apple-darwin_sha }}
       resolc-x86_64-pc-windows-msvc_url: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_url }}
       resolc-x86_64-pc-windows-msvc_sha: ${{ steps.set-output.outputs.resolc-x86_64-pc-windows-msvc_sha }}
+    # Queue jobs for the same target and commit instead of running in parallel or cancelling
+    # the first job. This allows the second workflow to use cached builds from the first if
+    # it is triggered by the same commit.
+    #
+    # Example: Workflow A and Workflow B both call this workflow for the same commit:
+    #
+    #   Time | Workflow A                | Workflow B
+    #   -----|---------------------------|---------------------------
+    #   T1   | Job starts, cache miss    |
+    #   T2   | Building...               | Job queued (same group)
+    #   T3   | Build done, cache saved   | Job queued
+    #   T4   | Job finishes              | Job starts, cache hit
+    #   T5   |                           | Skips build, job finishes
+    concurrency:
+      group: build-${{ matrix.target }}-${{ github.sha }}
+      cancel-in-progress: false
     strategy:
       matrix:
         target:
@@ -78,18 +94,30 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+
+      # Cache build artifacts by target and commit (restores if available, saves on cache miss).
+      - name: Check Build Cache
+        id: cache
+        uses: actions/cache@v5
+        with:
+          # Use glob to match binaries with and without extensions.
+          path: resolc-${{ matrix.target }}*
+          key: build-${{ matrix.target }}-${{ github.sha }}
+
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         with:
           rustflags: ""
           cache-key: ${{ matrix.target }}
 
       - name: Download LLVM
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: ${{ matrix.target }}
 
       - name: Build (Native)
-        if: ${{ matrix.type == 'native' }}
+        if: ${{ steps.cache.outputs.cache-hit != 'true' && matrix.type == 'native' }}
         shell: bash
         run: |
           export LLVM_SYS_181_PREFIX=$PWD/llvm-${{ matrix.target }}
@@ -97,7 +125,7 @@ jobs:
           mv target/release/resolc resolc-${{ matrix.target }} || mv target/release/resolc.exe resolc-${{ matrix.target }}.exe
 
       - name: Build (MUSL)
-        if: ${{ matrix.type == 'musl' }}
+        if: ${{ steps.cache.outputs.cache-hit != 'true' && matrix.type == 'musl' }}
         run: |
           docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
            cd /opt/revive
@@ -139,38 +167,66 @@ jobs:
     outputs:
       resolc_web_js_url: ${{ steps.set-output.outputs.resolc_web_js_url }}
       resolc_web_js_sha: ${{ steps.set-output.outputs.resolc_web_js_sha }}
+    # Queue jobs for the same target and commit instead of running in parallel or cancelling
+    # the first job. This allows the second workflow to use cached builds from the first if
+    # it is triggered by the same commit.
+    concurrency:
+      group: build-wasm32-unknown-emscripten-${{ github.sha }}
+      cancel-in-progress: false
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
       - uses: actions/checkout@v4
+
+      # Cache build artifacts by commit (restores if available, saves on cache miss).
+      - name: Check Build Cache
+        id: cache
+        uses: actions/cache@v5
+        with:
+          path: resolc-wasm32-unknown-emscripten
+          key: build-wasm32-unknown-emscripten-${{ github.sha }}
+
       # Pin to 1.92.0 until LLVM WASM libraries are rebuilt with -fwasm-exceptions
       # See: https://github.com/paritytech/revive/issues/XXX
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         with:
           toolchain: "1.92.0"
           target: wasm32-unknown-emscripten
           rustflags: ""
 
       - name: Download Host LLVM
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: x86_64-unknown-linux-gnu
 
       - name: Download Wasm LLVM
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: wasm32-unknown-emscripten
 
       - name: Download EMSDK
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-emsdk
 
       - name: Build
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         run: |
           export LLVM_SYS_181_PREFIX=$PWD/llvm-x86_64-unknown-linux-gnu
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-wasm32-unknown-emscripten
           source emsdk/emsdk_env.sh
           make install-wasm
           chmod -x ./target/wasm32-unknown-emscripten/release/resolc.wasm
+
+      - name: Compress Artifact
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          mkdir -p resolc-wasm32-unknown-emscripten
+          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
+          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
       - name: Set Up Node.js
         uses: actions/setup-node@v3
@@ -183,7 +239,7 @@ jobs:
           curl -sSLo solc/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
           node -e "
           const soljson = require('solc/soljson');
-          const createRevive = require('./target/wasm32-unknown-emscripten/release/resolc.js');
+          const createRevive = require('./resolc-wasm32-unknown-emscripten/resolc.js');
 
           const compiler = createRevive();
           compiler.soljson = soljson;
@@ -220,13 +276,6 @@ jobs:
 
           if(!bytecode.startsWith('50564d')) { process.exit(1); }
           "
-
-      - name: Compress Artifact
-        run: |
-          mkdir -p resolc-wasm32-unknown-emscripten
-          mv ./target/wasm32-unknown-emscripten/release/resolc.js ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc.wasm ./resolc-wasm32-unknown-emscripten/
-          mv ./target/wasm32-unknown-emscripten/release/resolc_web.js ./resolc-wasm32-unknown-emscripten/
 
       - name: Upload artifacts (Release)
         if: ${{ inputs.is_release }}

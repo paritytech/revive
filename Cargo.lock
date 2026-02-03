@@ -9025,6 +9025,7 @@ dependencies = [
  "rayon",
  "revive-common",
  "revive-llvm-context",
+ "revive-newyork",
  "revive-solc-json-interface",
  "revive-yul",
  "semver 1.0.27",
@@ -9164,7 +9165,6 @@ dependencies = [
  "revive-common",
  "revive-llvm-context",
  "revive-yul",
- "serde",
  "thiserror 2.0.17",
 ]
 

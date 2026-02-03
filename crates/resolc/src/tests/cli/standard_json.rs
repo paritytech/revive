@@ -187,7 +187,25 @@ fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_me
 
 /// Asserts that the standard JSON output has no errors with severity `error`.
 fn assert_no_errors(output: &SolcStandardJsonOutput) {
-    assert!(!output.errors.iter().any(|error| error.is_error()));
+    let errors: Vec<_> = output
+        .errors
+        .iter()
+        .filter(|error| error.is_error())
+        .collect();
+    if !errors.is_empty() {
+        for error in &errors {
+            eprintln!(
+                "ERROR in {}: {}",
+                error
+                    .source_location
+                    .as_ref()
+                    .map(|l| l.file.as_str())
+                    .unwrap_or("unknown"),
+                error.message
+            );
+        }
+    }
+    assert!(errors.is_empty(), "Found {} errors", errors.len());
 }
 
 /// Converts valid JSON text to `SolcStandardJsonOutput`.

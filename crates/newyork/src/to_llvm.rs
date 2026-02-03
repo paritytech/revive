@@ -35,7 +35,7 @@ pub enum CodegenError {
     #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch { expected: String, actual: String },
 
-    #[error("Unsupported operation: {0}")]
+    #[error("{0}")]
     Unsupported(String),
 }
 
@@ -94,7 +94,30 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Translates an IR Value to LLVM value.
     fn translate_value(&self, value: &Value) -> Result<BasicValueEnum<'ctx>> {
-        self.get_value(value.id)
+        self.values.get(&value.id.0).copied().ok_or_else(|| {
+            let mut defined_ids: Vec<_> = self.values.keys().copied().collect();
+            defined_ids.sort();
+            let max_id = defined_ids.iter().max().copied().unwrap_or(0);
+            // Find the nearest defined IDs
+            let lower_bound = defined_ids
+                .iter()
+                .filter(|&&x| x < value.id.0)
+                .max()
+                .copied();
+            let upper_bound = defined_ids
+                .iter()
+                .filter(|&&x| x > value.id.0)
+                .min()
+                .copied();
+            CodegenError::Llvm(format!(
+                "Undefined value {:?} (nearest: {:?}..{:?}, max: {}, total: {})",
+                value.id,
+                lower_bound,
+                upper_bound,
+                max_id,
+                defined_ids.len()
+            ))
+        })
     }
 
     /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
@@ -377,6 +400,53 @@ impl<'ctx> LlvmCodegen<'ctx> {
         stmt: &Statement,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
+        // Track which statement we're processing for better error messages
+        let stmt_kind = match stmt {
+            Statement::Let { .. } => "Let",
+            Statement::MStore { .. } => "MStore",
+            Statement::MStore8 { .. } => "MStore8",
+            Statement::MCopy { .. } => "MCopy",
+            Statement::SStore { .. } => "SStore",
+            Statement::TStore { .. } => "TStore",
+            Statement::If { .. } => "If",
+            Statement::Switch { .. } => "Switch",
+            Statement::For { .. } => "For",
+            Statement::Return { .. } => "Return",
+            Statement::Revert { .. } => "Revert",
+            Statement::Leave { .. } => "Leave",
+            Statement::ExternalCall { .. } => "ExternalCall",
+            Statement::Create { .. } => "Create",
+            Statement::SelfDestruct { .. } => "SelfDestruct",
+            Statement::Log { .. } => "Log",
+            Statement::CodeCopy { .. } => "CodeCopy",
+            Statement::ExtCodeCopy { .. } => "ExtCodeCopy",
+            Statement::ReturnDataCopy { .. } => "ReturnDataCopy",
+            Statement::CallDataCopy { .. } => "CallDataCopy",
+            Statement::Block(_) => "Block",
+            Statement::Expr(_) => "Expr",
+            Statement::SetImmutable { .. } => "SetImmutable",
+            Statement::Continue => "Continue",
+            Statement::Break => "Break",
+            Statement::Stop => "Stop",
+            Statement::Invalid => "Invalid",
+            Statement::DataCopy { .. } => "DataCopy",
+        };
+
+        if let Err(e) = self.generate_statement_inner(stmt, context) {
+            return Err(CodegenError::Llvm(format!(
+                "Error in {} statement: {}",
+                stmt_kind, e
+            )));
+        }
+        Ok(())
+    }
+
+    /// Inner implementation of generate_statement.
+    fn generate_statement_inner(
+        &mut self,
+        stmt: &Statement,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<()> {
         match stmt {
             Statement::Let { bindings, value } => {
                 let llvm_value = self.generate_expr(value, context)?;
@@ -569,25 +639,41 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // Create phi nodes for outputs only if we have at least two incoming edges
                 // If there's only one incoming edge, just use the value directly (no phi needed)
                 if phi_incoming.len() >= 2 {
+                    // Verify all yields match outputs length
+                    for (yields, _) in &phi_incoming {
+                        if yields.len() != outputs.len() {
+                            return Err(CodegenError::Llvm(format!(
+                                "If phi mismatch: {} yields vs {} outputs (outputs: {:?})",
+                                yields.len(),
+                                outputs.len(),
+                                outputs
+                            )));
+                        }
+                    }
                     for (i, output_id) in outputs.iter().enumerate() {
                         let phi = context
                             .builder()
                             .build_phi(context.word_type(), &format!("if_phi_{}", i))
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         for (yields, block) in &phi_incoming {
-                            if i < yields.len() {
-                                phi.add_incoming(&[(&yields[i], *block)]);
-                            }
+                            phi.add_incoming(&[(&yields[i], *block)]);
                         }
                         self.set_value(*output_id, phi.as_basic_value());
                     }
                 } else if phi_incoming.len() == 1 {
                     // Only one incoming edge - use the yielded values directly
                     let (yields, _) = &phi_incoming[0];
+                    // Verify yields matches outputs
+                    if yields.len() != outputs.len() {
+                        return Err(CodegenError::Llvm(format!(
+                            "If statement mismatch: {} yields vs {} outputs (outputs: {:?})",
+                            yields.len(),
+                            outputs.len(),
+                            outputs
+                        )));
+                    }
                     for (i, output_id) in outputs.iter().enumerate() {
-                        if i < yields.len() {
-                            self.set_value(*output_id, yields[i]);
-                        }
+                        self.set_value(*output_id, yields[i]);
                     }
                 } else {
                     // No incoming edges - the join block is unreachable (all branches terminated early)
@@ -604,6 +690,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .builder()
                         .build_unreachable()
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    // Create a new block for any dead code that follows
+                    let dead_block = context.append_basic_block("if_dead");
+                    context.set_basic_block(dead_block);
                 }
             }
 
@@ -651,7 +740,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )> = Vec::new();
 
                 // Generate case bodies
-                for (_, case_block, body) in case_blocks {
+                for (idx, (_, case_block, body)) in case_blocks.into_iter().enumerate() {
                     context.set_basic_block(case_block);
                     self.generate_region(body, context)?;
                     let end_block = context.basic_block();
@@ -659,8 +748,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // Only collect yields and branch if the block is reachable
                     if !Self::block_is_unreachable(end_block) {
                         let mut yields = Vec::new();
-                        for yield_val in &body.yields {
-                            yields.push(self.translate_value(yield_val)?);
+                        for (yield_idx, yield_val) in body.yields.iter().enumerate() {
+                            match self.translate_value(yield_val) {
+                                Ok(v) => yields.push(v),
+                                Err(e) => {
+                                    return Err(CodegenError::Llvm(format!(
+                                        "Switch case {} yield {}: {:?} - {}",
+                                        idx, yield_idx, yield_val.id, e
+                                    )));
+                                }
+                            }
                         }
                         context.build_unconditional_branch(join_block);
                         all_yields.push((yields, end_block));
@@ -706,25 +803,45 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.set_basic_block(join_block);
 
                 // Create phi nodes for outputs only if we have incoming edges
-                if !all_yields.is_empty() {
+                if all_yields.len() >= 2 {
                     for (i, output_id) in outputs.iter().enumerate() {
-                        if all_yields.len() >= 2 {
-                            let phi = context
-                                .builder()
-                                .build_phi(context.word_type(), &format!("switch_phi_{}", i))
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        let phi = context
+                            .builder()
+                            .build_phi(context.word_type(), &format!("switch_phi_{}", i))
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                            for (yields, end_block) in &all_yields {
-                                if i < yields.len() {
-                                    phi.add_incoming(&[(&yields[i], *end_block)]);
-                                }
+                        for (yields, end_block) in &all_yields {
+                            if i < yields.len() {
+                                phi.add_incoming(&[(&yields[i], *end_block)]);
                             }
-                            self.set_value(*output_id, phi.as_basic_value());
-                        } else if all_yields.len() == 1 && i < all_yields[0].0.len() {
-                            // Only one incoming edge - use value directly
-                            self.set_value(*output_id, all_yields[0].0[i]);
+                        }
+                        self.set_value(*output_id, phi.as_basic_value());
+                    }
+                } else if all_yields.len() == 1 {
+                    // Only one incoming edge - use values directly
+                    let (yields, _) = &all_yields[0];
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        if i < yields.len() {
+                            self.set_value(*output_id, yields[i]);
                         }
                     }
+                } else {
+                    // No incoming edges - all branches terminated early
+                    // Set outputs to undef values for unreachable code that may reference them
+                    for output_id in outputs.iter() {
+                        self.set_value(
+                            *output_id,
+                            context.word_type().get_undef().as_basic_value_enum(),
+                        );
+                    }
+                    // Add unreachable terminator
+                    context
+                        .builder()
+                        .build_unreachable()
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    // Create a new block for any dead code that follows
+                    let dead_block = context.append_basic_block("switch_dead");
+                    context.set_basic_block(dead_block);
                 }
             }
 
@@ -909,6 +1026,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 ret_length,
                 result,
             } => {
+                // CALLCODE is not supported on PolkaVM
+                if matches!(kind, CallKind::CallCode) {
+                    return Err(CodegenError::Unsupported(
+                        "The `CALLCODE` instruction is not supported".into(),
+                    ));
+                }
+
                 let gas_val = self.translate_value(gas)?.into_int_value();
                 let address_val = self.translate_value(address)?.into_int_value();
                 let args_offset_val = self.translate_value(args_offset)?.into_int_value();
@@ -917,7 +1041,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let ret_length_val = self.translate_value(ret_length)?.into_int_value();
 
                 let call_result = match kind {
-                    CallKind::Call | CallKind::CallCode => {
+                    CallKind::Call => {
                         let value_val = value
                             .map(|v| self.translate_value(&v))
                             .transpose()?
@@ -934,6 +1058,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             vec![], // No constant simulation addresses
                             false,  // Not a static call
                         )?
+                    }
+                    CallKind::CallCode => {
+                        unreachable!("CallCode is handled above")
                     }
                     CallKind::StaticCall => {
                         revive_llvm_context::polkavm_evm_call::call(
@@ -1041,6 +1168,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 offset,
                 length,
             } => {
+                // CODECOPY is only supported in deploy code, not runtime
+                if matches!(
+                    context.code_type(),
+                    Some(revive_llvm_context::PolkaVMCodeType::Runtime)
+                ) {
+                    return Err(CodegenError::Unsupported(
+                        "The `CODECOPY` instruction is not supported in the runtime code".into(),
+                    ));
+                }
                 // In deploy code, codecopy copies from calldata
                 let dest_val = self.translate_value(dest)?.into_int_value();
                 let offset_val = self.translate_value(offset)?.into_int_value();
@@ -1052,7 +1188,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::ExtCodeCopy { .. } => {
                 // ExtCodeCopy is not supported on PolkaVM
-                return Err(CodegenError::Unsupported("extcodecopy".into()));
+                return Err(CodegenError::Unsupported(
+                    "The `EXTCODECOPY` instruction is not supported".into(),
+                ));
             }
 
             Statement::ReturnDataCopy {

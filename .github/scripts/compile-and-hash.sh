@@ -14,15 +14,17 @@
 #           solidity/simple/loop/array/simple.sol:ContractName:<hash>
 #           yul/instructions/byte.yul:ContractName:<hash>
 #
-# Usage: compile-and-hash.sh <resolc-binary> <contracts-dir> <output-dir> [opt-levels]
+# Usage: compile-and-hash.sh <resolc-binary> <contracts-dir> <output-dir> [opt-levels] [debug]
 #   opt-levels: Comma-separated optimization levels (default: "0,3,z")
+#   debug: "true" to enable verbose output (default: "false")
 
 set -euo pipefail
 
-if [ $# -lt 3 ] || [ $# -gt 4 ]; then
-    echo "Error: Expected 3 or 4 arguments, got $#"
-    echo "Usage: $0 <resolc-binary> <contracts-dir> <output-dir> [opt-levels]"
+if [ $# -lt 3 ] || [ $# -gt 5 ]; then
+    echo "Error: Expected 3 to 5 arguments, got $#"
+    echo "Usage: $0 <resolc-binary> <contracts-dir> <output-dir> [opt-levels] [debug]"
     echo "  opt-levels: Comma-separated list (default: \"0,3,z\")"
+    echo "  debug: \"true\" to enable verbose output (default: \"false\")"
     exit 1
 fi
 
@@ -30,6 +32,7 @@ RESOLC="$1"
 CONTRACTS_DIR="${2%/}"
 OUTPUT_DIR="${3%/}"
 OPT_LEVELS_STR="${4:-0,3,z}"
+DEBUG="${5:-false}"
 IFS=',' read -ra OPT_LEVELS <<< "$OPT_LEVELS_STR"
 
 # Trim whitespace from each optimization level.
@@ -71,9 +74,11 @@ TOTAL_COUNT=0
 # Arguments:
 #   $1 - File path to the contract.
 #   $2 - Optimization level (0, 3, or z).
+#   $3 - Temporary file path for compiler output.
 compile_and_hash_one() {
     local file_path="$1"
     local opt="$2"
+    local tmp_output="$3"
 
     local is_yul="false"
     if [[ "$file_path" == *.yul ]]; then
@@ -91,13 +96,12 @@ compile_and_hash_one() {
     local normalized_base_dir="${CONTRACTS_DIR//\\//}"
     local relative_path="${normalized_file_path#$normalized_base_dir/}"
 
-    # Compile the contract.
+    # Compile the contract to a temporary file to avoid command substitution issues on Windows.
     local exit_code=0
-    local output
     if [ "$is_yul" = "true" ]; then
-        output=$($RESOLC -O${opt} --yul --bin "$file_path" 2>&1) || exit_code=$?
+        $RESOLC -O${opt} --yul --bin "$file_path" > "$tmp_output" 2>&1 || exit_code=$?
     else
-        output=$($RESOLC -O${opt} --bin "$file_path" 2>&1) || exit_code=$?
+        $RESOLC -O${opt} --bin "$file_path" > "$tmp_output" 2>&1 || exit_code=$?
     fi
 
     # Track files that failed to compile.
@@ -126,7 +130,7 @@ compile_and_hash_one() {
                 echo "${relative_path}:${contract_name}:${hash}" >> "$OUTPUT_DIR/O${opt}.txt"
             fi
         fi
-    done <<< "$output"
+    done < "$tmp_output"
 }
 
 # Compiles all contracts of the given type and stores their bytecode hashes.
@@ -137,12 +141,16 @@ compile_and_hash_all() {
     local extension="$1"
     local label="$2"
     local count=0
+    local tmp_output=$(mktemp)
 
     echo ""
     echo "=== Compiling $label contracts ==="
     while IFS= read -r -d '' file_path; do
+        if [ "$DEBUG" = "true" ]; then
+            echo "Compiling: $file_path"
+        fi
         for opt in "${OPT_LEVELS[@]}"; do
-            compile_and_hash_one "$file_path" "$opt"
+            compile_and_hash_one "$file_path" "$opt" "$tmp_output"
         done
         count=$((count + 1))
         if [ $((count % 200)) -eq 0 ]; then
@@ -151,6 +159,7 @@ compile_and_hash_all() {
     done < <(find "$CONTRACTS_DIR" -name "*.$extension" -print0 2>/dev/null | sort -z)
     echo "Total $label files processed: $count"
 
+    rm -f "$tmp_output"
     TOTAL_COUNT=$((TOTAL_COUNT + count))
 }
 

@@ -82,12 +82,16 @@ jobs:
 
       - name: Compile Contracts and Collect Hashes
         id: compile
+        timeout-minutes: 80
         shell: bash
         run: |
           RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"
           CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures"
           OUTPUT_DIR="$PWD/hashes"
           OPT_LEVELS="0,3,z"
+          # TODO: Temporarily enabling debugging for Windows as compiling
+          #       currently hangs somewhere between file 400-600.
+          DEBUG="${{ runner.os == 'Windows' }}"
 
           chmod +x "$RESOLC_BIN"
           chmod +x ./revive/.github/scripts/compile-and-hash.sh
@@ -95,7 +99,8 @@ jobs:
               "$RESOLC_BIN" \
               "$CONTRACTS_DIR" \
               "$OUTPUT_DIR" \
-              "$OPT_LEVELS"
+              "$OPT_LEVELS" \
+              "$DEBUG"
           echo "hashes_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload Hashes

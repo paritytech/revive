@@ -82,7 +82,9 @@ jobs:
 
       - name: Compile Contracts and Collect Hashes
         id: compile
-        timeout-minutes: 80
+        # Windows needs the longest.
+        # TODO: Set timeout when we know how long everything takes.
+        # timeout-minutes: 100
         shell: bash
         run: |
           RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"

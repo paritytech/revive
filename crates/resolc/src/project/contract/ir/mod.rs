@@ -5,8 +5,10 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use self::newyork::NewYork;
 use self::yul::Yul;
 
+pub mod newyork;
 pub mod yul;
 
 /// The contract source code.
@@ -15,6 +17,8 @@ pub mod yul;
 pub enum IR {
     /// The Yul source code.
     Yul(Yul),
+    /// The newyork IR (via Yul translation).
+    NewYork(NewYork),
 }
 
 impl IR {
@@ -22,6 +26,9 @@ impl IR {
     pub fn drain_factory_dependencies(&mut self) -> BTreeSet<String> {
         match self {
             IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
+            IR::NewYork(ref mut newyork) => {
+                newyork.yul_object.factory_dependencies.drain().collect()
+            }
         }
     }
 
@@ -29,6 +36,7 @@ impl IR {
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         match self {
             Self::Yul(inner) => inner.get_missing_libraries(),
+            Self::NewYork(inner) => inner.get_missing_libraries(),
         }
     }
 }
@@ -36,5 +44,11 @@ impl IR {
 impl From<Yul> for IR {
     fn from(inner: Yul) -> Self {
         Self::Yul(inner)
+    }
+}
+
+impl From<NewYork> for IR {
+    fn from(inner: NewYork) -> Self {
+        Self::NewYork(inner)
     }
 }

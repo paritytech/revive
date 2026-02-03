@@ -24,8 +24,8 @@ use revive_yul::parser::statement::variable_declaration::VariableDeclaration;
 use revive_yul::parser::statement::Statement as YulStatement;
 
 use crate::ir::{
-    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, MemoryRegion,
-    Object, Region, Statement, SwitchCase, Type, UnaryOp, Value,
+    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, MemoryRegion, Object,
+    Region, Statement, SwitchCase, Type, UnaryOp, Value,
 };
 use crate::ssa::SsaBuilder;
 
@@ -60,6 +60,9 @@ pub struct YulTranslator {
     functions: BTreeMap<FunctionId, Function>,
     /// Factory dependencies.
     factory_dependencies: HashSet<String>,
+    /// Return variable names for the current function being translated.
+    /// Used to look up current SSA values when translating `leave` statements.
+    current_return_var_names: Vec<String>,
 }
 
 impl Default for YulTranslator {
@@ -77,6 +80,7 @@ impl YulTranslator {
             next_function_id: 0,
             functions: BTreeMap::new(),
             factory_dependencies: HashSet::new(),
+            current_return_var_names: Vec::new(),
         }
     }
 
@@ -208,9 +212,20 @@ impl YulTranslator {
             YulStatement::Assignment(assign) => self.translate_assignment(assign),
             YulStatement::Expression(expr) => self.translate_expression_statement(expr),
             YulStatement::Block(block) => {
+                let parent_scope = self.ssa.current_scope().clone();
                 self.ssa.enter_scope();
                 let region = self.translate_region(block)?;
-                self.ssa.exit_scope();
+                let block_scope = self.ssa.exit_scope();
+
+                // Propagate modifications of parent-scope variables back to parent
+                // This ensures assignments inside blocks affect outer-scope variables
+                for (name, value) in &block_scope {
+                    if parent_scope.contains_key(name) {
+                        // Variable from outer scope was modified in the block
+                        self.ssa.define(name, *value);
+                    }
+                }
+
                 Ok(vec![Statement::Block(region)])
             }
             YulStatement::IfConditional(if_cond) => self.translate_if(if_cond),
@@ -221,7 +236,16 @@ impl YulTranslator {
             }
             YulStatement::Continue(_) => Ok(vec![Statement::Continue]),
             YulStatement::Break(_) => Ok(vec![Statement::Break]),
-            YulStatement::Leave(_) => Ok(vec![Statement::Leave]),
+            YulStatement::Leave(_) => {
+                // Collect current values of return variables
+                let mut return_values = Vec::new();
+                for name in &self.current_return_var_names {
+                    if let Some(value) = self.ssa.lookup(name) {
+                        return_values.push(value);
+                    }
+                }
+                Ok(vec![Statement::Leave { return_values }])
+            }
             YulStatement::Object(_) | YulStatement::Code(_) => {
                 // Objects and Code are handled at the top level
                 Ok(vec![])
@@ -359,6 +383,56 @@ impl YulTranslator {
 
     /// Translates a function call.
     fn translate_function_call(&mut self, call: &FunctionCall) -> Result<(Vec<Statement>, Expr)> {
+        // Handle special cases that need access to the original arguments first
+        match &call.name {
+            FunctionName::DataSize => {
+                // DataSize takes a string literal argument
+                let id = self.extract_string_literal(&call.arguments)?;
+                return Ok((vec![], Expr::DataSize { id }));
+            }
+            FunctionName::DataOffset => {
+                // DataOffset takes a string literal argument
+                let id = self.extract_string_literal(&call.arguments)?;
+                return Ok((vec![], Expr::DataOffset { id }));
+            }
+            FunctionName::LoadImmutable => {
+                // LoadImmutable takes a string literal key
+                let key = self.extract_string_literal(&call.arguments)?;
+                return Ok((vec![], Expr::LoadImmutable { key }));
+            }
+            FunctionName::SetImmutable => {
+                // SetImmutable(base_ptr, key, value) - need the key as string and value
+                let key = self.extract_string_literal_at(&call.arguments, 1)?;
+                let (value_stmts, value_expr) = self.translate_expression(&call.arguments[2])?;
+                let mut stmts = value_stmts;
+                let value = match value_expr {
+                    Expr::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
+                    _ => {
+                        let temp_id = self.ssa.fresh_value();
+                        stmts.push(Statement::Let {
+                            bindings: vec![temp_id],
+                            value: value_expr,
+                        });
+                        Value::new(temp_id, Type::Int(BitWidth::I256))
+                    }
+                };
+                stmts.push(Statement::SetImmutable { key, value });
+                return Ok((
+                    stmts,
+                    Expr::Literal {
+                        value: BigUint::from(0u32),
+                        ty: Type::Void,
+                    },
+                ));
+            }
+            FunctionName::LinkerSymbol => {
+                // LinkerSymbol takes a string literal path argument
+                let path = self.extract_string_literal(&call.arguments)?;
+                return Ok((vec![], Expr::LinkerSymbol { path }));
+            }
+            _ => {}
+        }
+
         // First, translate all arguments
         let mut stmts = Vec::new();
         let mut args = Vec::new();
@@ -388,6 +462,37 @@ impl YulTranslator {
         // Translate the function call based on its name
         let expr = self.translate_builtin_or_call(&call.name, args, &mut stmts)?;
         Ok((stmts, expr))
+    }
+
+    /// Extracts a string literal from the first argument.
+    fn extract_string_literal(&self, args: &[YulExpression]) -> Result<String> {
+        self.extract_string_literal_at(args, 0)
+    }
+
+    /// Extracts a string literal from an argument at a specific index.
+    fn extract_string_literal_at(&self, args: &[YulExpression], index: usize) -> Result<String> {
+        if args.len() <= index {
+            return Err(TranslationError::Unsupported(
+                "Missing string literal argument".to_string(),
+            ));
+        }
+
+        match &args[index] {
+            YulExpression::Literal(lit) => {
+                // The literal's inner value may be a string
+                match &lit.inner {
+                    LexicalLiteral::String(s) => Ok(s.inner.clone()),
+                    _ => {
+                        // For non-string literals, convert to string representation
+                        let value = self.parse_literal(lit)?;
+                        Ok(value.to_string())
+                    }
+                }
+            }
+            _ => Err(TranslationError::Unsupported(
+                "Expected literal argument".to_string(),
+            )),
+        }
     }
 
     /// Translates a builtin function or user-defined call.
@@ -775,17 +880,10 @@ impl YulTranslator {
                 })
             }
 
-            // Data size and offset (used for deployed bytecode)
-            FunctionName::DataSize => {
-                // DataSize takes a string literal argument, but we've already translated it
-                // We need to handle this specially - for now return a placeholder
-                Ok(Expr::DataSize {
-                    id: "deployed".to_string(),
-                })
+            // Data size and offset are handled in translate_function_call
+            FunctionName::DataSize | FunctionName::DataOffset => {
+                unreachable!("DataSize/DataOffset handled in translate_function_call")
             }
-            FunctionName::DataOffset => Ok(Expr::DataOffset {
-                id: "deployed".to_string(),
-            }),
 
             // Special builtins
             FunctionName::Pop => {
@@ -807,26 +905,19 @@ impl YulTranslator {
                 }
             }
             FunctionName::LinkerSymbol => {
-                // LinkerSymbol returns an address, placeholder for now
-                Ok(Expr::Literal {
-                    value: BigUint::from(0u32),
-                    ty: Type::Int(BitWidth::I256),
-                })
+                // LinkerSymbol is handled in translate_function_call before arguments are evaluated
+                unreachable!("LinkerSymbol handled in translate_function_call")
             }
 
             // PC is not supported on PolkaVM
             FunctionName::Pc => Err(TranslationError::Unsupported("pc".to_string())),
 
             // CLZ (count leading zeros)
-            FunctionName::Clz => Err(TranslationError::Unsupported(
-                "clz (will be implemented)".to_string(),
-            )),
+            FunctionName::Clz => Ok(unary_op(UnaryOp::Clz, &args)),
 
-            // Immutables
+            // Immutables are handled in translate_function_call
             FunctionName::LoadImmutable | FunctionName::SetImmutable => {
-                Err(TranslationError::Unsupported(
-                    "immutables (will be implemented)".to_string(),
-                ))
+                unreachable!("LoadImmutable/SetImmutable handled in translate_function_call")
             }
 
             // Verbatim
@@ -951,7 +1042,7 @@ impl YulTranslator {
         // Save current scope state
         let scope_before = self.ssa.current_scope().clone();
 
-        // Translate each case
+        // Translate each case ONCE and collect their scopes and regions
         let mut cases = Vec::new();
         let mut all_scopes = Vec::new();
 
@@ -963,33 +1054,112 @@ impl YulTranslator {
             all_scopes.push(case_scope);
 
             let case_value = self.parse_literal(&case.literal)?;
-            cases.push(SwitchCase {
+            cases.push((case_value, case_region));
+        }
+
+        // Translate default case ONCE
+        let (default_scope, default_region) = if let Some(default_block) = &switch.default {
+            self.ssa.restore_scope(scope_before.clone());
+            self.ssa.enter_scope();
+            let region = self.translate_region(default_block)?;
+            let scope = self.ssa.exit_scope();
+            (Some(scope), Some(region))
+        } else {
+            (None, None)
+        };
+
+        // Collect all variables that were modified in any branch
+        let mut modified_vars: BTreeMap<String, Value> = BTreeMap::new();
+
+        // Check each case scope for modified variables
+        for case_scope in &all_scopes {
+            for (name, &value) in case_scope {
+                if let Some(&before_value) = scope_before.get(name) {
+                    if value.id != before_value.id {
+                        modified_vars.entry(name.clone()).or_insert(before_value);
+                    }
+                }
+            }
+        }
+
+        // Check default scope for modified variables
+        if let Some(ref default_scope) = default_scope {
+            for (name, &value) in default_scope {
+                if let Some(&before_value) = scope_before.get(name) {
+                    if value.id != before_value.id {
+                        modified_vars.entry(name.clone()).or_insert(before_value);
+                    }
+                }
+            }
+        }
+
+        // Get sorted list of modified variable names for deterministic ordering
+        let modified_names: Vec<String> = modified_vars.keys().cloned().collect();
+
+        // Create inputs and outputs
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
+        let mut output_names = Vec::new();
+
+        for name in &modified_names {
+            if let Some(&before_value) = modified_vars.get(name) {
+                inputs.push(before_value);
+                let output_id = self.ssa.fresh_value();
+                outputs.push(output_id);
+                output_names.push((name.clone(), Value::new(output_id, before_value.ty)));
+            }
+        }
+
+        // Add yields to already-translated cases (no re-translation needed)
+        let mut cases_with_yields = Vec::new();
+        for (idx, (case_value, mut case_region)) in cases.into_iter().enumerate() {
+            let case_scope = &all_scopes[idx];
+            // Add yields for modified variables
+            for name in &modified_names {
+                let before_value = modified_vars.get(name).copied().unwrap();
+                let value = case_scope.get(name).copied().unwrap_or(before_value);
+                case_region.yields.push(value);
+            }
+            cases_with_yields.push(SwitchCase {
                 value: case_value,
                 body: case_region,
             });
         }
 
-        // Translate default case
-        let default_region = if let Some(default_block) = &switch.default {
-            self.ssa.restore_scope(scope_before.clone());
-            self.ssa.enter_scope();
-            let region = self.translate_region(default_block)?;
-            let _default_scope = self.ssa.exit_scope();
+        // Add yields to already-translated default (no re-translation needed)
+        let default_with_yields = if let Some(mut region) = default_region {
+            let default_scope = default_scope.as_ref().unwrap();
+            // Add yields for modified variables
+            for name in &modified_names {
+                let before_value = modified_vars.get(name).copied().unwrap();
+                let value = default_scope.get(name).copied().unwrap_or(before_value);
+                region.yields.push(value);
+            }
+            Some(region)
+        } else if !modified_names.is_empty() {
+            // No default branch but we have modified variables - need to yield the originals
+            let mut region = Region::new();
+            for name in &modified_names {
+                let before_value = modified_vars.get(name).copied().unwrap();
+                region.yields.push(before_value);
+            }
             Some(region)
         } else {
             None
         };
 
-        // Compute modified variables across all branches
-        // For now, simplified: just restore original scope (no SSA merging for switch)
+        // Update the scope with output values
         self.ssa.restore_scope(scope_before);
+        for (name, value) in output_names {
+            self.ssa.define(&name, value);
+        }
 
         stmts.push(Statement::Switch {
             scrutinee: scrut_value,
-            inputs: vec![],
-            cases,
-            default: default_region,
-            outputs: vec![],
+            inputs,
+            cases: cases_with_yields,
+            default: default_with_yields,
+            outputs,
         });
 
         Ok(stmts)
@@ -1022,43 +1192,49 @@ impl YulTranslator {
             self.ssa.define(name, Value::new(*var_id, ty));
         }
 
-        // Translate condition
-        let (cond_stmts, cond_expr) = self.translate_expression(&for_loop.condition)?;
-        for stmt in cond_stmts {
-            stmts.push(stmt);
-        }
+        // Translate condition - condition_stmts will be executed inside the loop header,
+        // not before the loop, because they may reference loop_vars
+        let (condition_stmts, cond_expr) = self.translate_expression(&for_loop.condition)?;
 
-        // Translate body
+        // Translate body and post in a shared scope so body modifications are visible in post
+        // The body can modify loop-carried variables, and post can modify them too
+        // Both modifications should be accumulated and then fed back via phi nodes
         self.ssa.enter_scope();
         let body_region = self.translate_region(&for_loop.body)?;
-        self.ssa.exit_scope();
-
-        // Translate post (finalizer)
-        self.ssa.enter_scope();
+        // Don't exit scope - continue in same scope so body's modifications are visible to post
         let mut post_region = self.translate_region(&for_loop.finalizer)?;
-        let post_scope = self.ssa.exit_scope();
+        let combined_scope = self.ssa.exit_scope();
 
-        // Add yields for loop-carried variables
+        // Add yields for loop-carried variables using the combined scope
+        // (contains modifications from both body and post)
         for (name, _) in &loop_vars {
-            if let Some(&value) = post_scope.get(name) {
+            if let Some(&value) = combined_scope.get(name) {
                 post_region.yields.push(value);
             }
         }
 
         // Create output bindings
         let mut outputs = Vec::new();
+        let mut output_values = Vec::new();
         for (name, _) in &loop_vars {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
             let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
-            self.ssa.define(name, Value::new(output_id, ty));
+            output_values.push((name.clone(), Value::new(output_id, ty)));
         }
 
+        // Exit the loop scope first, then define outputs in the parent scope
         self.ssa.exit_scope();
+
+        // Define output values in the parent scope (which is now current)
+        for (name, value) in output_values {
+            self.ssa.define(&name, value);
+        }
 
         stmts.push(Statement::For {
             init_values,
             loop_vars: loop_vars.into_iter().map(|(_, id)| id).collect(),
+            condition_stmts,
             condition: cond_expr,
             body: body_region,
             post: post_region,
@@ -1069,15 +1245,20 @@ impl YulTranslator {
     }
 
     /// Translates a function definition.
-    fn translate_function_definition(&mut self, func_def: &FunctionDefinition) -> Result<Vec<Statement>> {
+    fn translate_function_definition(
+        &mut self,
+        func_def: &FunctionDefinition,
+    ) -> Result<Vec<Statement>> {
         // Get the function ID
         let func_id = self
             .lookup_function(&func_def.identifier)
             .ok_or_else(|| TranslationError::UndefinedFunction(func_def.identifier.clone()))?;
 
-        // Create a fresh SSA context for the function body
-        let saved_ssa = std::mem::take(&mut self.ssa);
-        self.ssa = SsaBuilder::new();
+        // Save the current scope but keep the SSA counter to ensure globally unique IDs.
+        // This is critical: if we create a fresh SsaBuilder, it starts from ID 0 which
+        // conflicts with parameter IDs that were allocated in collect_functions.
+        let saved_scope = self.ssa.current_scope().clone();
+        self.ssa.restore_scope(BTreeMap::new());
 
         // Define parameters in the function scope
         let func = self.functions.get(&func_id).cloned();
@@ -1090,26 +1271,43 @@ impl YulTranslator {
             }
         }
 
-        // Define return variables
+        // Define return variables and track their IDs and names
+        let mut return_value_ids = Vec::new();
+        let saved_return_var_names = std::mem::take(&mut self.current_return_var_names);
         for ret_ident in &func_def.result {
             let ret_id = self.ssa.fresh_value();
             self.ssa.define(
                 &ret_ident.inner,
                 Value::new(ret_id, Type::Int(BitWidth::I256)),
             );
+            return_value_ids.push(ret_id);
+            self.current_return_var_names.push(ret_ident.inner.clone());
         }
 
         // Translate the function body
         let body = self.translate_block(&func_def.body)?;
 
-        // Update the function with its body
+        // Restore the return var names for outer function (if nested)
+        self.current_return_var_names = saved_return_var_names;
+
+        // Collect final values of return variables after body execution
+        let mut final_return_values = Vec::new();
+        for ret_ident in &func_def.result {
+            if let Some(value) = self.ssa.lookup(&ret_ident.inner) {
+                final_return_values.push(value.id);
+            }
+        }
+
+        // Update the function with its body and return value IDs
         if let Some(func) = self.functions.get_mut(&func_id) {
             func.body = body;
+            func.return_values_initial = return_value_ids;
+            func.return_values = final_return_values;
             func.size_estimate = estimate_function_size(&func.body);
         }
 
-        // Restore the original SSA context
-        self.ssa = saved_ssa;
+        // Restore the original scope (keeps the counter advanced)
+        self.ssa.restore_scope(saved_scope);
 
         // Function definitions don't produce statements in the containing block
         Ok(vec![])
@@ -1121,21 +1319,20 @@ impl YulTranslator {
 
         // Handle different literal types
         match inner {
-            LexicalLiteral::Boolean(b) => {
-                Ok(match b {
-                    BooleanLiteral::True => BigUint::from(1u32),
-                    BooleanLiteral::False => BigUint::from(0u32),
-                })
-            }
+            LexicalLiteral::Boolean(b) => Ok(match b {
+                BooleanLiteral::True => BigUint::from(1u32),
+                BooleanLiteral::False => BigUint::from(0u32),
+            }),
             LexicalLiteral::Integer(int_lit) => {
                 // Parse the integer literal
                 match int_lit {
-                    IntegerLiteral::Decimal { inner } => {
-                        BigUint::parse_bytes(inner.as_bytes(), 10)
-                            .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone()))
-                    }
+                    IntegerLiteral::Decimal { inner } => BigUint::parse_bytes(inner.as_bytes(), 10)
+                        .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone())),
                     IntegerLiteral::Hexadecimal { inner } => {
-                        let hex = inner.strip_prefix("0x").or_else(|| inner.strip_prefix("0X")).unwrap_or(inner);
+                        let hex = inner
+                            .strip_prefix("0x")
+                            .or_else(|| inner.strip_prefix("0X"))
+                            .unwrap_or(inner);
                         BigUint::parse_bytes(hex.as_bytes(), 16)
                             .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone()))
                     }
@@ -1200,10 +1397,11 @@ fn estimate_statement_size(stmt: &Statement) -> usize {
             1 + estimate_region_size(then_region)
                 + else_region.as_ref().map_or(0, estimate_region_size)
         }
-        Statement::Switch {
-            cases, default, ..
-        } => {
-            1 + cases.iter().map(|c| estimate_region_size(&c.body)).sum::<usize>()
+        Statement::Switch { cases, default, .. } => {
+            1 + cases
+                .iter()
+                .map(|c| estimate_region_size(&c.body))
+                .sum::<usize>()
                 + default.as_ref().map_or(0, estimate_region_size)
         }
         Statement::For { body, post, .. } => {
@@ -1217,11 +1415,7 @@ fn estimate_statement_size(stmt: &Statement) -> usize {
 
 /// Estimates the size of a region.
 fn estimate_region_size(region: &Region) -> usize {
-    region
-        .statements
-        .iter()
-        .map(estimate_statement_size)
-        .sum()
+    region.statements.iter().map(estimate_statement_size).sum()
 }
 
 #[cfg(test)]

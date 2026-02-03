@@ -267,8 +267,7 @@ impl TypeInference {
                 self.infer_region(post);
             }
 
-            Statement::Revert { offset, length }
-            | Statement::Return { offset, length } => {
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
                 self.widen(offset.id, BitWidth::I64);
                 self.widen(length.id, BitWidth::I64);
             }
@@ -327,11 +326,32 @@ impl TypeInference {
                 }
             }
 
-            Statement::CodeCopy { dest, offset, length }
-            | Statement::ExtCodeCopy { dest, offset, length, .. }
-            | Statement::ReturnDataCopy { dest, offset, length }
-            | Statement::DataCopy { dest, offset, length }
-            | Statement::CallDataCopy { dest, offset, length } => {
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::ExtCodeCopy {
+                dest,
+                offset,
+                length,
+                ..
+            }
+            | Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
                 self.widen(dest.id, BitWidth::I64);
                 self.widen(offset.id, BitWidth::I64);
                 self.widen(length.id, BitWidth::I64);
@@ -352,8 +372,16 @@ impl TypeInference {
             }
 
             // These don't define or use values
-            Statement::Break | Statement::Continue | Statement::Leave
-            | Statement::Stop | Statement::Invalid => {}
+            Statement::Break
+            | Statement::Continue
+            | Statement::Leave { .. }
+            | Statement::Stop
+            | Statement::Invalid => {}
+
+            Statement::SetImmutable { value, .. } => {
+                // Immutable values are 256-bit
+                self.widen(value.id, BitWidth::I256);
+            }
         }
     }
 
@@ -433,12 +461,11 @@ impl TypeInference {
                 }
             }
 
-            Expr::Unary { op, operand } => {
-                match op {
-                    crate::ir::UnaryOp::IsZero => BitWidth::I1,
-                    crate::ir::UnaryOp::Not => self.get(operand.id).min_width,
-                }
-            }
+            Expr::Unary { op, operand } => match op {
+                crate::ir::UnaryOp::IsZero => BitWidth::I1,
+                crate::ir::UnaryOp::Not => self.get(operand.id).min_width,
+                crate::ir::UnaryOp::Clz => BitWidth::I256, // CLZ returns up to 256
+            },
 
             // EVM builtins that return specific sizes
             Expr::CallDataLoad { offset } => {
@@ -509,6 +536,10 @@ impl TypeInference {
             }
 
             Expr::DataOffset { .. } | Expr::DataSize { .. } => BitWidth::I64,
+
+            Expr::LoadImmutable { .. } => BitWidth::I256, // Immutables are 256-bit
+
+            Expr::LinkerSymbol { .. } => BitWidth::I160, // LinkerSymbol returns an address
         }
     }
 

@@ -55,6 +55,7 @@ impl Contract {
     pub fn object_identifier(&self) -> &str {
         match self.ir {
             IR::Yul(ref yul) => yul.object.identifier.as_str(),
+            IR::NewYork(ref newyork) => newyork.yul_object.identifier.as_str(),
         }
     }
 
@@ -102,6 +103,21 @@ impl Contract {
                 yul.declare(&mut context)?;
                 yul.into_llvm(&mut context)
                     .map_err(|error| anyhow::anyhow!("LLVM IR generator: {error}"))?;
+
+                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
+            }
+            IR::NewYork(mut newyork) => {
+                let module = llvm.create_module(self.identifier.full_path.as_str());
+                let mut context =
+                    PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);
+                context.set_solidity_data(PolkaVMContextSolidityData::default());
+                let yul_data = PolkaVMContextYulData::new(identifier_paths);
+                context.set_yul_data(yul_data);
+
+                newyork.declare(&mut context)?;
+                newyork
+                    .into_llvm(&mut context)
+                    .map_err(|error| anyhow::anyhow!("NewYork IR generator: {error}"))?;
 
                 context.build(self.identifier.full_path.as_str(), metadata_bytes)?
             }

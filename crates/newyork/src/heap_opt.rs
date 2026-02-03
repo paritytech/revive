@@ -37,12 +37,18 @@ pub enum AccessPattern {
 impl AccessPattern {
     /// Returns true if this access is known to be aligned.
     pub fn is_aligned(&self) -> bool {
-        matches!(self, AccessPattern::AlignedStatic(_) | AccessPattern::AlignedDynamic)
+        matches!(
+            self,
+            AccessPattern::AlignedStatic(_) | AccessPattern::AlignedDynamic
+        )
     }
 
     /// Returns true if this access pattern is fully known at compile time.
     pub fn is_static(&self) -> bool {
-        matches!(self, AccessPattern::AlignedStatic(_) | AccessPattern::UnalignedStatic(_))
+        matches!(
+            self,
+            AccessPattern::AlignedStatic(_) | AccessPattern::UnalignedStatic(_)
+        )
     }
 }
 
@@ -255,9 +261,7 @@ impl HeapAnalysis {
                 }
             }
 
-            Statement::Switch {
-                cases, default, ..
-            } => {
+            Statement::Switch { cases, default, .. } => {
                 for case in cases {
                     self.analyze_region(&case.body);
                 }
@@ -298,9 +302,10 @@ impl HeapAnalysis {
             | Statement::SelfDestruct { .. }
             | Statement::Break
             | Statement::Continue
-            | Statement::Leave
+            | Statement::Leave { .. }
             | Statement::Stop
-            | Statement::Invalid => {}
+            | Statement::Invalid
+            | Statement::SetImmutable { .. } => {}
         }
     }
 
@@ -541,7 +546,7 @@ fn compute_alignment(value: u64) -> u32 {
     if value == 0 {
         return 32; // Zero is aligned to everything
     }
-    value.trailing_zeros().min(5) as u32
+    value.trailing_zeros().min(5)
 }
 
 /// Computes GCD of two numbers.

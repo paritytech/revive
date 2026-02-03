@@ -177,11 +177,18 @@ fn main_inner(
     );
 
     let build = if arguments.newyork {
-        // NewYork pipeline is experimental and not yet implemented
-        anyhow::bail!(
-            "The NewYork IR pipeline (--newyork) is experimental and not yet implemented. \
-            This option exists for development purposes only."
-        );
+        // NewYork IR pipeline (Yul via newyork IR)
+        resolc::newyork(
+            &solc,
+            input_files.as_slice(),
+            arguments.libraries.as_slice(),
+            arguments.metadata_hash,
+            messages,
+            optimizer_settings,
+            debug_config,
+            &arguments.llvm_arguments,
+            memory_config,
+        )
     } else if arguments.yul {
         resolc::yul(
             &solc,

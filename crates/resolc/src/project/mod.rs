@@ -27,6 +27,7 @@ use crate::build::Build;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
+use crate::project::contract::ir::newyork::NewYork;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::project::contract::Contract;
@@ -209,13 +210,88 @@ impl Project {
         Ok(Self::new(None, contracts, libraries))
     }
 
+    /// Parses Yul source code files using the newyork IR pipeline.
+    pub fn try_from_newyork_paths(
+        paths: &[PathBuf],
+        solc_output: Option<&mut SolcStandardJsonOutput>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        debug_config: &DebugConfig,
+    ) -> anyhow::Result<Self> {
+        let sources = paths
+            .iter()
+            .map(|path| {
+                let source = SolcStandardJsonInputSource::from(path.as_path());
+                (path.to_string_lossy().to_string(), source)
+            })
+            .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
+        Self::try_from_newyork_sources(sources, libraries, solc_output, debug_config)
+    }
+
+    /// Parses Yul source code strings using the newyork IR pipeline.
+    pub fn try_from_newyork_sources(
+        sources: BTreeMap<String, SolcStandardJsonInputSource>,
+        libraries: SolcStandardJsonInputSettingsLibraries,
+        mut solc_output: Option<&mut SolcStandardJsonOutput>,
+        debug_config: &DebugConfig,
+    ) -> anyhow::Result<Self> {
+        #[cfg(feature = "parallel")]
+        let iter = sources.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let iter = sources.into_iter();
+
+        let results = iter
+            .filter_map(|(path, mut source)| {
+                let source_code = match source.try_resolve() {
+                    Ok(()) => source.take_content().expect("Always exists"),
+                    Err(error) => return Some((path, Err(error))),
+                };
+                let ir = match NewYork::try_from_source(&source_code) {
+                    Ok(ir) => ir?,
+                    Err(error) => return Some((path, Err(error))),
+                };
+                let object_identifier = ir.yul_object.identifier.clone();
+                let name = ContractIdentifier::new(path.clone(), Some(object_identifier));
+                let full_path = name.full_path.clone();
+                if let Err(error) = debug_config.dump_yul(&name.full_path, &source_code) {
+                    return Some((full_path.clone(), Err(error)));
+                }
+                let source_metadata = serde_json::json!({
+                    "source_hash": Keccak256::from_slice(source_code.as_bytes()).to_string()
+                });
+                let contract = Contract::new(name, ir.into(), source_metadata);
+                Some((full_path, Ok(contract)))
+            })
+            .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
+
+        let mut contracts = BTreeMap::new();
+        for (path, result) in results.into_iter() {
+            match result {
+                Ok(contract) => {
+                    contracts.insert(path, contract);
+                }
+                Err(error) => match solc_output {
+                    Some(ref mut solc_output) => solc_output.push_error(Some(path), error),
+                    None => anyhow::bail!(error),
+                },
+            }
+        }
+        Ok(Self::new(None, contracts, libraries))
+    }
+
     /// Converts the `solc` JSON output into a convenient project.
+    ///
+    /// If the `RESOLC_USE_NEWYORK` environment variable is set to "1",
+    /// the newyork IR pipeline will be used instead of the standard Yul pipeline.
     pub fn try_from_standard_json_output(
         solc_output: &mut SolcStandardJsonOutput,
         libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
         debug_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
+        let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+
         let mut input_contracts = Vec::with_capacity(solc_output.contracts.len());
         for (path, file) in solc_output.contracts.iter() {
             for (name, contract) in file.iter() {
@@ -231,11 +307,19 @@ impl Project {
 
         let results = iter
             .filter_map(|(name, contract)| {
-                let ir = match Yul::try_from_source(&contract.ir_optimized)
-                    .map(|yul| yul.map(IR::from))
-                {
-                    Ok(ir) => ir?,
-                    Err(error) => return Some((name.full_path, Err(error))),
+                let ir = if use_newyork {
+                    match NewYork::try_from_source(&contract.ir_optimized)
+                        .map(|ny| ny.map(IR::from))
+                    {
+                        Ok(ir) => ir?,
+                        Err(error) => return Some((name.full_path, Err(error))),
+                    }
+                } else {
+                    match Yul::try_from_source(&contract.ir_optimized).map(|yul| yul.map(IR::from))
+                    {
+                        Ok(ir) => ir?,
+                        Err(error) => return Some((name.full_path, Err(error))),
+                    }
                 };
                 if let Err(error) = debug_config.dump_yul(&name.full_path, &contract.ir_optimized) {
                     return Some((name.full_path, Err(error)));

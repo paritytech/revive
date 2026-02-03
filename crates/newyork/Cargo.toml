@@ -14,12 +14,11 @@ doctest = false
 [dependencies]
 anyhow = { workspace = true }
 num = { workspace = true }
-serde = { workspace = true }
 thiserror = { workspace = true }
 inkwell = { workspace = true }
 
-revive-common = { workspace = true }
 revive-yul = { workspace = true }
 revive-llvm-context = { workspace = true }
+revive-common = { workspace = true }
 
 [dev-dependencies]

@@ -105,6 +105,40 @@ pub fn yul<T: Compiler>(
     Ok(build)
 }
 
+/// Runs the newyork IR mode (Yul via newyork IR pipeline).
+pub fn newyork<T: Compiler>(
+    solc: &T,
+    input_files: &[PathBuf],
+    libraries: &[String],
+    metadata_hash: MetadataHash,
+    messages: &mut Vec<SolcStandardJsonOutputError>,
+    optimizer_settings: OptimizerSettings,
+    debug_config: DebugConfig,
+    llvm_arguments: &[String],
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+) -> anyhow::Result<Build> {
+    let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
+    solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
+
+    let linker_symbols = libraries.as_linker_symbols()?;
+    let project = Project::try_from_newyork_paths(input_files, None, libraries, &debug_config)?;
+    let mut build = project.compile(
+        messages,
+        optimizer_settings,
+        metadata_hash,
+        &debug_config,
+        llvm_arguments,
+        memory_config,
+    )?;
+    build.take_and_write_warnings();
+    build.check_errors()?;
+
+    let mut build = build.link(linker_symbols, &debug_config);
+    build.take_and_write_warnings();
+    build.check_errors()?;
+    Ok(build)
+}
+
 /// Runs the standard output mode.
 pub fn standard_output<T: Compiler>(
     solc: &T,

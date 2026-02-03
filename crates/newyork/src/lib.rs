@@ -27,8 +27,8 @@
 //! - [`to_llvm`] - LLVM code generation from newyork IR
 //! - [`type_inference`] - Type inference pass for narrowing integer widths
 //! - [`heap_opt`] - Heap optimization for partial big-endian emulation
-
-//! For now, allow missing docs while the crate is in development
+//!
+//! For now, allow missing docs while the crate is in development.
 #![allow(missing_docs)]
 #![deny(clippy::all)]
 
@@ -41,6 +41,7 @@ pub mod type_inference;
 
 // Re-export main types
 pub use from_yul::{TranslationError, YulTranslator};
+pub use heap_opt::{AccessPattern, HeapAnalysis, HeapAnalysisStats, MemorySlot, OffsetInfo};
 pub use ir::{
     AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
@@ -48,7 +49,6 @@ pub use ir::{
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
-pub use heap_opt::{AccessPattern, HeapAnalysis, HeapAnalysisStats, MemorySlot, OffsetInfo};
 
 /// Translates a Yul object to newyork IR.
 ///

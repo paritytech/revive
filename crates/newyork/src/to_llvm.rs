@@ -6,16 +6,18 @@
 //! NOTE: This is a work-in-progress implementation. Many functions are stubbed
 //! or simplified for initial development.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use inkwell::types::BasicType;
 use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
 use num::ToPrimitive;
-use revive_llvm_context::{PolkaVMArgument, PolkaVMContext};
+use revive_llvm_context::{
+    PolkaVMArgument, PolkaVMContext, PolkaVMFunctionDeployCode, PolkaVMFunctionRuntimeCode,
+};
 
 use crate::ir::{
-    BinOp, Block, Expr, Function, FunctionId, Object, Region, Statement, Type, UnaryOp, Value,
-    ValueId,
+    BinOp, Block, CallKind, CreateKind, Expr, Function, FunctionId, Object, Region, Statement,
+    Type, UnaryOp, Value, ValueId,
 };
 
 /// Error type for LLVM codegen.
@@ -52,6 +54,9 @@ pub struct LlvmCodegen<'ctx> {
     values: BTreeMap<u32, BasicValueEnum<'ctx>>,
     /// Function table: maps IR FunctionId to function name.
     function_names: BTreeMap<u32, String>,
+    /// Set of function names that have already been generated.
+    /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
+    generated_functions: BTreeSet<String>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -60,6 +65,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
+            generated_functions: BTreeSet::new(),
+        }
+    }
+
+    /// Creates a new code generator that shares the generated_functions set with another.
+    /// This is used for subobjects to avoid regenerating shared utility functions.
+    pub fn new_with_shared_functions(generated_functions: BTreeSet<String>) -> Self {
+        LlvmCodegen {
+            values: BTreeMap::new(),
+            function_names: BTreeMap::new(),
+            generated_functions,
         }
     }
 
@@ -81,17 +97,43 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.get_value(value.id)
     }
 
+    /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
+    /// This is used to determine if a region ended early due to Leave/Break/Return/etc.
+    fn block_is_unreachable(block: inkwell::basic_block::BasicBlock<'ctx>) -> bool {
+        // If block has a terminator, it was already terminated
+        if block.get_terminator().is_some() {
+            return true;
+        }
+        // If block has no instructions at all and its name contains "unreachable",
+        // it was created as an unreachable landing pad after Leave/Break/Continue
+        if block.get_first_instruction().is_none() {
+            if let Ok(name) = block.get_name().to_str() {
+                if name.contains("unreachable") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Generates LLVM IR for a complete object.
     pub fn generate_object(
         &mut self,
         object: &Object,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        // First pass: declare all functions
+        // Determine if this is deploy or runtime code and set the code type
+        let is_runtime = object.name.ends_with("_deployed");
+        if is_runtime {
+            context.set_code_type(revive_llvm_context::PolkaVMCodeType::Runtime);
+        } else {
+            context.set_code_type(revive_llvm_context::PolkaVMCodeType::Deploy);
+        }
+
+        // First pass: declare all user-defined functions
         for (func_id, function) in &object.functions {
             self.declare_function(function, context)?;
-            self.function_names
-                .insert(func_id.0, function.name.clone());
+            self.function_names.insert(func_id.0, function.name.clone());
         }
 
         // Second pass: generate function bodies
@@ -99,23 +141,77 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.generate_function(function, context)?;
         }
 
-        // Generate main code block
+        // Generate main code block within the appropriate function context
+        let function_name = if is_runtime {
+            PolkaVMFunctionRuntimeCode
+        } else {
+            PolkaVMFunctionDeployCode
+        };
+
+        // Set the current function and basic block
+        context
+            .set_current_function(function_name, None, false)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context.set_basic_block(context.current_function().borrow().entry_block());
+
+        // Generate the main code block
         self.generate_block(&object.code, context)?;
 
-        // Recursively handle subobjects
+        // Reset debug location and handle function return
+        context
+            .set_debug_location(0, 0, None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Check if block ends with a terminator, if not add branch to return
+        match context
+            .basic_block()
+            .get_last_instruction()
+            .map(|i| i.get_opcode())
+        {
+            Some(inkwell::values::InstructionOpcode::Br) => {}
+            Some(inkwell::values::InstructionOpcode::Switch) => {}
+            Some(inkwell::values::InstructionOpcode::Return) => {}
+            Some(inkwell::values::InstructionOpcode::Unreachable) => {}
+            _ => {
+                context
+                    .build_unconditional_branch(context.current_function().borrow().return_block());
+            }
+        }
+
+        // Build the return block
+        context.set_basic_block(context.current_function().borrow().return_block());
+        context.build_return(None);
+
+        context.pop_debug_scope();
+
+        // Recursively handle subobjects (inner_object for deployed code)
+        // Each subobject gets a fresh codegen instance for values (SSA values are scoped to objects)
+        // but shares the generated_functions set to avoid regenerating shared utility functions
         for subobject in &object.subobjects {
-            self.generate_object(subobject, context)?;
+            let mut subobject_codegen =
+                LlvmCodegen::new_with_shared_functions(self.generated_functions.clone());
+            subobject_codegen.generate_object(subobject, context)?;
+            // Merge back any new generated functions
+            self.generated_functions
+                .extend(subobject_codegen.generated_functions);
         }
 
         Ok(())
     }
 
     /// Declares a function (without generating body).
-    fn declare_function(
+    /// If the function already exists (e.g., shared utility functions in multi-contract scenarios),
+    /// this will skip re-declaring it.
+    pub fn declare_function(
         &mut self,
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
+        // Check if function already exists (handles shared utility functions)
+        if context.get_function(&function.name, true).is_some() {
+            return Ok(());
+        }
+
         let argument_types: Vec<_> = function
             .params
             .iter()
@@ -137,37 +233,121 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Generates LLVM IR for a function body.
+    /// If the function body has already been generated (shared utility functions in multi-contract
+    /// scenarios), this will skip regenerating it.
     fn generate_function(
         &mut self,
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
+        // Build the internal function name (includes _Deploy or _Runtime suffix)
+        let internal_name = format!(
+            "{}_{}",
+            function.name,
+            context
+                .code_type()
+                .map(|c| format!("{:?}", c))
+                .unwrap_or_default()
+        );
+
+        // Skip if this function's body has already been generated
+        // We use the internal name (with code_type suffix) to properly track
+        // deploy vs runtime variants of the same function
+        if self.generated_functions.contains(&internal_name) {
+            return Ok(());
+        }
+        self.generated_functions.insert(internal_name);
+
+        // Save the current values map and start fresh for this function
+        // Each function has its own SSA namespace
+        let saved_values = std::mem::take(&mut self.values);
+
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        // Set up parameters
-        for (index, (param_id, param_ty)) in function.params.iter().enumerate() {
-            let llvm_ty = self.ir_type_to_llvm(*param_ty, context);
-            let pointer = context.build_alloca(llvm_ty, &format!("param_{}", index));
-            context.build_store(
-                pointer,
-                context.current_function().borrow().get_nth_param(index),
-            )?;
-            // Load the value so it's available
-            let value = context.build_load(pointer, &format!("param_{}_val", index))?;
-            self.set_value(*param_id, value);
+        // Set up parameters - use the parameter values directly
+        for (index, (param_id, _param_ty)) in function.params.iter().enumerate() {
+            let param_value = context.current_function().borrow().get_nth_param(index);
+            self.set_value(*param_id, param_value);
+        }
+
+        // Initialize return values to zero
+        // Return variables in Yul start at zero and can be assigned in the body.
+        // We need to initialize BOTH the initial IDs (used by If statements as "before" values)
+        // AND the final IDs (used for the actual return).
+        let zero = context.word_const(0).as_basic_value_enum();
+        for ret_id in &function.return_values_initial {
+            self.set_value(*ret_id, zero);
+        }
+        // Also set the final return value IDs (they may be the same as initial or different)
+        for ret_id in &function.return_values {
+            self.set_value(*ret_id, zero);
         }
 
         // Generate body
         self.generate_block(&function.body, context)?;
 
-        // Build return
+        // Store return values to return pointer before going to return block
+        match context.current_function().borrow().r#return() {
+            revive_llvm_context::PolkaVMFunctionReturn::None => {}
+            revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+                // Single return value
+                if !function.return_values.is_empty() {
+                    if let Ok(ret_val) = self.get_value(function.return_values[0]) {
+                        context.build_store(pointer, ret_val)?;
+                    }
+                }
+            }
+            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
+                // Multiple return values - build a struct
+                // Get the struct type from the pointer's element type
+                let field_types: Vec<_> = (0..size)
+                    .map(|_| context.word_type().as_basic_type_enum())
+                    .collect();
+                let struct_type = context.structure_type(&field_types);
+                let mut struct_val = struct_type.get_undef();
+                for (i, ret_id) in function.return_values.iter().enumerate() {
+                    if let Ok(ret_val) = self.get_value(*ret_id) {
+                        struct_val = context
+                            .builder()
+                            .build_insert_value(struct_val, ret_val, i as u32, "ret_insert")
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                            .into_struct_value();
+                    }
+                }
+                context.build_store(pointer, struct_val.as_basic_value_enum())?;
+            }
+        }
+
+        // Build return - handle based on return type
         let return_block = context.current_function().borrow().return_block();
         context.build_unconditional_branch(return_block);
         context.set_basic_block(return_block);
-        context.build_return(None);
+
+        // Get the return type and build appropriate return
+        match context.current_function().borrow().r#return() {
+            revive_llvm_context::PolkaVMFunctionReturn::None => {
+                context.build_return(None);
+            }
+            revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+                let return_value = context
+                    .build_load(pointer, "return_value")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                context.build_return(Some(&return_value));
+            }
+            revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, .. } => {
+                let return_value = context
+                    .build_load(pointer, "return_value")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                context.build_return(Some(&return_value));
+            }
+        }
 
         context.pop_debug_scope();
+
+        // Restore the saved values map from before this function
+        self.values = saved_values;
+
         Ok(())
     }
 
@@ -237,15 +417,32 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
-                revive_llvm_context::polkavm_evm_memory::store_byte(context, offset_val, value_val)?;
+                revive_llvm_context::polkavm_evm_memory::store_byte(
+                    context, offset_val, value_val,
+                )?;
             }
 
             Statement::MCopy { dest, src, length } => {
-                // MCopy is handled via memory operations
-                let _dest_val = self.translate_value(dest)?.into_int_value();
-                let _src_val = self.translate_value(src)?.into_int_value();
-                let _len_val = self.translate_value(length)?.into_int_value();
-                // TODO: Implement mcopy using a loop or memcpy intrinsic
+                let dest_val = self.translate_value(dest)?.into_int_value();
+                let src_val = self.translate_value(src)?.into_int_value();
+                let len_val = self.translate_value(length)?.into_int_value();
+
+                let dest_pointer = revive_llvm_context::PolkaVMPointer::new_with_offset(
+                    context,
+                    revive_llvm_context::PolkaVMAddressSpace::Heap,
+                    context.byte_type(),
+                    dest_val,
+                    "mcopy_destination",
+                );
+                let src_pointer = revive_llvm_context::PolkaVMPointer::new_with_offset(
+                    context,
+                    revive_llvm_context::PolkaVMAddressSpace::Heap,
+                    context.byte_type(),
+                    src_val,
+                    "mcopy_source",
+                );
+
+                context.build_memcpy(dest_pointer, src_pointer, len_val, "mcopy_size")?;
             }
 
             Statement::SStore {
@@ -268,10 +465,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::If {
                 condition,
-                inputs: _,
+                inputs,
                 then_region,
                 else_region,
-                outputs: _,
+                outputs,
             } => {
                 let cond_val = self.translate_value(condition)?.into_int_value();
                 // Convert to i1 (compare != 0)
@@ -288,34 +485,134 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let then_block = context.append_basic_block("if_then");
                 let join_block = context.append_basic_block("if_join");
 
+                // Track which branches contribute to phi nodes
+                // (branches that end with terminators like Leave/Break don't contribute)
+                let mut phi_incoming: Vec<(
+                    Vec<BasicValueEnum<'ctx>>,
+                    inkwell::basic_block::BasicBlock<'ctx>,
+                )> = Vec::new();
+
                 if let Some(else_region) = else_region {
                     let else_block = context.append_basic_block("if_else");
                     context.build_conditional_branch(cond_bool, then_block, else_block)?;
 
+                    // Generate then branch
                     context.set_basic_block(then_block);
                     self.generate_region(then_region, context)?;
-                    context.build_unconditional_branch(join_block);
+                    let then_end_block = context.basic_block();
+                    // Only collect yields and branch if the block is reachable
+                    if !Self::block_is_unreachable(then_end_block) {
+                        let mut then_yields = Vec::new();
+                        for yield_val in &then_region.yields {
+                            then_yields.push(self.translate_value(yield_val)?);
+                        }
+                        context.build_unconditional_branch(join_block);
+                        phi_incoming.push((then_yields, then_end_block));
+                    } else if then_end_block.get_terminator().is_none() {
+                        // Add unreachable terminator for blocks that don't have one
+                        context
+                            .builder()
+                            .build_unreachable()
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
 
+                    // Generate else branch
                     context.set_basic_block(else_block);
                     self.generate_region(else_region, context)?;
-                    context.build_unconditional_branch(join_block);
+                    let else_end_block = context.basic_block();
+                    if !Self::block_is_unreachable(else_end_block) {
+                        let mut else_yields = Vec::new();
+                        for yield_val in &else_region.yields {
+                            else_yields.push(self.translate_value(yield_val)?);
+                        }
+                        context.build_unconditional_branch(join_block);
+                        phi_incoming.push((else_yields, else_end_block));
+                    } else if else_end_block.get_terminator().is_none() {
+                        context
+                            .builder()
+                            .build_unreachable()
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
                 } else {
+                    // No else branch - the "else" path goes directly to join
+                    let entry_block = context.basic_block();
                     context.build_conditional_branch(cond_bool, then_block, join_block)?;
 
+                    // Collect inputs as the "else" yields (from entry block to join)
+                    let mut else_yields = Vec::new();
+                    for input_val in inputs {
+                        else_yields.push(self.translate_value(input_val)?);
+                    }
+                    phi_incoming.push((else_yields, entry_block));
+
+                    // Generate then branch
                     context.set_basic_block(then_block);
                     self.generate_region(then_region, context)?;
-                    context.build_unconditional_branch(join_block);
+                    let then_end_block = context.basic_block();
+                    if !Self::block_is_unreachable(then_end_block) {
+                        let mut then_yields = Vec::new();
+                        for yield_val in &then_region.yields {
+                            then_yields.push(self.translate_value(yield_val)?);
+                        }
+                        context.build_unconditional_branch(join_block);
+                        phi_incoming.push((then_yields, then_end_block));
+                    } else if then_end_block.get_terminator().is_none() {
+                        context
+                            .builder()
+                            .build_unreachable()
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
                 }
 
                 context.set_basic_block(join_block);
+
+                // Create phi nodes for outputs only if we have at least two incoming edges
+                // If there's only one incoming edge, just use the value directly (no phi needed)
+                if phi_incoming.len() >= 2 {
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        let phi = context
+                            .builder()
+                            .build_phi(context.word_type(), &format!("if_phi_{}", i))
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        for (yields, block) in &phi_incoming {
+                            if i < yields.len() {
+                                phi.add_incoming(&[(&yields[i], *block)]);
+                            }
+                        }
+                        self.set_value(*output_id, phi.as_basic_value());
+                    }
+                } else if phi_incoming.len() == 1 {
+                    // Only one incoming edge - use the yielded values directly
+                    let (yields, _) = &phi_incoming[0];
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        if i < yields.len() {
+                            self.set_value(*output_id, yields[i]);
+                        }
+                    }
+                } else {
+                    // No incoming edges - the join block is unreachable (all branches terminated early)
+                    // But we still need to define outputs (with undef values) in case
+                    // subsequent unreachable code references them
+                    for output_id in outputs.iter() {
+                        self.set_value(
+                            *output_id,
+                            context.word_type().get_undef().as_basic_value_enum(),
+                        );
+                    }
+                    // Add unreachable terminator
+                    context
+                        .builder()
+                        .build_unreachable()
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                }
             }
 
             Statement::Switch {
                 scrutinee,
-                inputs: _,
+                inputs,
                 cases,
                 default,
-                outputs: _,
+                outputs,
             } => {
                 let scrut_val = self.translate_value(scrutinee)?.into_int_value();
                 let join_block = context.append_basic_block("switch_join");
@@ -345,37 +642,108 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .build_switch(scrut_val, default_block, &switch_cases)
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
+                // Collect yields from each case
+                // Track which branches contribute to phi nodes
+                // (branches that end with terminators like Leave/Break don't contribute)
+                let mut all_yields: Vec<(
+                    Vec<BasicValueEnum<'ctx>>,
+                    inkwell::basic_block::BasicBlock<'ctx>,
+                )> = Vec::new();
+
                 // Generate case bodies
                 for (_, case_block, body) in case_blocks {
                     context.set_basic_block(case_block);
                     self.generate_region(body, context)?;
-                    context.build_unconditional_branch(join_block);
+                    let end_block = context.basic_block();
+
+                    // Only collect yields and branch if the block is reachable
+                    if !Self::block_is_unreachable(end_block) {
+                        let mut yields = Vec::new();
+                        for yield_val in &body.yields {
+                            yields.push(self.translate_value(yield_val)?);
+                        }
+                        context.build_unconditional_branch(join_block);
+                        all_yields.push((yields, end_block));
+                    } else if end_block.get_terminator().is_none() {
+                        // Add unreachable terminator for blocks that don't have one
+                        context
+                            .builder()
+                            .build_unreachable()
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
                 }
 
                 // Generate default
                 context.set_basic_block(default_block);
                 if let Some(default_region) = default {
                     self.generate_region(default_region, context)?;
+                    let default_end_block = context.basic_block();
+
+                    if !Self::block_is_unreachable(default_end_block) {
+                        let mut default_yields = Vec::new();
+                        for yield_val in &default_region.yields {
+                            default_yields.push(self.translate_value(yield_val)?);
+                        }
+                        context.build_unconditional_branch(join_block);
+                        all_yields.push((default_yields, default_end_block));
+                    } else if default_end_block.get_terminator().is_none() {
+                        context
+                            .builder()
+                            .build_unreachable()
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
+                } else {
+                    // No default region - use inputs as yields
+                    let default_end_block = context.basic_block();
+                    let mut default_yields = Vec::new();
+                    for input_val in inputs {
+                        default_yields.push(self.translate_value(input_val)?);
+                    }
+                    context.build_unconditional_branch(join_block);
+                    all_yields.push((default_yields, default_end_block));
                 }
-                context.build_unconditional_branch(join_block);
 
                 context.set_basic_block(join_block);
+
+                // Create phi nodes for outputs only if we have incoming edges
+                if !all_yields.is_empty() {
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        if all_yields.len() >= 2 {
+                            let phi = context
+                                .builder()
+                                .build_phi(context.word_type(), &format!("switch_phi_{}", i))
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                            for (yields, end_block) in &all_yields {
+                                if i < yields.len() {
+                                    phi.add_incoming(&[(&yields[i], *end_block)]);
+                                }
+                            }
+                            self.set_value(*output_id, phi.as_basic_value());
+                        } else if all_yields.len() == 1 && i < all_yields[0].0.len() {
+                            // Only one incoming edge - use value directly
+                            self.set_value(*output_id, all_yields[0].0[i]);
+                        }
+                    }
+                }
             }
 
             Statement::For {
                 init_values,
                 loop_vars,
+                condition_stmts,
                 condition,
                 body,
                 post,
-                outputs: _,
+                outputs,
             } => {
-                // Initialize loop variables
-                for (init_val, loop_var) in init_values.iter().zip(loop_vars.iter()) {
-                    let val = self.translate_value(init_val)?;
-                    self.set_value(*loop_var, val);
+                // Get initial values for loop variables
+                let mut init_llvm_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
+                for init_val in init_values {
+                    init_llvm_values.push(self.translate_value(init_val)?);
                 }
 
+                let entry_block = context.basic_block();
                 let cond_block = context.append_basic_block("for_cond");
                 let body_block = context.append_basic_block("for_body");
                 let post_block = context.append_basic_block("for_post");
@@ -383,6 +751,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 context.build_unconditional_branch(cond_block);
                 context.set_basic_block(cond_block);
+
+                // Create phi nodes for loop-carried variables
+                let mut loop_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
+                for (i, loop_var) in loop_vars.iter().enumerate() {
+                    let phi = context
+                        .builder()
+                        .build_phi(context.word_type(), &format!("loop_var_{}", i))
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                    // Add incoming from entry (initial value)
+                    if i < init_llvm_values.len() {
+                        phi.add_incoming(&[(&init_llvm_values[i], entry_block)]);
+                    }
+
+                    // Make the phi value available as the loop variable
+                    self.set_value(*loop_var, phi.as_basic_value());
+                    loop_phis.push(phi);
+                }
+
+                // Generate condition statements (these may use loop_vars)
+                for stmt in condition_stmts {
+                    self.generate_statement(stmt, context)?;
+                }
 
                 // Evaluate condition
                 let cond_val = self.generate_expr(condition, context)?;
@@ -407,10 +798,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 context.set_basic_block(post_block);
                 self.generate_region(post, context)?;
+
+                // Collect yields from post region and wire up phi nodes
+                let post_end_block = context.basic_block();
+                for (i, phi) in loop_phis.iter().enumerate() {
+                    if i < post.yields.len() {
+                        let yield_val = self.translate_value(&post.yields[i])?;
+                        phi.add_incoming(&[(&yield_val, post_end_block)]);
+                    }
+                }
+
                 context.build_unconditional_branch(cond_block);
 
                 context.pop_loop();
                 context.set_basic_block(join_block);
+
+                // Set outputs to the final phi values (values when loop exits)
+                for (i, output_id) in outputs.iter().enumerate() {
+                    if i < loop_phis.len() {
+                        self.set_value(*output_id, loop_phis[i].as_basic_value());
+                    }
+                }
             }
 
             Statement::Break => {
@@ -428,7 +836,37 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.set_basic_block(unreachable);
             }
 
-            Statement::Leave => {
+            Statement::Leave { return_values } => {
+                // Store return values to return pointer before branching to return block
+                match context.current_function().borrow().r#return() {
+                    revive_llvm_context::PolkaVMFunctionReturn::None => {}
+                    revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
+                        // Single return value
+                        if !return_values.is_empty() {
+                            if let Ok(ret_val) = self.translate_value(&return_values[0]) {
+                                context.build_store(pointer, ret_val)?;
+                            }
+                        }
+                    }
+                    revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
+                        // Multiple return values - build a struct
+                        let field_types: Vec<_> = (0..size)
+                            .map(|_| context.word_type().as_basic_type_enum())
+                            .collect();
+                        let struct_type = context.structure_type(&field_types);
+                        let mut struct_val = struct_type.get_undef();
+                        for (i, ret_val) in return_values.iter().enumerate() {
+                            if let Ok(val) = self.translate_value(ret_val) {
+                                struct_val = context
+                                    .builder()
+                                    .build_insert_value(struct_val, val, i as u32, "ret_insert")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    .into_struct_value();
+                            }
+                        }
+                        context.build_store(pointer, struct_val.as_basic_value_enum())?;
+                    }
+                }
                 let return_block = context.current_function().borrow().return_block();
                 context.build_unconditional_branch(return_block);
                 let unreachable = context.append_basic_block("leave_unreachable");
@@ -444,9 +882,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::Return { offset, length } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
-                revive_llvm_context::polkavm_evm_return::r#return(
-                    context, offset_val, length_val,
-                )?;
+                revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)?;
             }
 
             Statement::Stop => {
@@ -462,18 +898,95 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 revive_llvm_context::polkavm_evm_return::selfdestruct(context, addr_val)?;
             }
 
-            Statement::ExternalCall { result, .. } => {
-                // TODO: Implement external call handling
-                // For now, set result to 0
-                let zero = context.word_const(0).as_basic_value_enum();
-                self.set_value(*result, zero);
+            Statement::ExternalCall {
+                kind,
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                result,
+            } => {
+                let gas_val = self.translate_value(gas)?.into_int_value();
+                let address_val = self.translate_value(address)?.into_int_value();
+                let args_offset_val = self.translate_value(args_offset)?.into_int_value();
+                let args_length_val = self.translate_value(args_length)?.into_int_value();
+                let ret_offset_val = self.translate_value(ret_offset)?.into_int_value();
+                let ret_length_val = self.translate_value(ret_length)?.into_int_value();
+
+                let call_result = match kind {
+                    CallKind::Call | CallKind::CallCode => {
+                        let value_val = value
+                            .map(|v| self.translate_value(&v))
+                            .transpose()?
+                            .map(|v| v.into_int_value());
+                        revive_llvm_context::polkavm_evm_call::call(
+                            context,
+                            gas_val,
+                            address_val,
+                            value_val,
+                            args_offset_val,
+                            args_length_val,
+                            ret_offset_val,
+                            ret_length_val,
+                            vec![], // No constant simulation addresses
+                            false,  // Not a static call
+                        )?
+                    }
+                    CallKind::StaticCall => {
+                        revive_llvm_context::polkavm_evm_call::call(
+                            context,
+                            gas_val,
+                            address_val,
+                            None,
+                            args_offset_val,
+                            args_length_val,
+                            ret_offset_val,
+                            ret_length_val,
+                            vec![], // No constant simulation addresses
+                            true,   // Static call
+                        )?
+                    }
+                    CallKind::DelegateCall => {
+                        revive_llvm_context::polkavm_evm_call::delegate_call(
+                            context,
+                            gas_val,
+                            address_val,
+                            args_offset_val,
+                            args_length_val,
+                            ret_offset_val,
+                            ret_length_val,
+                            vec![], // No constant simulation addresses
+                        )?
+                    }
+                };
+                self.set_value(*result, call_result);
             }
 
-            Statement::Create { result, .. } => {
-                // TODO: Implement create handling
-                // For now, set result to 0
-                let zero = context.word_const(0).as_basic_value_enum();
-                self.set_value(*result, zero);
+            Statement::Create {
+                kind,
+                value,
+                offset,
+                length,
+                salt,
+                result,
+            } => {
+                let value_val = self.translate_value(value)?.into_int_value();
+                let offset_val = self.translate_value(offset)?.into_int_value();
+                let length_val = self.translate_value(length)?.into_int_value();
+                let salt_val = match (kind, salt) {
+                    (CreateKind::Create2, Some(s)) => {
+                        Some(self.translate_value(s)?.into_int_value())
+                    }
+                    _ => None,
+                };
+
+                let create_result = revive_llvm_context::polkavm_evm_create::create(
+                    context, value_val, offset_val, length_val, salt_val,
+                )?;
+                self.set_value(*result, create_result);
             }
 
             Statement::Log {
@@ -523,12 +1036,62 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
 
-            Statement::CodeCopy { .. }
-            | Statement::ExtCodeCopy { .. }
-            | Statement::ReturnDataCopy { .. }
-            | Statement::DataCopy { .. }
-            | Statement::CallDataCopy { .. } => {
-                // TODO: Implement these copy operations
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                // In deploy code, codecopy copies from calldata
+                let dest_val = self.translate_value(dest)?.into_int_value();
+                let offset_val = self.translate_value(offset)?.into_int_value();
+                let length_val = self.translate_value(length)?.into_int_value();
+                revive_llvm_context::polkavm_evm_calldata::copy(
+                    context, dest_val, offset_val, length_val,
+                )?;
+            }
+
+            Statement::ExtCodeCopy { .. } => {
+                // ExtCodeCopy is not supported on PolkaVM
+                return Err(CodegenError::Unsupported("extcodecopy".into()));
+            }
+
+            Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                let dest_val = self.translate_value(dest)?.into_int_value();
+                let offset_val = self.translate_value(offset)?.into_int_value();
+                let length_val = self.translate_value(length)?.into_int_value();
+                revive_llvm_context::polkavm_evm_return_data::copy(
+                    context, dest_val, offset_val, length_val,
+                )?;
+            }
+
+            Statement::DataCopy {
+                dest,
+                offset,
+                length: _,
+            } => {
+                // DataCopy writes the contract hash at the destination offset
+                // This is used in create patterns: datacopy(dest, dataoffset("deployed"), datasize("deployed"))
+                // The offset is actually the contract hash to write
+                let dest_val = self.translate_value(dest)?.into_int_value();
+                let hash_val = self.translate_value(offset)?.into_int_value();
+                revive_llvm_context::polkavm_evm_memory::store(context, dest_val, hash_val)?;
+            }
+
+            Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                let dest_val = self.translate_value(dest)?.into_int_value();
+                let offset_val = self.translate_value(offset)?.into_int_value();
+                let length_val = self.translate_value(length)?.into_int_value();
+                revive_llvm_context::polkavm_evm_calldata::copy(
+                    context, dest_val, offset_val, length_val,
+                )?;
             }
 
             Statement::Block(region) => {
@@ -538,6 +1101,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::Expr(expr) => {
                 // Evaluate for side effects, discard result
                 let _ = self.generate_expr(expr, context)?;
+            }
+
+            Statement::SetImmutable { key, value } => {
+                let offset = context.solidity_mut().allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
+                let index = context.xlen_type().const_int(offset as u64, false);
+                let val = self.translate_value(value)?.into_int_value();
+                revive_llvm_context::polkavm_evm_immutable::store(context, index, val)?;
             }
         }
         Ok(())
@@ -551,9 +1122,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>> {
         match expr {
             Expr::Literal { value, ty: _ } => {
-                // Convert BigUint to u64 for LLVM constant
-                let val = value.to_u64().unwrap_or(0);
-                Ok(context.word_const(val).as_basic_value_enum())
+                // Convert BigUint to LLVM constant using decimal string representation
+                // This handles arbitrarily large values that don't fit in u64
+                let val_str = value.to_string();
+                Ok(context.word_const_str_dec(&val_str).as_basic_value_enum())
             }
 
             Expr::Var(id) => self.get_value(*id),
@@ -611,27 +1183,48 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         Ok(result.as_basic_value_enum())
                     }
+                    UnaryOp::Clz => {
+                        // Count leading zeros
+                        Ok(
+                            revive_llvm_context::polkavm_evm_bitwise::count_leading_zeros(
+                                context,
+                                operand_val,
+                            )?,
+                        )
+                    }
                 }
             }
 
             Expr::CallDataLoad { offset } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_calldata::load(context, offset_val)?)
+                Ok(revive_llvm_context::polkavm_evm_calldata::load(
+                    context, offset_val,
+                )?)
             }
 
             Expr::CallValue => Ok(revive_llvm_context::polkavm_evm_ether_gas::value(context)?),
 
-            Expr::Caller => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::caller(context)?)
-            }
+            Expr::Caller => Ok(revive_llvm_context::polkavm_evm_contract_context::caller(
+                context,
+            )?),
 
-            Expr::Origin => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::origin(context)?)
-            }
+            Expr::Origin => Ok(revive_llvm_context::polkavm_evm_contract_context::origin(
+                context,
+            )?),
 
             Expr::CallDataSize => Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?),
 
-            Expr::CodeSize => Ok(revive_llvm_context::polkavm_evm_ext_code::size(context, None)?),
+            Expr::CodeSize => match context.code_type() {
+                Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                    Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
+                }
+                Some(revive_llvm_context::PolkaVMCodeType::Runtime) => Ok(
+                    revive_llvm_context::polkavm_evm_ext_code::size(context, None)?,
+                ),
+                None => Err(CodegenError::Unsupported(
+                    "code type undefined for codesize".into(),
+                )),
+            },
 
             Expr::GasPrice => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_price(context)?)
@@ -639,7 +1232,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::ExtCodeSize { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_ext_code::size(context, Some(addr_val))?)
+                Ok(revive_llvm_context::polkavm_evm_ext_code::size(
+                    context,
+                    Some(addr_val),
+                )?)
             }
 
             Expr::ReturnDataSize => {
@@ -648,17 +1244,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::ExtCodeHash { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_ext_code::hash(context, addr_val)?)
+                Ok(revive_llvm_context::polkavm_evm_ext_code::hash(
+                    context, addr_val,
+                )?)
             }
 
             Expr::BlockHash { number } => {
                 let num_val = self.translate_value(number)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_contract_context::block_hash(context, num_val)?)
+                Ok(
+                    revive_llvm_context::polkavm_evm_contract_context::block_hash(
+                        context, num_val,
+                    )?,
+                )
             }
 
-            Expr::Coinbase => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::coinbase(context)?)
-            }
+            Expr::Coinbase => Ok(revive_llvm_context::polkavm_evm_contract_context::coinbase(
+                context,
+            )?),
 
             Expr::Timestamp => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::block_timestamp(context)?)
@@ -676,17 +1278,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_limit(context)?)
             }
 
-            Expr::ChainId => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::chain_id(context)?)
-            }
+            Expr::ChainId => Ok(revive_llvm_context::polkavm_evm_contract_context::chain_id(
+                context,
+            )?),
 
-            Expr::SelfBalance => {
-                Ok(revive_llvm_context::polkavm_evm_ether_gas::self_balance(context)?)
-            }
+            Expr::SelfBalance => Ok(revive_llvm_context::polkavm_evm_ether_gas::self_balance(
+                context,
+            )?),
 
-            Expr::BaseFee => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::basefee(context)?)
-            }
+            Expr::BaseFee => Ok(revive_llvm_context::polkavm_evm_contract_context::basefee(
+                context,
+            )?),
 
             Expr::BlobHash { .. } | Expr::BlobBaseFee => {
                 // Blob opcodes return 0 for now (EIP-4844)
@@ -697,28 +1299,39 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::MSize => Ok(revive_llvm_context::polkavm_evm_memory::msize(context)?),
 
-            Expr::Address => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::address(context)?)
-            }
+            Expr::Address => Ok(revive_llvm_context::polkavm_evm_contract_context::address(
+                context,
+            )?),
 
             Expr::Balance { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_ether_gas::balance(context, addr_val)?)
+                Ok(revive_llvm_context::polkavm_evm_ether_gas::balance(
+                    context, addr_val,
+                )?)
             }
 
             Expr::MLoad { offset, region: _ } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?)
+                Ok(revive_llvm_context::polkavm_evm_memory::load(
+                    context, offset_val,
+                )?)
             }
 
-            Expr::SLoad { key, static_slot: _ } => {
+            Expr::SLoad {
+                key,
+                static_slot: _,
+            } => {
                 let key_arg = self.value_to_argument(key)?;
-                Ok(revive_llvm_context::polkavm_evm_storage::load(context, &key_arg)?)
+                Ok(revive_llvm_context::polkavm_evm_storage::load(
+                    context, &key_arg,
+                )?)
             }
 
             Expr::TLoad { key } => {
                 let key_arg = self.value_to_argument(key)?;
-                Ok(revive_llvm_context::polkavm_evm_storage::transient_load(context, &key_arg)?)
+                Ok(revive_llvm_context::polkavm_evm_storage::transient_load(
+                    context, &key_arg,
+                )?)
             }
 
             Expr::Call { function, args } => {
@@ -733,16 +1346,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     arg_vals.push(self.translate_value(arg)?);
                 }
 
+                // Ensure debug location is set for function calls
+                context.set_debug_location(1, 0, None)?;
+
                 let func = context
                     .get_function(&func_name, true)
-                    .ok_or_else(|| CodegenError::UndefinedFunction(*function))?;
+                    .ok_or(CodegenError::UndefinedFunction(*function))?;
                 let result = context.build_call(
                     func.borrow().declaration(),
                     &arg_vals,
                     &format!("{}_result", func_name),
                 );
 
-                result.ok_or_else(|| CodegenError::Llvm("Function call failed".into()))
+                // build_call returns None for void functions, which is valid
+                // For void functions, return a zero value as a placeholder
+                Ok(result.unwrap_or_else(|| context.word_const(0).as_basic_value_enum()))
             }
 
             Expr::Truncate { value, to } => {
@@ -779,16 +1397,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
                 Ok(revive_llvm_context::polkavm_evm_crypto::sha3(
-                    context,
-                    offset_val,
-                    length_val,
+                    context, offset_val, length_val,
                 )?)
             }
 
-            Expr::DataOffset { .. } | Expr::DataSize { .. } => {
-                // TODO: Implement dataoffset/datasize
-                Ok(context.word_const(0).as_basic_value_enum())
+            Expr::DataOffset { id } => {
+                // DataOffset returns a reference to the contract code hash
+                // For subcontract deployments, this is the hash of the deployed bytecode
+                // We use the PolkaVM create infrastructure which handles this
+                let arg =
+                    revive_llvm_context::polkavm_evm_create::contract_hash(context, id.clone())?;
+                arg.access(context)
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))
             }
+
+            Expr::DataSize { id } => {
+                // DataSize returns the size of the deploy call header
+                let arg =
+                    revive_llvm_context::polkavm_evm_create::header_size(context, id.clone())?;
+                arg.access(context)
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))
+            }
+
+            Expr::LoadImmutable { key } => {
+                let offset = context
+                    .solidity_mut()
+                    .get_or_allocate_immutable(key.as_str())
+                    / revive_common::BYTE_LENGTH_WORD;
+                let index = context.xlen_type().const_int(offset as u64, false);
+                Ok(revive_llvm_context::polkavm_evm_immutable::load(
+                    context, index,
+                )?)
+            }
+
+            Expr::LinkerSymbol { path } => Ok(
+                revive_llvm_context::polkavm_evm_call::linker_symbol(context, path)?,
+            ),
         }
     }
 
@@ -801,41 +1445,49 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>> {
         match op {
-            BinOp::Add => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::addition(context, lhs, rhs)?)
-            }
-            BinOp::Sub => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::subtraction(context, lhs, rhs)?)
-            }
-            BinOp::Mul => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::multiplication(context, lhs, rhs)?)
-            }
-            BinOp::Div => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::division(context, lhs, rhs)?)
-            }
-            BinOp::SDiv => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::division_signed(context, lhs, rhs)?)
-            }
-            BinOp::Mod => {
-                Ok(revive_llvm_context::polkavm_evm_arithmetic::remainder(context, lhs, rhs)?)
-            }
+            BinOp::Add => Ok(revive_llvm_context::polkavm_evm_arithmetic::addition(
+                context, lhs, rhs,
+            )?),
+            BinOp::Sub => Ok(revive_llvm_context::polkavm_evm_arithmetic::subtraction(
+                context, lhs, rhs,
+            )?),
+            BinOp::Mul => Ok(revive_llvm_context::polkavm_evm_arithmetic::multiplication(
+                context, lhs, rhs,
+            )?),
+            BinOp::Div => Ok(revive_llvm_context::polkavm_evm_arithmetic::division(
+                context, lhs, rhs,
+            )?),
+            BinOp::SDiv => Ok(
+                revive_llvm_context::polkavm_evm_arithmetic::division_signed(context, lhs, rhs)?,
+            ),
+            BinOp::Mod => Ok(revive_llvm_context::polkavm_evm_arithmetic::remainder(
+                context, lhs, rhs,
+            )?),
             BinOp::SMod => Ok(
                 revive_llvm_context::polkavm_evm_arithmetic::remainder_signed(context, lhs, rhs)?,
             ),
-            BinOp::Exp => {
-                Ok(revive_llvm_context::polkavm_evm_math::exponent(context, lhs, rhs)?)
-            }
-            BinOp::And => Ok(revive_llvm_context::polkavm_evm_bitwise::and(context, lhs, rhs)?),
-            BinOp::Or => Ok(revive_llvm_context::polkavm_evm_bitwise::or(context, lhs, rhs)?),
-            BinOp::Xor => Ok(revive_llvm_context::polkavm_evm_bitwise::xor(context, lhs, rhs)?),
-            BinOp::Shl => {
-                Ok(revive_llvm_context::polkavm_evm_bitwise::shift_left(context, lhs, rhs)?)
-            }
-            BinOp::Shr => {
-                Ok(revive_llvm_context::polkavm_evm_bitwise::shift_right(context, lhs, rhs)?)
-            }
+            BinOp::Exp => Ok(revive_llvm_context::polkavm_evm_math::exponent(
+                context, lhs, rhs,
+            )?),
+            BinOp::And => Ok(revive_llvm_context::polkavm_evm_bitwise::and(
+                context, lhs, rhs,
+            )?),
+            BinOp::Or => Ok(revive_llvm_context::polkavm_evm_bitwise::or(
+                context, lhs, rhs,
+            )?),
+            BinOp::Xor => Ok(revive_llvm_context::polkavm_evm_bitwise::xor(
+                context, lhs, rhs,
+            )?),
+            BinOp::Shl => Ok(revive_llvm_context::polkavm_evm_bitwise::shift_left(
+                context, lhs, rhs,
+            )?),
+            BinOp::Shr => Ok(revive_llvm_context::polkavm_evm_bitwise::shift_right(
+                context, lhs, rhs,
+            )?),
             BinOp::Sar => Ok(
-                revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(context, lhs, rhs)?,
+                revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(
+                    context, lhs, rhs,
+                )?,
             ),
             BinOp::Lt => Ok(revive_llvm_context::polkavm_evm_comparison::compare(
                 context,
@@ -873,12 +1525,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                 Ok(result.as_basic_value_enum())
             }
-            BinOp::Byte => {
-                Ok(revive_llvm_context::polkavm_evm_bitwise::byte(context, lhs, rhs)?)
-            }
-            BinOp::SignExtend => {
-                Ok(revive_llvm_context::polkavm_evm_math::sign_extend(context, lhs, rhs)?)
-            }
+            BinOp::Byte => Ok(revive_llvm_context::polkavm_evm_bitwise::byte(
+                context, lhs, rhs,
+            )?),
+            BinOp::SignExtend => Ok(revive_llvm_context::polkavm_evm_math::sign_extend(
+                context, lhs, rhs,
+            )?),
             BinOp::AddMod | BinOp::MulMod => {
                 // These are ternary ops, shouldn't reach here
                 Err(CodegenError::Unsupported(format!(

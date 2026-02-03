@@ -34,7 +34,7 @@ impl BitWidth {
             BitWidth::I32
         } else if *value <= BigUint::from(u64::MAX) {
             BitWidth::I64
-        } else if *value <= BigUint::from(2u8).pow(160) - 1u8 {
+        } else if *value < BigUint::from(2u8).pow(160) {
             BitWidth::I160
         } else {
             BitWidth::I256
@@ -171,6 +171,8 @@ pub enum UnaryOp {
     IsZero,
     /// Bitwise NOT.
     Not,
+    /// Count leading zeros.
+    Clz,
 }
 
 /// External call kinds.
@@ -204,13 +206,20 @@ impl FunctionId {
 #[derive(Clone, Debug)]
 pub enum Expr {
     /// Literal constant.
-    Literal { value: BigUint, ty: Type },
+    Literal {
+        value: BigUint,
+        ty: Type,
+    },
 
     /// Reference to an SSA value.
     Var(ValueId),
 
     /// Binary operation.
-    Binary { op: BinOp, lhs: Value, rhs: Value },
+    Binary {
+        op: BinOp,
+        lhs: Value,
+        rhs: Value,
+    },
 
     /// Ternary operation (addmod, mulmod).
     Ternary {
@@ -221,20 +230,31 @@ pub enum Expr {
     },
 
     /// Unary operation.
-    Unary { op: UnaryOp, operand: Value },
+    Unary {
+        op: UnaryOp,
+        operand: Value,
+    },
 
     // EVM builtins (pure getters)
-    CallDataLoad { offset: Value },
+    CallDataLoad {
+        offset: Value,
+    },
     CallValue,
     Caller,
     Origin,
     CallDataSize,
     CodeSize,
     GasPrice,
-    ExtCodeSize { address: Value },
+    ExtCodeSize {
+        address: Value,
+    },
     ReturnDataSize,
-    ExtCodeHash { address: Value },
-    BlockHash { number: Value },
+    ExtCodeHash {
+        address: Value,
+    },
+    BlockHash {
+        number: Value,
+    },
     Coinbase,
     Timestamp,
     Number,
@@ -243,15 +263,22 @@ pub enum Expr {
     ChainId,
     SelfBalance,
     BaseFee,
-    BlobHash { index: Value },
+    BlobHash {
+        index: Value,
+    },
     BlobBaseFee,
     Gas,
     MSize,
     Address,
-    Balance { address: Value },
+    Balance {
+        address: Value,
+    },
 
     /// Memory load with region annotation.
-    MLoad { offset: Value, region: MemoryRegion },
+    MLoad {
+        offset: Value,
+        region: MemoryRegion,
+    },
 
     /// Storage load with optional static slot.
     SLoad {
@@ -261,7 +288,9 @@ pub enum Expr {
     },
 
     /// Transient storage load.
-    TLoad { key: Value },
+    TLoad {
+        key: Value,
+    },
 
     /// Function call.
     Call {
@@ -270,18 +299,46 @@ pub enum Expr {
     },
 
     // Type conversions (explicit)
-    Truncate { value: Value, to: BitWidth },
-    ZeroExtend { value: Value, to: BitWidth },
-    SignExtendTo { value: Value, to: BitWidth },
+    Truncate {
+        value: Value,
+        to: BitWidth,
+    },
+    ZeroExtend {
+        value: Value,
+        to: BitWidth,
+    },
+    SignExtendTo {
+        value: Value,
+        to: BitWidth,
+    },
 
     /// Keccak256 hash (pure but expensive).
-    Keccak256 { offset: Value, length: Value },
+    Keccak256 {
+        offset: Value,
+        length: Value,
+    },
 
     /// Data offset (for deployed bytecode).
-    DataOffset { id: String },
+    DataOffset {
+        id: String,
+    },
 
     /// Data size (for deployed bytecode).
-    DataSize { id: String },
+    DataSize {
+        id: String,
+    },
+
+    /// Load immutable variable.
+    LoadImmutable {
+        /// The immutable variable identifier.
+        key: String,
+    },
+
+    /// Linker symbol - returns the address of an external library.
+    LinkerSymbol {
+        /// The library path (e.g., "contracts/Library.sol:L").
+        path: String,
+    },
 }
 
 /// Switch case.
@@ -335,7 +392,10 @@ impl Block {
 pub enum Statement {
     // SSA binding
     /// SSA binding: let x, y, z = expr
-    Let { bindings: Vec<ValueId>, value: Expr },
+    Let {
+        bindings: Vec<ValueId>,
+        value: Expr,
+    },
 
     // Memory operations
     /// Memory store with region annotation.
@@ -369,7 +429,10 @@ pub enum Statement {
     },
 
     /// Transient storage store.
-    TStore { key: Value, value: Value },
+    TStore {
+        key: Value,
+        value: Value,
+    },
 
     // Structured control flow (with explicit value flow)
     /// Structured if with explicit yields.
@@ -400,7 +463,10 @@ pub enum Statement {
         init_values: Vec<Value>,
         /// Loop-carried variable bindings (visible in condition, body, post).
         loop_vars: Vec<ValueId>,
-        /// Condition expression (evaluated each iteration).
+        /// Statements to execute before evaluating condition (evaluated each iteration).
+        /// These are generated inside the loop header block.
+        condition_stmts: Vec<Statement>,
+        /// Condition expression (evaluated each iteration after condition_stmts).
         condition: Expr,
         /// Loop body.
         body: Region,
@@ -413,14 +479,26 @@ pub enum Statement {
     /// Loop control.
     Break,
     Continue,
-    Leave,
+    /// Leave the current function, returning the given values.
+    Leave {
+        /// The current values of the return variables to return.
+        return_values: Vec<Value>,
+    },
 
     // Terminating statements
-    Revert { offset: Value, length: Value },
-    Return { offset: Value, length: Value },
+    Revert {
+        offset: Value,
+        length: Value,
+    },
+    Return {
+        offset: Value,
+        length: Value,
+    },
     Stop,
     Invalid,
-    SelfDestruct { address: Value },
+    SelfDestruct {
+        address: Value,
+    },
 
     // External calls
     ExternalCall {
@@ -484,6 +562,14 @@ pub enum Statement {
 
     /// Expression evaluated for side effects only (result discarded).
     Expr(Expr),
+
+    /// Set immutable variable.
+    SetImmutable {
+        /// The immutable variable identifier.
+        key: String,
+        /// The value to store.
+        value: Value,
+    },
 }
 
 /// Function definition.
@@ -493,6 +579,13 @@ pub struct Function {
     pub name: String,
     pub params: Vec<(ValueId, Type)>,
     pub returns: Vec<Type>,
+    /// Initial SSA value IDs for return variables (allocated at function entry).
+    /// These are the IDs that the function body's If statements will reference
+    /// as "before" values.
+    pub return_values_initial: Vec<ValueId>,
+    /// Final SSA value IDs for return variables (after body execution).
+    /// These are the values that should be stored to the return pointer.
+    pub return_values: Vec<ValueId>,
     pub body: Block,
     /// Number of call sites (for inlining decisions).
     pub call_count: usize,
@@ -508,6 +601,8 @@ impl Function {
             name,
             params: Vec::new(),
             returns: Vec::new(),
+            return_values_initial: Vec::new(),
+            return_values: Vec::new(),
             body: Block::new(),
             call_count: 0,
             size_estimate: 0,

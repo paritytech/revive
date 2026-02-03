@@ -85,16 +85,14 @@ jobs:
         shell: bash
         run: |
           RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"
-          SOLIDITY_CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures/solidity"
-          YUL_CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures/yul"
+          CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures"
           OUTPUT_DIR="$PWD/hashes"
 
           chmod +x "$RESOLC_BIN"
           chmod +x ./revive/.github/scripts/compile-and-hash.sh
           bash ./revive/.github/scripts/compile-and-hash.sh \
               "$RESOLC_BIN" \
-              "$SOLIDITY_CONTRACTS_DIR" \
-              "$YUL_CONTRACTS_DIR" \
+              "$CONTRACTS_DIR" \
               "$OUTPUT_DIR"
           echo "hashes_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 

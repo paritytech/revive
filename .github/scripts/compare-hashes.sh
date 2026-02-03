@@ -12,11 +12,14 @@
 # (the script `compile-and-hash.sh` can generate such files):
 #       - <platform>
 #           - O0.txt
-#               <path>:<ContractName>:<hash>
+#               <path1>:<ContractName1>:<hash>
+#               <path2>:<ContractName2>:<hash>
 #           - O3.txt
-#               <path>:<ContractName>:<hash>
+#               <path1>:<ContractName1>:<hash>
+#               <path2>:<ContractName2>:<hash>
 #           - Oz.txt
-#               <path>:<ContractName>:<hash>
+#               <path1>:<ContractName1>:<hash>
+#               <path2>:<ContractName2>:<hash>
 #
 # If the platform subdirectory names have a prefix (e.g. "hashes-" in "hashes-linux-musl"),
 # the prefix can be provided in order for outputs to show the platform name without the prefix.
@@ -103,7 +106,8 @@ for opt in O0 O3 Oz; do
 
             # Collect details of the first 10 mismatched contracts.
             # Example output:
-            #   Oz: linux-musl vs macos-universal: 2 mismatches
+            #   Optimization level: Oz
+            #       linux-musl vs macos-universal: 2 mismatches
             #       Mismatched contracts (first 10):
             #       - contract: path/to/my_contract.sol:MyContract1
             #         macos-universal: abcd1234
@@ -111,8 +115,9 @@ for opt in O0 O3 Oz; do
             #       - contract: path/to/my_contract.sol:MyContract2
             #         macos-universal: efgh5678
             #         linux-musl: MISSING
-            CURRENT_DETAILS=$(printf "%s\n%s\n%s" \
-                "${opt}: ${REF_PLATFORM} vs ${platform}: ${MISMATCH_COUNT} mismatches" \
+            CURRENT_DETAILS=$(printf "%s\n%s\n%s\n%s" \
+                "Optimization level: ${opt}" \
+                "    ${REF_PLATFORM} vs ${platform}: ${MISMATCH_COUNT} mismatches" \
                 "    Mismatched contracts (first 10):" \
                 "$(echo "$DIFF_OUTPUT" | grep '^<' | head -10 | while read line; do
                 CONTRACT=$(echo "$line" | sed 's/^< //' | cut -d':' -f1,2)
@@ -138,6 +143,7 @@ echo ""
 echo "==========================================="
 echo "SUMMARY"
 echo "==========================================="
+echo ""
 if [ "$TOTAL_MISMATCHES" -gt 0 ]; then
     echo "❌ FAILURE: Reproducible build verification failed!"
     echo ""

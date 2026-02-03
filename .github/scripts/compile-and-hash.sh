@@ -1,46 +1,40 @@
 #!/bin/bash
 
-# This script compiles all `.sol` and `.yul` files from the provided Solidity
-# and Yul directories (and their subdirectories) respectively, using the provided
-# resolc binary. For each compiled contract, it extracts the bytecode and computes
-# a SHA256 hash. These hashes are stored in files per optimization level:
+# This script compiles all `.sol` and `.yul` files from the provided contracts
+# directory (and its subdirectories) using the provided resolc binary. For each
+# compiled contract, it extracts the bytecode and computes a SHA256 hash. These
+# hashes are stored in files per optimization level:
 #       - <output-dir>/O0.txt
-#           simple/loop/array/simple.sol:ContractName:<hash>
-#           instructions/byte.yul:ContractName:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/O3.txt
-#           simple/loop/array/simple.sol:ContractName:<hash>
-#           instructions/byte.yul:ContractName:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #       - <output-dir>/Oz.txt
-#           simple/loop/array/simple.sol:ContractName:<hash>
-#           instructions/byte.yul:ContractName:<hash>
+#           solidity/simple/loop/array/simple.sol:ContractName:<hash>
+#           yul/instructions/byte.yul:ContractName:<hash>
 #
-# Usage: compile-and-hash.sh <resolc-binary> <solidity-contracts-dir> <yul-contracts-dir> <output-dir>
+# Usage: compile-and-hash.sh <resolc-binary> <contracts-dir> <output-dir>
 
 set -euo pipefail
 
-if [ $# -ne 4 ]; then
-    echo "Error: Expected 4 arguments, got $#"
-    echo "Usage: $0 <resolc-binary> <solidity-contracts-dir> <yul-contracts-dir> <output-dir>"
+if [ $# -ne 3 ]; then
+    echo "Error: Expected 3 arguments, got $#"
+    echo "Usage: $0 <resolc-binary> <contracts-dir> <output-dir>"
     exit 1
 fi
 
 RESOLC="$1"
-SOLIDITY_CONTRACTS_DIR="${2%/}"
-YUL_CONTRACTS_DIR="${3%/}"
-OUTPUT_DIR="${4%/}"
+CONTRACTS_DIR="${2%/}"
+OUTPUT_DIR="${3%/}"
 
 if [ ! -f "$RESOLC" ]; then
     echo "Error: resolc binary not found: $RESOLC"
     exit 1
 fi
 
-if [ ! -d "$SOLIDITY_CONTRACTS_DIR" ]; then
-    echo "Error: Solidity contracts directory not found: $SOLIDITY_CONTRACTS_DIR"
-    exit 1
-fi
-
-if [ ! -d "$YUL_CONTRACTS_DIR" ]; then
-    echo "Error: Yul contracts directory not found: $YUL_CONTRACTS_DIR"
+if [ ! -d "$CONTRACTS_DIR" ]; then
+    echo "Error: Contracts directory not found: $CONTRACTS_DIR"
     exit 1
 fi
 
@@ -60,28 +54,24 @@ FAILED_Oz=""
 # Arguments:
 #   $1 - File path to the contract.
 #   $2 - Optimization level (0, 3, or z).
-#   $3 - "true" if Yul contract, "false" if Solidity.
 compile_and_hash() {
     local file_path="$1"
     local opt="$2"
-    local is_yul="$3"
 
-    local base_dir
-    if [ "$is_yul" = "true" ]; then
-        base_dir="$YUL_CONTRACTS_DIR"
-    else
-        base_dir="$SOLIDITY_CONTRACTS_DIR"
+    local is_yul="false"
+    if [[ "$file_path" == *.yul ]]; then
+        is_yul="true"
     fi
 
     # To ensure that the file path added as part of a hash entry is consistent, and thus
     # comparable, across platforms it is normalized (potential backslashes are replaced
-    # with forward slashes) and converted to a path relative to the `base_dir`.
+    # with forward slashes) and converted to a path relative to the `CONTRACTS_DIR`.
     # Example:
-    #     * base_dir = /path/to/contracts/fixtures/solidity
+    #     * CONTRACTS_DIR = /path/to/contracts/fixtures
     #     * file_path = /path/to/contracts/fixtures/solidity/simple/loop/array/simple.sol
-    #     * relative_path = simple/loop/array/simple.sol
+    #     * relative_path = solidity/simple/loop/array/simple.sol
     local normalized_file_path="${file_path//\\//}"
-    local normalized_base_dir="${base_dir//\\//}"
+    local normalized_base_dir="${CONTRACTS_DIR//\\//}"
     local relative_path="${normalized_file_path#$normalized_base_dir/}"
 
     # Compile the contract.
@@ -103,12 +93,12 @@ compile_and_hash() {
     fi
 
     # Parse each contract section from the output and compute hashes.
-    # Output format:
+    # For each contract, output a line: <relative_path>:<ContractName>:<hash>
+    #
+    # Compilation output format:
     #   ======= <file>:<ContractName> =======
     #   Binary:
     #   <bytecode starting with 50564d>
-    #
-    # For each contract, output a line: <relative_path>:<ContractName>:<hash>
     local contract_name=""
     while IFS= read -r line; do
         # If it is the header, extract the contract name.
@@ -129,30 +119,30 @@ compile_and_hash() {
 # Compile all Solidity contracts.
 echo "=== Compiling Solidity contracts ==="
 SOLIDITY_COUNT=0
-while IFS= read -r -d '' file; do
+while IFS= read -r -d '' file_path; do
     for opt in 0 3 z; do
-        compile_and_hash "$file" "$opt" "false"
+        compile_and_hash "$file_path" "$opt"
     done
     ((++SOLIDITY_COUNT))
     if [ $((SOLIDITY_COUNT % 200)) -eq 0 ]; then
         echo "Processed $SOLIDITY_COUNT files..."
     fi
-done < <(find "$SOLIDITY_CONTRACTS_DIR" -name "*.sol" -print0 2>/dev/null | sort -z)
+done < <(find "$CONTRACTS_DIR" -name "*.sol" -print0 2>/dev/null | sort -z)
 echo "Total Solidity files compiled: $SOLIDITY_COUNT"
 
 # Compile all Yul contracts.
 echo ""
 echo "=== Compiling Yul contracts ==="
 YUL_COUNT=0
-while IFS= read -r -d '' file; do
+while IFS= read -r -d '' file_path; do
     for opt in 0 3 z; do
-        compile_and_hash "$file" "$opt" "true"
+        compile_and_hash "$file_path" "$opt"
     done
     ((++YUL_COUNT))
     if [ $((YUL_COUNT % 200)) -eq 0 ]; then
         echo "Processed $YUL_COUNT files..."
     fi
-done < <(find "$YUL_CONTRACTS_DIR" -name "*.yul" -print0 2>/dev/null | sort -z)
+done < <(find "$CONTRACTS_DIR" -name "*.yul" -print0 2>/dev/null | sort -z)
 echo "Total Yul files compiled: $YUL_COUNT"
 
 # Sort hash files for deterministic comparison across platforms.
@@ -164,16 +154,19 @@ done
 
 # Show final summary.
 # Example output:
-#   O0: 120 hashes generated, 143/145 files compiled
+#   Optimization level: O0
+#       120 hashes generated, 143/145 files compiled
 #       2 files failed to compile:
-#         - simple/loop/array/simple.sol
-#         - instructions/byte.yul
+#         - solidity/simple/loop/array/simple.sol
+#         - yul/instructions/byte.yul
 #
-#   O3: 121 hashes generated, 144/145 files compiled
+#   Optimization level: O3
+#       121 hashes generated, 144/145 files compiled
 #       1 files failed to compile:
-#         - simple/loop/array/simple.sol
+#         - solidity/simple/loop/array/simple.sol
 #
-#   Oz: 122 hashes generated, 145/145 files compiled
+#   Optimization level: Oz
+#       122 hashes generated, 145/145 files compiled
 echo ""
 echo "==========================================="
 echo "SUMMARY"
@@ -189,7 +182,9 @@ for opt in O0 O3 Oz; do
     FAILED_COUNT=$(echo -e "$FAILED" | grep -c .) || FAILED_COUNT=0
     SUCCESSFUL_COUNT=$((TOTAL_COUNT - FAILED_COUNT))
 
-    echo "${opt}: $HASH_COUNT hashes generated, $SUCCESSFUL_COUNT/$TOTAL_COUNT files compiled"
+    echo ""
+    echo "Optimization level: ${opt}"
+    echo "    $HASH_COUNT hashes generated, $SUCCESSFUL_COUNT/$TOTAL_COUNT files compiled"
     if [ "$FAILED_COUNT" -gt 0 ]; then
         echo "    $FAILED_COUNT files failed to compile:"
         echo -e "$FAILED" | grep . | sort | sed 's/^/      - /'

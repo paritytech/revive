@@ -14,19 +14,28 @@
 #           solidity/simple/loop/array/simple.sol:ContractName:<hash>
 #           yul/instructions/byte.yul:ContractName:<hash>
 #
-# Usage: compile-and-hash.sh <resolc-binary> <contracts-dir> <output-dir>
+# Usage: compile-and-hash.sh <resolc-binary> <contracts-dir> <output-dir> [opt-levels]
+#   opt-levels: Comma-separated optimization levels (default: "0,3,z")
 
 set -euo pipefail
 
-if [ $# -ne 3 ]; then
-    echo "Error: Expected 3 arguments, got $#"
-    echo "Usage: $0 <resolc-binary> <contracts-dir> <output-dir>"
+if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+    echo "Error: Expected 3 or 4 arguments, got $#"
+    echo "Usage: $0 <resolc-binary> <contracts-dir> <output-dir> [opt-levels]"
+    echo "  opt-levels: Comma-separated list (default: \"0,3,z\")"
     exit 1
 fi
 
 RESOLC="$1"
 CONTRACTS_DIR="${2%/}"
 OUTPUT_DIR="${3%/}"
+OPT_LEVELS_STR="${4:-0,3,z}"
+IFS=',' read -ra OPT_LEVELS <<< "$OPT_LEVELS_STR"
+
+# Trim whitespace from each optimization level.
+for i in "${!OPT_LEVELS[@]}"; do
+    OPT_LEVELS[$i]="${OPT_LEVELS[$i]// /}"
+done
 
 if [ ! -f "$RESOLC" ]; then
     echo "Error: resolc binary not found: $RESOLC"
@@ -38,17 +47,22 @@ if [ ! -d "$CONTRACTS_DIR" ]; then
     exit 1
 fi
 
-mkdir -p "$OUTPUT_DIR"
-
-# Create an output file for each optimization level if it does not exist, otherwise truncate it.
-for opt in O0 O3 Oz; do
-    echo -n > "$OUTPUT_DIR/${opt}.txt"
+VALID_OPT_LEVELS="0 1 2 3 s z"
+for opt in "${OPT_LEVELS[@]}"; do
+    if [[ ! " $VALID_OPT_LEVELS " =~ " $opt " ]]; then
+        echo "Error: Invalid optimization level \`$opt\`. Valid levels are: $VALID_OPT_LEVELS"
+        exit 1
+    fi
 done
 
-# Files that failed to compile per optimization level.
-FAILED_O0=""
-FAILED_O3=""
-FAILED_Oz=""
+mkdir -p "$OUTPUT_DIR"
+
+# For each optimization level, create an output file for hashes as well as
+# for failed compilations if they do not exist, otherwise truncate them.
+for opt in "${OPT_LEVELS[@]}"; do
+    echo -n > "$OUTPUT_DIR/O${opt}.txt"
+    echo -n > "$OUTPUT_DIR/failed_O${opt}.txt"
+done
 
 # Total number of files processed.
 TOTAL_COUNT=0
@@ -86,13 +100,9 @@ compile_and_hash_one() {
         output=$($RESOLC -O${opt} --bin "$file_path" 2>&1) || exit_code=$?
     fi
 
-    # Track contracts that failed to compile.
+    # Track files that failed to compile.
     if [ "$exit_code" -ne 0 ]; then
-        case "$opt" in
-            0) FAILED_O0="${FAILED_O0}${relative_path}\n" ;;
-            3) FAILED_O3="${FAILED_O3}${relative_path}\n" ;;
-            z) FAILED_Oz="${FAILED_Oz}${relative_path}\n" ;;
-        esac
+        echo "$relative_path" >> "$OUTPUT_DIR/failed_O${opt}.txt"
     fi
 
     # Parse each contract section from the output and compute hashes.
@@ -131,17 +141,17 @@ compile_and_hash_all() {
     echo ""
     echo "=== Compiling $label contracts ==="
     while IFS= read -r -d '' file_path; do
-        for opt in 0 3 z; do
+        for opt in "${OPT_LEVELS[@]}"; do
             compile_and_hash_one "$file_path" "$opt"
         done
-        ((++count))
+        count=$((count + 1))
         if [ $((count % 200)) -eq 0 ]; then
             echo "Processed $count files..."
         fi
     done < <(find "$CONTRACTS_DIR" -name "*.$extension" -print0 2>/dev/null | sort -z)
-    echo "Total $label files compiled: $count"
+    echo "Total $label files processed: $count"
 
-    ((TOTAL_COUNT += count))
+    TOTAL_COUNT=$((TOTAL_COUNT + count))
 }
 
 compile_and_hash_all "sol" "Solidity"
@@ -150,8 +160,8 @@ compile_and_hash_all "yul" "Yul"
 # Sort hash files for deterministic comparison across platforms.
 # This ensures that the same contracts appear in the same order
 # regardless of filesystem ordering differences between platforms.
-for opt in O0 O3 Oz; do
-    sort -o "$OUTPUT_DIR/${opt}.txt" "$OUTPUT_DIR/${opt}.txt"
+for opt in "${OPT_LEVELS[@]}"; do
+    sort -o "$OUTPUT_DIR/O${opt}.txt" "$OUTPUT_DIR/O${opt}.txt"
 done
 
 # Show final summary.
@@ -173,22 +183,17 @@ echo ""
 echo "==========================================="
 echo "SUMMARY"
 echo "==========================================="
-for opt in O0 O3 Oz; do
-    HASH_COUNT=$(($(wc -l < "$OUTPUT_DIR/${opt}.txt")))
-    case "$opt" in
-        O0) FAILED="$FAILED_O0" ;;
-        O3) FAILED="$FAILED_O3" ;;
-        Oz) FAILED="$FAILED_Oz" ;;
-    esac
-    FAILED_COUNT=$(echo -e "$FAILED" | grep -c .) || FAILED_COUNT=0
+for opt in "${OPT_LEVELS[@]}"; do
+    HASH_COUNT=$(($(wc -l < "$OUTPUT_DIR/O${opt}.txt")))
+    FAILED_COUNT=$(($(wc -l < "$OUTPUT_DIR/failed_O${opt}.txt")))
     SUCCESSFUL_COUNT=$((TOTAL_COUNT - FAILED_COUNT))
 
     echo ""
-    echo "Optimization level: ${opt}"
+    echo "Optimization level: O${opt}"
     echo "    $HASH_COUNT hashes generated, $SUCCESSFUL_COUNT/$TOTAL_COUNT files compiled"
     if [ "$FAILED_COUNT" -gt 0 ]; then
         echo "    $FAILED_COUNT files failed to compile:"
-        echo -e "$FAILED" | grep . | sort | sed 's/^/      - /'
+        sort "$OUTPUT_DIR/failed_O${opt}.txt" | sed 's/^/      - /'
         echo ""
     fi
 done

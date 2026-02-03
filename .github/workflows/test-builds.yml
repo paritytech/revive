@@ -87,13 +87,15 @@ jobs:
           RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"
           CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures"
           OUTPUT_DIR="$PWD/hashes"
+          OPT_LEVELS="0,3,z"
 
           chmod +x "$RESOLC_BIN"
           chmod +x ./revive/.github/scripts/compile-and-hash.sh
           bash ./revive/.github/scripts/compile-and-hash.sh \
               "$RESOLC_BIN" \
               "$CONTRACTS_DIR" \
-              "$OUTPUT_DIR"
+              "$OUTPUT_DIR" \
+              "$OPT_LEVELS"
           echo "hashes_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload Hashes
@@ -124,7 +126,11 @@ jobs:
       - name: Compare Hashes Across Platforms
         run: |
           HASHES_DIR="$PWD/all-hashes"
+          OPT_LEVELS="0,3,z"
           PLATFORM_PREFIX="hashes-"
 
           chmod +x ./revive/.github/scripts/compare-hashes.sh
-          bash ./revive/.github/scripts/compare-hashes.sh "$HASHES_DIR" "$PLATFORM_PREFIX"
+          bash ./revive/.github/scripts/compare-hashes.sh \
+              "$HASHES_DIR" \
+              "$OPT_LEVELS" \
+              "$PLATFORM_PREFIX"

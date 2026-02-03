@@ -2,9 +2,10 @@
 
 # This script compares bytecode hashes across the provided platforms
 # to verify that resolc generates identical bytecode. Hashes are
-# compared for each optimization level (O0, O3, Oz).
+# compared for each optimization level provided.
 #
-# Usage: compare-hashes.sh <hashes-dir> [platform-prefix]
+# Usage: compare-hashes.sh <hashes-dir> <opt-levels> [platform-prefix]
+#   opt-levels: Comma-separated optimization levels (e.g., "0,3,z")
 #
 # The provided hashes directory should contain subdirectories for each platform
 # to compare (e.g., linux-musl, macos-universal, windows) each of which containing
@@ -26,19 +27,35 @@
 
 set -euo pipefail
 
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-    echo "Error: Expected 1 or 2 arguments, got $#"
-    echo "Usage: $0 <hashes-directory> [platform-prefix]"
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+    echo "Error: Expected 2 or 3 arguments, got $#"
+    echo "Usage: $0 <hashes-dir> <opt-levels> [platform-prefix]"
+    echo "  opt-levels: Comma-separated list (e.g., \"0,3,z\")"
     exit 1
 fi
 
 HASHES_DIR="${1%/}"
-PLATFORM_PREFIX="${2:-}"
+OPT_LEVELS_STR="$2"
+IFS=',' read -ra OPT_LEVELS <<< "$OPT_LEVELS_STR"
+PLATFORM_PREFIX="${3:-}"
+
+# Trim whitespace from each optimization level.
+for i in "${!OPT_LEVELS[@]}"; do
+    OPT_LEVELS[$i]="${OPT_LEVELS[$i]// /}"
+done
 
 if [ ! -d "$HASHES_DIR" ]; then
     echo "Error: Hashes directory not found: $HASHES_DIR"
     exit 1
 fi
+
+VALID_OPT_LEVELS="0 1 2 3 s z"
+for opt in "${OPT_LEVELS[@]}"; do
+    if [[ ! " $VALID_OPT_LEVELS " =~ " $opt " ]]; then
+        echo "Error: Invalid optimization level \`$opt\`. Valid levels are: $VALID_OPT_LEVELS"
+        exit 1
+    fi
+done
 
 echo "=== Verifying Reproducible Builds ==="
 
@@ -56,13 +73,13 @@ TOTAL_MISMATCHES=0
 ALL_MISMATCH_DETAILS=""
 
 # Compare hashes for each optimization level.
-for opt in O0 O3 Oz; do
+for opt in "${OPT_LEVELS[@]}"; do
     echo ""
-    echo "=== Processing $opt optimization level ==="
+    echo "=== Processing O${opt} optimization level ==="
 
     # Use the first platform as the reference for comparison.
     REF_PLATFORM=$(echo $PLATFORMS | awk '{print $1}')
-    REF_FILE="${HASHES_DIR}/${PLATFORM_PREFIX}${REF_PLATFORM}/${opt}.txt"
+    REF_FILE="${HASHES_DIR}/${PLATFORM_PREFIX}${REF_PLATFORM}/O${opt}.txt"
 
     if [ ! -f "$REF_FILE" ]; then
         echo "⚠️ WARNING: Reference file not found: $REF_FILE"
@@ -80,7 +97,7 @@ for opt in O0 O3 Oz; do
             continue
         fi
 
-        OTHER_FILE="${HASHES_DIR}/${PLATFORM_PREFIX}${platform}/${opt}.txt"
+        OTHER_FILE="${HASHES_DIR}/${PLATFORM_PREFIX}${platform}/O${opt}.txt"
 
         if [ ! -f "$OTHER_FILE" ]; then
             echo "⚠️ WARNING: File not found: $OTHER_FILE"
@@ -96,10 +113,12 @@ for opt in O0 O3 Oz; do
             # No differences found.
             echo "$platform: ✅ All $OTHER_COUNT hashes match"
         else
-            # Found differences. Count lines starting with < or >.
-            MISMATCH_COUNT=$(echo "$DIFF_OUTPUT" | grep -c '^[<>]') || MISMATCH_COUNT=0
-            # Divide by 2 as each mismatch shows as both < and >.
-            MISMATCH_COUNT=$((MISMATCH_COUNT / 2))
+            # Found differences.
+            # Get the number of mismatches by extracting the contract IDs (`path:ContractName`, not including
+            # the hash) from the diff output, deduplicating it, and counting the unique contracts, because:
+            #   - A contract with different hashes appears twice (< and >) with different hashes.
+            #   - A missing contract appears once (< or >).
+            MISMATCH_COUNT=$(($(echo "$DIFF_OUTPUT" | grep '^[<>]' | sed 's/^[<>] //' | cut -d':' -f1,2 | sort -u | wc -l)))
             echo "$platform: ❌ $MISMATCH_COUNT contracts have different hashes"
 
             ((OPT_LEVEL_MISMATCHES += MISMATCH_COUNT))
@@ -116,7 +135,7 @@ for opt in O0 O3 Oz; do
             #         macos-universal: efgh5678
             #         linux-musl: MISSING
             CURRENT_DETAILS=$(printf "%s\n%s\n%s\n%s" \
-                "Optimization level: ${opt}" \
+                "Optimization level: O${opt}" \
                 "    ${REF_PLATFORM} vs ${platform}: ${MISMATCH_COUNT} mismatches" \
                 "    Mismatched contracts (first 10):" \
                 "$(echo "$DIFF_OUTPUT" | grep '^<' | head -10 | while read line; do
@@ -134,7 +153,7 @@ for opt in O0 O3 Oz; do
     ((TOTAL_MISMATCHES += OPT_LEVEL_MISMATCHES))
 
     if [ "$OPT_LEVEL_MISMATCHES" -eq 0 ]; then
-        echo "✅ All platforms match for optimization level $opt"
+        echo "✅ All platforms match for optimization level O${opt}"
     fi
 done
 

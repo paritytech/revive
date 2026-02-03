@@ -54,6 +54,12 @@ jobs:
             binary: resolc-x86_64-pc-windows-msvc.exe
     runs-on: ${{ matrix.runner }}
     steps:
+      # For some deeply nested contracts in `resolc-compiler-tests`, Windows
+      # will generate a "Filename too long" error. This step enables long paths.
+      - name: Enable Git Long Paths (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: git config --system core.longpaths true
+
       - name: Checkout revive
         uses: actions/checkout@v4
         with:

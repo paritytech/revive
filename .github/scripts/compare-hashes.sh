@@ -150,9 +150,11 @@ if [ "$TOTAL_MISMATCHES" -gt 0 ]; then
     echo "Total mismatches: $TOTAL_MISMATCHES"
     echo ""
     echo -e "Details:$ALL_MISMATCH_DETAILS"
+    echo ""
     echo "==========================================="
     exit 1
 else
     echo "✅ SUCCESS: All platform builds are reproducible!"
+    echo ""
     echo "==========================================="
 fi

@@ -45,16 +45,19 @@ for opt in O0 O3 Oz; do
     echo -n > "$OUTPUT_DIR/${opt}.txt"
 done
 
-# Contracts that failed to compile per optimization level.
+# Files that failed to compile per optimization level.
 FAILED_O0=""
 FAILED_O3=""
 FAILED_Oz=""
+
+# Total number of files processed.
+TOTAL_COUNT=0
 
 # Compiles a single contract and stores its bytecode hash.
 # Arguments:
 #   $1 - File path to the contract.
 #   $2 - Optimization level (0, 3, or z).
-compile_and_hash() {
+compile_and_hash_one() {
     local file_path="$1"
     local opt="$2"
 
@@ -116,34 +119,33 @@ compile_and_hash() {
     done <<< "$output"
 }
 
-# Compile all Solidity contracts.
-echo "=== Compiling Solidity contracts ==="
-SOLIDITY_COUNT=0
-while IFS= read -r -d '' file_path; do
-    for opt in 0 3 z; do
-        compile_and_hash "$file_path" "$opt"
-    done
-    ((++SOLIDITY_COUNT))
-    if [ $((SOLIDITY_COUNT % 200)) -eq 0 ]; then
-        echo "Processed $SOLIDITY_COUNT files..."
-    fi
-done < <(find "$CONTRACTS_DIR" -name "*.sol" -print0 2>/dev/null | sort -z)
-echo "Total Solidity files compiled: $SOLIDITY_COUNT"
+# Compiles all contracts of the given type and stores their bytecode hashes.
+# Arguments:
+#   $1 - File extension ("sol" or "yul").
+#   $2 - Display label ("Solidity" or "Yul").
+compile_and_hash_all() {
+    local extension="$1"
+    local label="$2"
+    local count=0
 
-# Compile all Yul contracts.
-echo ""
-echo "=== Compiling Yul contracts ==="
-YUL_COUNT=0
-while IFS= read -r -d '' file_path; do
-    for opt in 0 3 z; do
-        compile_and_hash "$file_path" "$opt"
-    done
-    ((++YUL_COUNT))
-    if [ $((YUL_COUNT % 200)) -eq 0 ]; then
-        echo "Processed $YUL_COUNT files..."
-    fi
-done < <(find "$CONTRACTS_DIR" -name "*.yul" -print0 2>/dev/null | sort -z)
-echo "Total Yul files compiled: $YUL_COUNT"
+    echo ""
+    echo "=== Compiling $label contracts ==="
+    while IFS= read -r -d '' file_path; do
+        for opt in 0 3 z; do
+            compile_and_hash_one "$file_path" "$opt"
+        done
+        ((++count))
+        if [ $((count % 200)) -eq 0 ]; then
+            echo "Processed $count files..."
+        fi
+    done < <(find "$CONTRACTS_DIR" -name "*.$extension" -print0 2>/dev/null | sort -z)
+    echo "Total $label files compiled: $count"
+
+    ((TOTAL_COUNT += count))
+}
+
+compile_and_hash_all "sol" "Solidity"
+compile_and_hash_all "yul" "Yul"
 
 # Sort hash files for deterministic comparison across platforms.
 # This ensures that the same contracts appear in the same order
@@ -155,23 +157,22 @@ done
 # Show final summary.
 # Example output:
 #   Optimization level: O0
-#       120 hashes generated, 143/145 files compiled
+#       160 hashes generated, 143/145 files compiled
 #       2 files failed to compile:
 #         - solidity/simple/loop/array/simple.sol
 #         - yul/instructions/byte.yul
 #
 #   Optimization level: O3
-#       121 hashes generated, 144/145 files compiled
+#       161 hashes generated, 144/145 files compiled
 #       1 files failed to compile:
 #         - solidity/simple/loop/array/simple.sol
 #
 #   Optimization level: Oz
-#       122 hashes generated, 145/145 files compiled
+#       162 hashes generated, 145/145 files compiled
 echo ""
 echo "==========================================="
 echo "SUMMARY"
 echo "==========================================="
-TOTAL_COUNT=$((SOLIDITY_COUNT + YUL_COUNT))
 for opt in O0 O3 Oz; do
     HASH_COUNT=$(($(wc -l < "$OUTPUT_DIR/${opt}.txt")))
     case "$opt" in
@@ -191,4 +192,5 @@ for opt in O0 O3 Oz; do
         echo ""
     fi
 done
+echo ""
 echo "==========================================="

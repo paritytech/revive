@@ -555,6 +555,14 @@ pub struct HeapOptResults {
     pub native_safe_regions: BTreeSet<u64>,
     /// Static offsets that are known to be safe for native access.
     pub native_safe_offsets: BTreeSet<u64>,
+    /// Total number of memory accesses analyzed.
+    pub total_accesses: usize,
+    /// Number of accesses that have unknown/dynamic offsets.
+    pub unknown_accesses: usize,
+    /// Number of tainted regions (require big-endian).
+    pub tainted_count: usize,
+    /// Number of escaping regions (external interfaces).
+    pub escaping_count: usize,
 }
 
 impl HeapOptResults {
@@ -562,10 +570,13 @@ impl HeapOptResults {
     pub fn from_analysis(analysis: &HeapAnalysis) -> Self {
         let mut native_safe_regions = BTreeSet::new();
         let mut native_safe_offsets = BTreeSet::new();
+        let mut unknown_accesses = 0;
 
         // Find all accessed addresses that are aligned and not tainted/escaping
         for (&addr, pattern) in &analysis.memory_accesses {
-            if pattern.is_aligned() {
+            if matches!(pattern, AccessPattern::Unknown) {
+                unknown_accesses += 1;
+            } else if pattern.is_aligned() {
                 let word_addr = addr / 32 * 32;
                 if !analysis.requires_big_endian(addr) {
                     native_safe_regions.insert(word_addr);
@@ -577,6 +588,10 @@ impl HeapOptResults {
         HeapOptResults {
             native_safe_regions,
             native_safe_offsets,
+            total_accesses: analysis.memory_accesses.len(),
+            unknown_accesses,
+            tainted_count: analysis.tainted_regions().len(),
+            escaping_count: analysis.escaping_regions().len(),
         }
     }
 
@@ -593,6 +608,37 @@ impl HeapOptResults {
 
     /// Returns true if any optimization opportunities were found.
     pub fn has_optimizations(&self) -> bool {
+        !self.native_safe_regions.is_empty()
+    }
+
+    /// Returns true if ALL memory accesses can use native byte order.
+    ///
+    /// This is used to enable the native-only heap mode, where we only emit
+    /// native heap functions and skip byte-swapping entirely. This is beneficial
+    /// only when ALL accesses are native-safe; otherwise, emitting both native
+    /// and non-native functions increases code size.
+    ///
+    /// Native-only mode is enabled when:
+    /// 1. There are memory accesses that were analyzed
+    /// 2. No unknown/dynamic accesses exist
+    /// 3. No memory escapes to external code (calls, returns, logs)
+    /// 4. No tainted regions (unaligned writes)
+    pub fn all_native(&self) -> bool {
+        // Conditions for native-only mode:
+        // 1. We must have analyzed at least one access
+        // 2. No unknown/dynamic accesses
+        // 3. No tainted regions (unaligned writes)
+        // 4. No escaping regions (external interfaces)
+        self.total_accesses > 0
+            && self.unknown_accesses == 0
+            && self.tainted_count == 0
+            && self.escaping_count == 0
+    }
+
+    /// Checks if ANY native optimizations are available.
+    /// This is a weaker condition than `all_native()` - it means at least some
+    /// accesses can use native byte order, but we may need mixed mode.
+    pub fn has_any_native(&self) -> bool {
         !self.native_safe_regions.is_empty()
     }
 }

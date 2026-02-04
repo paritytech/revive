@@ -49,6 +49,8 @@ struct CachedBlob {
     solidity: String,
     /// The optimization level.
     opt: String,
+    /// Whether newyork IR pipeline is enabled.
+    use_newyork: bool,
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
@@ -110,7 +112,21 @@ pub fn build_solidity_with_options(
     if output.has_errors() {
         return Ok(output);
     }
-    let debug_config = DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z");
+    let debug_config = if std::env::var("RESOLC_DEBUG_BLOB").is_ok() {
+        let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+        let suffix = if use_newyork { "newyork" } else { "yul" };
+        DebugConfig::new(
+            Some(std::path::PathBuf::from(format!(
+                "/tmp/debug_llvm_{}",
+                suffix
+            ))),
+            optimizer_settings.middle_end_as_string() != "z",
+        )
+    } else {
+        DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z")
+    };
     let linker_symbols = libraries.as_linker_symbols()?;
     let build = Project::try_from_standard_json_output(
         &mut output,
@@ -349,11 +365,16 @@ pub fn compile_blob_with_options(
     optimizer_settings: OptimizerSettings,
     libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
+    let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         opt: optimizer_settings.middle_end_as_string(),
         solc_optimizer_enabled,
         solidity: source_code.to_owned(),
+        use_newyork,
     };
 
     if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
@@ -385,6 +406,18 @@ pub fn compile_blob_with_options(
         .as_str();
     let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
     assert_eq!(&blob[..3], b"PVM");
+
+    // Debug: dump blob info for newyork investigation
+    if std::env::var("RESOLC_DEBUG_BLOB").is_ok() {
+        eprintln!(
+            "DEBUG [{}]: blob size={}, first_bytes={:?}, use_newyork={}",
+            contract_name,
+            blob.len(),
+            &blob[..20.min(blob.len())],
+            std::env::var("RESOLC_USE_NEWYORK").unwrap_or_default()
+        );
+        std::fs::write(format!("/tmp/debug_blob_{}.pvm", contract_name), &blob).ok();
+    }
 
     PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
 
@@ -454,6 +487,7 @@ fn compile_evm(
         solidity: source_code.to_owned(),
         solc_optimizer_enabled,
         opt: String::new(),
+        use_newyork: false, // EVM compilation never uses newyork
     };
 
     let cache = if runtime {
@@ -510,6 +544,7 @@ pub fn compile_to_yul(
         solc_optimizer_enabled,
         solidity: source_code.to_owned(),
         opt: optimizer.mode.into(),
+        use_newyork: false, // Yul IR cache doesn't use newyork
     };
 
     if let Some(yul) = YUL_IR_CACHE.lock().unwrap().get(&id) {

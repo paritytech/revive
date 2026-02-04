@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use inkwell::types::BasicType;
-use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
+use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue};
 use num::ToPrimitive;
 use revive_llvm_context::{
     PolkaVMArgument, PolkaVMContext, PolkaVMFunctionDeployCode, PolkaVMFunctionRuntimeCode,
@@ -136,22 +136,77 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Tries to extract a constant u64 offset from an LLVM IntValue.
     /// Returns Some(offset) if the value is a constant that fits in u64.
+    /// NOTE: Currently unused but preserved for future heap optimization work.
+    #[allow(dead_code)]
     fn try_extract_const_offset(&self, value: IntValue<'ctx>) -> Option<u64> {
-        if value.is_const() {
-            // Get the constant value as u64 (for offset checking)
-            // IntValue::get_zero_extended_constant returns Option<u64>
-            value.get_zero_extended_constant()
-        } else {
-            None
+        // For 256-bit integers, get_zero_extended_constant returns None
+        // because the value doesn't fit in u64. We need to check if it's
+        // a small value that fits in u64 by looking at the actual constant.
+        if !value.is_const() {
+            return None;
         }
+
+        // Try to get as zero-extended constant (works for <= 64-bit types)
+        if let Some(v) = value.get_zero_extended_constant() {
+            return Some(v);
+        }
+
+        // For i256 constants, we need to check if the high bits are zero
+        // by converting to string and parsing
+        let s = value.print_to_string().to_string();
+        // Format is "i256 <value>" - extract the value
+        if let Some(val_str) = s.strip_prefix("i256 ") {
+            if let Ok(v) = val_str.trim().parse::<u64>() {
+                return Some(v);
+            }
+        }
+
+        None
     }
 
     /// Checks if a memory operation at the given offset can use native byte order.
+    /// Returns true if ALL heap operations can use native byte order (all_native mode)
+    /// or if this specific offset is known to be safe.
+    ///
+    /// Native mode is only enabled when ALL heap accesses are:
+    /// - Statically known offsets (no dynamic/unknown accesses)
+    /// - Word-aligned (offset is multiple of 32)
+    /// - Not escaping to external code (no calls, returns, logs)
+    /// - Not tainted by unaligned writes
+    ///
+    /// When all_native() is true, we use native functions exclusively and don't
+    /// emit the byte-swapping functions, saving ~200 bytes of code.
+    #[allow(unused_variables)]
     fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
-        if let Some(const_offset) = self.try_extract_const_offset(offset) {
-            self.heap_opt.can_use_native(const_offset)
+        // Only enable native mode when ALL accesses are safe
+        // This avoids defining both native and non-native functions
+        if self.heap_opt.all_native() {
+            return true;
+        }
+
+        // If not all_native, we must use non-native (byte-swapping) for everything
+        // to avoid emitting both function sets
+        false
+    }
+
+    /// Truncates a 256-bit offset to 32-bit for use with native memory operations.
+    /// The native load/store functions expect xlen_type (32-bit) offsets.
+    /// NOTE: Currently unused but preserved for future heap optimization work.
+    #[allow(dead_code)]
+    fn truncate_offset_to_xlen(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        offset: IntValue<'ctx>,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let xlen_type = context.xlen_type();
+        if offset.get_type().get_bit_width() == xlen_type.get_bit_width() {
+            Ok(offset)
         } else {
-            false
+            context
+                .builder()
+                .build_int_truncate(offset, xlen_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
         }
     }
 
@@ -163,8 +218,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets the LLVM int type for a given bit-width.
-    /// NOTE: Currently unused but preserved for future type inference integration.
-    #[allow(dead_code)]
     fn int_type_for_width(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -205,6 +258,37 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .builder()
                 .build_int_truncate(value, context.word_type(), name)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))
+        }
+    }
+
+    /// Ensures two values have the same type by extending the narrower one.
+    /// Returns both values at the wider type.
+    fn ensure_same_type(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        a: IntValue<'ctx>,
+        b: IntValue<'ctx>,
+        name: &str,
+    ) -> Result<(IntValue<'ctx>, IntValue<'ctx>)> {
+        let a_width = a.get_type().get_bit_width();
+        let b_width = b.get_type().get_bit_width();
+
+        if a_width == b_width {
+            Ok((a, b))
+        } else if a_width > b_width {
+            // Extend b to match a
+            let b_ext = context
+                .builder()
+                .build_int_z_extend(b, a.get_type(), &format!("{}_ext_b", name))
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            Ok((a, b_ext))
+        } else {
+            // Extend a to match b
+            let a_ext = context
+                .builder()
+                .build_int_z_extend(a, b.get_type(), &format!("{}_ext_a", name))
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            Ok((a_ext, b))
         }
     }
 
@@ -609,8 +693,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
                 if self.can_use_native_memory(offset_val) {
+                    // Native memory operations require 32-bit offset (xlen_type)
+                    let offset_xlen =
+                        self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
                     revive_llvm_context::polkavm_evm_memory::store_native(
-                        context, offset_val, value_val,
+                        context,
+                        offset_xlen,
+                        value_val,
                     )?;
                 } else {
                     revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
@@ -861,6 +950,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 outputs,
             } => {
                 let scrut_val = self.translate_value(scrutinee)?.into_int_value();
+                // Switch scrutinee must be word type to match case constants
+                let scrut_val = self.ensure_word_type(context, scrut_val, "switch_scrut")?;
                 let join_block = context.append_basic_block("switch_join");
 
                 // Create case blocks
@@ -1440,8 +1531,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>> {
         match expr {
             Expr::Literal { value, ty: _ } => {
-                // Convert BigUint to LLVM constant using decimal string representation
-                // This handles arbitrarily large values that don't fit in u64
+                // Convert BigUint to LLVM constant at word type (256-bit).
+                // Runtime functions expect word-sized values, and LLVM's optimizer
+                // will fold trivial operations on constants anyway.
                 let val_str = value.to_string();
                 Ok(context.word_const_str_dec(&val_str).as_basic_value_enum())
             }
@@ -1451,10 +1543,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Expr::Binary { op, lhs, rhs } => {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
-                // Ensure both operands are word type for binary operations
-                let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
-                let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
-                self.generate_binop(*op, lhs_val, rhs_val, context)
+
+                // For comparison operations, we can operate on narrow types directly
+                // (they produce i1 which is extended when needed).
+                // For other operations, use word type for EVM compatibility.
+                match op {
+                    BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
+                        // Comparisons: ensure both operands have the same type
+                        let (lhs_val, rhs_val) =
+                            self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                    }
+                    _ => {
+                        // Other operations: use word type for EVM semantics
+                        let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
+                        let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                    }
+                }
             }
 
             Expr::Ternary { op, a, b, n } => {
@@ -1482,36 +1588,33 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::Unary { op, operand } => {
                 let operand_val = self.translate_value(operand)?.into_int_value();
-                // Ensure operand is word type for unary operations
-                let operand_val = self.ensure_word_type(context, operand_val, "unary_op")?;
                 match op {
                     UnaryOp::IsZero => {
-                        // IsZero: result is 1 if operand == 0, else 0
+                        // IsZero: result is i1 (1 if operand == 0, else 0)
+                        // Compare at the operand's native type to avoid unnecessary extensions
+                        let zero = operand_val.get_type().const_zero();
                         let is_zero = context
                             .builder()
-                            .build_int_compare(
-                                inkwell::IntPredicate::EQ,
-                                operand_val,
-                                context.word_type().const_zero(),
-                                "iszero",
-                            )
+                            .build_int_compare(inkwell::IntPredicate::EQ, operand_val, zero, "iszero")
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        let result = context
-                            .builder()
-                            .build_int_z_extend(is_zero, context.word_type(), "iszero_ext")
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        Ok(result.as_basic_value_enum())
+                        // Return i1 - will be extended only when needed
+                        Ok(is_zero.as_basic_value_enum())
                     }
                     UnaryOp::Not => {
-                        // Bitwise NOT
-                        let result = context
+                        // Bitwise NOT: XOR with all-ones mask at word (256-bit) width.
+                        // This matches the YUL backend behavior and ensures the NOT
+                        // operates at full EVM word width regardless of operand type.
+                        let operand_val = self.ensure_word_type(context, operand_val, "not_op")?;
+                        let all_ones = context.word_type().const_all_ones();
+                        let xor_result = context
                             .builder()
-                            .build_not(operand_val, "not")
+                            .build_xor(operand_val, all_ones, "not_result")
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        Ok(result.as_basic_value_enum())
+                        Ok(xor_result.as_basic_value_enum())
                     }
                     UnaryOp::Clz => {
-                        // Count leading zeros
+                        // Count leading zeros requires word type
+                        let operand_val = self.ensure_word_type(context, operand_val, "clz_op")?;
                         Ok(
                             revive_llvm_context::polkavm_evm_bitwise::count_leading_zeros(
                                 context,
@@ -1640,8 +1743,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Expr::MLoad { offset, region: _ } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 if self.can_use_native_memory(offset_val) {
+                    // Native memory operations require 32-bit offset (xlen_type)
+                    let offset_xlen =
+                        self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
                     Ok(revive_llvm_context::polkavm_evm_memory::load_native(
-                        context, offset_val,
+                        context,
+                        offset_xlen,
                     )?)
                 } else {
                     Ok(revive_llvm_context::polkavm_evm_memory::load(
@@ -1827,41 +1934,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     context, lhs, rhs,
                 )?,
             ),
-            BinOp::Lt => Ok(revive_llvm_context::polkavm_evm_comparison::compare(
-                context,
-                lhs,
-                rhs,
-                inkwell::IntPredicate::ULT,
-            )?),
-            BinOp::Gt => Ok(revive_llvm_context::polkavm_evm_comparison::compare(
-                context,
-                lhs,
-                rhs,
-                inkwell::IntPredicate::UGT,
-            )?),
-            BinOp::Slt => Ok(revive_llvm_context::polkavm_evm_comparison::compare(
-                context,
-                lhs,
-                rhs,
-                inkwell::IntPredicate::SLT,
-            )?),
-            BinOp::Sgt => Ok(revive_llvm_context::polkavm_evm_comparison::compare(
-                context,
-                lhs,
-                rhs,
-                inkwell::IntPredicate::SGT,
-            )?),
+            BinOp::Lt => {
+                // Narrow comparison: result is i1, will be extended only when needed
+                let cmp = context
+                    .builder()
+                    .build_int_compare(inkwell::IntPredicate::ULT, lhs, rhs, "lt")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(cmp.as_basic_value_enum())
+            }
+            BinOp::Gt => {
+                let cmp = context
+                    .builder()
+                    .build_int_compare(inkwell::IntPredicate::UGT, lhs, rhs, "gt")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(cmp.as_basic_value_enum())
+            }
+            BinOp::Slt => {
+                let cmp = context
+                    .builder()
+                    .build_int_compare(inkwell::IntPredicate::SLT, lhs, rhs, "slt")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(cmp.as_basic_value_enum())
+            }
+            BinOp::Sgt => {
+                let cmp = context
+                    .builder()
+                    .build_int_compare(inkwell::IntPredicate::SGT, lhs, rhs, "sgt")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(cmp.as_basic_value_enum())
+            }
             BinOp::Eq => {
-                // Equal comparison
+                // Equal comparison: result is i1
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::EQ, lhs, rhs, "eq")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "eq_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Byte => Ok(revive_llvm_context::polkavm_evm_bitwise::byte(
                 context, lhs, rhs,

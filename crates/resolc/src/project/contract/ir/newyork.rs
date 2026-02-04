@@ -56,10 +56,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // is available for the newyork IR codegen.
         self.yul_object.declare(context)?;
 
-        // Declare native heap functions (used by heap optimization pass).
-        // These are newyork-specific functions that skip byte-swapping for internal memory.
-        revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.declare(context)?;
-        revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.declare(context)?;
+        // NOTE: Native heap functions (PolkaVMLoadHeapWordNativeFunction, PolkaVMStoreHeapWordNativeFunction)
+        // are NOT declared here because using BOTH native and non-native heap functions
+        // in the same contract increases code size. The native function definitions
+        // (~200+ bytes) outweigh the savings from skipping byte-swap instructions (~40 bytes).
+        // See to_llvm.rs can_use_native_memory() for details.
         Ok(())
     }
 
@@ -69,6 +70,31 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let ir_object = translation_result.object;
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
+
+        // Check if we can use native-only heap mode (no byte-swapping needed)
+        let use_native_heap = heap_opt.all_native();
+
+        // Log heap analysis results (output to file for subprocess visibility)
+        if std::env::var("RESOLC_DEBUG_HEAP").is_ok() {
+            use std::io::Write;
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/resolc_heap_debug.log")
+            {
+                let _ = writeln!(
+                    file,
+                    "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={}",
+                    ir_object.name,
+                    use_native_heap,
+                    heap_opt.total_accesses,
+                    heap_opt.unknown_accesses,
+                    heap_opt.tainted_count,
+                    heap_opt.escaping_count,
+                    heap_opt.native_safe_regions.len(),
+                );
+            }
+        }
 
         // Set up debug info scope if available
         if let Some(debug_info) = context.debug_info() {
@@ -107,10 +133,18 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
 
-            revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
+            // Emit heap functions: either native-only OR byte-swapping versions
+            // Using native-only saves ~200 bytes of code when all accesses are aligned
+            if use_native_heap {
+                // Native heap mode: no byte-swapping, use direct RISC-V load/store
+                revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
+                revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
+            } else {
+                // Standard mode: EVM-compatible big-endian byte order
+                revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
+                revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+            }
+
             revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;

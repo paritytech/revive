@@ -3,22 +3,28 @@
 //! This module implements a dataflow-based type inference algorithm that
 //! determines the minimum bit-width required for each SSA value. The algorithm:
 //!
-//! 1. Starts with all values having an unknown (minimal) type
-//! 2. Propagates type constraints forward and backward through the program
+//! 1. **Forward pass**: Computes minimum width from literals and operation results
+//! 2. **Backward pass**: Constrains width based on how values are USED
 //! 3. Iterates until a fixed point is reached
 //!
+//! Key insight: If a value is only used in contexts needing N bits (e.g., mload offset
+//! only needs 64 bits), we can constrain the value's computation to N bits.
+//!
 //! The result is that each value has the narrowest possible type that can
-//! correctly represent all values it may hold at runtime.
+//! correctly represent all values it may hold at runtime AND satisfies all use sites.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{BinOp, BitWidth, Block, Expr, Function, Object, Region, Statement, Type, ValueId};
 
-/// Type constraint representing the minimum required width for a value.
+/// Type constraint representing the width bounds for a value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct TypeConstraint {
-    /// Minimum bit width required.
+    /// Minimum bit width required (from forward propagation).
     pub min_width: BitWidth,
+    /// Maximum bit width needed (from backward propagation / use sites).
+    /// If max_width < min_width, the value is truncated at use sites.
+    pub max_width: BitWidth,
     /// Whether the value is known to be signed.
     pub is_signed: bool,
 }
@@ -26,7 +32,8 @@ pub struct TypeConstraint {
 impl Default for TypeConstraint {
     fn default() -> Self {
         TypeConstraint {
-            min_width: BitWidth::I1, // Start with minimum
+            min_width: BitWidth::I1,   // Start with minimum
+            max_width: BitWidth::I256, // Start with maximum
             is_signed: false,
         }
     }
@@ -37,6 +44,7 @@ impl TypeConstraint {
     pub fn with_width(width: BitWidth) -> Self {
         TypeConstraint {
             min_width: width,
+            max_width: BitWidth::I256,
             is_signed: false,
         }
     }
@@ -45,25 +53,86 @@ impl TypeConstraint {
     pub fn signed(width: BitWidth) -> Self {
         TypeConstraint {
             min_width: width,
+            max_width: BitWidth::I256,
             is_signed: true,
         }
     }
 
-    /// Joins two constraints, taking the wider one.
+    /// Joins two constraints, taking the wider minimum.
     pub fn join(&self, other: &TypeConstraint) -> TypeConstraint {
         TypeConstraint {
             min_width: self.min_width.max(other.min_width),
+            max_width: self.max_width.min(other.max_width), // Narrower max
             is_signed: self.is_signed || other.is_signed,
         }
     }
 
-    /// Widens this constraint to at least the given width.
+    /// Widens this constraint's minimum to at least the given width.
     pub fn widen_to(&mut self, width: BitWidth) -> bool {
         if width > self.min_width {
             self.min_width = width;
             true
         } else {
             false
+        }
+    }
+
+    /// Narrows this constraint's maximum to at most the given width.
+    pub fn narrow_max_to(&mut self, width: BitWidth) -> bool {
+        if width < self.max_width {
+            self.max_width = width;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns the effective width to use for this value.
+    /// Takes the maximum of min_width (what we need to hold the value)
+    /// and respects max_width (what use sites need).
+    pub fn effective_width(&self) -> BitWidth {
+        // The effective width is bounded by what the use sites need,
+        // but must be at least what the value requires.
+        self.min_width.max(self.max_width.min(self.min_width))
+    }
+}
+
+/// Use context - how a value is used affects its max_width constraint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum UseContext {
+    /// Used as a memory offset (64-bit sufficient).
+    MemoryOffset,
+    /// Used as a memory value (256-bit required for EVM compatibility).
+    MemoryValue,
+    /// Used as a storage key or value (256-bit required).
+    StorageAccess,
+    /// Used in a comparison (keeps narrow type).
+    Comparison,
+    /// Used in arithmetic (may need full width depending on operation).
+    Arithmetic,
+    /// Used as function argument (depends on callee).
+    FunctionArg,
+    /// Returned from function (may escape, assume full width).
+    FunctionReturn,
+    /// Used in external call (256-bit for EVM ABI).
+    ExternalCall,
+    /// General/unknown use.
+    General,
+}
+
+impl UseContext {
+    /// Returns the maximum width needed for this use context.
+    fn max_width_needed(&self) -> BitWidth {
+        match self {
+            UseContext::MemoryOffset => BitWidth::I64,
+            UseContext::MemoryValue => BitWidth::I256,
+            UseContext::StorageAccess => BitWidth::I256,
+            UseContext::Comparison => BitWidth::I256, // Preserve, don't constrain
+            UseContext::Arithmetic => BitWidth::I256, // Conservative
+            UseContext::FunctionArg => BitWidth::I256, // Conservative for now
+            UseContext::FunctionReturn => BitWidth::I256,
+            UseContext::ExternalCall => BitWidth::I256,
+            UseContext::General => BitWidth::I256,
         }
     }
 }
@@ -73,6 +142,8 @@ impl TypeConstraint {
 pub struct TypeInference {
     /// Constraints for each value.
     constraints: BTreeMap<u32, TypeConstraint>,
+    /// Use contexts for each value (for backward propagation).
+    uses: BTreeMap<u32, BTreeSet<UseContext>>,
     /// Whether any constraint changed in the last iteration.
     changed: bool,
 }
@@ -82,6 +153,7 @@ impl TypeInference {
     pub fn new() -> Self {
         TypeInference {
             constraints: BTreeMap::new(),
+            uses: BTreeMap::new(),
             changed: false,
         }
     }
@@ -91,10 +163,18 @@ impl TypeInference {
         self.constraints.get(&id.0).copied().unwrap_or_default()
     }
 
+    /// Gets the effective width for a value (considering both min and max).
+    pub fn effective_width(&self, id: ValueId) -> BitWidth {
+        let constraint = self.get(id);
+        // The effective width is the minimum required, but capped by use context
+        constraint.min_width.max(constraint.max_width.min(constraint.min_width))
+    }
+
     /// Sets the constraint for a value, returning true if changed.
     fn set(&mut self, id: ValueId, constraint: TypeConstraint) -> bool {
         let existing = self.get(id);
         if constraint.min_width > existing.min_width
+            || constraint.max_width < existing.max_width
             || (constraint.is_signed && !existing.is_signed)
         {
             let joined = existing.join(&constraint);
@@ -118,6 +198,23 @@ impl TypeInference {
         }
     }
 
+    /// Records a use of a value in a specific context (for backward propagation).
+    fn record_use(&mut self, id: ValueId, context: UseContext) {
+        self.uses.entry(id.0).or_default().insert(context);
+    }
+
+    /// Narrows a value's max_width based on use context.
+    fn narrow_from_use(&mut self, id: ValueId, max_width: BitWidth) -> bool {
+        let mut constraint = self.get(id);
+        if constraint.narrow_max_to(max_width) {
+            self.constraints.insert(id.0, constraint);
+            self.changed = true;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Marks a value as signed.
     fn mark_signed(&mut self, id: ValueId) {
         let mut constraint = self.get(id);
@@ -128,21 +225,18 @@ impl TypeInference {
         }
     }
 
-    /// Runs type inference on an object.
+    /// Runs type inference on an object with both forward and backward passes.
     pub fn infer_object(&mut self, object: &Object) {
-        // Run until fixed point
+        // Phase 1: Forward propagation - determine minimum widths
         loop {
             self.changed = false;
 
-            // Infer types for main code block
-            self.infer_block(&object.code);
+            self.infer_block_forward(&object.code);
 
-            // Infer types for all functions
             for function in object.functions.values() {
-                self.infer_function(function);
+                self.infer_function_forward(function);
             }
 
-            // Recursively handle subobjects
             for subobject in &object.subobjects {
                 self.infer_object(subobject);
             }
@@ -151,11 +245,20 @@ impl TypeInference {
                 break;
             }
         }
+
+        // Phase 2: Backward propagation - collect uses and narrow max_width
+        self.collect_uses_block(&object.code);
+        for function in object.functions.values() {
+            self.collect_uses_function(function);
+        }
+
+        // Phase 3: Apply backward constraints
+        self.apply_backward_constraints();
     }
 
-    /// Infers types for a function.
-    fn infer_function(&mut self, function: &Function) {
-        // Parameters come from outside, assume full width for now
+    /// Forward pass for a function.
+    fn infer_function_forward(&mut self, function: &Function) {
+        // Parameters come from outside, assume full width
         for (param_id, param_ty) in &function.params {
             if let Type::Int(width) = param_ty {
                 self.widen(*param_id, *width);
@@ -164,25 +267,245 @@ impl TypeInference {
             }
         }
 
-        self.infer_block(&function.body);
+        self.infer_block_forward(&function.body);
     }
 
-    /// Infers types for a block.
-    fn infer_block(&mut self, block: &Block) {
+    /// Collect uses from a function for backward propagation.
+    fn collect_uses_function(&mut self, function: &Function) {
+        self.collect_uses_block(&function.body);
+
+        // Return values escape to caller - mark as needing full width
+        for ret_id in &function.return_values {
+            self.record_use(*ret_id, UseContext::FunctionReturn);
+        }
+    }
+
+    /// Apply backward constraints based on collected uses.
+    fn apply_backward_constraints(&mut self) {
+        for (id, uses) in &self.uses {
+            // Find the minimum max_width across all uses
+            let mut narrowest_max = BitWidth::I256;
+            for use_ctx in uses {
+                let needed = use_ctx.max_width_needed();
+                if needed < narrowest_max {
+                    narrowest_max = needed;
+                }
+            }
+
+            // Only narrow if ALL uses allow it
+            let can_narrow = uses.iter().all(|u| u.max_width_needed() <= narrowest_max);
+            if can_narrow && narrowest_max < BitWidth::I256 {
+                let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
+                constraint.narrow_max_to(narrowest_max);
+                self.constraints.insert(*id, constraint);
+            }
+        }
+    }
+
+    /// Forward pass: infers minimum types for a block.
+    fn infer_block_forward(&mut self, block: &Block) {
         for stmt in &block.statements {
-            self.infer_statement(stmt);
+            self.infer_statement_forward(stmt);
         }
     }
 
-    /// Infers types for a region.
-    fn infer_region(&mut self, region: &Region) {
+    /// Forward pass: infers minimum types for a region.
+    fn infer_region_forward(&mut self, region: &Region) {
         for stmt in &region.statements {
-            self.infer_statement(stmt);
+            self.infer_statement_forward(stmt);
         }
     }
 
-    /// Infers types for a statement.
-    fn infer_statement(&mut self, stmt: &Statement) {
+    /// Collects uses from a block for backward propagation.
+    fn collect_uses_block(&mut self, block: &Block) {
+        for stmt in &block.statements {
+            self.collect_uses_statement(stmt);
+        }
+    }
+
+    /// Collects uses from a region for backward propagation.
+    fn collect_uses_region(&mut self, region: &Region) {
+        for stmt in &region.statements {
+            self.collect_uses_statement(stmt);
+        }
+    }
+
+    /// Collects uses from a statement for backward propagation.
+    fn collect_uses_statement(&mut self, stmt: &Statement) {
+        match stmt {
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                // Offset only needs 64 bits for memory addressing
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                // Value needs full 256 bits for EVM memory semantics
+                self.record_use(value.id, UseContext::MemoryValue);
+            }
+
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                self.record_use(key.id, UseContext::StorageAccess);
+                self.record_use(value.id, UseContext::StorageAccess);
+            }
+
+            Statement::If { condition, then_region, else_region, .. } => {
+                // Condition only needs to be non-zero, can stay narrow
+                self.record_use(condition.id, UseContext::Comparison);
+                self.collect_uses_region(then_region);
+                if let Some(else_region) = else_region {
+                    self.collect_uses_region(else_region);
+                }
+            }
+
+            Statement::Switch { scrutinee, cases, default, .. } => {
+                self.record_use(scrutinee.id, UseContext::Comparison);
+                for case in cases {
+                    self.collect_uses_region(&case.body);
+                }
+                if let Some(default) = default {
+                    self.collect_uses_region(default);
+                }
+            }
+
+            Statement::For { init_values, condition_stmts, body, post, .. } => {
+                for val in init_values {
+                    self.record_use(val.id, UseContext::Arithmetic);
+                }
+                for stmt in condition_stmts {
+                    self.collect_uses_statement(stmt);
+                }
+                self.collect_uses_region(body);
+                self.collect_uses_region(post);
+            }
+
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+            }
+
+            Statement::ExternalCall { gas, address, value, args_offset, args_length, ret_offset, ret_length, .. } => {
+                self.record_use(gas.id, UseContext::ExternalCall);
+                self.record_use(address.id, UseContext::ExternalCall);
+                if let Some(value) = value {
+                    self.record_use(value.id, UseContext::ExternalCall);
+                }
+                // Offsets and lengths are memory pointers
+                self.record_use(args_offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(args_offset.id, BitWidth::I64);
+                self.record_use(args_length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(args_length.id, BitWidth::I64);
+                self.record_use(ret_offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(ret_offset.id, BitWidth::I64);
+                self.record_use(ret_length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(ret_length.id, BitWidth::I64);
+            }
+
+            Statement::Log { offset, length, topics } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+                for topic in topics {
+                    self.record_use(topic.id, UseContext::MemoryValue); // Topics are 256-bit
+                }
+            }
+
+            Statement::CodeCopy { dest, offset, length }
+            | Statement::ExtCodeCopy { dest, offset, length, .. }
+            | Statement::ReturnDataCopy { dest, offset, length }
+            | Statement::DataCopy { dest, offset, length }
+            | Statement::CallDataCopy { dest, offset, length } => {
+                self.record_use(dest.id, UseContext::MemoryOffset);
+                self.narrow_from_use(dest.id, BitWidth::I64);
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+            }
+
+            Statement::MCopy { dest, src, length } => {
+                self.record_use(dest.id, UseContext::MemoryOffset);
+                self.narrow_from_use(dest.id, BitWidth::I64);
+                self.record_use(src.id, UseContext::MemoryOffset);
+                self.narrow_from_use(src.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+            }
+
+            Statement::Block(region) => {
+                self.collect_uses_region(region);
+            }
+
+            Statement::Let { value, .. } => {
+                self.collect_uses_expr(value);
+            }
+
+            Statement::Expr(expr) => {
+                self.collect_uses_expr(expr);
+            }
+
+            _ => {}
+        }
+    }
+
+    /// Collects uses from an expression.
+    fn collect_uses_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Binary { lhs, rhs, op } => {
+                match op {
+                    BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
+                        self.record_use(lhs.id, UseContext::Comparison);
+                        self.record_use(rhs.id, UseContext::Comparison);
+                    }
+                    _ => {
+                        self.record_use(lhs.id, UseContext::Arithmetic);
+                        self.record_use(rhs.id, UseContext::Arithmetic);
+                    }
+                }
+            }
+            Expr::Ternary { a, b, n, .. } => {
+                self.record_use(a.id, UseContext::Arithmetic);
+                self.record_use(b.id, UseContext::Arithmetic);
+                self.record_use(n.id, UseContext::Arithmetic);
+            }
+            Expr::Unary { operand, .. } => {
+                self.record_use(operand.id, UseContext::Arithmetic);
+            }
+            Expr::MLoad { offset, .. } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+            }
+            Expr::SLoad { key, .. } | Expr::TLoad { key } => {
+                self.record_use(key.id, UseContext::StorageAccess);
+            }
+            Expr::CallDataLoad { offset } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+            }
+            Expr::Keccak256 { offset, length } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+            }
+            Expr::Call { args, .. } => {
+                for arg in args {
+                    self.record_use(arg.id, UseContext::FunctionArg);
+                }
+            }
+            Expr::Balance { address } | Expr::ExtCodeSize { address } | Expr::ExtCodeHash { address } => {
+                self.record_use(address.id, UseContext::ExternalCall);
+            }
+            Expr::BlockHash { number } | Expr::BlobHash { index: number } => {
+                self.record_use(number.id, UseContext::MemoryOffset);
+                self.narrow_from_use(number.id, BitWidth::I64);
+            }
+            _ => {}
+        }
+    }
+
+    /// Forward pass: infers types for a statement.
+    fn infer_statement_forward(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Let { bindings, value } => {
                 let expr_width = self.infer_expr_width(value);
@@ -223,9 +546,9 @@ impl TypeInference {
             } => {
                 // Condition only needs to be boolean-like
                 self.widen(condition.id, BitWidth::I1);
-                self.infer_region(then_region);
+                self.infer_region_forward(then_region);
                 if let Some(else_region) = else_region {
-                    self.infer_region(else_region);
+                    self.infer_region_forward(else_region);
                 }
             }
 
@@ -238,10 +561,10 @@ impl TypeInference {
                 // Switch value could be any size, but often fits in 64 bits
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
-                    self.infer_region(&case.body);
+                    self.infer_region_forward(&case.body);
                 }
                 if let Some(default) = default {
-                    self.infer_region(default);
+                    self.infer_region_forward(default);
                 }
             }
 
@@ -264,8 +587,8 @@ impl TypeInference {
                 // But treat it as at least I1
                 let _ = cond_width; // Condition result doesn't define new values
 
-                self.infer_region(body);
-                self.infer_region(post);
+                self.infer_region_forward(body);
+                self.infer_region_forward(post);
             }
 
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
@@ -365,7 +688,7 @@ impl TypeInference {
             }
 
             Statement::Block(region) => {
-                self.infer_region(region);
+                self.infer_region_forward(region);
             }
 
             Statement::Expr(expr) => {

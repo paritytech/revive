@@ -522,16 +522,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
         match context.current_function().borrow().r#return() {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
-                // Single return value
+                // Single return value - must be word type for the pointer
                 if !function.return_values.is_empty() {
                     if let Ok(ret_val) = self.get_value(function.return_values[0]) {
+                        let ret_val = if ret_val.is_int_value() {
+                            self.ensure_word_type(context, ret_val.into_int_value(), "ret_val")?
+                                .as_basic_value_enum()
+                        } else {
+                            ret_val
+                        };
                         context.build_store(pointer, ret_val)?;
                     }
                 }
             }
             revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
                 // Multiple return values - build a struct
-                // Get the struct type from the pointer's element type
+                // Struct fields are word type, so ensure each value is word type
                 let field_types: Vec<_> = (0..size)
                     .map(|_| context.word_type().as_basic_type_enum())
                     .collect();
@@ -539,6 +545,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let mut struct_val = struct_type.get_undef();
                 for (i, ret_id) in function.return_values.iter().enumerate() {
                     if let Ok(ret_val) = self.get_value(*ret_id) {
+                        let ret_val = if ret_val.is_int_value() {
+                            self.ensure_word_type(
+                                context,
+                                ret_val.into_int_value(),
+                                &format!("ret_val_{}", i),
+                            )?
+                            .as_basic_value_enum()
+                        } else {
+                            ret_val
+                        };
                         struct_val = context
                             .builder()
                             .build_insert_value(struct_val, ret_val, i as u32, "ret_insert")
@@ -1263,13 +1279,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Revert { offset, length } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.ensure_word_type(context, offset_val, "revert_offset")?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.ensure_word_type(context, length_val, "revert_length")?;
                 revive_llvm_context::polkavm_evm_return::revert(context, offset_val, length_val)?;
             }
 
             Statement::Return { offset, length } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.ensure_word_type(context, length_val, "return_length")?;
                 revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)?;
             }
 
@@ -1283,6 +1303,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::SelfDestruct { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
+                let addr_val = self.ensure_word_type(context, addr_val, "selfdestruct_addr")?;
                 revive_llvm_context::polkavm_evm_return::selfdestruct(context, addr_val)?;
             }
 
@@ -1305,7 +1326,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
 
                 let gas_val = self.translate_value(gas)?.into_int_value();
+                let gas_val = self.ensure_word_type(context, gas_val, "call_gas")?;
                 let address_val = self.translate_value(address)?.into_int_value();
+                let address_val = self.ensure_word_type(context, address_val, "call_addr")?;
                 let args_offset_val = self.translate_value(args_offset)?.into_int_value();
                 let args_length_val = self.translate_value(args_length)?.into_int_value();
                 let ret_offset_val = self.translate_value(ret_offset)?.into_int_value();
@@ -1314,9 +1337,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let call_result = match kind {
                     CallKind::Call => {
                         let value_val = value
-                            .map(|v| self.translate_value(&v))
-                            .transpose()?
-                            .map(|v| v.into_int_value());
+                            .map(|v| -> Result<_> {
+                                let val = self.translate_value(&v)?.into_int_value();
+                                self.ensure_word_type(context, val, "call_value")
+                            })
+                            .transpose()?;
                         revive_llvm_context::polkavm_evm_call::call(
                             context,
                             gas_val,
@@ -1372,11 +1397,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 result,
             } => {
                 let value_val = self.translate_value(value)?.into_int_value();
+                let value_val = self.ensure_word_type(context, value_val, "create_value")?;
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
                 let salt_val = match (kind, salt) {
                     (CreateKind::Create2, Some(s)) => {
-                        Some(self.translate_value(s)?.into_int_value())
+                        let s_val = self.translate_value(s)?.into_int_value();
+                        Some(self.ensure_word_type(context, s_val, "create_salt")?)
                     }
                     _ => None,
                 };
@@ -1394,9 +1421,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
+                // Topics must be word type for the log function
                 let topic_vals: Vec<BasicValueEnum<'ctx>> = topics
                     .iter()
-                    .map(|t| self.translate_value(t))
+                    .enumerate()
+                    .map(|(i, t)| {
+                        let val = self.translate_value(t)?.into_int_value();
+                        let val =
+                            self.ensure_word_type(context, val, &format!("log_topic_{}", i))?;
+                        Ok(val.as_basic_value_enum())
+                    })
                     .collect::<Result<_>>()?;
 
                 match topic_vals.len() {
@@ -1487,6 +1521,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // The offset is actually the contract hash to write
                 let dest_val = self.translate_value(dest)?.into_int_value();
                 let hash_val = self.translate_value(offset)?.into_int_value();
+                let hash_val = self.ensure_word_type(context, hash_val, "datacopy_hash")?;
                 revive_llvm_context::polkavm_evm_memory::store(context, dest_val, hash_val)?;
             }
 
@@ -1517,6 +1552,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     / revive_common::BYTE_LENGTH_WORD;
                 let index = context.xlen_type().const_int(offset as u64, false);
                 let val = self.translate_value(value)?.into_int_value();
+                let val = self.ensure_word_type(context, val, "immutable_val")?;
                 revive_llvm_context::polkavm_evm_immutable::store(context, index, val)?;
             }
         }
@@ -1530,12 +1566,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>> {
         match expr {
-            Expr::Literal { value, ty: _ } => {
-                // Convert BigUint to LLVM constant at word type (256-bit).
-                // Runtime functions expect word-sized values, and LLVM's optimizer
-                // will fold trivial operations on constants anyway.
-                let val_str = value.to_string();
-                Ok(context.word_const_str_dec(&val_str).as_basic_value_enum())
+            Expr::Literal { value, .. } => {
+                // Generate narrow literals for values that fit in 64 bits.
+                // This enables more efficient code generation - the values will be
+                // extended to word type only where needed (runtime function calls).
+                if value.bits() <= 64 {
+                    let val_u64 = value.to_u64().unwrap_or(0);
+                    Ok(context
+                        .llvm()
+                        .i64_type()
+                        .const_int(val_u64, false)
+                        .as_basic_value_enum())
+                } else {
+                    let val_str = value.to_string();
+                    Ok(context.word_const_str_dec(&val_str).as_basic_value_enum())
+                }
             }
 
             Expr::Var(id) => self.get_value(*id),
@@ -1590,15 +1635,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let operand_val = self.translate_value(operand)?.into_int_value();
                 match op {
                     UnaryOp::IsZero => {
-                        // IsZero: result is i1 (1 if operand == 0, else 0)
-                        // Compare at the operand's native type to avoid unnecessary extensions
+                        // IsZero: EVM returns 1 if operand == 0, else 0 (as 256-bit word)
                         let zero = operand_val.get_type().const_zero();
                         let is_zero = context
                             .builder()
-                            .build_int_compare(inkwell::IntPredicate::EQ, operand_val, zero, "iszero")
+                            .build_int_compare(
+                                inkwell::IntPredicate::EQ,
+                                operand_val,
+                                zero,
+                                "iszero",
+                            )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        // Return i1 - will be extended only when needed
-                        Ok(is_zero.as_basic_value_enum())
+                        // Zero-extend i1 to word type for EVM compatibility
+                        let result = context
+                            .builder()
+                            .build_int_z_extend(is_zero, context.word_type(), "iszero_ext")
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        Ok(result.as_basic_value_enum())
                     }
                     UnaryOp::Not => {
                         // Bitwise NOT: XOR with all-ones mask at word (256-bit) width.
@@ -1662,6 +1715,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::ExtCodeSize { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
+                let addr_val = self.ensure_word_type(context, addr_val, "extcodesize_addr")?;
                 Ok(revive_llvm_context::polkavm_evm_ext_code::size(
                     context,
                     Some(addr_val),
@@ -1674,6 +1728,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::ExtCodeHash { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
+                let addr_val = self.ensure_word_type(context, addr_val, "extcodehash_addr")?;
                 Ok(revive_llvm_context::polkavm_evm_ext_code::hash(
                     context, addr_val,
                 )?)
@@ -1681,6 +1736,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::BlockHash { number } => {
                 let num_val = self.translate_value(number)?.into_int_value();
+                let num_val = self.ensure_word_type(context, num_val, "blockhash_num")?;
                 Ok(
                     revive_llvm_context::polkavm_evm_contract_context::block_hash(
                         context, num_val,
@@ -1735,6 +1791,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::Balance { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
+                let addr_val = self.ensure_word_type(context, addr_val, "balance_addr")?;
                 Ok(revive_llvm_context::polkavm_evm_ether_gas::balance(
                     context, addr_val,
                 )?)
@@ -1935,41 +1992,61 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?,
             ),
             BinOp::Lt => {
-                // Narrow comparison: result is i1, will be extended only when needed
+                // EVM comparison: result is 0 or 1 as 256-bit word
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::ULT, lhs, rhs, "lt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
+                let result = context
+                    .builder()
+                    .build_int_z_extend(cmp, context.word_type(), "lt_ext")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(result.as_basic_value_enum())
             }
             BinOp::Gt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::UGT, lhs, rhs, "gt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
+                let result = context
+                    .builder()
+                    .build_int_z_extend(cmp, context.word_type(), "gt_ext")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(result.as_basic_value_enum())
             }
             BinOp::Slt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::SLT, lhs, rhs, "slt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
+                let result = context
+                    .builder()
+                    .build_int_z_extend(cmp, context.word_type(), "slt_ext")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(result.as_basic_value_enum())
             }
             BinOp::Sgt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::SGT, lhs, rhs, "sgt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
+                let result = context
+                    .builder()
+                    .build_int_z_extend(cmp, context.word_type(), "sgt_ext")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(result.as_basic_value_enum())
             }
             BinOp::Eq => {
-                // Equal comparison: result is i1
+                // Equal comparison: result is 0 or 1 as 256-bit word
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::EQ, lhs, rhs, "eq")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
+                let result = context
+                    .builder()
+                    .build_int_z_extend(cmp, context.word_type(), "eq_ext")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                Ok(result.as_basic_value_enum())
             }
             BinOp::Byte => Ok(revive_llvm_context::polkavm_evm_bitwise::byte(
                 context, lhs, rhs,

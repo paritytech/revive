@@ -167,7 +167,9 @@ impl TypeInference {
     pub fn effective_width(&self, id: ValueId) -> BitWidth {
         let constraint = self.get(id);
         // The effective width is the minimum required, but capped by use context
-        constraint.min_width.max(constraint.max_width.min(constraint.min_width))
+        constraint
+            .min_width
+            .max(constraint.max_width.min(constraint.min_width))
     }
 
     /// Sets the constraint for a value, returning true if changed.
@@ -346,7 +348,12 @@ impl TypeInference {
                 self.record_use(value.id, UseContext::StorageAccess);
             }
 
-            Statement::If { condition, then_region, else_region, .. } => {
+            Statement::If {
+                condition,
+                then_region,
+                else_region,
+                ..
+            } => {
                 // Condition only needs to be non-zero, can stay narrow
                 self.record_use(condition.id, UseContext::Comparison);
                 self.collect_uses_region(then_region);
@@ -355,7 +362,12 @@ impl TypeInference {
                 }
             }
 
-            Statement::Switch { scrutinee, cases, default, .. } => {
+            Statement::Switch {
+                scrutinee,
+                cases,
+                default,
+                ..
+            } => {
                 self.record_use(scrutinee.id, UseContext::Comparison);
                 for case in cases {
                     self.collect_uses_region(&case.body);
@@ -365,7 +377,13 @@ impl TypeInference {
                 }
             }
 
-            Statement::For { init_values, condition_stmts, body, post, .. } => {
+            Statement::For {
+                init_values,
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
                 for val in init_values {
                     self.record_use(val.id, UseContext::Arithmetic);
                 }
@@ -383,7 +401,16 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            Statement::ExternalCall { gas, address, value, args_offset, args_length, ret_offset, ret_length, .. } => {
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                ..
+            } => {
                 self.record_use(gas.id, UseContext::ExternalCall);
                 self.record_use(address.id, UseContext::ExternalCall);
                 if let Some(value) = value {
@@ -400,7 +427,11 @@ impl TypeInference {
                 self.narrow_from_use(ret_length.id, BitWidth::I64);
             }
 
-            Statement::Log { offset, length, topics } => {
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);
                 self.record_use(length.id, UseContext::MemoryOffset);
@@ -410,11 +441,32 @@ impl TypeInference {
                 }
             }
 
-            Statement::CodeCopy { dest, offset, length }
-            | Statement::ExtCodeCopy { dest, offset, length, .. }
-            | Statement::ReturnDataCopy { dest, offset, length }
-            | Statement::DataCopy { dest, offset, length }
-            | Statement::CallDataCopy { dest, offset, length } => {
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::ExtCodeCopy {
+                dest,
+                offset,
+                length,
+                ..
+            }
+            | Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
                 self.record_use(dest.id, UseContext::MemoryOffset);
                 self.narrow_from_use(dest.id, BitWidth::I64);
                 self.record_use(offset.id, UseContext::MemoryOffset);
@@ -451,18 +503,16 @@ impl TypeInference {
     /// Collects uses from an expression.
     fn collect_uses_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Binary { lhs, rhs, op } => {
-                match op {
-                    BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
-                        self.record_use(lhs.id, UseContext::Comparison);
-                        self.record_use(rhs.id, UseContext::Comparison);
-                    }
-                    _ => {
-                        self.record_use(lhs.id, UseContext::Arithmetic);
-                        self.record_use(rhs.id, UseContext::Arithmetic);
-                    }
+            Expr::Binary { lhs, rhs, op } => match op {
+                BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
+                    self.record_use(lhs.id, UseContext::Comparison);
+                    self.record_use(rhs.id, UseContext::Comparison);
                 }
-            }
+                _ => {
+                    self.record_use(lhs.id, UseContext::Arithmetic);
+                    self.record_use(rhs.id, UseContext::Arithmetic);
+                }
+            },
             Expr::Ternary { a, b, n, .. } => {
                 self.record_use(a.id, UseContext::Arithmetic);
                 self.record_use(b.id, UseContext::Arithmetic);
@@ -493,7 +543,9 @@ impl TypeInference {
                     self.record_use(arg.id, UseContext::FunctionArg);
                 }
             }
-            Expr::Balance { address } | Expr::ExtCodeSize { address } | Expr::ExtCodeHash { address } => {
+            Expr::Balance { address }
+            | Expr::ExtCodeSize { address }
+            | Expr::ExtCodeHash { address } => {
                 self.record_use(address.id, UseContext::ExternalCall);
             }
             Expr::BlockHash { number } | Expr::BlobHash { index: number } => {

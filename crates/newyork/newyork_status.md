@@ -198,6 +198,8 @@ Investigation revealed several findings:
 
 4. **Heap all_native mode**: Working but rarely triggered. Most contracts have escaping memory regions (returns, calls, logs) that require big-endian byte order. Typical Flipper contract: `total=3, unknown=0, tainted=2, escaping=1`.
 
+5. **Narrow literal generation**: Attempted but reverted. Runtime functions (`safe_truncate_int_to_xlen`) only accept XLEN (32-bit) or WORD (256-bit) types. Generating i8/i32/i64 literals causes assertion failures when passed to memory operations. The runtime API would need modification to support intermediate widths.
+
 ### Future Optimization Paths
 
 To achieve code size reduction, deeper changes would be needed:
@@ -206,6 +208,7 @@ To achieve code size reduction, deeper changes would be needed:
 - **Internal function narrowing**: Generate narrow-typed variants of internal functions
 - **Call site specialization**: If caller always passes narrow values, use specialized callee
 - **Store values at inferred type**: Change `Let` statement to store at narrow type instead of i256
+- **Modify runtime API**: Add support for intermediate widths (i64) in `safe_truncate_int_to_xlen`
 
 **Long-term (ABI Changes)**:
 - **Narrow runtime functions**: `mstore32(offset32, value256)` variants

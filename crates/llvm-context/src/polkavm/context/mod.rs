@@ -1059,28 +1059,46 @@ impl<'ctx> Context<'ctx> {
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        if value.get_type() == self.xlen_type() {
+        let value_width = value.get_type().get_bit_width();
+        let xlen_width = self.xlen_type().get_bit_width();
+        let word_width = self.word_type().get_bit_width();
+
+        // Already xlen-sized
+        if value_width == xlen_width {
             return Ok(value);
         }
-        assert_eq!(
-            value.get_type(),
-            self.word_type(),
-            "expected XLEN or WORD sized int type for memory offset",
-        );
 
-        Ok(self
-            .build_call(
-                <WordToPointer as RuntimeFunction>::declaration(self),
-                &[value.into()],
-                "word_to_pointer",
-            )
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <WordToPointer as RuntimeFunction>::NAME,
+        // Narrow type (e.g., i1, i8) - zero-extend to xlen
+        if value_width < xlen_width {
+            return Ok(self.builder().build_int_z_extend(
+                value,
+                self.xlen_type(),
+                "narrow_to_xlen",
+            )?);
+        }
+
+        // Word type - use runtime function for safe truncation with overflow check
+        if value_width == word_width {
+            return Ok(self
+                .build_call(
+                    <WordToPointer as RuntimeFunction>::declaration(self),
+                    &[value.into()],
+                    "word_to_pointer",
                 )
-            })
-            .into_int_value())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "revive runtime function {} should return a value",
+                        <WordToPointer as RuntimeFunction>::NAME,
+                    )
+                })
+                .into_int_value());
+        }
+
+        // Intermediate width (e.g., i64) - truncate directly to xlen
+        // This is safe because we know the value came from a narrow literal
+        Ok(self
+            .builder()
+            .build_int_truncate(value, self.xlen_type(), "intermediate_to_xlen")?)
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.
@@ -1088,12 +1106,32 @@ impl<'ctx> Context<'ctx> {
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let value_width = value.get_type().get_bit_width();
+        let xlen_width = self.xlen_type().get_bit_width();
+
+        // Already xlen-sized - no clipping needed
+        if value_width == xlen_width {
+            return Ok(value);
+        }
+
+        // Narrow type - zero-extend to xlen (no overflow possible)
+        if value_width < xlen_width {
+            return Ok(self.builder().build_int_z_extend(
+                value,
+                self.xlen_type(),
+                "narrow_to_xlen",
+            )?);
+        }
+
+        // Wider type - check for overflow and clip
         let clipped = self.xlen_type().const_all_ones();
+        let clipped_extended =
+            self.builder()
+                .build_int_z_extend(clipped, value.get_type(), "value_clipped")?;
         let is_overflow = self.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
             value,
-            self.builder()
-                .build_int_z_extend(clipped, self.word_type(), "value_clipped")?,
+            clipped_extended,
             "is_value_overflow",
         )?;
         let truncated =

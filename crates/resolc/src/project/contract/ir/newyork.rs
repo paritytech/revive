@@ -3,13 +3,14 @@
 //! This module integrates the newyork IR pipeline:
 //! 1. Parse Yul source to Yul AST
 //! 2. Translate Yul AST to newyork IR
-//! 3. Generate LLVM IR from newyork IR
+//! 3. Run heap optimization analysis
+//! 4. Generate LLVM IR from newyork IR
 
 use std::collections::BTreeSet;
 
 use inkwell::debug_info::AsDIScope;
 use revive_llvm_context::PolkaVMCodeType;
-use revive_newyork::{LlvmCodegen, Object as NewYorkObject};
+use revive_newyork::{LlvmCodegen, TranslationResult};
 use revive_yul::lexer::Lexer;
 use revive_yul::parser::statement::object::Object as YulObject;
 use serde::{Deserialize, Serialize};
@@ -41,8 +42,8 @@ impl NewYork {
         self.yul_object.get_missing_libraries()
     }
 
-    /// Translate the Yul AST to newyork IR.
-    fn translate_to_ir(&self) -> anyhow::Result<NewYorkObject> {
+    /// Translate the Yul AST to newyork IR with heap optimization analysis.
+    fn translate_to_ir(&self) -> anyhow::Result<TranslationResult> {
         revive_newyork::translate_yul_object(&self.yul_object)
             .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
     }
@@ -53,12 +54,21 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // Delegate to the Yul object's declare to set up all runtime functions.
         // This ensures all the necessary runtime support (heap, storage, events, etc.)
         // is available for the newyork IR codegen.
-        self.yul_object.declare(context)
+        self.yul_object.declare(context)?;
+
+        // Declare native heap functions (used by heap optimization pass).
+        // These are newyork-specific functions that skip byte-swapping for internal memory.
+        revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.declare(context)?;
+        revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.declare(context)?;
+        Ok(())
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        // Translate Yul AST to newyork IR
-        let ir_object = self.translate_to_ir()?;
+        // Translate Yul AST to newyork IR with optimization analysis
+        let translation_result = self.translate_to_ir()?;
+        let ir_object = translation_result.object;
+        let heap_opt = translation_result.heap_opt;
+        let type_info = translation_result.type_info;
 
         // Set up debug info scope if available
         if let Some(debug_info) = context.debug_info() {
@@ -82,7 +92,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             context.set_code_type(PolkaVMCodeType::Runtime);
 
             // Generate the runtime code using newyork IR
-            let mut codegen = LlvmCodegen::new();
+            let mut codegen = LlvmCodegen::new(heap_opt.clone(), type_info.clone());
             codegen
                 .generate_object(&ir_object, context)
                 .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
@@ -99,6 +109,8 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
             revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
@@ -122,7 +134,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally
-            let mut codegen = LlvmCodegen::new();
+            let mut codegen = LlvmCodegen::new(heap_opt, type_info);
             codegen
                 .generate_object(&ir_object, context)
                 .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;

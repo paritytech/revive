@@ -541,6 +541,62 @@ pub struct HeapAnalysisStats {
     pub escaping_regions: usize,
 }
 
+/// Results of heap analysis that can be used during code generation.
+///
+/// This struct captures which memory addresses can use native byte order
+/// (skip byte-swapping) because they are:
+/// 1. Word-aligned (offset is multiple of 32)
+/// 2. Not escaping to external code
+/// 3. Not tainted by unaligned writes
+#[derive(Clone, Debug, Default)]
+pub struct HeapOptResults {
+    /// Memory addresses (word-aligned) that can use native byte order.
+    /// These are addresses that are NOT in tainted_regions and NOT in escaping_regions.
+    pub native_safe_regions: BTreeSet<u64>,
+    /// Static offsets that are known to be safe for native access.
+    pub native_safe_offsets: BTreeSet<u64>,
+}
+
+impl HeapOptResults {
+    /// Creates results from a completed heap analysis.
+    pub fn from_analysis(analysis: &HeapAnalysis) -> Self {
+        let mut native_safe_regions = BTreeSet::new();
+        let mut native_safe_offsets = BTreeSet::new();
+
+        // Find all accessed addresses that are aligned and not tainted/escaping
+        for (&addr, pattern) in &analysis.memory_accesses {
+            if pattern.is_aligned() {
+                let word_addr = addr / 32 * 32;
+                if !analysis.requires_big_endian(addr) {
+                    native_safe_regions.insert(word_addr);
+                    native_safe_offsets.insert(addr);
+                }
+            }
+        }
+
+        HeapOptResults {
+            native_safe_regions,
+            native_safe_offsets,
+        }
+    }
+
+    /// Checks if a static offset can use native byte order.
+    pub fn can_use_native(&self, offset: u64) -> bool {
+        // Check if this specific offset is safe
+        if self.native_safe_offsets.contains(&offset) {
+            return true;
+        }
+        // Check if the word region is safe
+        let word_addr = offset / 32 * 32;
+        self.native_safe_regions.contains(&word_addr)
+    }
+
+    /// Returns true if any optimization opportunities were found.
+    pub fn has_optimizations(&self) -> bool {
+        !self.native_safe_regions.is_empty()
+    }
+}
+
 /// Computes the alignment of a value (highest power of 2 that divides it).
 fn compute_alignment(value: u64) -> u32 {
     if value == 0 {

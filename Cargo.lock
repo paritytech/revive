@@ -9161,6 +9161,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "inkwell",
+ "log",
  "num",
  "revive-common",
  "revive-llvm-context",

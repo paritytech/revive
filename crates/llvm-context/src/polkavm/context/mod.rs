@@ -19,8 +19,10 @@ use crate::polkavm::DebugConfig;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 use crate::PolkaVMLoadHeapWordFunction;
+use crate::PolkaVMLoadHeapWordNativeFunction;
 use crate::PolkaVMSbrkFunction;
 use crate::PolkaVMStoreHeapWordFunction;
+use crate::PolkaVMStoreHeapWordNativeFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
@@ -817,6 +819,34 @@ impl<'ctx> Context<'ctx> {
             }
         };
 
+        Ok(())
+    }
+
+    /// Builds a heap load instruction without byte-swapping.
+    /// Used for internal memory operations that don't escape to external code.
+    pub fn build_load_native(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        let name = <PolkaVMLoadHeapWordNativeFunction as RuntimeFunction>::NAME;
+        let declaration = <PolkaVMLoadHeapWordNativeFunction as RuntimeFunction>::declaration(self);
+        let arguments = [offset.as_basic_value_enum()];
+        Ok(self
+            .build_call(declaration, &arguments, "heap_load_native")
+            .unwrap_or_else(|| panic!("revive runtime function {name} should return a value")))
+    }
+
+    /// Builds a heap store instruction without byte-swapping.
+    /// Used for internal memory operations that don't escape to external code.
+    pub fn build_store_native(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<()> {
+        let declaration =
+            <PolkaVMStoreHeapWordNativeFunction as RuntimeFunction>::declaration(self);
+        let arguments = [offset.as_basic_value_enum(), value.as_basic_value_enum()];
+        self.build_call(declaration, &arguments, "heap_store_native");
         Ok(())
     }
 

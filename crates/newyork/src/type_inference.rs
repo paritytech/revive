@@ -69,6 +69,7 @@ impl TypeConstraint {
 }
 
 /// Type inference context holding all constraints.
+#[derive(Clone)]
 pub struct TypeInference {
     /// Constraints for each value.
     constraints: BTreeMap<u32, TypeConstraint>,

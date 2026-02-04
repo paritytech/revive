@@ -15,10 +15,12 @@ use revive_llvm_context::{
     PolkaVMArgument, PolkaVMContext, PolkaVMFunctionDeployCode, PolkaVMFunctionRuntimeCode,
 };
 
+use crate::heap_opt::HeapOptResults;
 use crate::ir::{
-    BinOp, Block, CallKind, CreateKind, Expr, Function, FunctionId, Object, Region, Statement,
-    Type, UnaryOp, Value, ValueId,
+    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, Object, Region,
+    Statement, Type, UnaryOp, Value, ValueId,
 };
+use crate::type_inference::TypeInference;
 
 /// Error type for LLVM codegen.
 #[derive(Debug, thiserror::Error)]
@@ -57,25 +59,37 @@ pub struct LlvmCodegen<'ctx> {
     /// Set of function names that have already been generated.
     /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
     generated_functions: BTreeSet<String>,
+    /// Heap optimization results for skipping byte-swapping on internal memory.
+    heap_opt: HeapOptResults,
+    /// Type inference results for using narrower types.
+    type_info: TypeInference,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
-    /// Creates a new code generator.
-    pub fn new() -> Self {
+    /// Creates a new code generator with optimization results.
+    pub fn new(heap_opt: HeapOptResults, type_info: TypeInference) -> Self {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             generated_functions: BTreeSet::new(),
+            heap_opt,
+            type_info,
         }
     }
 
     /// Creates a new code generator that shares the generated_functions set with another.
     /// This is used for subobjects to avoid regenerating shared utility functions.
-    pub fn new_with_shared_functions(generated_functions: BTreeSet<String>) -> Self {
+    pub fn new_with_shared_functions(
+        generated_functions: BTreeSet<String>,
+        heap_opt: HeapOptResults,
+        type_info: TypeInference,
+    ) -> Self {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             generated_functions,
+            heap_opt,
+            type_info,
         }
     }
 
@@ -118,6 +132,107 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 defined_ids.len()
             ))
         })
+    }
+
+    /// Tries to extract a constant u64 offset from an LLVM IntValue.
+    /// Returns Some(offset) if the value is a constant that fits in u64.
+    fn try_extract_const_offset(&self, value: IntValue<'ctx>) -> Option<u64> {
+        if value.is_const() {
+            // Get the constant value as u64 (for offset checking)
+            // IntValue::get_zero_extended_constant returns Option<u64>
+            value.get_zero_extended_constant()
+        } else {
+            None
+        }
+    }
+
+    /// Checks if a memory operation at the given offset can use native byte order.
+    fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
+        if let Some(const_offset) = self.try_extract_const_offset(offset) {
+            self.heap_opt.can_use_native(const_offset)
+        } else {
+            false
+        }
+    }
+
+    /// Gets the inferred bit-width for a value.
+    fn inferred_width(&self, id: ValueId) -> BitWidth {
+        self.type_info.get(id).min_width
+    }
+
+    /// Gets the LLVM int type for a given bit-width.
+    fn int_type_for_width(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        width: BitWidth,
+    ) -> inkwell::types::IntType<'ctx> {
+        match width {
+            BitWidth::I1 => context.llvm().bool_type(),
+            BitWidth::I8 => context.llvm().i8_type(),
+            BitWidth::I32 => context.llvm().i32_type(),
+            BitWidth::I64 => context.llvm().i64_type(),
+            BitWidth::I160 => context.llvm().custom_width_int_type(160),
+            BitWidth::I256 => context.word_type(),
+        }
+    }
+
+    /// Ensures a value is extended to 256-bit word type.
+    /// Used when a narrower value needs to be used in operations requiring full width.
+    fn ensure_word_type(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        value: IntValue<'ctx>,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let value_width = value.get_type().get_bit_width();
+        let word_width = context.word_type().get_bit_width();
+
+        if value_width == word_width {
+            Ok(value)
+        } else if value_width < word_width {
+            // Zero-extend to word type
+            context
+                .builder()
+                .build_int_z_extend(value, context.word_type(), name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        } else {
+            // Shouldn't happen - truncate as fallback
+            context
+                .builder()
+                .build_int_truncate(value, context.word_type(), name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        }
+    }
+
+    /// Converts a value to the inferred type for storage.
+    /// If the inferred type is narrower, truncates; if wider, zero-extends.
+    fn convert_to_inferred_type(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        value: IntValue<'ctx>,
+        target_id: ValueId,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let inferred_width = self.inferred_width(target_id);
+        let target_type = self.int_type_for_width(context, inferred_width);
+        let value_width = value.get_type().get_bit_width();
+        let target_width = target_type.get_bit_width();
+
+        if value_width == target_width {
+            Ok(value)
+        } else if value_width > target_width {
+            // Truncate to narrower type
+            context
+                .builder()
+                .build_int_truncate(value, target_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        } else {
+            // Zero-extend to wider type
+            context
+                .builder()
+                .build_int_z_extend(value, target_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        }
     }
 
     /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
@@ -211,8 +326,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Each subobject gets a fresh codegen instance for values (SSA values are scoped to objects)
         // but shares the generated_functions set to avoid regenerating shared utility functions
         for subobject in &object.subobjects {
-            let mut subobject_codegen =
-                LlvmCodegen::new_with_shared_functions(self.generated_functions.clone());
+            let mut subobject_codegen = LlvmCodegen::new_with_shared_functions(
+                self.generated_functions.clone(),
+                self.heap_opt.clone(),
+                self.type_info.clone(),
+            );
             subobject_codegen.generate_object(subobject, context)?;
             // Merge back any new generated functions
             self.generated_functions
@@ -452,7 +570,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let llvm_value = self.generate_expr(value, context)?;
                 // For single binding
                 if bindings.len() == 1 {
-                    self.set_value(bindings[0], llvm_value);
+                    let binding_id = bindings[0];
+                    // Convert to inferred type if narrower
+                    let stored_value = if llvm_value.is_int_value() {
+                        let int_val = llvm_value.into_int_value();
+                        let converted = self
+                            .convert_to_inferred_type(context, int_val, binding_id, "let_conv")?;
+                        converted.as_basic_value_enum()
+                    } else {
+                        llvm_value
+                    };
+                    self.set_value(binding_id, stored_value);
                 } else {
                     // Tuple unpacking - extract each element
                     let struct_val = llvm_value.into_struct_value();
@@ -465,7 +593,20 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 &format!("field_{}", index),
                             )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        self.set_value(*binding, field);
+                        // Convert tuple element to inferred type
+                        let stored_value = if field.is_int_value() {
+                            let int_val = field.into_int_value();
+                            let converted = self.convert_to_inferred_type(
+                                context,
+                                int_val,
+                                *binding,
+                                &format!("tuple_{}_conv", index),
+                            )?;
+                            converted.as_basic_value_enum()
+                        } else {
+                            field
+                        };
+                        self.set_value(*binding, stored_value);
                     }
                 }
             }
@@ -477,7 +618,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
-                revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
+                // MStore requires 256-bit value
+                let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
+                if self.can_use_native_memory(offset_val) {
+                    revive_llvm_context::polkavm_evm_memory::store_native(
+                        context, offset_val, value_val,
+                    )?;
+                } else {
+                    revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
+                }
             }
 
             Statement::MStore8 {
@@ -487,6 +636,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
+                // MStore8 expects word-sized value (takes low byte)
+                let value_val = self.ensure_word_type(context, value_val, "mstore8_val")?;
                 revive_llvm_context::polkavm_evm_memory::store_byte(
                     context, offset_val, value_val,
                 )?;
@@ -520,14 +671,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 value,
                 static_slot: _,
             } => {
-                let key_arg = self.value_to_argument(key)?;
-                let value_arg = self.value_to_argument(value)?;
+                let key_arg = self.value_to_argument(key, context)?;
+                let value_arg = self.value_to_argument(value, context)?;
                 revive_llvm_context::polkavm_evm_storage::store(context, &key_arg, &value_arg)?;
             }
 
             Statement::TStore { key, value } => {
-                let key_arg = self.value_to_argument(key)?;
-                let value_arg = self.value_to_argument(value)?;
+                let key_arg = self.value_to_argument(key, context)?;
+                let value_arg = self.value_to_argument(value, context)?;
                 revive_llvm_context::polkavm_evm_storage::transient_store(
                     context, &key_arg, &value_arg,
                 )?;
@@ -1450,23 +1601,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::MLoad { offset, region: _ } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_memory::load(
-                    context, offset_val,
-                )?)
+                if self.can_use_native_memory(offset_val) {
+                    Ok(revive_llvm_context::polkavm_evm_memory::load_native(
+                        context, offset_val,
+                    )?)
+                } else {
+                    Ok(revive_llvm_context::polkavm_evm_memory::load(
+                        context, offset_val,
+                    )?)
+                }
             }
 
             Expr::SLoad {
                 key,
                 static_slot: _,
             } => {
-                let key_arg = self.value_to_argument(key)?;
+                let key_arg = self.value_to_argument(key, context)?;
                 Ok(revive_llvm_context::polkavm_evm_storage::load(
                     context, &key_arg,
                 )?)
             }
 
             Expr::TLoad { key } => {
-                let key_arg = self.value_to_argument(key)?;
+                let key_arg = self.value_to_argument(key, context)?;
                 Ok(revive_llvm_context::polkavm_evm_storage::transient_load(
                     context, &key_arg,
                 )?)
@@ -1695,14 +1852,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Converts a Value to a PolkaVMArgument for storage operations.
-    fn value_to_argument(&self, value: &Value) -> Result<PolkaVMArgument<'ctx>> {
+    /// Storage operations require 256-bit values, so narrow values are zero-extended.
+    fn value_to_argument(
+        &self,
+        value: &Value,
+        context: &PolkaVMContext<'ctx>,
+    ) -> Result<PolkaVMArgument<'ctx>> {
         let llvm_val = self.translate_value(value)?;
-        Ok(PolkaVMArgument::value(llvm_val))
+        if llvm_val.is_int_value() {
+            let int_val = llvm_val.into_int_value();
+            let word_val = self.ensure_word_type(context, int_val, "storage_arg")?;
+            Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()))
+        } else {
+            Ok(PolkaVMArgument::value(llvm_val))
+        }
     }
 }
 
 impl Default for LlvmCodegen<'_> {
     fn default() -> Self {
-        Self::new()
+        Self::new(HeapOptResults::default(), TypeInference::default())
     }
 }

@@ -84,3 +84,22 @@ pub fn store_byte<'ctx>(
         .expect("Alignment is valid");
     Ok(())
 }
+
+/// Translates the `mload` instruction without byte-swapping.
+/// Used for internal memory operations that don't escape to external code.
+pub fn load_native<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    context.build_load_native(offset)
+}
+
+/// Translates the `mstore` instruction without byte-swapping.
+/// Used for internal memory operations that don't escape to external code.
+pub fn store_native<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    context.build_store_native(offset, value)
+}

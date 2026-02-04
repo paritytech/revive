@@ -98,3 +98,96 @@ impl WriteLLVM for StoreWord {
         <Self as RuntimeFunction>::emit(&self, context)
     }
 }
+
+/// Load a word size value from a heap pointer without byte-swapping.
+/// Used for internal memory operations that don't escape to external code.
+pub struct LoadWordNative;
+
+impl RuntimeFunction for LoadWordNative {
+    const NAME: &'static str = "__revive_load_heap_word_native";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context
+            .word_type()
+            .fn_type(&[context.xlen_type().into()], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
+        let offset = Self::paramater(context, 0).into_int_value();
+        let length = context
+            .xlen_type()
+            .const_int(BYTE_LENGTH_WORD as u64, false);
+        let pointer = context.build_heap_gep(offset, length)?;
+        let value = context
+            .builder()
+            .build_load(context.word_type(), pointer.value, "value")?;
+        context
+            .basic_block()
+            .get_last_instruction()
+            .expect("Always exists")
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+
+        // No byte-swap for native operations
+        Ok(Some(value))
+    }
+}
+
+impl WriteLLVM for LoadWordNative {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Store a word size value through a heap pointer without byte-swapping.
+/// Used for internal memory operations that don't escape to external code.
+pub struct StoreWordNative;
+
+impl RuntimeFunction for StoreWordNative {
+    const NAME: &'static str = "__revive_store_heap_word_native";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(
+            &[context.xlen_type().into(), context.word_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
+        let offset = Self::paramater(context, 0).into_int_value();
+        let length = context
+            .xlen_type()
+            .const_int(BYTE_LENGTH_WORD as u64, false);
+        let pointer = context.build_heap_gep(offset, length)?;
+
+        // No byte-swap for native operations
+        let value = Self::paramater(context, 1);
+
+        context
+            .builder()
+            .build_store(pointer.value, value)?
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+        Ok(None)
+    }
+}
+
+impl WriteLLVM for StoreWordNative {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}

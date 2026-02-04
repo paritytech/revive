@@ -2,17 +2,18 @@
 
 ## Current State
 
-The newyork IR pipeline is **functionally complete** with **heap optimization and type inference fully integrated**.
+The newyork IR pipeline is **functionally complete** with **heap optimization integrated and type inference infrastructure in place**.
 
 ### What Works
 - Yul AST to newyork IR translation (`from_yul.rs`)
 - newyork IR to LLVM IR codegen (`to_llvm.rs`)
 - All 62 integration tests pass with `RESOLC_USE_NEWYORK=1`
-- All resolc tests pass
+- All resolc tests pass (both with and without newyork)
 - Proper error handling for unsupported opcodes (CALLCODE, CODECOPY in runtime, EXTCODECOPY)
 - Heap analysis runs on every compiled contract
-- Type inference runs on every compiled contract
-- Analysis results are used in codegen
+- Type inference analysis runs on every compiled contract
+- Heap optimization results used in codegen (native byte order for internal memory)
+- Type inference infrastructure ready for future narrow-type optimizations
 
 ### Code Size Comparison (vs main branch)
 
@@ -75,18 +76,23 @@ Most Solidity contracts don't benefit because:
    - Tracks signedness for signed operations
 
 2. **Codegen Phase** (`to_llvm.rs`):
-   - Values stored at inferred width (may be i1, i8, i32, i64, i160, or i256)
-   - Automatically zero-extended to 256-bit when needed for:
-     - Memory operations (MStore, MStore8)
-     - Storage operations (SStore, TStore, SLoad, TLoad)
-     - Other EVM operations expecting 256-bit values
+   - Currently: Values kept at word type (256-bit) for compatibility with runtime functions
+   - Infrastructure for narrow types is in place (`convert_to_inferred_type`, `int_type_for_width`)
+   - Helper methods ensure values are extended to word type when needed
+
+### Current Status
+
+Values are currently kept at word type (256-bit) in codegen because:
+- The existing runtime functions (EVM builtins) expect word-type arguments
+- Converting values to narrow types and back caused type mismatches
+- The infrastructure is in place for future work to use narrow types more aggressively
 
 ### Why No Type Inference Benefits Yet
 
 Code sizes remain identical because:
-- Values are extended back to 256-bit for most operations
-- LLVM's optimization passes eliminate the redundant extend/truncate pairs
-- The infrastructure is in place for future optimizations that keep values narrow throughout
+- Values are kept at 256-bit throughout codegen
+- LLVM's optimization passes handle most redundant operations
+- The infrastructure is ready for future optimizations that keep values narrow
 
 ### Potential Future Improvements
 
@@ -114,8 +120,10 @@ Added to `revive-llvm-context`:
 6. **`crates/newyork/src/type_inference.rs`**: Added `Clone` derive
 7. **`crates/newyork/src/to_llvm.rs`**:
    - Added `type_info` field to `LlvmCodegen`
-   - Added `inferred_width()`, `int_type_for_width()`, `ensure_word_type()`, `convert_to_inferred_type()` helpers
-   - Let bindings store values at inferred width
+   - Added helper methods (currently unused but ready for future narrow-type optimization):
+     - `inferred_width()`, `int_type_for_width()`, `convert_to_inferred_type()`
+   - Added `ensure_word_type()` to extend narrow values to 256-bit
+   - Added `translate_value_as_word()` for phi nodes and function calls
    - MStore/MStore8 ensure 256-bit values
    - `value_to_argument()` ensures 256-bit for storage ops
 

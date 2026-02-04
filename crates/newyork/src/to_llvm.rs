@@ -156,11 +156,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets the inferred bit-width for a value.
+    /// NOTE: Currently unused but preserved for future type inference integration.
+    #[allow(dead_code)]
     fn inferred_width(&self, id: ValueId) -> BitWidth {
         self.type_info.get(id).min_width
     }
 
     /// Gets the LLVM int type for a given bit-width.
+    /// NOTE: Currently unused but preserved for future type inference integration.
+    #[allow(dead_code)]
     fn int_type_for_width(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -206,6 +210,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Converts a value to the inferred type for storage.
     /// If the inferred type is narrower, truncates; if wider, zero-extends.
+    /// NOTE: Currently unused but preserved for future type inference integration.
+    #[allow(dead_code)]
     fn convert_to_inferred_type(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -571,16 +577,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // For single binding
                 if bindings.len() == 1 {
                     let binding_id = bindings[0];
-                    // Convert to inferred type if narrower
-                    let stored_value = if llvm_value.is_int_value() {
-                        let int_val = llvm_value.into_int_value();
-                        let converted = self
-                            .convert_to_inferred_type(context, int_val, binding_id, "let_conv")?;
-                        converted.as_basic_value_enum()
-                    } else {
-                        llvm_value
-                    };
-                    self.set_value(binding_id, stored_value);
+                    // Store value at word type for compatibility with runtime functions.
+                    // Type inference infrastructure is in place for future use, but
+                    // currently all values are kept at word type.
+                    self.set_value(binding_id, llvm_value);
                 } else {
                     // Tuple unpacking - extract each element
                     let struct_val = llvm_value.into_struct_value();
@@ -593,20 +593,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 &format!("field_{}", index),
                             )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        // Convert tuple element to inferred type
-                        let stored_value = if field.is_int_value() {
-                            let int_val = field.into_int_value();
-                            let converted = self.convert_to_inferred_type(
-                                context,
-                                int_val,
-                                *binding,
-                                &format!("tuple_{}_conv", index),
-                            )?;
-                            converted.as_basic_value_enum()
-                        } else {
-                            field
-                        };
-                        self.set_value(*binding, stored_value);
+                        // Store tuple element at word type
+                        self.set_value(*binding, field);
                     }
                 }
             }
@@ -692,6 +680,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 outputs,
             } => {
                 let cond_val = self.translate_value(condition)?.into_int_value();
+                // Ensure condition is word type before comparing
+                let cond_val = self.ensure_word_type(context, cond_val, "if_cond")?;
                 // Convert to i1 (compare != 0)
                 let cond_bool = context
                     .builder()
@@ -724,8 +714,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // Only collect yields and branch if the block is reachable
                     if !Self::block_is_unreachable(then_end_block) {
                         let mut then_yields = Vec::new();
-                        for yield_val in &then_region.yields {
-                            then_yields.push(self.translate_value(yield_val)?);
+                        for (i, yield_val) in then_region.yields.iter().enumerate() {
+                            then_yields.push(self.translate_value_as_word(
+                                yield_val,
+                                context,
+                                &format!("then_yield_{}", i),
+                            )?);
                         }
                         context.build_unconditional_branch(join_block);
                         phi_incoming.push((then_yields, then_end_block));
@@ -743,8 +737,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     let else_end_block = context.basic_block();
                     if !Self::block_is_unreachable(else_end_block) {
                         let mut else_yields = Vec::new();
-                        for yield_val in &else_region.yields {
-                            else_yields.push(self.translate_value(yield_val)?);
+                        for (i, yield_val) in else_region.yields.iter().enumerate() {
+                            else_yields.push(self.translate_value_as_word(
+                                yield_val,
+                                context,
+                                &format!("else_yield_{}", i),
+                            )?);
                         }
                         context.build_unconditional_branch(join_block);
                         phi_incoming.push((else_yields, else_end_block));
@@ -761,8 +759,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                     // Collect inputs as the "else" yields (from entry block to join)
                     let mut else_yields = Vec::new();
-                    for input_val in inputs {
-                        else_yields.push(self.translate_value(input_val)?);
+                    for (i, input_val) in inputs.iter().enumerate() {
+                        else_yields.push(self.translate_value_as_word(
+                            input_val,
+                            context,
+                            &format!("input_yield_{}", i),
+                        )?);
                     }
                     phi_incoming.push((else_yields, entry_block));
 
@@ -772,8 +774,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     let then_end_block = context.basic_block();
                     if !Self::block_is_unreachable(then_end_block) {
                         let mut then_yields = Vec::new();
-                        for yield_val in &then_region.yields {
-                            then_yields.push(self.translate_value(yield_val)?);
+                        for (i, yield_val) in then_region.yields.iter().enumerate() {
+                            then_yields.push(self.translate_value_as_word(
+                                yield_val,
+                                context,
+                                &format!("then_yield_{}", i),
+                            )?);
                         }
                         context.build_unconditional_branch(join_block);
                         phi_incoming.push((then_yields, then_end_block));
@@ -900,7 +906,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     if !Self::block_is_unreachable(end_block) {
                         let mut yields = Vec::new();
                         for (yield_idx, yield_val) in body.yields.iter().enumerate() {
-                            match self.translate_value(yield_val) {
+                            match self.translate_value_as_word(
+                                yield_val,
+                                context,
+                                &format!("case_{}_yield_{}", idx, yield_idx),
+                            ) {
                                 Ok(v) => yields.push(v),
                                 Err(e) => {
                                     return Err(CodegenError::Llvm(format!(
@@ -929,8 +939,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                     if !Self::block_is_unreachable(default_end_block) {
                         let mut default_yields = Vec::new();
-                        for yield_val in &default_region.yields {
-                            default_yields.push(self.translate_value(yield_val)?);
+                        for (i, yield_val) in default_region.yields.iter().enumerate() {
+                            default_yields.push(self.translate_value_as_word(
+                                yield_val,
+                                context,
+                                &format!("default_yield_{}", i),
+                            )?);
                         }
                         context.build_unconditional_branch(join_block);
                         all_yields.push((default_yields, default_end_block));
@@ -944,8 +958,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // No default region - use inputs as yields
                     let default_end_block = context.basic_block();
                     let mut default_yields = Vec::new();
-                    for input_val in inputs {
-                        default_yields.push(self.translate_value(input_val)?);
+                    for (i, input_val) in inputs.iter().enumerate() {
+                        default_yields.push(self.translate_value_as_word(
+                            input_val,
+                            context,
+                            &format!("default_input_{}", i),
+                        )?);
                     }
                     context.build_unconditional_branch(join_block);
                     all_yields.push((default_yields, default_end_block));
@@ -1005,10 +1023,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 post,
                 outputs,
             } => {
-                // Get initial values for loop variables
+                // Get initial values for loop variables (ensure word type for phi nodes)
                 let mut init_llvm_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
-                for init_val in init_values {
-                    init_llvm_values.push(self.translate_value(init_val)?);
+                for (i, init_val) in init_values.iter().enumerate() {
+                    init_llvm_values.push(self.translate_value_as_word(
+                        init_val,
+                        context,
+                        &format!("for_init_{}", i),
+                    )?);
                 }
 
                 let entry_block = context.basic_block();
@@ -1045,11 +1067,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 // Evaluate condition
                 let cond_val = self.generate_expr(condition, context)?;
+                // Ensure condition is word type before comparing
+                let cond_val =
+                    self.ensure_word_type(context, cond_val.into_int_value(), "for_cond")?;
                 let cond_bool = context
                     .builder()
                     .build_int_compare(
                         inkwell::IntPredicate::NE,
-                        cond_val.into_int_value(),
+                        cond_val,
                         context.word_type().const_zero(),
                         "for_cond_bool",
                     )
@@ -1067,11 +1092,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.set_basic_block(post_block);
                 self.generate_region(post, context)?;
 
-                // Collect yields from post region and wire up phi nodes
+                // Collect yields from post region and wire up phi nodes (ensure word type)
                 let post_end_block = context.basic_block();
                 for (i, phi) in loop_phis.iter().enumerate() {
                     if i < post.yields.len() {
-                        let yield_val = self.translate_value(&post.yields[i])?;
+                        let yield_val = self.translate_value_as_word(
+                            &post.yields[i],
+                            context,
+                            &format!("for_post_yield_{}", i),
+                        )?;
                         phi.add_incoming(&[(&yield_val, post_end_block)]);
                     }
                 }
@@ -1422,6 +1451,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Expr::Binary { op, lhs, rhs } => {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
+                // Ensure both operands are word type for binary operations
+                let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
+                let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
                 self.generate_binop(*op, lhs_val, rhs_val, context)
             }
 
@@ -1429,6 +1461,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let a_val = self.translate_value(a)?.into_int_value();
                 let b_val = self.translate_value(b)?.into_int_value();
                 let n_val = self.translate_value(n)?.into_int_value();
+                // Ensure all operands are word type for ternary operations
+                let a_val = self.ensure_word_type(context, a_val, "ternary_a")?;
+                let b_val = self.ensure_word_type(context, b_val, "ternary_b")?;
+                let n_val = self.ensure_word_type(context, n_val, "ternary_n")?;
 
                 match op {
                     BinOp::AddMod => Ok(revive_llvm_context::polkavm_evm_math::add_mod(
@@ -1446,6 +1482,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::Unary { op, operand } => {
                 let operand_val = self.translate_value(operand)?.into_int_value();
+                // Ensure operand is word type for unary operations
+                let operand_val = self.ensure_word_type(context, operand_val, "unary_op")?;
                 match op {
                     UnaryOp::IsZero => {
                         // IsZero: result is 1 if operand == 0, else 0
@@ -1636,9 +1674,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .ok_or(CodegenError::UndefinedFunction(*function))?
                     .clone();
 
+                // Ensure all arguments are word type (function parameters expect word type)
                 let mut arg_vals = Vec::new();
-                for arg in args {
-                    arg_vals.push(self.translate_value(arg)?);
+                for (i, arg) in args.iter().enumerate() {
+                    arg_vals.push(self.translate_value_as_word(
+                        arg,
+                        context,
+                        &format!("call_arg_{}", i),
+                    )?);
                 }
 
                 // Ensure debug location is set for function calls
@@ -1848,6 +1891,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .as_basic_type_enum(),
             Type::Ptr(_) => context.word_type().as_basic_type_enum(), // Pointers are word-sized
             Type::Void => context.word_type().as_basic_type_enum(),   // Void defaults to word
+        }
+    }
+
+    /// Translates a value and ensures it's word type.
+    /// Used for phi nodes and other operations requiring consistent types.
+    fn translate_value_as_word(
+        &self,
+        value: &Value,
+        context: &PolkaVMContext<'ctx>,
+        name: &str,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let llvm_val = self.translate_value(value)?;
+        if llvm_val.is_int_value() {
+            let int_val = llvm_val.into_int_value();
+            Ok(self
+                .ensure_word_type(context, int_val, name)?
+                .as_basic_value_enum())
+        } else {
+            Ok(llvm_val)
         }
     }
 

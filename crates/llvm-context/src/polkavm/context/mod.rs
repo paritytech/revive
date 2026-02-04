@@ -1055,6 +1055,7 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
+    /// Handles xlen, word, narrow, and intermediate types.
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1102,12 +1103,14 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.
+    /// Handles xlen, word, narrow, and intermediate types.
     pub fn clip_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
         let value_width = value.get_type().get_bit_width();
         let xlen_width = self.xlen_type().get_bit_width();
+        let word_width = self.word_type().get_bit_width();
 
         // Already xlen-sized - no clipping needed
         if value_width == xlen_width {
@@ -1124,14 +1127,19 @@ impl<'ctx> Context<'ctx> {
         }
 
         // Wider type - check for overflow and clip
+        // For word-type values, use word_type to maintain original codegen
+        // For intermediate types (e.g., i64), use the value's type
         let clipped = self.xlen_type().const_all_ones();
-        let clipped_extended =
-            self.builder()
-                .build_int_z_extend(clipped, value.get_type(), "value_clipped")?;
+        let comparison_type = if value_width == word_width {
+            self.word_type()
+        } else {
+            value.get_type()
+        };
         let is_overflow = self.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
             value,
-            clipped_extended,
+            self.builder()
+                .build_int_z_extend(clipped, comparison_type, "value_clipped")?,
             "is_value_overflow",
         )?;
         let truncated =

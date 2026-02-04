@@ -221,6 +221,8 @@ fn build_host(
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='aarch64'",
+                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
+                "-DCMAKE_C_COMPILER_TARGET='aarch64-unknown-linux-musl'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::shared_build_opts_ccache(
@@ -293,6 +295,7 @@ fn build_target(
                 "-G",
                 "Ninja",
                 "-DBUILD_SHARED_LIBS='Off'",
+                "-DLLVM_USE_LINKER='lld'",
                 "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
                 format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",

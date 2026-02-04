@@ -121,7 +121,7 @@ for opt in "${OPT_LEVELS[@]}"; do
             MISMATCH_COUNT=$(($(echo "$DIFF_OUTPUT" | grep '^[<>]' | sed 's/^[<>] //' | cut -d':' -f1,2 | sort -u | wc -l)))
             echo "$platform: ❌ $MISMATCH_COUNT contracts have different hashes"
 
-            ((OPT_LEVEL_MISMATCHES += MISMATCH_COUNT))
+            OPT_LEVEL_MISMATCHES=$((OPT_LEVEL_MISMATCHES + MISMATCH_COUNT))
 
             # Collect details of the first 10 mismatched contracts.
             # Example output:
@@ -150,7 +150,7 @@ for opt in "${OPT_LEVELS[@]}"; do
         fi
     done
 
-    ((TOTAL_MISMATCHES += OPT_LEVEL_MISMATCHES))
+    TOTAL_MISMATCHES=$((TOTAL_MISMATCHES + OPT_LEVEL_MISMATCHES))
 
     if [ "$OPT_LEVEL_MISMATCHES" -eq 0 ]; then
         echo "✅ All platforms match for optimization level O${opt}"

@@ -127,7 +127,7 @@ jobs:
       - name: Package Artifact
         shell: bash
         run: |
-          mv target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}
+          cp -r target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}
           tar -czf "${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}.tar.gz" llvm-${{ matrix.target }}
 
       - name: Add Artifact to Release

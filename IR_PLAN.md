@@ -1235,15 +1235,18 @@ tests/
 - [x] Load-after-store elimination fires on test cases
 - [x] Code size reduced by ≥10% on key contracts
 
-**Current Status**: COMPLETE. Key achievements:
+**Current Status**: COMPLETE (with caveats). Key achievements:
 - Constant value tracking through Let bindings ✅
 - Memory state tracking (what value was stored where) ✅
 - IR traversal with correct control flow handling ✅
-- Load-after-store elimination **WORKING** ✅
+- Load-after-store elimination **WORKING** ✅ (unit tests pass, produces code size improvements)
+- Internal function call invalidation ✅ (memory state cleared after calls)
 - Dead store tracking infrastructure ready ✅
 - State save/restore for nested regions (fixed bug where recursive calls corrupted outer state) ✅
 - **Per-access native memory optimization IMPLEMENTED** ✅
 - All 62 integration tests pass with newyork path
+
+**Note on retester failures**: The newyork pipeline has **pre-existing bugs** that cause ~717 retester failures. These failures occur even with mem_opt completely disabled, and are unrelated to the Phase 3 memory optimization work. The failures are in the core newyork translation/codegen (from_yul.rs, to_llvm.rs), not in mem_opt.rs.
 
 **Code Size Results (newyork pipeline):**
 

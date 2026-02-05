@@ -544,8 +544,18 @@ impl MemoryOptimizer {
                 }
 
                 Statement::Let { bindings, value } => {
+                    // Check if the value is a function call - if so, invalidate memory state
+                    // because internal functions can modify memory
+                    let is_call = matches!(&value, Expr::Call { .. });
+
                     // Check for load-after-store elimination opportunity
                     let optimized_value = self.optimize_expr_with_read_tracking(value);
+
+                    // Invalidate memory state after function calls
+                    if is_call {
+                        self.memory_state.clear();
+                        self.pending_stores.clear();
+                    }
 
                     // Track constant bindings for single-value lets
                     if bindings.len() == 1 {
@@ -685,7 +695,17 @@ impl MemoryOptimizer {
                 }
 
                 Statement::Expr(expr) => {
+                    // Check if the expression is a function call - if so, invalidate memory state
+                    let is_call = matches!(&expr, Expr::Call { .. });
+
                     let optimized = self.optimize_expr_with_read_tracking(expr);
+
+                    // Invalidate memory state after function calls
+                    if is_call {
+                        self.memory_state.clear();
+                        self.pending_stores.clear();
+                    }
+
                     processed.push(Statement::Expr(optimized));
                 }
 
@@ -722,17 +742,18 @@ impl MemoryOptimizer {
                 }
 
                 // Log reads from memory - pending stores are used
-                Statement::Log { offset, length, .. } => {
+                Statement::Log {
+                    offset,
+                    length,
+                    topics,
+                } => {
                     // Log reads from memory at offset..offset+length
                     // Mark all pending stores as used (conservative)
                     self.pending_stores.clear();
                     processed.push(Statement::Log {
                         offset,
                         length,
-                        topics: match stmt {
-                            Statement::Log { topics, .. } => topics,
-                            _ => unreachable!(),
-                        },
+                        topics,
                     });
                 }
 
@@ -810,17 +831,10 @@ impl MemoryOptimizer {
             }
 
             Expr::Keccak256 { offset, length } => {
-                // Keccak reads from memory - mark pending stores as used
-                if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                    let word_offset = static_offset / 32 * 32;
-                    self.pending_stores.remove(&word_offset);
-                    if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
-                        tracked.was_read = true;
-                    }
-                } else {
-                    // Unknown offset - all pending stores might be read
-                    self.pending_stores.clear();
-                }
+                // Keccak256 reads multiple words from memory (offset..offset+length).
+                // Conservatively clear ALL pending stores since determining the exact
+                // range of words read is complex and error-prone.
+                self.pending_stores.clear();
                 Expr::Keccak256 { offset, length }
             }
 

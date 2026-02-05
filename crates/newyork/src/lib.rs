@@ -93,21 +93,12 @@ pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
-    let mut ir_object = translator.translate_object(yul_object)?;
+    let ir_object = translator.translate_object(yul_object)?;
 
-    // Run memory optimization pass (load-after-store, dead store elimination)
+    // Run memory optimization pass (load-after-store and dead store elimination)
+    let mut ir_object = ir_object;
     let mut mem_optimizer = MemoryOptimizer::new();
     let mem_opt = mem_optimizer.optimize_object(&mut ir_object);
-
-    // Log memory optimization statistics (debug builds only)
-    #[cfg(debug_assertions)]
-    log::debug!(
-        "mem_opt for {}: {} loads eliminated, {} stores eliminated, {} values tracked",
-        ir_object.name,
-        mem_opt.loads_eliminated,
-        mem_opt.stores_eliminated,
-        mem_opt.values_tracked
-    );
 
     // Run heap analysis to identify optimization opportunities
     let mut heap_analysis = HeapAnalysis::new();

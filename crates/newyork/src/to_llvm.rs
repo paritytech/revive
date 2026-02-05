@@ -136,7 +136,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Tries to extract a constant u64 offset from an LLVM IntValue.
     /// Returns Some(offset) if the value is a constant that fits in u64.
-    /// Used for per-access native memory optimization.
+    /// NOTE: Currently unused but preserved for future heap optimization work.
+    #[allow(dead_code)]
     fn try_extract_const_offset(&self, value: IntValue<'ctx>) -> Option<u64> {
         // For 256-bit integers, get_zero_extended_constant returns None
         // because the value doesn't fit in u64. We need to check if it's
@@ -163,40 +164,35 @@ impl<'ctx> LlvmCodegen<'ctx> {
         None
     }
 
+    /// Returns true when ALL heap accesses can use native byte order.
+    /// In this mode we use the native function call variants (defined once, called many times)
+    /// which avoids emitting byte-swapping functions entirely.
+    fn is_all_native(&self) -> bool {
+        self.heap_opt.all_native()
+    }
+
     /// Checks if a memory operation at the given offset can use native byte order.
-    /// Returns true in two cases:
-    /// 1. all_native mode: ALL heap accesses are safe, so we use native functions exclusively
-    /// 2. Per-access mode: This specific offset is known to be safe, use inline native code
     ///
-    /// Native memory (no byte-swapping) requires:
-    /// - Statically known offset (no dynamic/unknown accesses)
-    /// - Word-aligned (offset is multiple of 32)
-    /// - Not escaping to external code (no calls, returns, logs)
-    /// - Not tainted by unaligned writes
+    /// Three tiers:
+    /// 1. `all_native()` — every access is safe, use function-call native ops
+    /// 2. Per-access — only when ALL offsets are static (unknown_accesses == 0)
+    ///    and this particular offset is native-safe, use inline native ops
+    /// 3. Otherwise — standard byte-swapping path
     ///
-    /// When all_native() is true, we use native functions (saves ~200 bytes).
-    /// When per-access native is possible, we use inline code (no function overhead).
+    /// The `unknown_accesses == 0` guard is critical: without it, a dynamic offset
+    /// could alias a "native-safe" static offset, causing store-native/load-byteswap
+    /// corruption.
     fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
-        // If ALL accesses are safe, use native mode
         if self.heap_opt.all_native() {
             return true;
         }
-
-        // Try per-access check: if this specific offset is known-safe, we can inline native code
-        if let Some(const_offset) = self.try_extract_const_offset(offset) {
-            if self.heap_opt.can_use_native(const_offset) {
-                return true;
+        // Per-access: safe only when ALL accesses are static (no aliasing risk)
+        if self.heap_opt.unknown_accesses == 0 {
+            if let Some(const_offset) = self.try_extract_const_offset(offset) {
+                return self.heap_opt.can_use_native(const_offset);
             }
         }
-
-        // Otherwise, must use byte-swapping
         false
-    }
-
-    /// Returns true if ALL memory accesses can use native byte order.
-    /// Used to decide whether to emit only native heap functions.
-    fn is_all_native(&self) -> bool {
-        self.heap_opt.all_native()
     }
 
     /// Truncates a 256-bit offset to 32-bit for use with native memory operations.
@@ -732,18 +728,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
                 if self.can_use_native_memory(offset_val) {
-                    // Native memory operations require 32-bit offset (xlen_type)
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
                     if self.is_all_native() {
-                        // All accesses native: use runtime function (function body is emitted)
+                        // All-native: use function call variant (defined once)
                         revive_llvm_context::polkavm_evm_memory::store_native(
                             context,
                             offset_xlen,
                             value_val,
                         )?;
                     } else {
-                        // Per-access native: inline the store (no function overhead)
+                        // Per-access: use inline variant (no extra function defined)
                         revive_llvm_context::polkavm_evm_memory::store_native_inline(
                             context,
                             offset_xlen,
@@ -1643,41 +1638,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
 
-                // Type inference Phase 2: Use narrow types where possible.
-                // - Comparisons: can always operate on narrow types (result is i1)
-                // - Simple arithmetic (add, sub, mul): can use narrow types when both
-                //   operands are already narrow (LLVM handles wrapping correctly)
-                // - Bitwise ops (and, or, xor): can use narrow types
-                // - Shifts, division, modulo, exp: require word type for EVM semantics
-                //   (shift functions use word_const, division has special zero handling)
+                // Comparisons produce i1 and can operate on narrow types.
+                // Bitwise ops (And/Or/Xor) are safe with narrow types because
+                // and(zext(a), zext(b)) == zext(and(a,b)) — they can't create
+                // bits that weren't in the inputs.
+                // All other ops use word type for correct EVM wrapping semantics.
                 match op {
-                    // Comparisons: operate on narrow types directly
                     BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
 
-                    // Simple arithmetic: use narrow types when possible
-                    // LLVM's add/sub/mul with wrapping has same semantics at any width
-                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
-                        let (lhs_val, rhs_val) =
-                            self.ensure_same_type(context, lhs_val, rhs_val, "arith")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
-                    }
-
-                    // Bitwise operations: can use narrow types
                     BinOp::And | BinOp::Or | BinOp::Xor => {
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "bitwise")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
 
-                    // All other operations require word type for EVM semantics:
-                    // - Shifts: runtime functions use word_const and word_type
-                    // - Division/Mod: runtime functions for div-by-zero handling
-                    // - Exp: can overflow to full 256-bit
-                    // - Byte/SignExtend: operate on 256-bit words
                     _ => {
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
@@ -1878,17 +1856,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Expr::MLoad { offset, region: _ } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 if self.can_use_native_memory(offset_val) {
-                    // Native memory operations require 32-bit offset (xlen_type)
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
                     if self.is_all_native() {
-                        // All accesses native: use runtime function (function body is emitted)
+                        // All-native: use function call variant (defined once)
                         Ok(revive_llvm_context::polkavm_evm_memory::load_native(
                             context,
                             offset_xlen,
                         )?)
                     } else {
-                        // Per-access native: inline the load (no function overhead)
+                        // Per-access: use inline variant (no extra function defined)
                         Ok(revive_llvm_context::polkavm_evm_memory::load_native_inline(
                             context,
                             offset_xlen,

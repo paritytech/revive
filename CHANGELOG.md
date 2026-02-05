@@ -14,7 +14,6 @@ This is a development pre-release.
 - Updated `musl` to `1.2.5`
 - Updated `inkwell` to `0.8.0`
 - Updated `polkavm-*` to `0.31.0`
-- Updated `EMSDK` to `4.0.23`
 
 ## v1.0.0
 

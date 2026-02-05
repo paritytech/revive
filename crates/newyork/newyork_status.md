@@ -1,226 +1,210 @@
-# NewYork IR Status
+# newyork Crate Status Summary
 
-## Current State
+**Date:** 2026-02-05
+**Crate Name:** revive-newyork (NEW Yul OptimziR Kit)
 
-The newyork IR pipeline is **functionally complete** with **heap optimization and bidirectional type inference integrated**.
+## Overview
 
-### What Works
-- Yul AST to newyork IR translation (`from_yul.rs`)
-- newyork IR to LLVM IR codegen (`to_llvm.rs`)
-- All 62 integration tests pass with `RESOLC_USE_NEWYORK=1`
-- All resolc tests pass (both with and without newyork)
-- Proper error handling for unsupported opcodes (CALLCODE, CODECOPY in runtime, EXTCODECOPY)
-- Heap analysis runs on every compiled contract
-- **Bidirectional type inference** (forward + backward constraint propagation)
-- Heap optimization results used in codegen (native byte order for internal memory)
-- Type inference infrastructure ready for function specialization
+The newyork crate implements a custom intermediate representation (IR) between Yul and LLVM IR, enabling domain-specific optimizations that LLVM cannot perform due to lack of semantic knowledge about PolkaVM and EVM/Solidity domains.
 
-### Code Size Comparison
+## Implementation Progress vs IR_PLAN.md
 
-| Contract | YUL Pipeline | NewYork Pipeline | Diff |
-|----------|--------------|------------------|------|
-| Baseline | 864 bytes | 864 bytes | 0 |
-| Flipper | 2154 bytes | 2154 bytes | 0 |
-| ERC20 | 17813 bytes | 17813 bytes | 0 |
-| FibonacciIterative | 1424 bytes | 1424 bytes | 0 |
-| Computation | 2323 bytes | 2323 bytes | 0 |
+### Phase 0: Infrastructure Setup - COMPLETE
 
-**Summary**: Code sizes are identical between pipelines. The newyork IR pipeline produces equivalent output to the Yul pipeline. The optimization infrastructure is in place but cannot reduce code size without deeper changes (see "Why No Size Reduction" below).
+| Item | Status | Notes |
+|------|--------|-------|
+| Create crate structure | Done | `crates/newyork/` with all core modules |
+| IR data structures | Done | `ir.rs` - full type system, SSA values, statements, expressions |
+| Visitor traits | Partial | Not a formal visitor, but analysis traversal in heap_opt.rs and type_inference.rs |
+| Pretty printer | Not started | No IR printer for debugging yet |
+| IR validation | Not started | No SSA well-formedness or type checking passes |
 
-## Pipeline Architecture
+### Phase 0.5: IR Round-Trip Validation - NOT STARTED
 
-```
-Yul AST ──► newyork IR ──► HeapAnalysis ──► TypeInference ──► LLVM IR Codegen
-         (from_yul.rs)    (heap_opt.rs)   (type_inference.rs)  (to_llvm.rs)
-                               │                  │                  │
-                       HeapOptResults ────────────┼─────────────────►│
-                                                  │                  │
-                                    TypeInference ─────────────────►│
-                                    (min_width + max_width)         │
-                                    (use contexts)                  │
-                                                                    ▼
-                                              Values at 256-bit for runtime compat
-                                              Narrow types possible for internal ops
-```
+| Item | Status | Notes |
+|------|--------|-------|
+| Yul -> IR translation | Done | `from_yul.rs` - complete translation of all Yul constructs |
+| IR -> Yul printer | Not started | No round-trip testing capability |
+| Round-trip test suite | Not started | Cannot verify IR correctness via round-trip |
 
-## Type Inference
+### Phase 1: Pass-Through to LLVM - IN PROGRESS
 
-### Bidirectional Constraint Propagation
+| Item | Status | Notes |
+|------|--------|-------|
+| IR -> LLVM lowering | Mostly done | `to_llvm.rs` - ~2700 lines, comprehensive implementation |
+| Integration with pipeline | Unknown | Need to verify integration with resolc driver |
+| All tests passing | Unknown | Need validation run |
 
-The type inference now performs both forward and backward analysis:
+### Phase 2: Type Inference - PARTIAL
 
-1. **Forward Pass** (min_width):
-   - Propagates minimum required width from literals and operation results
-   - Example: literal `42` needs only I8, literal `0x10000` needs I32
-   - Addition may overflow by 1 bit, multiplication doubles width
+| Item | Status | Notes |
+|------|--------|-------|
+| Type inference algorithm | Done | `type_inference.rs` - forward + backward dataflow |
+| Insert type conversions | Not yet | Narrowed types computed but not used in codegen |
+| Narrower LLVM types | Partial | Type info available but unclear if used |
 
-2. **Backward Pass** (max_width):
-   - Collects how each value is **used** via `UseContext` enum
-   - Propagates constraints backward from use sites
-   - Example: if value is only used as `mload(x)` offset, only 64 bits needed
+### Phase 3: Memory Optimization - PARTIAL
 
-### UseContext Enum
+| Item | Status | Notes |
+|------|--------|-------|
+| Memory analysis pass | Done | `heap_opt.rs` - alignment and escape analysis |
+| Load-after-store elimination | Not started | Analysis only, no transformations |
+| Dead store elimination | Not started | |
+| Scratch-to-stack promotion | Not started | |
 
-```rust
-pub enum UseContext {
-    MemoryOffset,    // mload/mstore offset → 64-bit sufficient
-    MemoryValue,     // mstore value → 256-bit required (EVM compat)
-    StorageAccess,   // sload/sstore → 256-bit required
-    Comparison,      // lt/gt/eq → preserves narrow type
-    Arithmetic,      // add/mul → may need full width
-    FunctionArg,     // function call argument
-    FunctionReturn,  // returned to caller → 256-bit (escapes)
-    ExternalCall,    // external call args → 256-bit (EVM ABI)
-    General,         // unknown use
-}
-```
+### Phase 4: Custom Inliner - NOT STARTED
 
-### TypeConstraint Structure
+- Call graph construction: Not started
+- Cost-benefit analysis: Not started (but `size_estimate` field exists in Function)
+- Inline transformation: Not started
 
-```rust
-pub struct TypeConstraint {
-    pub min_width: BitWidth,  // Minimum from forward propagation
-    pub max_width: BitWidth,  // Maximum from backward propagation
-    pub is_signed: bool,      // Signed operation detected
-}
-```
+### Phase 5: Pattern Rewrites - NOT STARTED
 
-### Why No Size Reduction Yet
+- No pattern matcher framework
+- No rewrite rules implemented
 
-The type inference cannot reduce code size because:
+## Module Status Details
 
-1. **Runtime function signatures**: Memory/storage/call functions expect 256-bit arguments
-2. **Escaping values**: Any value that leaves the contract (return, call, log) needs 256-bit
-3. **LLVM optimization**: LLVM already folds trivial zext/trunc of constants
+### `ir.rs` - Core IR Data Structures
+**Status: Complete**
 
-To actually benefit from narrow types, we need:
-- **Function specialization**: Generate variants of functions for narrow argument types
-- **Runtime variants**: Provide `mstore32`, `mstore64` etc. for narrow offsets
-- **ABI changes**: Use narrower types at internal function boundaries
+Implements:
+- `BitWidth` enum: I1, I8, I32, I64, I160, I256
+- `AddressSpace` enum: Heap, Stack, Storage, Code
+- `Type` enum: Int, Ptr, Void
+- `MemoryRegion` enum: Scratch, FreePointerSlot, Dynamic, Unknown
+- `ValueId`, `Value` - SSA value representation
+- `BinOp`, `UnaryOp` - all EVM operations
+- `Expr` enum - all pure expressions (literals, binary/ternary/unary ops, EVM builtins, loads)
+- `Statement` enum - all effectful operations (stores, control flow, calls, etc.)
+- `Region`, `Block` - structured control flow containers
+- `Function`, `Object` - top-level constructs
 
-## Heap Optimization
+Key design choices:
+- SSA with structured control flow (MLIR SCF style)
+- Explicit region inputs/outputs for If/Switch/For
+- Memory region annotations for optimization
+- Static slot tracking for storage operations
 
-### How It Works
+### `ssa.rs` - SSA Builder
+**Status: Complete**
 
-1. **Analysis Phase** (`heap_opt.rs`):
-   - Tracks memory access patterns and offset information
-   - Identifies "tainted" regions (unaligned writes, byte-level access)
-   - Identifies "escaping" regions (return data, call data, log data)
-   - Computes `native_safe_regions` and `native_safe_offsets`
+Provides:
+- Fresh value ID allocation
+- Scope management (enter/exit)
+- Variable definition and lookup
+- Modified variable tracking for control flow
+- Scope merging for phi nodes
 
-2. **Codegen Phase** (`to_llvm.rs`):
-   - Checks `HeapOptResults.all_native()` for whole-contract optimization
-   - Uses native (non-byte-swapping) heap functions when all accesses are safe
-   - Falls back to byte-swapping functions otherwise
+### `from_yul.rs` - Yul to IR Translation
+**Status: Complete**
 
-### HeapOptResults
+Translates all Yul constructs:
+- Variable declarations and assignments
+- All EVM builtins (arithmetic, bitwise, memory, storage, calls, etc.)
+- Control flow: if, switch, for loops
+- Function definitions with return value tracking
+- Nested blocks and scopes
+- Factory dependencies and immutables
+- Proper SSA form with explicit yields for control flow joins
 
-```rust
-pub struct HeapOptResults {
-    pub native_safe_regions: BTreeSet<u64>,
-    pub native_safe_offsets: BTreeSet<u64>,
-    pub total_accesses: usize,
-    pub unknown_accesses: usize,
-    pub tainted_count: usize,
-    pub escaping_count: usize,
-}
+Notable implementation details:
+- Two-pass translation: collect functions first, then translate bodies
+- Return variable tracking for `leave` statements
+- Combined scope for for-loop body and post regions
+- Size estimation for inlining decisions
 
-pub fn all_native(&self) -> bool {
-    self.total_accesses > 0
-        && self.unknown_accesses == 0
-        && self.tainted_count == 0
-        && self.escaping_count == 0
-}
-```
+### `to_llvm.rs` - LLVM Code Generation
+**Status: Mostly Complete (~2700 lines)**
 
-### Why Limited Heap Optimization Benefits
+Implements:
+- Full IR to LLVM translation
+- Integration with `PolkaVMContext` from revive-llvm-context
+- All statement types
+- All expression types
+- Control flow (if, switch, for loops)
+- Function declarations and calls
+- External calls and contract creation
+- Memory and storage operations
+- Data operations (codecopy, calldatacopy, etc.)
+- Immutable variables
+- Heap optimization integration (uses `HeapOptResults`)
+- Type inference integration (uses `TypeInference`)
 
-Most contracts don't benefit because:
-- Memory regions that escape (return, call, log) must use big-endian
-- The analysis is conservative - if unsure, it doesn't optimize
-- Typical Flipper contract: `total=3, unknown=0, tainted=2, escaping=1`
+### `type_inference.rs` - Type Inference Pass
+**Status: Complete but Not Fully Utilized**
 
-## Files Modified
+Implements:
+- `TypeConstraint` with min_width/max_width/is_signed
+- Forward dataflow for minimum width
+- Backward dataflow for maximum width from use sites
+- Use context classification (MemoryOffset, StorageAccess, Comparison, etc.)
+- Width inference for all expressions and statements
 
-### Type Inference (Bidirectional)
-1. **`crates/newyork/src/type_inference.rs`**:
-   - Added `max_width` to `TypeConstraint`
-   - Added `UseContext` enum for tracking value usage
-   - Added `uses: BTreeMap<u32, BTreeSet<UseContext>>` to track all uses
-   - Renamed `infer_*` to `infer_*_forward` for clarity
-   - Added `collect_uses_*` methods for backward pass
-   - Added `apply_backward_constraints()` to narrow max_width
+Inference rules implemented:
+- Literals: minimum width that fits
+- Comparisons: I1 result
+- Address builtins: I160
+- Memory sizes: I64
+- Arithmetic: width propagation with widening
 
-### Heap Optimization
-2. **`crates/newyork/src/heap_opt.rs`**: Added tracking fields, fixed `all_native()`
-3. **`crates/llvm-context/src/polkavm/context/pointer/heap.rs`**: Native load/store
-4. **`crates/llvm-context/src/polkavm/evm/memory.rs`**: `load_native()`, `store_native()`
+### `heap_opt.rs` - Heap Optimization Analysis
+**Status: Complete Analysis, No Transformations**
 
-### Codegen Integration
-5. **`crates/newyork/src/to_llvm.rs`**:
-   - Uses `type_info` from translation
-   - Helper methods for type conversion ready but values kept at 256-bit
-   - Conditional native heap function emission based on `all_native()`
+Implements:
+- Memory access pattern classification (aligned vs unaligned, static vs dynamic)
+- Offset tracking with alignment information
+- Tainted region detection (unaligned writes, external data)
+- Escape analysis (external calls, returns, logs)
+- `HeapOptResults` for codegen integration
 
-### Resolc Integration
-6. **`crates/resolc/src/project/contract/ir/newyork.rs`**: Pass analysis results to codegen
+Used for:
+- Determining where byte-swapping can be skipped
+- Native byte order optimization opportunities
 
-## Testing
+## Dependencies
 
-Run all tests with newyork IR:
-```bash
-RESOLC_USE_NEWYORK=1 cargo test --package revive-integration
+```toml
+[dependencies]
+anyhow, log, num, thiserror, inkwell
+revive-yul, revive-llvm-context, revive-common
 ```
 
-Run unit tests:
-```bash
-cargo test --package revive-newyork
-```
+## Key Gaps for Production Readiness
 
-Debug heap analysis (output written to `/tmp/resolc_heap_debug.log`):
-```bash
-rm -f /tmp/resolc_heap_debug.log
-RESOLC_DEBUG_HEAP=1 RESOLC_USE_NEWYORK=1 resolc input.sol -o out --overwrite
-cat /tmp/resolc_heap_debug.log
-```
+1. **No IR Validation** - Cannot verify SSA well-formedness or type consistency
+2. **No Pretty Printer** - Difficult to debug IR transformations
+3. **No Round-Trip Testing** - Cannot verify translation correctness
+4. **Type Inference Not Applied** - Narrowed types computed but not used in LLVM codegen
+5. **No Optimization Passes** - Analysis exists but no transformations
+6. **Integration Unknown** - Need to verify integration with resolc driver
 
-## Next Steps for Code Size Reduction
+## Recommended Next Steps
 
-### Completed Analysis (2026-02)
+1. **Validation & Testing**
+   - Add IR pretty printer for debugging
+   - Add IR validation pass (SSA dominance, type checking)
+   - Add round-trip test: Yul -> IR -> (simple Yul-like output)
+   - Run retester to verify correctness
 
-Investigation revealed several findings:
+2. **Type Inference Integration**
+   - Use inferred types in LLVM codegen
+   - Insert explicit truncate/extend operations
+   - Verify no semantic changes via differential testing
 
-1. **Dead function elimination**: Already works via LLVM optimization. Unused runtime functions are stripped.
+3. **Memory Optimizations**
+   - Implement load-after-store elimination using heap analysis
+   - Implement dead store elimination
 
-2. **Comparison narrow-type optimization**: Code exists in `to_llvm.rs` (using `ensure_same_type` for comparisons) but has no effect because all values are stored at i256 (word type) for EVM compatibility.
+4. **Inlining**
+   - Build call graph
+   - Implement single-call function inlining
+   - Use existing size_estimate for cost model
 
-3. **Per-offset heap optimization**: Not beneficial. Emitting both native and non-native heap functions would add ~200 bytes of code, while savings from skipping byte-swap are only ~40 bytes per occurrence.
+## Code Quality
 
-4. **Heap all_native mode**: Working but rarely triggered. Most contracts have escaping memory regions (returns, calls, logs) that require big-endian byte order. Typical Flipper contract: `total=3, unknown=0, tainted=2, escaping=1`.
-
-5. **Narrow literal generation**: Attempted but reverted. Runtime functions (`safe_truncate_int_to_xlen`) only accept XLEN (32-bit) or WORD (256-bit) types. Generating i8/i32/i64 literals causes assertion failures when passed to memory operations. The runtime API would need modification to support intermediate widths.
-
-### Future Optimization Paths
-
-To achieve code size reduction, deeper changes would be needed:
-
-**Medium-term (Function Specialization)**:
-- **Internal function narrowing**: Generate narrow-typed variants of internal functions
-- **Call site specialization**: If caller always passes narrow values, use specialized callee
-- **Store values at inferred type**: Change `Let` statement to store at narrow type instead of i256
-- **Modify runtime API**: Add support for intermediate widths (i64) in `safe_truncate_int_to_xlen`
-
-**Long-term (ABI Changes)**:
-- **Narrow runtime functions**: `mstore32(offset32, value256)` variants
-- **Internal ABI**: Use narrow types at internal function boundaries
-- **Escape analysis**: Track which values truly need 256-bit
-
-## Environment
-
-Enable newyork pipeline: `export RESOLC_USE_NEWYORK=1`
-
-Build: `make install-bin` (requires `LLVM_SYS_181_PREFIX` set to LLVM 18.1.x)
-
-Test: `RESOLC_USE_NEWYORK=1 cargo test --package revive-integration`
-
-Debug: `RESOLC_DEBUG_HEAP=1` to see heap analysis statistics
+- Uses `BTreeMap` throughout (deterministic iteration)
+- Comprehensive doc comments on public items
+- No magic numbers - uses module constants
+- Meaningful, non-abbreviated identifiers
+- Clean separation of concerns between modules

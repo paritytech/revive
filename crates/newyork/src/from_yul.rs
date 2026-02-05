@@ -1340,8 +1340,13 @@ impl YulTranslator {
             }
             LexicalLiteral::String(str_lit) => {
                 // String literals are converted to their byte representation
+                // They are padded to 32 bytes (BYTE_LENGTH_WORD) with zeros on the right
+                // to match the Yul pipeline behavior
                 let bytes = str_lit.inner.as_bytes();
-                Ok(BigUint::from_bytes_be(bytes))
+                let mut padded = vec![0u8; 32]; // BYTE_LENGTH_WORD = 32
+                let len = bytes.len().min(32);
+                padded[..len].copy_from_slice(&bytes[..len]);
+                Ok(BigUint::from_bytes_be(&padded))
             }
         }
     }

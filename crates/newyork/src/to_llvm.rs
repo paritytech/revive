@@ -1278,15 +1278,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 match context.current_function().borrow().r#return() {
                     revive_llvm_context::PolkaVMFunctionReturn::None => {}
                     revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
-                        // Single return value
+                        // Single return value - must be word type for the pointer
                         if !return_values.is_empty() {
                             if let Ok(ret_val) = self.translate_value(&return_values[0]) {
+                                let ret_val = if ret_val.is_int_value() {
+                                    self.ensure_word_type(
+                                        context,
+                                        ret_val.into_int_value(),
+                                        "leave_ret_val",
+                                    )?
+                                    .as_basic_value_enum()
+                                } else {
+                                    ret_val
+                                };
                                 context.build_store(pointer, ret_val)?;
                             }
                         }
                     }
                     revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
                         // Multiple return values - build a struct
+                        // Struct fields are word type, so ensure each value is word type
                         let field_types: Vec<_> = (0..size)
                             .map(|_| context.word_type().as_basic_type_enum())
                             .collect();
@@ -1294,6 +1305,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         let mut struct_val = struct_type.get_undef();
                         for (i, ret_val) in return_values.iter().enumerate() {
                             if let Ok(val) = self.translate_value(ret_val) {
+                                let val = if val.is_int_value() {
+                                    self.ensure_word_type(
+                                        context,
+                                        val.into_int_value(),
+                                        &format!("leave_ret_val_{}", i),
+                                    )?
+                                    .as_basic_value_enum()
+                                } else {
+                                    val
+                                };
                                 struct_val = context
                                     .builder()
                                     .build_insert_value(struct_val, val, i as u32, "ret_insert")

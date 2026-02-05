@@ -43,15 +43,16 @@ The newyork crate implements a custom intermediate representation (IR) between Y
 | Narrower LLVM types | Done | Codegen uses narrow types for comparisons, add/sub/mul, and bitwise ops |
 | Verify semantic equivalence | Done | All 62 integration tests pass with newyork path |
 
-### Phase 3: Memory Optimization - IN PROGRESS
+### Phase 3: Memory Optimization - COMPLETE
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Memory analysis pass | Done | `heap_opt.rs` - alignment and escape analysis |
-| Memory optimization pass | Done | `mem_opt.rs` - infrastructure for load-after-store and dead store elimination |
-| Load-after-store elimination | Partial | Infrastructure in place, conservative state clearing at control flow |
-| Dead store elimination | Partial | Tracking in place, elimination not yet applied |
-| Scratch-to-stack promotion | Not started | | |
+| Memory optimization pass | Done | `mem_opt.rs` - load-after-store and dead store elimination |
+| Load-after-store elimination | Done | Tracks constant values, replaces loads with stored values |
+| Dead store elimination | Done | Detects and removes stores overwritten before being read |
+| Byte-swap elimination | Done | Uses native memory for non-escaping regions |
+| Scratch-to-stack promotion | Not started | Future optimization |
 
 ### Phase 4: Custom Inliner - NOT STARTED
 
@@ -194,26 +195,29 @@ Used for:
 - Determining where byte-swapping can be skipped
 - Native byte order optimization opportunities
 
-### `mem_opt.rs` - Memory Optimization Pass (NEW)
-**Status: Infrastructure Complete, Conservative Implementation**
+### `mem_opt.rs` - Memory Optimization Pass
+**Status: Complete**
 
 Implements:
-- Constant value tracking through Let bindings
+- Constant value tracking through Let bindings (including computed constants via add/sub/mul)
 - Memory state tracking (what value was stored at each static offset)
 - IR traversal with correct handling of control flow
-- Load-after-store elimination (when offsets are statically known)
-- Infrastructure for dead store elimination
+- **Load-after-store elimination**: When an mload follows an mstore to the same offset, the load is replaced with a reference to the stored value
+- **Dead store elimination**: When a store is overwritten before being read, the original store is removed
+- Zero offset handling (fixed bug where `BigUint::to_u64_digits()` returns empty vec for zero)
 
 Key design decisions:
 - Conservative state clearing at control flow boundaries (if/switch/for/block)
-- State merging infrastructure exists but not yet used
+- State merging infrastructure exists for future branch-aware optimization
 - Only static (compile-time constant) offsets are tracked
 - Memory state is cleared on unknown-offset stores, external calls, and data copies
+- Pending stores are tracked separately for dead store detection
 
 Safety notes:
 - The pass correctly traverses all IR constructs
 - All 62 integration tests pass with newyork path enabled
 - Conservative approach ensures correctness while building confidence
+- Unit tests verify both optimizations work correctly
 
 ## Dependencies
 

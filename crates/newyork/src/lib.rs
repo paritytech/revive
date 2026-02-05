@@ -27,6 +27,7 @@
 //! - [`to_llvm`] - LLVM code generation from newyork IR
 //! - [`type_inference`] - Type inference pass for narrowing integer widths
 //! - [`heap_opt`] - Heap optimization for partial big-endian emulation
+//! - [`mem_opt`] - Memory optimization (load-after-store, dead store elimination)
 //!
 //! For now, allow missing docs while the crate is in development.
 #![allow(missing_docs)]
@@ -35,6 +36,7 @@
 pub mod from_yul;
 pub mod heap_opt;
 pub mod ir;
+pub mod mem_opt;
 pub mod printer;
 pub mod ssa;
 pub mod to_llvm;
@@ -50,6 +52,7 @@ pub use ir::{
     AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
 };
+pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
     print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
@@ -66,6 +69,8 @@ pub struct TranslationResult {
     pub heap_opt: HeapOptResults,
     /// Type inference results (narrower types for values).
     pub type_info: TypeInference,
+    /// Memory optimization results (load-after-store, dead store elimination).
+    pub mem_opt: MemOptResults,
 }
 
 /// Translates a Yul object to newyork IR.
@@ -88,7 +93,21 @@ pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
-    let ir_object = translator.translate_object(yul_object)?;
+    let mut ir_object = translator.translate_object(yul_object)?;
+
+    // Run memory optimization pass (load-after-store, dead store elimination)
+    let mut mem_optimizer = MemoryOptimizer::new();
+    let mem_opt = mem_optimizer.optimize_object(&mut ir_object);
+
+    // Log memory optimization statistics (debug builds only)
+    #[cfg(debug_assertions)]
+    log::debug!(
+        "mem_opt for {}: {} loads eliminated, {} stores eliminated, {} values tracked",
+        ir_object.name,
+        mem_opt.loads_eliminated,
+        mem_opt.stores_eliminated,
+        mem_opt.values_tracked
+    );
 
     // Run heap analysis to identify optimization opportunities
     let mut heap_analysis = HeapAnalysis::new();
@@ -141,5 +160,6 @@ pub fn translate_yul_object(
         object: ir_object,
         heap_opt,
         type_info,
+        mem_opt,
     })
 }

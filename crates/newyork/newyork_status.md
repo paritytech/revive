@@ -43,14 +43,15 @@ The newyork crate implements a custom intermediate representation (IR) between Y
 | Narrower LLVM types | Done | Codegen uses narrow types for comparisons, add/sub/mul, and bitwise ops |
 | Verify semantic equivalence | Done | All 62 integration tests pass with newyork path |
 
-### Phase 3: Memory Optimization - PARTIAL
+### Phase 3: Memory Optimization - IN PROGRESS
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Memory analysis pass | Done | `heap_opt.rs` - alignment and escape analysis |
-| Load-after-store elimination | Not started | Analysis only, no transformations |
-| Dead store elimination | Not started | |
-| Scratch-to-stack promotion | Not started | |
+| Memory optimization pass | Done | `mem_opt.rs` - infrastructure for load-after-store and dead store elimination |
+| Load-after-store elimination | Partial | Infrastructure in place, conservative state clearing at control flow |
+| Dead store elimination | Partial | Tracking in place, elimination not yet applied |
+| Scratch-to-stack promotion | Not started | | |
 
 ### Phase 4: Custom Inliner - NOT STARTED
 
@@ -180,7 +181,7 @@ Inference rules implemented:
 - Bitwise operations (and/or/xor) operate at narrow width
 
 ### `heap_opt.rs` - Heap Optimization Analysis
-**Status: Complete Analysis, No Transformations**
+**Status: Complete Analysis**
 
 Implements:
 - Memory access pattern classification (aligned vs unaligned, static vs dynamic)
@@ -192,6 +193,27 @@ Implements:
 Used for:
 - Determining where byte-swapping can be skipped
 - Native byte order optimization opportunities
+
+### `mem_opt.rs` - Memory Optimization Pass (NEW)
+**Status: Infrastructure Complete, Conservative Implementation**
+
+Implements:
+- Constant value tracking through Let bindings
+- Memory state tracking (what value was stored at each static offset)
+- IR traversal with correct handling of control flow
+- Load-after-store elimination (when offsets are statically known)
+- Infrastructure for dead store elimination
+
+Key design decisions:
+- Conservative state clearing at control flow boundaries (if/switch/for/block)
+- State merging infrastructure exists but not yet used
+- Only static (compile-time constant) offsets are tracked
+- Memory state is cleared on unknown-offset stores, external calls, and data copies
+
+Safety notes:
+- The pass correctly traverses all IR constructs
+- All 62 integration tests pass with newyork path enabled
+- Conservative approach ensures correctness while building confidence
 
 ## Dependencies
 
@@ -211,14 +233,15 @@ The newyork IR path is fully integrated into the resolc compiler:
 
 ## Remaining Gaps
 
-1. **No Optimization Passes** - Analysis exists but no transformations (Phase 3-5)
-2. **No Round-Trip Testing** - Cannot verify translation correctness via round-trip
+1. **Conservative Memory Optimization** - State merging at control flow joins not yet enabled
+2. **No Dead Store Elimination** - Tracking exists but stores aren't removed
+3. **No Round-Trip Testing** - Cannot verify translation correctness via round-trip
 
 ## Recommended Next Steps
 
-1. **Memory Optimizations (Phase 3)**
-   - Implement load-after-store elimination using heap analysis
-   - Implement dead store elimination
+1. **Memory Optimizations (Phase 3) - Continue**
+   - Enable state merging at control flow joins for more optimization opportunities
+   - Implement actual dead store elimination (remove stores that are never read)
    - Apply byte-swap elimination for native-safe regions
 
 2. **Inlining (Phase 4)**
@@ -238,5 +261,5 @@ The newyork IR path is fully integrated into the resolc compiler:
 - No magic numbers - uses module constants
 - Meaningful, non-abbreviated identifiers
 - Clean separation of concerns between modules
-- All tests passing (22 unit tests)
+- All tests passing (24 unit tests)
 - Clippy clean with `deny(clippy::all)`

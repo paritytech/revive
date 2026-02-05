@@ -136,8 +136,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Tries to extract a constant u64 offset from an LLVM IntValue.
     /// Returns Some(offset) if the value is a constant that fits in u64.
-    /// NOTE: Currently unused but preserved for future heap optimization work.
-    #[allow(dead_code)]
+    /// Used for per-access native memory optimization.
     fn try_extract_const_offset(&self, value: IntValue<'ctx>) -> Option<u64> {
         // For 256-bit integers, get_zero_extended_constant returns None
         // because the value doesn't fit in u64. We need to check if it's
@@ -165,34 +164,43 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Checks if a memory operation at the given offset can use native byte order.
-    /// Returns true if ALL heap operations can use native byte order (all_native mode)
-    /// or if this specific offset is known to be safe.
+    /// Returns true in two cases:
+    /// 1. all_native mode: ALL heap accesses are safe, so we use native functions exclusively
+    /// 2. Per-access mode: This specific offset is known to be safe, use inline native code
     ///
-    /// Native mode is only enabled when ALL heap accesses are:
-    /// - Statically known offsets (no dynamic/unknown accesses)
+    /// Native memory (no byte-swapping) requires:
+    /// - Statically known offset (no dynamic/unknown accesses)
     /// - Word-aligned (offset is multiple of 32)
     /// - Not escaping to external code (no calls, returns, logs)
     /// - Not tainted by unaligned writes
     ///
-    /// When all_native() is true, we use native functions exclusively and don't
-    /// emit the byte-swapping functions, saving ~200 bytes of code.
-    #[allow(unused_variables)]
+    /// When all_native() is true, we use native functions (saves ~200 bytes).
+    /// When per-access native is possible, we use inline code (no function overhead).
     fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
-        // Only enable native mode when ALL accesses are safe
-        // This avoids defining both native and non-native functions
+        // If ALL accesses are safe, use native mode
         if self.heap_opt.all_native() {
             return true;
         }
 
-        // If not all_native, we must use non-native (byte-swapping) for everything
-        // to avoid emitting both function sets
+        // Try per-access check: if this specific offset is known-safe, we can inline native code
+        if let Some(const_offset) = self.try_extract_const_offset(offset) {
+            if self.heap_opt.can_use_native(const_offset) {
+                return true;
+            }
+        }
+
+        // Otherwise, must use byte-swapping
         false
     }
 
+    /// Returns true if ALL memory accesses can use native byte order.
+    /// Used to decide whether to emit only native heap functions.
+    fn is_all_native(&self) -> bool {
+        self.heap_opt.all_native()
+    }
+
     /// Truncates a 256-bit offset to 32-bit for use with native memory operations.
-    /// The native load/store functions expect xlen_type (32-bit) offsets.
-    /// NOTE: Currently unused but preserved for future heap optimization work.
-    #[allow(dead_code)]
+    /// The native load/store functions and inline native operations expect xlen_type (32-bit) offsets.
     fn truncate_offset_to_xlen(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -727,11 +735,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // Native memory operations require 32-bit offset (xlen_type)
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
-                    revive_llvm_context::polkavm_evm_memory::store_native(
-                        context,
-                        offset_xlen,
-                        value_val,
-                    )?;
+                    if self.is_all_native() {
+                        // All accesses native: use runtime function (function body is emitted)
+                        revive_llvm_context::polkavm_evm_memory::store_native(
+                            context,
+                            offset_xlen,
+                            value_val,
+                        )?;
+                    } else {
+                        // Per-access native: inline the store (no function overhead)
+                        revive_llvm_context::polkavm_evm_memory::store_native_inline(
+                            context,
+                            offset_xlen,
+                            value_val,
+                        )?;
+                    }
                 } else {
                     revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
                 }
@@ -1842,10 +1860,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // Native memory operations require 32-bit offset (xlen_type)
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                    Ok(revive_llvm_context::polkavm_evm_memory::load_native(
-                        context,
-                        offset_xlen,
-                    )?)
+                    if self.is_all_native() {
+                        // All accesses native: use runtime function (function body is emitted)
+                        Ok(revive_llvm_context::polkavm_evm_memory::load_native(
+                            context,
+                            offset_xlen,
+                        )?)
+                    } else {
+                        // Per-access native: inline the load (no function overhead)
+                        Ok(revive_llvm_context::polkavm_evm_memory::load_native_inline(
+                            context,
+                            offset_xlen,
+                        )?)
+                    }
                 } else {
                     Ok(revive_llvm_context::polkavm_evm_memory::load(
                         context, offset_val,

@@ -103,3 +103,48 @@ pub fn store_native<'ctx>(
 ) -> anyhow::Result<()> {
     context.build_store_native(offset, value)
 }
+
+/// Translates the `mload` instruction without byte-swapping, inlined.
+/// This version inlines the load directly without a function call,
+/// saving both call overhead and function body size when not all
+/// memory accesses need native mode.
+pub fn load_native_inline<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let length = context
+        .xlen_type()
+        .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+    let pointer = context.build_heap_gep(offset, length)?;
+    let value = context
+        .builder()
+        .build_load(context.word_type(), pointer.value, "native_load")?;
+    context
+        .basic_block()
+        .get_last_instruction()
+        .expect("Always exists")
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
+        .expect("Alignment is valid");
+    Ok(value)
+}
+
+/// Translates the `mstore` instruction without byte-swapping, inlined.
+/// This version inlines the store directly without a function call,
+/// saving both call overhead and function body size when not all
+/// memory accesses need native mode.
+pub fn store_native_inline<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    let length = context
+        .xlen_type()
+        .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+    let pointer = context.build_heap_gep(offset, length)?;
+    context
+        .builder()
+        .build_store(pointer.value, value)?
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
+        .expect("Alignment is valid");
+    Ok(())
+}

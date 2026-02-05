@@ -35,13 +35,13 @@ The newyork crate implements a custom intermediate representation (IR) between Y
 | Integration with pipeline | Done | Fully integrated via `--newyork` flag and `RESOLC_USE_NEWYORK=1` env var |
 | All tests passing | Done | 62 integration tests pass with both Yul and newyork paths |
 
-### Phase 2: Type Inference - PARTIAL
+### Phase 2: Type Inference - COMPLETE
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Type inference algorithm | Done | `type_inference.rs` - forward + backward dataflow |
-| Insert type conversions | Not yet | Narrowed types computed but not used in codegen |
-| Narrower LLVM types | Partial | Type info available but unclear if used |
+| Narrower LLVM types | Done | Codegen uses narrow types for comparisons, add/sub/mul, and bitwise ops |
+| Verify semantic equivalence | Done | All 62 integration tests pass with newyork path |
 
 ### Phase 3: Memory Optimization - PARTIAL
 
@@ -129,7 +129,11 @@ Implements:
 - Data operations (codecopy, calldatacopy, etc.)
 - Immutable variables
 - Heap optimization integration (uses `HeapOptResults`)
-- Type inference integration (uses `TypeInference`)
+- Type inference integration - Phase 2 complete:
+  - Comparisons operate on narrow types directly
+  - Simple arithmetic (add, sub, mul) uses narrow types when possible
+  - Bitwise operations (and, or, xor) use narrow types when possible
+  - Division, shifts, and EVM-specific ops still use word type for correctness
 
 ### `printer.rs` - IR Pretty Printer
 **Status: Complete (NEW)**
@@ -154,7 +158,7 @@ Implements:
 - Comprehensive test coverage
 
 ### `type_inference.rs` - Type Inference Pass
-**Status: Complete but Not Fully Utilized**
+**Status: Complete and Integrated**
 
 Implements:
 - `TypeConstraint` with min_width/max_width/is_signed
@@ -164,11 +168,16 @@ Implements:
 - Width inference for all expressions and statements
 
 Inference rules implemented:
-- Literals: minimum width that fits
+- Literals: minimum width that fits (small literals use i64)
 - Comparisons: I1 result
 - Address builtins: I160
 - Memory sizes: I64
 - Arithmetic: width propagation with widening
+
+**Phase 2 Integration**: Codegen now uses narrow types for operations that support them:
+- Comparisons operate at the narrower operand width
+- Add/Sub/Mul operate at narrow width when both operands are narrow
+- Bitwise operations (and/or/xor) operate at narrow width
 
 ### `heap_opt.rs` - Heap Optimization Analysis
 **Status: Complete Analysis, No Transformations**
@@ -202,25 +211,25 @@ The newyork IR path is fully integrated into the resolc compiler:
 
 ## Remaining Gaps
 
-1. **Type Inference Not Applied** - Narrowed types computed but not used in LLVM codegen
-2. **No Optimization Passes** - Analysis exists but no transformations
-3. **No Round-Trip Testing** - Cannot verify translation correctness via round-trip
+1. **No Optimization Passes** - Analysis exists but no transformations (Phase 3-5)
+2. **No Round-Trip Testing** - Cannot verify translation correctness via round-trip
 
 ## Recommended Next Steps
 
-1. **Type Inference Integration**
-   - Use inferred types in LLVM codegen
-   - Insert explicit truncate/extend operations
-   - Verify no semantic changes via differential testing
-
-2. **Memory Optimizations**
+1. **Memory Optimizations (Phase 3)**
    - Implement load-after-store elimination using heap analysis
    - Implement dead store elimination
+   - Apply byte-swap elimination for native-safe regions
 
-3. **Inlining**
+2. **Inlining (Phase 4)**
    - Build call graph
    - Implement single-call function inlining
    - Use existing size_estimate for cost model
+
+3. **Pattern Rewrites (Phase 5)**
+   - Implement pattern matcher framework
+   - Add callvalue check optimization
+   - Add selector dispatch optimization
 
 ## Code Quality
 

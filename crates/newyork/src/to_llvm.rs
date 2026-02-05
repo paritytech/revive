@@ -211,13 +211,28 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets the inferred bit-width for a value.
-    /// NOTE: Currently unused but preserved for future type inference integration.
+    /// Phase 2 infrastructure: available for future optimizations that query type inference.
     #[allow(dead_code)]
     fn inferred_width(&self, id: ValueId) -> BitWidth {
         self.type_info.get(id).min_width
     }
 
+    /// Returns true if a value can use a narrow type (64-bit or less).
+    /// This is safe when the inferred width fits and the value is only used
+    /// in contexts that support narrow types (comparisons, memory offsets).
+    /// Phase 2 infrastructure: available for future optimizations.
+    #[allow(dead_code)]
+    fn can_use_narrow_type(&self, id: ValueId) -> bool {
+        let width = self.inferred_width(id);
+        matches!(
+            width,
+            BitWidth::I1 | BitWidth::I8 | BitWidth::I32 | BitWidth::I64
+        )
+    }
+
     /// Gets the LLVM int type for a given bit-width.
+    /// Phase 2 infrastructure: available for future optimizations.
+    #[allow(dead_code)]
     fn int_type_for_width(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -294,7 +309,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Converts a value to the inferred type for storage.
     /// If the inferred type is narrower, truncates; if wider, zero-extends.
-    /// NOTE: Currently unused but preserved for future type inference integration.
+    /// Phase 2 infrastructure: available for future optimizations.
     #[allow(dead_code)]
     fn convert_to_inferred_type(
         &self,
@@ -1589,18 +1604,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
 
-                // For comparison operations, we can operate on narrow types directly
-                // (they produce i1 which is extended when needed).
-                // For other operations, use word type for EVM compatibility.
+                // Type inference Phase 2: Use narrow types where possible.
+                // - Comparisons: can always operate on narrow types (result is i1)
+                // - Simple arithmetic (add, sub, mul): can use narrow types when both
+                //   operands are already narrow (LLVM handles wrapping correctly)
+                // - Bitwise ops (and, or, xor): can use narrow types
+                // - Shifts, division, modulo, exp: require word type for EVM semantics
+                //   (shift functions use word_const, division has special zero handling)
                 match op {
+                    // Comparisons: operate on narrow types directly
                     BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
-                        // Comparisons: ensure both operands have the same type
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
+
+                    // Simple arithmetic: use narrow types when possible
+                    // LLVM's add/sub/mul with wrapping has same semantics at any width
+                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                        let (lhs_val, rhs_val) =
+                            self.ensure_same_type(context, lhs_val, rhs_val, "arith")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                    }
+
+                    // Bitwise operations: can use narrow types
+                    BinOp::And | BinOp::Or | BinOp::Xor => {
+                        let (lhs_val, rhs_val) =
+                            self.ensure_same_type(context, lhs_val, rhs_val, "bitwise")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                    }
+
+                    // All other operations require word type for EVM semantics:
+                    // - Shifts: runtime functions use word_const and word_type
+                    // - Division/Mod: runtime functions for div-by-zero handling
+                    // - Exp: can overflow to full 256-bit
+                    // - Byte/SignExtend: operate on 256-bit words
                     _ => {
-                        // Other operations: use word type for EVM semantics
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)

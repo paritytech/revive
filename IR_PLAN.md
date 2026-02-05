@@ -1241,6 +1241,17 @@ tests/
 13. [ ] Implement single-call function inlining
 14. [ ] Implement pattern rewrite framework
 
+### Code Size Reduction Goals (Target: 50%)
+> Current byte-swap optimizations achieved ~20% reduction. To reach 50%, these areas need work:
+
+15. [ ] **Eliminate unused runtime function metadata** - Every contract includes import metadata for all 34+ runtime functions even if unused. Strip unused imports at link time.
+16. [ ] **More aggressive dead code elimination** at the PolkaVM linker level - Currently dead code from unused runtime paths persists in final blob.
+17. [ ] **Better 256-bit arithmetic lowering** - The 256-bit division/modulo functions are particularly large. Consider:
+    - Specializing for common cases (small divisors, power-of-2)
+    - Using runtime calls instead of inline expansion
+    - Detecting when 64-bit arithmetic suffices
+18. [ ] **Function inlining improvements** - Some small helper functions could be inlined to eliminate call overhead and enable further optimization.
+
 ---
 
 ## Future Work (Post-Phase 5)

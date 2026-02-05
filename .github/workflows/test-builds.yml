@@ -87,13 +87,12 @@ jobs:
         # timeout-minutes: 100
         shell: bash
         run: |
-          RESOLC_BIN="$PWD/resolc-bin/${{ matrix.binary }}"
-          CONTRACTS_DIR="$PWD/resolc-compiler-tests/fixtures"
-          OUTPUT_DIR="$PWD/hashes"
+          RESOLC_BIN="resolc-bin/${{ matrix.binary }}"
+          CONTRACTS_DIR="resolc-compiler-tests/fixtures"
+          OUTPUT_DIR="hashes"
           OPT_LEVELS="0,3,z"
-          # TODO: Temporarily enabling debugging for Windows as compiling
-          #       currently hangs somewhere between file 400-600.
-          DEBUG="${{ runner.os == 'Windows' }}"
+          # Set to "true" for verbose output.
+          DEBUG="false"
 
           chmod +x "$RESOLC_BIN"
           chmod +x ./revive/.github/scripts/compile-and-hash.sh

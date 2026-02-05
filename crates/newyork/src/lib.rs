@@ -35,9 +35,11 @@
 pub mod from_yul;
 pub mod heap_opt;
 pub mod ir;
+pub mod printer;
 pub mod ssa;
 pub mod to_llvm;
 pub mod type_inference;
+pub mod validate;
 
 // Re-export main types
 pub use from_yul::{TranslationError, YulTranslator};
@@ -48,9 +50,13 @@ pub use ir::{
     AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
 };
+pub use printer::{
+    print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
+};
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
+pub use validate::{validate_function, validate_object, ValidationError, ValidationResult};
 
 /// Result of translating a Yul object to newyork IR.
 pub struct TranslationResult {
@@ -94,6 +100,16 @@ pub fn translate_yul_object(
     // Run type inference to determine minimum bit-widths
     let mut type_info = TypeInference::new();
     type_info.infer_object(&ir_object);
+
+    // Validate IR correctness in debug builds
+    #[cfg(debug_assertions)]
+    {
+        if let Err(errors) = validate::validate_object(&ir_object) {
+            for error in &errors {
+                log::warn!("IR validation error in {}: {}", ir_object.name, error);
+            }
+        }
+    }
 
     // Log analysis statistics in debug builds
     #[cfg(debug_assertions)]

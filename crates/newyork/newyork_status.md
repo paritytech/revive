@@ -16,24 +16,24 @@ The newyork crate implements a custom intermediate representation (IR) between Y
 | Create crate structure | Done | `crates/newyork/` with all core modules |
 | IR data structures | Done | `ir.rs` - full type system, SSA values, statements, expressions |
 | Visitor traits | Partial | Not a formal visitor, but analysis traversal in heap_opt.rs and type_inference.rs |
-| Pretty printer | Not started | No IR printer for debugging yet |
-| IR validation | Not started | No SSA well-formedness or type checking passes |
+| Pretty printer | Done | `printer.rs` - Yul-like syntax output for debugging |
+| IR validation | Done | `validate.rs` - SSA dominance, type consistency, region validation |
 
-### Phase 0.5: IR Round-Trip Validation - NOT STARTED
+### Phase 0.5: IR Round-Trip Validation - PARTIAL
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Yul -> IR translation | Done | `from_yul.rs` - complete translation of all Yul constructs |
-| IR -> Yul printer | Not started | No round-trip testing capability |
+| IR -> Yul printer | Done | `printer.rs` - Yul-like syntax (not exact round-trip but good for debugging) |
 | Round-trip test suite | Not started | Cannot verify IR correctness via round-trip |
 
-### Phase 1: Pass-Through to LLVM - IN PROGRESS
+### Phase 1: Pass-Through to LLVM - COMPLETE
 
 | Item | Status | Notes |
 |------|--------|-------|
-| IR -> LLVM lowering | Mostly done | `to_llvm.rs` - ~2700 lines, comprehensive implementation |
-| Integration with pipeline | Unknown | Need to verify integration with resolc driver |
-| All tests passing | Unknown | Need validation run |
+| IR -> LLVM lowering | Done | `to_llvm.rs` - ~2700 lines, comprehensive implementation |
+| Integration with pipeline | Done | Fully integrated via `--newyork` flag and `RESOLC_USE_NEWYORK=1` env var |
+| All tests passing | Done | 62 integration tests pass with both Yul and newyork paths |
 
 ### Phase 2: Type Inference - PARTIAL
 
@@ -115,7 +115,7 @@ Notable implementation details:
 - Size estimation for inlining decisions
 
 ### `to_llvm.rs` - LLVM Code Generation
-**Status: Mostly Complete (~2700 lines)**
+**Status: Complete (~2700 lines)**
 
 Implements:
 - Full IR to LLVM translation
@@ -130,6 +130,28 @@ Implements:
 - Immutable variables
 - Heap optimization integration (uses `HeapOptResults`)
 - Type inference integration (uses `TypeInference`)
+
+### `printer.rs` - IR Pretty Printer
+**Status: Complete (NEW)**
+
+Implements:
+- Yul-like syntax output for debugging
+- Configurable display of types, regions, and static slots
+- Handles all IR constructs: Objects, Functions, Statements, Expressions
+- Display trait implementations for convenient printing
+- Comprehensive test coverage
+
+### `validate.rs` - IR Validation Pass
+**Status: Complete (NEW)**
+
+Implements:
+- SSA dominance checking (all uses dominated by definitions)
+- Multiple definition detection
+- Region yield count validation
+- Function return value consistency checking
+- Unknown function detection
+- Comprehensive error reporting with location context
+- Comprehensive test coverage
 
 ### `type_inference.rs` - Type Inference Pass
 **Status: Complete but Not Fully Utilized**
@@ -170,33 +192,32 @@ anyhow, log, num, thiserror, inkwell
 revive-yul, revive-llvm-context, revive-common
 ```
 
-## Key Gaps for Production Readiness
+## Integration with resolc
 
-1. **No IR Validation** - Cannot verify SSA well-formedness or type consistency
-2. **No Pretty Printer** - Difficult to debug IR transformations
-3. **No Round-Trip Testing** - Cannot verify translation correctness
-4. **Type Inference Not Applied** - Narrowed types computed but not used in LLVM codegen
-5. **No Optimization Passes** - Analysis exists but no transformations
-6. **Integration Unknown** - Need to verify integration with resolc driver
+The newyork IR path is fully integrated into the resolc compiler:
+
+1. **CLI Flag**: `resolc --newyork input.yul` (hidden, experimental)
+2. **Environment Variable**: `RESOLC_USE_NEWYORK=1` for standard JSON mode
+3. **Code Path**: `IR::NewYork` variant in `crates/resolc/src/project/contract/ir/`
+
+## Remaining Gaps
+
+1. **Type Inference Not Applied** - Narrowed types computed but not used in LLVM codegen
+2. **No Optimization Passes** - Analysis exists but no transformations
+3. **No Round-Trip Testing** - Cannot verify translation correctness via round-trip
 
 ## Recommended Next Steps
 
-1. **Validation & Testing**
-   - Add IR pretty printer for debugging
-   - Add IR validation pass (SSA dominance, type checking)
-   - Add round-trip test: Yul -> IR -> (simple Yul-like output)
-   - Run retester to verify correctness
-
-2. **Type Inference Integration**
+1. **Type Inference Integration**
    - Use inferred types in LLVM codegen
    - Insert explicit truncate/extend operations
    - Verify no semantic changes via differential testing
 
-3. **Memory Optimizations**
+2. **Memory Optimizations**
    - Implement load-after-store elimination using heap analysis
    - Implement dead store elimination
 
-4. **Inlining**
+3. **Inlining**
    - Build call graph
    - Implement single-call function inlining
    - Use existing size_estimate for cost model
@@ -208,3 +229,5 @@ revive-yul, revive-llvm-context, revive-common
 - No magic numbers - uses module constants
 - Meaningful, non-abbreviated identifiers
 - Clean separation of concerns between modules
+- All tests passing (22 unit tests)
+- Clippy clean with `deny(clippy::all)`

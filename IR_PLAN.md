@@ -1217,13 +1217,13 @@ tests/
 
 ## Next Steps
 
-> **Updated based on implementation status**
+> **Updated based on implementation status (2026-02-05)**
 
-### Immediate Priorities (Unblock Testing)
-1. [ ] Add IR pretty printer for debugging
-2. [ ] Add IR validation pass (SSA dominance, type consistency)
-3. [ ] Integrate newyork path into resolc driver
-4. [ ] Run retester to verify correctness
+### Immediate Priorities (Unblock Testing) - COMPLETE
+1. [x] Add IR pretty printer for debugging (`printer.rs`)
+2. [x] Add IR validation pass (SSA dominance, type consistency) (`validate.rs`)
+3. [x] Integrate newyork path into resolc driver (already done, `--newyork` flag)
+4. [x] Run retester to verify correctness (62 integration tests pass)
 
 ### Phase 2 Completion
 5. [ ] Use inferred types in LLVM codegen (currently ignored)

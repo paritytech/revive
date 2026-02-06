@@ -77,6 +77,9 @@ jobs:
             runner: windows-2022
     runs-on: ${{ matrix.runner }}
     steps:
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:

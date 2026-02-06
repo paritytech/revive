@@ -61,7 +61,7 @@ env_logger = { version = "0.11.8", default-features = false }
 serde_stacker = "0.1.14"
 criterion = { version = "0.8", features = ["html_reports"] }
 log = { version = "0.4.28" }
-git2 = { version = "0.20.2", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 downloader = "0.2.8"
 flate2 = "1.1"
 fs_extra = "1.3"

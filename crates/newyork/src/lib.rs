@@ -62,7 +62,7 @@ pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
     print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
-pub use simplify::{Simplifier, SimplifyResults};
+pub use simplify::{deduplicate_functions, Simplifier, SimplifyResults};
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
@@ -152,6 +152,9 @@ fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
     // This cleans up the IR after inlining, eliminating redundant operations.
     let mut simplifier = Simplifier::new();
     let _simplify_stats = simplifier.simplify_object(object);
+
+    // Run function deduplication after simplification (canonical forms are cleaner)
+    let _dedup_count = deduplicate_functions(object);
 
     // Run memory optimization pass (load-after-store elimination)
     let mut mem_optimizer = MemoryOptimizer::new();

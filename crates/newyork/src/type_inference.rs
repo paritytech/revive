@@ -173,6 +173,7 @@ impl TypeInference {
     }
 
     /// Sets the constraint for a value, returning true if changed.
+    #[allow(dead_code)]
     fn set(&mut self, id: ValueId, constraint: TypeConstraint) -> bool {
         let existing = self.get(id);
         if constraint.min_width > existing.min_width
@@ -594,6 +595,7 @@ impl TypeInference {
                 condition,
                 then_region,
                 else_region,
+                outputs,
                 ..
             } => {
                 // Condition only needs to be boolean-like
@@ -602,42 +604,75 @@ impl TypeInference {
                 if let Some(else_region) = else_region {
                     self.infer_region_forward(else_region);
                 }
+
+                // Propagate region yield types to outputs.
+                // Each output receives its value from the corresponding yield of
+                // whichever branch executes.
+                for region in std::iter::once(then_region).chain(else_region.as_ref()) {
+                    for (yield_val, output) in region.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_val.id);
+                        self.widen(*output, yield_constraint.min_width);
+                    }
+                }
             }
 
             Statement::Switch {
                 scrutinee,
                 cases,
                 default,
+                outputs,
                 ..
             } => {
                 // Switch value could be any size, but often fits in 64 bits
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
                     self.infer_region_forward(&case.body);
+                    // Propagate case yields to outputs
+                    for (yield_val, output) in case.body.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_val.id);
+                        self.widen(*output, yield_constraint.min_width);
+                    }
                 }
                 if let Some(default) = default {
                     self.infer_region_forward(default);
+                    // Propagate default yields to outputs
+                    for (yield_val, output) in default.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_val.id);
+                        self.widen(*output, yield_constraint.min_width);
+                    }
                 }
             }
 
             Statement::For {
-                init_values,
                 loop_vars,
                 condition,
+                condition_stmts,
                 body,
                 post,
+                post_input_vars,
+                outputs,
                 ..
             } => {
-                // Propagate init value types to loop vars
-                for (init_val, loop_var) in init_values.iter().zip(loop_vars.iter()) {
-                    let init_constraint = self.get(init_val.id);
-                    self.set(*loop_var, init_constraint);
+                // Loop variables participate in complex data flows across iterations.
+                // Conservatively mark them as full width to avoid unsound narrowing.
+                for loop_var in loop_vars {
+                    self.widen(*loop_var, BitWidth::I256);
+                }
+                for post_var in post_input_vars {
+                    self.widen(*post_var, BitWidth::I256);
+                }
+                // Loop outputs receive loop_var values when the loop exits,
+                // so they must be at least as wide as loop_vars.
+                for output in outputs {
+                    self.widen(*output, BitWidth::I256);
                 }
 
-                // Condition only needs to be boolean-like
+                // Infer widths for condition_stmts (Let bindings in the loop header).
+                for stmt in condition_stmts {
+                    self.infer_statement_forward(stmt);
+                }
                 let cond_width = self.infer_expr_width(condition);
-                // But treat it as at least I1
-                let _ = cond_width; // Condition result doesn't define new values
+                let _ = cond_width;
 
                 self.infer_region_forward(body);
                 self.infer_region_forward(post);
@@ -777,9 +812,14 @@ impl TypeInference {
 
                 match op {
                     // Arithmetic ops: result can be wider
-                    BinOp::Add | BinOp::Sub => {
-                        // Addition/subtraction can overflow by 1 bit
+                    BinOp::Add => {
+                        // Addition can overflow by 1 bit
                         widen_by_one(lhs_width.max(rhs_width))
+                    }
+                    BinOp::Sub => {
+                        // Subtraction wraps modular 2^256 when a < b,
+                        // producing a full 256-bit result.
+                        BitWidth::I256
                     }
                     BinOp::Mul => {
                         // Multiplication doubles width
@@ -804,8 +844,10 @@ impl TypeInference {
                         BitWidth::I256 // Conservative
                     }
                     BinOp::Shr | BinOp::Sar => {
-                        // Shift right shrinks value
-                        lhs_width
+                        // Shift right shrinks the value. In EVM, SHR(amount, value),
+                        // lhs is shift amount, rhs is the value being shifted.
+                        // Result width is bounded by the value's width.
+                        rhs_width
                     }
 
                     // Comparisons: result is boolean
@@ -839,7 +881,11 @@ impl TypeInference {
 
             Expr::Unary { op, operand } => match op {
                 crate::ir::UnaryOp::IsZero => BitWidth::I1,
-                crate::ir::UnaryOp::Not => self.get(operand.id).min_width,
+                crate::ir::UnaryOp::Not => {
+                    // NOT flips all 256 bits, producing a full-width result
+                    let _ = operand;
+                    BitWidth::I256
+                }
                 crate::ir::UnaryOp::Clz => BitWidth::I256, // CLZ returns up to 256
             },
 
@@ -911,7 +957,10 @@ impl TypeInference {
                 BitWidth::I256
             }
 
-            Expr::DataOffset { .. } | Expr::DataSize { .. } => BitWidth::I64,
+            // DataOffset returns a contract code hash (256-bit), not an actual offset.
+            Expr::DataOffset { .. } => BitWidth::I256,
+            // DataSize returns header size (small value, fits in 64 bits).
+            Expr::DataSize { .. } => BitWidth::I64,
 
             Expr::LoadImmutable { .. } => BitWidth::I256, // Immutables are 256-bit
 
@@ -938,7 +987,7 @@ impl Default for TypeInference {
 }
 
 /// Widens a bit width by one level (e.g., I8 -> I32).
-fn widen_by_one(width: BitWidth) -> BitWidth {
+pub fn widen_by_one(width: BitWidth) -> BitWidth {
     match width {
         BitWidth::I1 => BitWidth::I8,
         BitWidth::I8 => BitWidth::I32,
@@ -950,7 +999,7 @@ fn widen_by_one(width: BitWidth) -> BitWidth {
 }
 
 /// Doubles a bit width (e.g., I32 -> I64).
-fn double_width(width: BitWidth) -> BitWidth {
+pub fn double_width(width: BitWidth) -> BitWidth {
     match width {
         BitWidth::I1 => BitWidth::I8,
         BitWidth::I8 => BitWidth::I32,

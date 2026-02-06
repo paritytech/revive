@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, Zero};
 
 use crate::ir::{
-    BinOp, BitWidth, Block, Expr, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value,
-    ValueId,
+    BinOp, BitWidth, Block, CallKind, Expr, FunctionId, Object, Region, Statement, SwitchCase,
+    Type, UnaryOp, Value, ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -49,6 +49,8 @@ pub struct Simplifier {
     constants: BTreeMap<u32, BigUint>,
     /// Maps ValueId → ValueId for copy propagation (let x = y → x maps to y).
     copies: BTreeMap<u32, ValueId>,
+    /// Counter for fresh value IDs when creating new bindings (strength reduction).
+    next_value_id: u32,
     /// Statistics.
     stats: SimplifyResults,
 }
@@ -65,12 +67,23 @@ impl Simplifier {
         Simplifier {
             constants: BTreeMap::new(),
             copies: BTreeMap::new(),
+            next_value_id: 0,
             stats: SimplifyResults::default(),
         }
     }
 
+    /// Allocates a fresh ValueId.
+    fn fresh_id(&mut self) -> ValueId {
+        let id = ValueId(self.next_value_id);
+        self.next_value_id += 1;
+        id
+    }
+
     /// Simplifies an entire object in place.
     pub fn simplify_object(&mut self, object: &mut Object) -> SimplifyResults {
+        // Find maximum ValueId in use so we can allocate fresh IDs
+        self.next_value_id = find_max_value_id_in_object(object) + 1;
+
         // Simplify main code block
         self.simplify_block(&mut object.code);
         // DCE on main code block (no explicit return values)
@@ -129,6 +142,14 @@ impl Simplifier {
         match stmt {
             Statement::Let { bindings, value } => {
                 let simplified_expr = self.simplify_expr(value);
+
+                // Strength reduction: mul(x, 2^k) → shl(k, x), div(x, 2^k) → shr(k, x)
+                // We need to emit: let shift_id = k; let result = shl(shift_id, x)
+                if bindings.len() == 1 {
+                    if let Some(stmts) = self.try_strength_reduce(&bindings, &simplified_expr) {
+                        return stmts;
+                    }
+                }
 
                 // Track constants
                 if bindings.len() == 1 {
@@ -316,22 +337,58 @@ impl Simplifier {
 
                 let inputs: Vec<Value> =
                     inputs.into_iter().map(|v| self.resolve_value(v)).collect();
-                let cases: Vec<SwitchCase> = cases
+                let mut cases: Vec<SwitchCase> = cases
                     .into_iter()
                     .map(|c| SwitchCase {
                         value: c.value,
                         body: self.simplify_region(c.body),
                     })
                     .collect();
-                let default = default.map(|r| self.simplify_region(r));
+                let mut default = default.map(|r| self.simplify_region(r));
 
-                vec![Statement::Switch {
+                // Callvalue check hoisting: if all cases start with
+                // `let tmp = callvalue(); if tmp { revert(0,0) }`, hoist it before the switch.
+                // This eliminates N-1 redundant copies of the check (e.g., 10 copies in ERC20).
+                let mut hoisted = Vec::new();
+                if !cases.is_empty() {
+                    let all_have_callvalue_check = cases
+                        .iter()
+                        .all(|c| has_callvalue_revert_prefix(&c.body.statements))
+                        && default.as_ref().is_none_or(|d| {
+                            d.statements.is_empty() || has_callvalue_revert_prefix(&d.statements)
+                        });
+
+                    if all_have_callvalue_check {
+                        // Clone the two-statement check from the first case
+                        // (Let + If), but we only need ONE copy hoisted
+                        let first_stmts = &cases[0].body.statements;
+                        if first_stmts.len() >= 2 {
+                            hoisted.push(first_stmts[0].clone());
+                            hoisted.push(first_stmts[1].clone());
+                        }
+                        // Remove the two-statement prefix from all cases
+                        for case in &mut cases {
+                            if has_callvalue_revert_prefix(&case.body.statements) {
+                                case.body.statements.drain(0..2);
+                            }
+                        }
+                        // Remove from default if it has one
+                        if let Some(ref mut d) = default {
+                            if has_callvalue_revert_prefix(&d.statements) {
+                                d.statements.drain(0..2);
+                            }
+                        }
+                    }
+                }
+
+                hoisted.push(Statement::Switch {
                     scrutinee,
                     inputs,
                     cases,
                     default,
                     outputs,
-                }]
+                });
+                hoisted
             }
 
             Statement::For {
@@ -658,6 +715,117 @@ impl Simplifier {
         let resolved = self.resolve_copy(val.id);
         self.constants.get(&resolved.0).cloned()
     }
+
+    /// Attempts strength reduction on a Let binding.
+    /// Returns Some(vec of statements) if the expression was transformed, None otherwise.
+    ///
+    /// Transforms:
+    /// - `let result = mul(x, 2^k)` → `let shift_k = k; let result = shl(shift_k, x)`
+    /// - `let result = mul(2^k, x)` → `let shift_k = k; let result = shl(shift_k, x)`
+    /// - `let result = div(x, 2^k)` → `let shift_k = k; let result = shr(shift_k, x)`
+    fn try_strength_reduce(&mut self, bindings: &[ValueId], expr: &Expr) -> Option<Vec<Statement>> {
+        let (op, lhs, rhs) = match expr {
+            Expr::Binary { op, lhs, rhs } => (*op, *lhs, *rhs),
+            _ => return None,
+        };
+
+        let lhs_val = self.try_get_const(&lhs);
+        let rhs_val = self.try_get_const(&rhs);
+
+        match op {
+            BinOp::Mul => {
+                // mul(x, 2^k) → shl(k, x) or mul(2^k, x) → shl(k, x)
+                let (k, value) = if let Some(k) = rhs_val.as_ref().and_then(log2_exact) {
+                    (k, lhs)
+                } else if let Some(k) = lhs_val.as_ref().and_then(log2_exact) {
+                    (k, rhs)
+                } else {
+                    return None;
+                };
+                if k == 0 || k >= 256 {
+                    return None;
+                }
+                let shift_id = self.fresh_id();
+                let shift_val = BigUint::from(k);
+                self.constants.insert(shift_id.0, shift_val.clone());
+                self.stats.identities_simplified += 1;
+                Some(vec![
+                    Statement::Let {
+                        bindings: vec![shift_id],
+                        value: Expr::Literal {
+                            value: shift_val,
+                            ty: Type::Int(BitWidth::I256),
+                        },
+                    },
+                    Statement::Let {
+                        bindings: bindings.to_vec(),
+                        value: Expr::Binary {
+                            op: BinOp::Shl,
+                            lhs: Value::int(shift_id),
+                            rhs: value,
+                        },
+                    },
+                ])
+            }
+            BinOp::Div => {
+                // div(x, 2^k) → shr(k, x) (unsigned only)
+                let k = rhs_val.as_ref().and_then(log2_exact)?;
+                if k == 0 || k >= 256 {
+                    return None;
+                }
+                let shift_id = self.fresh_id();
+                let shift_val = BigUint::from(k);
+                self.constants.insert(shift_id.0, shift_val.clone());
+                self.stats.identities_simplified += 1;
+                Some(vec![
+                    Statement::Let {
+                        bindings: vec![shift_id],
+                        value: Expr::Literal {
+                            value: shift_val,
+                            ty: Type::Int(BitWidth::I256),
+                        },
+                    },
+                    Statement::Let {
+                        bindings: bindings.to_vec(),
+                        value: Expr::Binary {
+                            op: BinOp::Shr,
+                            lhs: Value::int(shift_id),
+                            rhs: lhs,
+                        },
+                    },
+                ])
+            }
+            BinOp::Mod => {
+                // mod(x, 2^k) → and(x, 2^k - 1)
+                let k = rhs_val.as_ref().and_then(log2_exact)?;
+                if k == 0 || k >= 256 {
+                    return None;
+                }
+                let mask = (BigUint::one() << k) - BigUint::one();
+                let mask_id = self.fresh_id();
+                self.constants.insert(mask_id.0, mask.clone());
+                self.stats.identities_simplified += 1;
+                Some(vec![
+                    Statement::Let {
+                        bindings: vec![mask_id],
+                        value: Expr::Literal {
+                            value: mask,
+                            ty: Type::Int(BitWidth::I256),
+                        },
+                    },
+                    Statement::Let {
+                        bindings: bindings.to_vec(),
+                        value: Expr::Binary {
+                            op: BinOp::And,
+                            lhs,
+                            rhs: Value::int(mask_id),
+                        },
+                    },
+                ])
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Returns the result type for a binary operation.
@@ -814,6 +982,16 @@ fn fold_ternary(op: BinOp, a: &BigUint, b: &BigUint, n: &BigUint) -> Option<BigU
         BinOp::MulMod => (a * b) % n,
         _ => return None,
     })
+}
+
+/// Returns the power-of-2 exponent if the value is a power of 2.
+/// E.g., 1 → Some(0), 2 → Some(1), 4 → Some(2), 32 → Some(5), 256 → Some(8).
+fn log2_exact(val: &BigUint) -> Option<u32> {
+    if val.is_zero() || !((val - BigUint::one()) & val).is_zero() {
+        return None;
+    }
+    // val is a power of 2: find the exponent
+    Some((val.bits() - 1) as u32)
 }
 
 /// Applies algebraic identity simplifications.
@@ -1414,6 +1592,15 @@ fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
 fn eliminate_dead_code_in_stmts(stmts: &mut Vec<Statement>, extra_used: &BTreeSet<u32>) -> usize {
     let mut total_removed = 0;
 
+    // Phase 0: Remove unreachable code after terminators (revert/return/stop/invalid/leave)
+    if let Some(terminator_pos) = stmts.iter().position(is_terminator) {
+        let unreachable_count = stmts.len() - terminator_pos - 1;
+        if unreachable_count > 0 {
+            stmts.truncate(terminator_pos + 1);
+            total_removed += unreachable_count;
+        }
+    }
+
     // Phase 1: Recursively DCE nested regions (bottom-up)
     for stmt in stmts.iter_mut() {
         total_removed += eliminate_dead_code_in_nested(stmt, extra_used);
@@ -1428,9 +1615,16 @@ fn eliminate_dead_code_in_stmts(stmts: &mut Vec<Statement>, extra_used: &BTreeSe
 
         let before = stmts.len();
         stmts.retain(|stmt| {
+            // Remove unused Let bindings with pure expressions
             if let Statement::Let { bindings, value } = stmt {
                 let all_unused = bindings.iter().all(|id| !used.contains(&id.0));
                 if all_unused && !expr_has_side_effects(value) {
+                    return false;
+                }
+            }
+            // Remove pure expression statements (e.g., void literals after revert/return)
+            if let Statement::Expr(expr) = stmt {
+                if !expr_has_side_effects(expr) {
                     return false;
                 }
             }
@@ -1492,6 +1686,373 @@ fn eliminate_dead_code_in_nested(stmt: &mut Statement, parent_extra_used: &BTree
     }
 }
 
+/// Checks if a statement is a control-flow terminator (no fall-through).
+fn is_terminator(stmt: &Statement) -> bool {
+    matches!(
+        stmt,
+        Statement::Revert { .. }
+            | Statement::Return { .. }
+            | Statement::Stop
+            | Statement::Invalid
+            | Statement::Leave { .. }
+            | Statement::SelfDestruct { .. }
+    )
+}
+
+/// Checks if a statement list starts with the two-statement pattern:
+///   `let tmp = callvalue()`
+///   `if tmp { ... revert(...) ... }`
+/// This pattern is generated by Solidity for non-payable function checks.
+/// The then_region must contain a Revert (possibly preceded by Let bindings
+/// for the offset/length arguments and followed by an unreachable marker).
+fn has_callvalue_revert_prefix(stmts: &[Statement]) -> bool {
+    if stmts.len() < 2 {
+        return false;
+    }
+
+    // Statement 0: let <id> = callvalue()
+    let callvalue_id = match &stmts[0] {
+        Statement::Let {
+            bindings,
+            value: Expr::CallValue,
+        } if bindings.len() == 1 => Some(bindings[0]),
+        _ => None,
+    };
+
+    let Some(cv_id) = callvalue_id else {
+        return false;
+    };
+
+    // Statement 1: if <cv_id> { <let bindings>* revert(...) <unreachable>? }
+    // Must have: no inputs, no outputs, no else, then_region contains a Revert
+    match &stmts[1] {
+        Statement::If {
+            condition,
+            inputs,
+            then_region,
+            else_region,
+            outputs,
+        } => {
+            // Condition must reference the callvalue binding
+            if condition.id != cv_id {
+                return false;
+            }
+            // No SSA value flow (non-payable check doesn't modify variables)
+            if !inputs.is_empty() || !outputs.is_empty() {
+                return false;
+            }
+            // No else branch
+            if else_region.is_some() {
+                return false;
+            }
+            // Then region must contain a Revert statement somewhere
+            // (typically: Let bindings for 0 values, then Revert, then unreachable Expr)
+            then_region
+                .statements
+                .iter()
+                .any(|s| matches!(s, Statement::Revert { .. }))
+        }
+        _ => false,
+    }
+}
+
+/// Finds the maximum ValueId in use in an object, so we can allocate fresh IDs.
+fn find_max_value_id_in_object(object: &Object) -> u32 {
+    let mut max_id = 0u32;
+
+    fn visit_value(val: &Value, max_id: &mut u32) {
+        *max_id = (*max_id).max(val.id.0);
+    }
+
+    fn visit_expr(expr: &Expr, max_id: &mut u32) {
+        match expr {
+            Expr::Literal { .. }
+            | Expr::CallValue
+            | Expr::Caller
+            | Expr::Origin
+            | Expr::CallDataSize
+            | Expr::CodeSize
+            | Expr::GasPrice
+            | Expr::ReturnDataSize
+            | Expr::Coinbase
+            | Expr::Timestamp
+            | Expr::Number
+            | Expr::Difficulty
+            | Expr::GasLimit
+            | Expr::ChainId
+            | Expr::SelfBalance
+            | Expr::BaseFee
+            | Expr::BlobBaseFee
+            | Expr::Gas
+            | Expr::MSize
+            | Expr::Address
+            | Expr::DataOffset { .. }
+            | Expr::DataSize { .. }
+            | Expr::LoadImmutable { .. }
+            | Expr::LinkerSymbol { .. } => {}
+            Expr::Var(id) => *max_id = (*max_id).max(id.0),
+            Expr::Binary { lhs, rhs, .. } => {
+                visit_value(lhs, max_id);
+                visit_value(rhs, max_id);
+            }
+            Expr::Ternary { a, b, n, .. } => {
+                visit_value(a, max_id);
+                visit_value(b, max_id);
+                visit_value(n, max_id);
+            }
+            Expr::Unary { operand, .. } => visit_value(operand, max_id),
+            Expr::CallDataLoad { offset } => visit_value(offset, max_id),
+            Expr::ExtCodeSize { address }
+            | Expr::ExtCodeHash { address }
+            | Expr::Balance { address } => visit_value(address, max_id),
+            Expr::BlockHash { number } => visit_value(number, max_id),
+            Expr::BlobHash { index } => visit_value(index, max_id),
+            Expr::MLoad { offset, .. } => visit_value(offset, max_id),
+            Expr::SLoad { key, .. } => visit_value(key, max_id),
+            Expr::TLoad { key } => visit_value(key, max_id),
+            Expr::Call { args, .. } => {
+                for arg in args {
+                    visit_value(arg, max_id);
+                }
+            }
+            Expr::Truncate { value, .. }
+            | Expr::ZeroExtend { value, .. }
+            | Expr::SignExtendTo { value, .. } => visit_value(value, max_id),
+            Expr::Keccak256 { offset, length } => {
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+            }
+        }
+    }
+
+    fn visit_region(region: &Region, max_id: &mut u32) {
+        for stmt in &region.statements {
+            visit_stmt(stmt, max_id);
+        }
+        for y in &region.yields {
+            visit_value(y, max_id);
+        }
+    }
+
+    fn visit_stmt(stmt: &Statement, max_id: &mut u32) {
+        match stmt {
+            Statement::Let { bindings, value } => {
+                for b in bindings {
+                    *max_id = (*max_id).max(b.0);
+                }
+                visit_expr(value, max_id);
+            }
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                visit_value(offset, max_id);
+                visit_value(value, max_id);
+            }
+            Statement::MCopy { dest, src, length } => {
+                visit_value(dest, max_id);
+                visit_value(src, max_id);
+                visit_value(length, max_id);
+            }
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                visit_value(key, max_id);
+                visit_value(value, max_id);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                outputs,
+            } => {
+                visit_value(condition, max_id);
+                for v in inputs {
+                    visit_value(v, max_id);
+                }
+                visit_region(then_region, max_id);
+                if let Some(r) = else_region {
+                    visit_region(r, max_id);
+                }
+                for o in outputs {
+                    *max_id = (*max_id).max(o.0);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                outputs,
+            } => {
+                visit_value(scrutinee, max_id);
+                for v in inputs {
+                    visit_value(v, max_id);
+                }
+                for c in cases {
+                    visit_region(&c.body, max_id);
+                }
+                if let Some(d) = default {
+                    visit_region(d, max_id);
+                }
+                for o in outputs {
+                    *max_id = (*max_id).max(o.0);
+                }
+            }
+            Statement::For {
+                init_values,
+                loop_vars,
+                condition_stmts,
+                condition,
+                body,
+                post_input_vars,
+                post,
+                outputs,
+            } => {
+                for v in init_values {
+                    visit_value(v, max_id);
+                }
+                for lv in loop_vars {
+                    *max_id = (*max_id).max(lv.0);
+                }
+                for s in condition_stmts {
+                    visit_stmt(s, max_id);
+                }
+                visit_expr(condition, max_id);
+                visit_region(body, max_id);
+                for pv in post_input_vars {
+                    *max_id = (*max_id).max(pv.0);
+                }
+                visit_region(post, max_id);
+                for o in outputs {
+                    *max_id = (*max_id).max(o.0);
+                }
+            }
+            Statement::Block(region) => visit_region(region, max_id),
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+            }
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                result,
+                ..
+            } => {
+                visit_value(gas, max_id);
+                visit_value(address, max_id);
+                if let Some(v) = value {
+                    visit_value(v, max_id);
+                }
+                visit_value(args_offset, max_id);
+                visit_value(args_length, max_id);
+                visit_value(ret_offset, max_id);
+                visit_value(ret_length, max_id);
+                *max_id = (*max_id).max(result.0);
+            }
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                result,
+                ..
+            } => {
+                visit_value(value, max_id);
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+                if let Some(s) = salt {
+                    visit_value(s, max_id);
+                }
+                *max_id = (*max_id).max(result.0);
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+                for t in topics {
+                    visit_value(t, max_id);
+                }
+            }
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                visit_value(dest, max_id);
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                dest,
+                offset,
+                length,
+            } => {
+                visit_value(address, max_id);
+                visit_value(dest, max_id);
+                visit_value(offset, max_id);
+                visit_value(length, max_id);
+            }
+            Statement::SetImmutable { value, .. } => visit_value(value, max_id),
+            Statement::Leave { return_values } => {
+                for v in return_values {
+                    visit_value(v, max_id);
+                }
+            }
+            Statement::Expr(expr) => visit_expr(expr, max_id),
+            Statement::SelfDestruct { address } => visit_value(address, max_id),
+            Statement::Stop | Statement::Invalid => {}
+            Statement::Break { values } | Statement::Continue { values } => {
+                for v in values {
+                    visit_value(v, max_id);
+                }
+            }
+        }
+    }
+
+    for stmt in &object.code.statements {
+        visit_stmt(stmt, &mut max_id);
+    }
+    for func in object.functions.values() {
+        for param in &func.params {
+            max_id = max_id.max(param.0 .0);
+        }
+        for rv in &func.return_values_initial {
+            max_id = max_id.max(rv.0);
+        }
+        for rv in &func.return_values {
+            max_id = max_id.max(rv.0);
+        }
+        for stmt in &func.body.statements {
+            visit_stmt(stmt, &mut max_id);
+        }
+    }
+    for sub in &object.subobjects {
+        max_id = max_id.max(find_max_value_id_in_object(sub));
+    }
+    max_id
+}
+
 /// Collects ValueIds from region yields into a "used" set.
 fn yields_as_used(yields: &[Value]) -> BTreeSet<u32> {
     let mut used = BTreeSet::new();
@@ -1499,6 +2060,789 @@ fn yields_as_used(yields: &[Value]) -> BTreeSet<u32> {
         used.insert(y.id.0);
     }
     used
+}
+
+// =============================================================================
+// Function deduplication
+// =============================================================================
+
+/// Deduplicates functions with identical bodies in an object.
+///
+/// Two functions are considered duplicates if they have:
+/// - Same number and types of parameters
+/// - Same number and types of return values
+/// - Structurally identical bodies (alpha-equivalent, ignoring ValueId numbering)
+///
+/// When duplicates are found, all calls to the duplicate are redirected to the
+/// canonical (first-seen) function, and the duplicate is removed.
+///
+/// Returns the number of functions removed.
+pub fn deduplicate_functions(object: &mut Object) -> usize {
+    if object.functions.len() < 2 {
+        return 0;
+    }
+
+    // Step 1: Compute canonical forms for all functions
+    let mut canonical_to_id: BTreeMap<Vec<u8>, FunctionId> = BTreeMap::new();
+    let mut redirects: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
+
+    for func in object.functions.values() {
+        // Skip functions that are too small to bother (the overhead of a call
+        // is roughly 2-3 instructions, so only dedup functions > 3 stmts)
+        if func.size_estimate <= 3 {
+            continue;
+        }
+
+        let signature = (
+            func.params.iter().map(|(_, ty)| *ty).collect::<Vec<_>>(),
+            func.returns.clone(),
+        );
+
+        let canonical = canonicalize_function(func, &signature.0, &signature.1);
+
+        if let Some(&canonical_id) = canonical_to_id.get(&canonical) {
+            // This function is a duplicate of canonical_id
+            redirects.insert(func.id, canonical_id);
+        } else {
+            canonical_to_id.insert(canonical, func.id);
+        }
+    }
+
+    if redirects.is_empty() {
+        return 0;
+    }
+
+    let removed_count = redirects.len();
+    // Step 2: Redirect all calls in the IR
+    redirect_calls_in_block(&mut object.code, &redirects);
+    for func in object.functions.values_mut() {
+        redirect_calls_in_block(&mut func.body, &redirects);
+    }
+
+    // Step 3: Remove duplicate functions
+    for dup_id in redirects.keys() {
+        object.functions.remove(dup_id);
+    }
+
+    removed_count
+}
+
+/// Produces a canonical byte representation of a function body for comparison.
+/// ValueIds are renumbered sequentially (0, 1, 2, ...) in order of first occurrence.
+/// FunctionIds are preserved (they're global references, not local SSA).
+fn canonicalize_function(
+    func: &crate::ir::Function,
+    param_types: &[Type],
+    return_types: &[Type],
+) -> Vec<u8> {
+    let mut canon = Canonicalizer::new();
+    let mut buf = Vec::new();
+
+    // Encode signature
+    buf.push(param_types.len() as u8);
+    for ty in param_types {
+        buf.push(type_tag(ty));
+    }
+    buf.push(return_types.len() as u8);
+    for ty in return_types {
+        buf.push(type_tag(ty));
+    }
+
+    // Register parameters in canonical order
+    for (param_id, _) in &func.params {
+        canon.get_or_insert(*param_id);
+    }
+    // Register return value initials
+    for rv in &func.return_values_initial {
+        canon.get_or_insert(*rv);
+    }
+
+    // Encode body
+    for stmt in &func.body.statements {
+        canon.encode_stmt(stmt, &mut buf);
+    }
+
+    // Encode return values
+    buf.push(0xFE); // marker for return values
+    for rv in &func.return_values {
+        canon.encode_value_id(*rv, &mut buf);
+    }
+
+    buf
+}
+
+struct Canonicalizer {
+    id_map: BTreeMap<u32, u32>,
+    next_id: u32,
+}
+
+impl Canonicalizer {
+    fn new() -> Self {
+        Canonicalizer {
+            id_map: BTreeMap::new(),
+            next_id: 0,
+        }
+    }
+
+    fn get_or_insert(&mut self, id: ValueId) -> u32 {
+        *self.id_map.entry(id.0).or_insert_with(|| {
+            let n = self.next_id;
+            self.next_id += 1;
+            n
+        })
+    }
+
+    fn encode_value_id(&mut self, id: ValueId, buf: &mut Vec<u8>) {
+        let canonical = self.get_or_insert(id);
+        buf.extend_from_slice(&canonical.to_le_bytes());
+    }
+
+    fn encode_value(&mut self, val: &Value, buf: &mut Vec<u8>) {
+        self.encode_value_id(val.id, buf);
+        buf.push(type_tag(&val.ty));
+    }
+
+    fn encode_expr(&mut self, expr: &Expr, buf: &mut Vec<u8>) {
+        match expr {
+            Expr::Literal { value, ty } => {
+                buf.push(0x01);
+                let bytes = value.to_bytes_le();
+                buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                buf.extend_from_slice(&bytes);
+                buf.push(type_tag(ty));
+            }
+            Expr::Var(id) => {
+                buf.push(0x02);
+                self.encode_value_id(*id, buf);
+            }
+            Expr::Binary { op, lhs, rhs } => {
+                buf.push(0x03);
+                buf.push(binop_tag(*op));
+                self.encode_value(lhs, buf);
+                self.encode_value(rhs, buf);
+            }
+            Expr::Ternary { op, a, b, n } => {
+                buf.push(0x04);
+                buf.push(binop_tag(*op));
+                self.encode_value(a, buf);
+                self.encode_value(b, buf);
+                self.encode_value(n, buf);
+            }
+            Expr::Unary { op, operand } => {
+                buf.push(0x05);
+                buf.push(unaryop_tag(*op));
+                self.encode_value(operand, buf);
+            }
+            Expr::Call { function, args } => {
+                buf.push(0x06);
+                // FunctionId is a global reference, preserve it
+                buf.extend_from_slice(&function.0.to_le_bytes());
+                buf.push(args.len() as u8);
+                for arg in args {
+                    self.encode_value(arg, buf);
+                }
+            }
+            Expr::CallDataLoad { offset } => {
+                buf.push(0x10);
+                self.encode_value(offset, buf);
+            }
+            Expr::MLoad { offset, region } => {
+                buf.push(0x11);
+                self.encode_value(offset, buf);
+                buf.push(region_tag(region));
+            }
+            Expr::SLoad { key, static_slot } => {
+                buf.push(0x12);
+                self.encode_value(key, buf);
+                if let Some(slot) = static_slot {
+                    buf.push(1);
+                    let bytes = slot.to_bytes_le();
+                    buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                    buf.extend_from_slice(&bytes);
+                } else {
+                    buf.push(0);
+                }
+            }
+            Expr::TLoad { key } => {
+                buf.push(0x13);
+                self.encode_value(key, buf);
+            }
+            Expr::Keccak256 { offset, length } => {
+                buf.push(0x14);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Expr::Truncate { value, to } => {
+                buf.push(0x15);
+                self.encode_value(value, buf);
+                buf.push(bitwidth_tag(*to));
+            }
+            Expr::ZeroExtend { value, to } => {
+                buf.push(0x16);
+                self.encode_value(value, buf);
+                buf.push(bitwidth_tag(*to));
+            }
+            Expr::SignExtendTo { value, to } => {
+                buf.push(0x17);
+                self.encode_value(value, buf);
+                buf.push(bitwidth_tag(*to));
+            }
+            Expr::ExtCodeSize { address }
+            | Expr::ExtCodeHash { address }
+            | Expr::Balance { address } => {
+                buf.push(match expr {
+                    Expr::ExtCodeSize { .. } => 0x20,
+                    Expr::ExtCodeHash { .. } => 0x21,
+                    Expr::Balance { .. } => 0x22,
+                    _ => unreachable!(),
+                });
+                self.encode_value(address, buf);
+            }
+            Expr::BlockHash { number } => {
+                buf.push(0x23);
+                self.encode_value(number, buf);
+            }
+            Expr::BlobHash { index } => {
+                buf.push(0x24);
+                self.encode_value(index, buf);
+            }
+            Expr::DataOffset { id } => {
+                buf.push(0x30);
+                buf.extend_from_slice(&(id.len() as u16).to_le_bytes());
+                buf.extend_from_slice(id.as_bytes());
+            }
+            Expr::DataSize { id } => {
+                buf.push(0x31);
+                buf.extend_from_slice(&(id.len() as u16).to_le_bytes());
+                buf.extend_from_slice(id.as_bytes());
+            }
+            Expr::LoadImmutable { key } => {
+                buf.push(0x32);
+                buf.extend_from_slice(&(key.len() as u16).to_le_bytes());
+                buf.extend_from_slice(key.as_bytes());
+            }
+            Expr::LinkerSymbol { path } => {
+                buf.push(0x33);
+                buf.extend_from_slice(&(path.len() as u16).to_le_bytes());
+                buf.extend_from_slice(path.as_bytes());
+            }
+            // Nullary builtins: each gets a unique tag
+            _ => {
+                buf.push(nullary_expr_tag(expr));
+            }
+        }
+    }
+
+    fn encode_region(&mut self, region: &Region, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
+        for stmt in &region.statements {
+            self.encode_stmt(stmt, buf);
+        }
+        buf.push(region.yields.len() as u8);
+        for y in &region.yields {
+            self.encode_value(y, buf);
+        }
+    }
+
+    fn encode_stmt(&mut self, stmt: &Statement, buf: &mut Vec<u8>) {
+        match stmt {
+            Statement::Let { bindings, value } => {
+                buf.push(0x80);
+                buf.push(bindings.len() as u8);
+                for b in bindings {
+                    self.encode_value_id(*b, buf);
+                }
+                self.encode_expr(value, buf);
+            }
+            Statement::MStore {
+                offset,
+                value,
+                region,
+            } => {
+                buf.push(0x81);
+                self.encode_value(offset, buf);
+                self.encode_value(value, buf);
+                buf.push(region_tag(region));
+            }
+            Statement::MStore8 {
+                offset,
+                value,
+                region,
+            } => {
+                buf.push(0x82);
+                self.encode_value(offset, buf);
+                self.encode_value(value, buf);
+                buf.push(region_tag(region));
+            }
+            Statement::MCopy { dest, src, length } => {
+                buf.push(0x83);
+                self.encode_value(dest, buf);
+                self.encode_value(src, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::SStore {
+                key,
+                value,
+                static_slot,
+            } => {
+                buf.push(0x84);
+                self.encode_value(key, buf);
+                self.encode_value(value, buf);
+                if let Some(slot) = static_slot {
+                    buf.push(1);
+                    let bytes = slot.to_bytes_le();
+                    buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                    buf.extend_from_slice(&bytes);
+                } else {
+                    buf.push(0);
+                }
+            }
+            Statement::TStore { key, value } => {
+                buf.push(0x85);
+                self.encode_value(key, buf);
+                self.encode_value(value, buf);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                outputs,
+            } => {
+                buf.push(0x86);
+                self.encode_value(condition, buf);
+                buf.push(inputs.len() as u8);
+                for i in inputs {
+                    self.encode_value(i, buf);
+                }
+                self.encode_region(then_region, buf);
+                if let Some(r) = else_region {
+                    buf.push(1);
+                    self.encode_region(r, buf);
+                } else {
+                    buf.push(0);
+                }
+                buf.push(outputs.len() as u8);
+                for o in outputs {
+                    self.encode_value_id(*o, buf);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                outputs,
+            } => {
+                buf.push(0x87);
+                self.encode_value(scrutinee, buf);
+                buf.push(inputs.len() as u8);
+                for i in inputs {
+                    self.encode_value(i, buf);
+                }
+                buf.extend_from_slice(&(cases.len() as u32).to_le_bytes());
+                for c in cases {
+                    let case_bytes = c.value.to_bytes_le();
+                    buf.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
+                    buf.extend_from_slice(&case_bytes);
+                    self.encode_region(&c.body, buf);
+                }
+                if let Some(d) = default {
+                    buf.push(1);
+                    self.encode_region(d, buf);
+                } else {
+                    buf.push(0);
+                }
+                buf.push(outputs.len() as u8);
+                for o in outputs {
+                    self.encode_value_id(*o, buf);
+                }
+            }
+            Statement::For {
+                init_values,
+                loop_vars,
+                condition_stmts,
+                condition,
+                body,
+                post_input_vars,
+                post,
+                outputs,
+            } => {
+                buf.push(0x88);
+                buf.push(init_values.len() as u8);
+                for v in init_values {
+                    self.encode_value(v, buf);
+                }
+                buf.push(loop_vars.len() as u8);
+                for lv in loop_vars {
+                    self.encode_value_id(*lv, buf);
+                }
+                buf.extend_from_slice(&(condition_stmts.len() as u32).to_le_bytes());
+                for s in condition_stmts {
+                    self.encode_stmt(s, buf);
+                }
+                self.encode_expr(condition, buf);
+                self.encode_region(body, buf);
+                buf.push(post_input_vars.len() as u8);
+                for pv in post_input_vars {
+                    self.encode_value_id(*pv, buf);
+                }
+                self.encode_region(post, buf);
+                buf.push(outputs.len() as u8);
+                for o in outputs {
+                    self.encode_value_id(*o, buf);
+                }
+            }
+            Statement::Block(region) => {
+                buf.push(0x89);
+                self.encode_region(region, buf);
+            }
+            Statement::Revert { offset, length } => {
+                buf.push(0x90);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::Return { offset, length } => {
+                buf.push(0x91);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::Stop => buf.push(0x92),
+            Statement::Invalid => buf.push(0x93),
+            Statement::ExternalCall {
+                kind,
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                result,
+            } => {
+                buf.push(0x94);
+                buf.push(callkind_tag(*kind));
+                self.encode_value(gas, buf);
+                self.encode_value(address, buf);
+                if let Some(v) = value {
+                    buf.push(1);
+                    self.encode_value(v, buf);
+                } else {
+                    buf.push(0);
+                }
+                self.encode_value(args_offset, buf);
+                self.encode_value(args_length, buf);
+                self.encode_value(ret_offset, buf);
+                self.encode_value(ret_length, buf);
+                self.encode_value_id(*result, buf);
+            }
+            Statement::Create {
+                kind,
+                value,
+                offset,
+                length,
+                salt,
+                result,
+            } => {
+                buf.push(0x95);
+                buf.push(createkind_tag(*kind));
+                self.encode_value(value, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+                if let Some(s) = salt {
+                    buf.push(1);
+                    self.encode_value(s, buf);
+                } else {
+                    buf.push(0);
+                }
+                self.encode_value_id(*result, buf);
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                buf.push(0x96);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+                buf.push(topics.len() as u8);
+                for t in topics {
+                    self.encode_value(t, buf);
+                }
+            }
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                buf.push(0x97);
+                self.encode_value(dest, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                dest,
+                offset,
+                length,
+            } => {
+                buf.push(0x98);
+                self.encode_value(address, buf);
+                self.encode_value(dest, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                buf.push(0x99);
+                self.encode_value(dest, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                buf.push(0x9A);
+                self.encode_value(dest, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                buf.push(0x9B);
+                self.encode_value(dest, buf);
+                self.encode_value(offset, buf);
+                self.encode_value(length, buf);
+            }
+            Statement::SetImmutable { key, value } => {
+                buf.push(0x9C);
+                buf.extend_from_slice(&(key.len() as u16).to_le_bytes());
+                buf.extend_from_slice(key.as_bytes());
+                self.encode_value(value, buf);
+            }
+            Statement::Leave { return_values } => {
+                buf.push(0x9D);
+                buf.push(return_values.len() as u8);
+                for v in return_values {
+                    self.encode_value(v, buf);
+                }
+            }
+            Statement::Expr(expr) => {
+                buf.push(0x9E);
+                self.encode_expr(expr, buf);
+            }
+            Statement::SelfDestruct { address } => {
+                buf.push(0x9F);
+                self.encode_value(address, buf);
+            }
+            Statement::Break { values } => {
+                buf.push(0xA0);
+                buf.push(values.len() as u8);
+                for v in values {
+                    self.encode_value(v, buf);
+                }
+            }
+            Statement::Continue { values } => {
+                buf.push(0xA1);
+                buf.push(values.len() as u8);
+                for v in values {
+                    self.encode_value(v, buf);
+                }
+            }
+        }
+    }
+}
+
+fn type_tag(ty: &Type) -> u8 {
+    match ty {
+        Type::Int(bw) => bitwidth_tag(*bw),
+        Type::Ptr(addr) => match addr {
+            crate::ir::AddressSpace::Heap => 0xE0,
+            crate::ir::AddressSpace::Stack => 0xE1,
+            crate::ir::AddressSpace::Storage => 0xE2,
+            crate::ir::AddressSpace::Code => 0xE3,
+        },
+        Type::Void => 0xFF,
+    }
+}
+
+fn bitwidth_tag(bw: BitWidth) -> u8 {
+    match bw {
+        BitWidth::I1 => 1,
+        BitWidth::I8 => 8,
+        BitWidth::I32 => 32,
+        BitWidth::I64 => 64,
+        BitWidth::I160 => 160,
+        BitWidth::I256 => 0,
+    }
+}
+
+fn binop_tag(op: BinOp) -> u8 {
+    match op {
+        BinOp::Add => 0,
+        BinOp::Sub => 1,
+        BinOp::Mul => 2,
+        BinOp::Div => 3,
+        BinOp::SDiv => 4,
+        BinOp::Mod => 5,
+        BinOp::SMod => 6,
+        BinOp::Exp => 7,
+        BinOp::AddMod => 8,
+        BinOp::MulMod => 9,
+        BinOp::And => 10,
+        BinOp::Or => 11,
+        BinOp::Xor => 12,
+        BinOp::Shl => 13,
+        BinOp::Shr => 14,
+        BinOp::Sar => 15,
+        BinOp::Lt => 16,
+        BinOp::Gt => 17,
+        BinOp::Slt => 18,
+        BinOp::Sgt => 19,
+        BinOp::Eq => 20,
+        BinOp::Byte => 21,
+        BinOp::SignExtend => 22,
+    }
+}
+
+fn unaryop_tag(op: UnaryOp) -> u8 {
+    match op {
+        UnaryOp::IsZero => 0,
+        UnaryOp::Not => 1,
+        UnaryOp::Clz => 2,
+    }
+}
+
+fn region_tag(region: &crate::ir::MemoryRegion) -> u8 {
+    match region {
+        crate::ir::MemoryRegion::Scratch => 0,
+        crate::ir::MemoryRegion::FreePointerSlot => 1,
+        crate::ir::MemoryRegion::Dynamic => 2,
+        crate::ir::MemoryRegion::Unknown => 3,
+    }
+}
+
+fn callkind_tag(kind: CallKind) -> u8 {
+    match kind {
+        CallKind::Call => 0,
+        CallKind::CallCode => 1,
+        CallKind::DelegateCall => 2,
+        CallKind::StaticCall => 3,
+    }
+}
+
+fn createkind_tag(kind: crate::ir::CreateKind) -> u8 {
+    match kind {
+        crate::ir::CreateKind::Create => 0,
+        crate::ir::CreateKind::Create2 => 1,
+    }
+}
+
+fn nullary_expr_tag(expr: &Expr) -> u8 {
+    match expr {
+        Expr::CallValue => 0x40,
+        Expr::Caller => 0x41,
+        Expr::Origin => 0x42,
+        Expr::CallDataSize => 0x43,
+        Expr::CodeSize => 0x44,
+        Expr::GasPrice => 0x45,
+        Expr::ReturnDataSize => 0x46,
+        Expr::Coinbase => 0x47,
+        Expr::Timestamp => 0x48,
+        Expr::Number => 0x49,
+        Expr::Difficulty => 0x4A,
+        Expr::GasLimit => 0x4B,
+        Expr::ChainId => 0x4C,
+        Expr::SelfBalance => 0x4D,
+        Expr::BaseFee => 0x4E,
+        Expr::BlobBaseFee => 0x4F,
+        Expr::Gas => 0x50,
+        Expr::MSize => 0x51,
+        Expr::Address => 0x52,
+        _ => 0x00, // Should not happen for nullary expressions
+    }
+}
+
+/// Redirects function calls in a block, replacing old function IDs with new ones.
+fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, FunctionId>) {
+    for stmt in &mut block.statements {
+        redirect_calls_in_stmt(stmt, redirects);
+    }
+}
+
+fn redirect_calls_in_expr(expr: &mut Expr, redirects: &BTreeMap<FunctionId, FunctionId>) {
+    match expr {
+        Expr::Call { function, args } => {
+            if let Some(&new_id) = redirects.get(function) {
+                *function = new_id;
+            }
+            for arg in args {
+                // Values don't contain expressions, no recursion needed
+                let _ = arg;
+            }
+        }
+        Expr::Binary { .. }
+        | Expr::Ternary { .. }
+        | Expr::Unary { .. }
+        | Expr::Literal { .. }
+        | Expr::Var(_) => {}
+        // All other expressions don't contain function calls
+        _ => {}
+    }
+}
+
+fn redirect_calls_in_region(region: &mut Region, redirects: &BTreeMap<FunctionId, FunctionId>) {
+    for stmt in &mut region.statements {
+        redirect_calls_in_stmt(stmt, redirects);
+    }
+}
+
+fn redirect_calls_in_stmt(stmt: &mut Statement, redirects: &BTreeMap<FunctionId, FunctionId>) {
+    match stmt {
+        Statement::Let { value, .. } => redirect_calls_in_expr(value, redirects),
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            redirect_calls_in_region(then_region, redirects);
+            if let Some(r) = else_region {
+                redirect_calls_in_region(r, redirects);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for c in cases {
+                redirect_calls_in_region(&mut c.body, redirects);
+            }
+            if let Some(d) = default {
+                redirect_calls_in_region(d, redirects);
+            }
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            for s in condition_stmts {
+                redirect_calls_in_stmt(s, redirects);
+            }
+            redirect_calls_in_region(body, redirects);
+            redirect_calls_in_region(post, redirects);
+        }
+        Statement::Block(region) => redirect_calls_in_region(region, redirects),
+        Statement::Expr(expr) => redirect_calls_in_expr(expr, redirects),
+        // All other statements don't contain expressions with function calls
+        _ => {}
+    }
 }
 
 #[cfg(test)]

@@ -32,6 +32,12 @@ const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 8;
 /// Maximum function size (in IR nodes) beyond which a function is never inlined.
 const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
 
+/// Maximum function size for single-call inlining at IR level.
+/// Larger single-call functions are deferred to LLVM's inliner (which has better register
+/// allocation awareness). This prevents creating monolithic dispatcher functions that
+/// exceed LLVM's optimization capacity.
+const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 40;
+
 /// Maximum number of call sites beyond which a function is never inlined.
 const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 10;
 
@@ -325,9 +331,14 @@ pub fn make_inline_decisions(
         } else if size >= NEVER_INLINE_SIZE_THRESHOLD {
             // Very large functions: never inline regardless of call count
             InlineDecision::NeverInline
-        } else if call_count == 1 {
-            // Single-call functions: always inline (eliminates function entirely)
+        } else if call_count == 1 && size <= SINGLE_CALL_INLINE_SIZE_THRESHOLD {
+            // Small single-call functions: inline at IR level (eliminates function entirely)
             InlineDecision::AlwaysInline
+        } else if call_count == 1 {
+            // Large single-call functions: defer to LLVM's inliner.
+            // IR-level inlining of many large functions creates monolithic functions
+            // that LLVM cannot optimize well (register pressure, code layout).
+            InlineDecision::CostBenefit
         } else if size <= ALWAYS_INLINE_SIZE_THRESHOLD && leave_count == 0 {
             // Very small functions without Leave: always inline
             InlineDecision::AlwaysInline
@@ -341,7 +352,7 @@ pub fn make_inline_decisions(
             let mut benefit = 0;
 
             // Small function bonus (only for Leave-free functions)
-            if size <= 20 && leave_count == 0 {
+            if size <= 15 && leave_count == 0 {
                 benefit += SMALL_FUNCTION_BONUS;
             }
 

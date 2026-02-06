@@ -50,6 +50,14 @@ impl From<anyhow::Error> for CodegenError {
 /// Result type for codegen operations.
 pub type Result<T> = std::result::Result<T, CodegenError>;
 
+/// Functions with size_estimate at or above this threshold get NoInline when appropriate.
+/// This prevents code bloat from inlining large function bodies at multiple call sites.
+const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
+
+/// Functions with size_estimate at or below this threshold get AlwaysInline when no
+/// IR-level decision was made. Very small functions benefit from inlining.
+const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
+
 /// LLVM code generator for newyork IR.
 /// Tracks phi nodes at the continue-landing block of a for loop.
 /// These phi nodes merge values from the body's normal exit and from continue sites.
@@ -235,9 +243,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
-    /// Gets the inferred bit-width for a value.
-    /// Phase 2 infrastructure: available for future optimizations that query type inference.
-    #[allow(dead_code)]
+    /// Gets the inferred bit-width for a value from type inference.
     fn inferred_width(&self, id: ValueId) -> BitWidth {
         self.type_info.get(id).min_width
     }
@@ -330,6 +336,88 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
+    /// Ensures both operands are extended to at least the given minimum width.
+    /// This is used for arithmetic operations where the result needs a certain
+    /// width to avoid modular arithmetic wrapping at the wrong boundary.
+    fn ensure_min_width(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        a: IntValue<'ctx>,
+        b: IntValue<'ctx>,
+        min_width: u32,
+        name: &str,
+    ) -> Result<(IntValue<'ctx>, IntValue<'ctx>)> {
+        let target_width = min_width
+            .max(a.get_type().get_bit_width())
+            .max(b.get_type().get_bit_width());
+        let target_type = context.integer_type(target_width as usize);
+
+        let a_ext = if a.get_type().get_bit_width() < target_width {
+            context
+                .builder()
+                .build_int_z_extend(a, target_type, &format!("{}_ext_a", name))
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else {
+            a
+        };
+        let b_ext = if b.get_type().get_bit_width() < target_width {
+            context
+                .builder()
+                .build_int_z_extend(b, target_type, &format!("{}_ext_b", name))
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else {
+            b
+        };
+        Ok((a_ext, b_ext))
+    }
+
+    /// Narrows a Let-bound value to i64 when type inference proves it fits.
+    /// This enables native RISC-V arithmetic for downstream operations.
+    ///
+    /// Safety: arithmetic operations (Add/Sub/Mul) ensure operands are
+    /// extended to the result's inferred width before operating, so narrow
+    /// values cannot cause incorrect modular wrapping.
+    fn try_narrow_let_binding(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        value: BasicValueEnum<'ctx>,
+        binding_id: ValueId,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let int_val = match value {
+            BasicValueEnum::IntValue(v) => v,
+            _ => return Ok(value),
+        };
+
+        let value_width = int_val.get_type().get_bit_width();
+
+        // Only truncate values wider than 64 bits
+        if value_width <= 64 {
+            return Ok(value);
+        }
+
+        let constraint = self.type_info.get(binding_id);
+
+        // Don't narrow signed values — truncation followed by zero-extension
+        // doesn't preserve sign information for negative values.
+        if constraint.is_signed {
+            return Ok(value);
+        }
+
+        if constraint.min_width.bits() > 64 {
+            return Ok(value);
+        }
+
+        // Truncate to i64 (not the exact inferred width) to avoid
+        // proliferating many small LLVM types. All values ≤ 64 bits
+        // are stored uniformly as i64.
+        let i64_type = context.llvm().i64_type();
+        let truncated = context
+            .builder()
+            .build_int_truncate(int_val, i64_type, "narrow_let")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        Ok(truncated.as_basic_value_enum())
+    }
+
     /// Converts a value to the inferred type for storage.
     /// If the inferred type is narrower, truncates; if wider, zero-extends.
     /// Phase 2 infrastructure: available for future optimizations.
@@ -361,6 +449,48 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .build_int_z_extend(value, target_type, name)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))
         }
+    }
+
+    /// Narrows a memory offset or length value to i64 when type inference
+    /// proves the value fits. This eliminates the expensive 3-basic-block
+    /// overflow check in `safe_truncate_int_to_xlen` (which converts i256→xlen)
+    /// by giving it an i64 input that takes the cheap direct truncation path.
+    ///
+    /// This is only applied at memory operation USE sites (mstore, mload,
+    /// return, revert, etc.) — never at LET bindings — so it cannot affect
+    /// intermediate arithmetic which must remain at full width.
+    fn narrow_offset_for_pointer(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        value: IntValue<'ctx>,
+        source_id: ValueId,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let value_width = value.get_type().get_bit_width();
+        let word_width = context.word_type().get_bit_width();
+
+        // Only narrow word-sized (i256) values — these are the ones that
+        // trigger the expensive overflow check in safe_truncate_int_to_xlen.
+        if value_width != word_width {
+            return Ok(value);
+        }
+
+        let inferred = self.inferred_width(source_id);
+        if !matches!(
+            inferred,
+            BitWidth::I1 | BitWidth::I8 | BitWidth::I32 | BitWidth::I64
+        ) {
+            return Ok(value);
+        }
+
+        // Truncate to i64 — safe because type inference proves the value fits.
+        // safe_truncate_int_to_xlen will then do a cheap i64→i32 truncation
+        // instead of the expensive i256→i32 overflow check.
+        let i64_type = context.llvm().i64_type();
+        context
+            .builder()
+            .build_int_truncate(value, i64_type, name)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))
     }
 
     /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
@@ -511,8 +641,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Sets LLVM inline attributes on a declared function based on our custom heuristics.
     ///
     /// This provides guidance to LLVM's inliner for functions that survived our IR-level
-    /// inlining pass. Functions that our heuristics marked as AlwaysInline but couldn't
-    /// be inlined at IR level (e.g., due to Leave statements) get LLVM AlwaysInline.
+    /// inlining pass. We use AlwaysInline for functions we know should be inlined, and
+    /// NoInline only for large functions or those called from many sites where inlining
+    /// would cause significant code bloat. For other functions, we let LLVM decide using
+    /// its own heuristics (it already has MinSize/OptimizeForSize from set_default_attributes).
     fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
         let llvm_func = match context.get_function(&function.name, true) {
             Some(func_ref) => func_ref.borrow().declaration().value,
@@ -525,17 +657,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let ir_decision = self.inline_decisions.get(&function.id.0).copied();
 
         let attr = match ir_decision {
-            // Our heuristics say always inline - trust them (they have domain knowledge)
+            // Our heuristics say always inline - trust them (they have domain knowledge).
+            // These are functions that could not be inlined at IR level (e.g., due to
+            // Leave statements inside For loops) but should still be inlined by LLVM.
             Some(crate::InlineDecision::AlwaysInline) => {
                 Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
             }
-            // Our heuristics say never inline
+            // NeverInline: only enforce NoInline for large functions to prevent bloat.
+            // Small NeverInline functions (e.g., dead functions with call_count=0) can
+            // be left to LLVM's judgment.
             Some(crate::InlineDecision::NeverInline) => {
-                Some(revive_llvm_context::PolkaVMAttribute::NoInline)
+                if function.size_estimate >= LARGE_FUNCTION_NOINLINE_THRESHOLD {
+                    Some(revive_llvm_context::PolkaVMAttribute::NoInline)
+                } else {
+                    None
+                }
             }
-            // Our heuristics say cost doesn't justify inlining everywhere.
-            // For multi-call functions, prevent LLVM from inlining to avoid
-            // code duplication.
+            // CostBenefit: prevent LLVM from inlining multi-call functions to avoid
+            // code duplication. Functions called 3+ times get NoInline to prevent
+            // LLVM from duplicating their body at every call site. Functions called
+            // only 2 times get no attribute, letting LLVM decide.
             Some(crate::InlineDecision::CostBenefit) => {
                 if function.call_count >= 3 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
@@ -543,14 +684,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 }
             }
-            // No decision (function not analyzed): use size/call-count heuristics
+            // No decision (function not analyzed): only hint for very small functions
             None => {
-                if function.size_estimate <= 8 {
+                if function.size_estimate <= SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD {
                     Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
-                } else if function.size_estimate >= 100 || function.call_count >= 10 {
-                    Some(revive_llvm_context::PolkaVMAttribute::NoInline)
-                } else if function.call_count <= 2 && function.size_estimate <= 30 {
-                    Some(revive_llvm_context::PolkaVMAttribute::InlineHint)
                 } else {
                     None
                 }
@@ -776,12 +913,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         match stmt {
             Statement::Let { bindings, value } => {
                 let llvm_value = self.generate_expr(value, context)?;
-                // For single binding
                 if bindings.len() == 1 {
                     let binding_id = bindings[0];
-                    // Store value at word type for compatibility with runtime functions.
-                    // Type inference infrastructure is in place for future use, but
-                    // currently all values are kept at word type.
+                    let llvm_value =
+                        self.try_narrow_let_binding(context, llvm_value, binding_id)?;
                     self.set_value(binding_id, llvm_value);
                 } else {
                     // Tuple unpacking - extract each element
@@ -789,13 +924,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     for (index, binding) in bindings.iter().enumerate() {
                         let field = context
                             .builder()
-                            .build_extract_value(
-                                struct_val,
-                                index as u32,
-                                &format!("field_{}", index),
-                            )
+                            .build_extract_value(struct_val, index as u32, &format!("{}", index))
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        // Store tuple element at word type
                         self.set_value(*binding, field);
                     }
                 }
@@ -819,6 +949,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         value_val,
                     )?;
                 } else {
+                    let offset_val = self.narrow_offset_for_pointer(
+                        context,
+                        offset_val,
+                        offset.id,
+                        "mstore_offset_narrow",
+                    )?;
                     revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
                 }
             }
@@ -829,6 +965,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 region: _,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "mstore8_offset_narrow",
+                )?;
                 let value_val = self.translate_value(value)?.into_int_value();
                 // MStore8 expects word-sized value (takes low byte)
                 let value_val = self.ensure_word_type(context, value_val, "mstore8_val")?;
@@ -839,8 +981,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::MCopy { dest, src, length } => {
                 let dest_val = self.translate_value(dest)?.into_int_value();
+                let dest_val = self.narrow_offset_for_pointer(
+                    context,
+                    dest_val,
+                    dest.id,
+                    "mcopy_dest_narrow",
+                )?;
                 let src_val = self.translate_value(src)?.into_int_value();
+                let src_val =
+                    self.narrow_offset_for_pointer(context, src_val, src.id, "mcopy_src_narrow")?;
                 let len_val = self.translate_value(length)?.into_int_value();
+                let len_val = self.narrow_offset_for_pointer(
+                    context,
+                    len_val,
+                    length.id,
+                    "mcopy_length_narrow",
+                )?;
 
                 let dest_pointer = revive_llvm_context::PolkaVMPointer::new_with_offset(
                     context,
@@ -886,17 +1042,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 outputs,
             } => {
                 let cond_val = self.translate_value(condition)?.into_int_value();
-                // Ensure condition is word type before comparing
-                let cond_val = self.ensure_word_type(context, cond_val, "if_cond")?;
-                // Convert to i1 (compare != 0)
+                // Compare at native width - no need to extend to word type
+                // since comparing != 0 works correctly at any integer width
+                let cond_zero = cond_val.get_type().const_zero();
                 let cond_bool = context
                     .builder()
-                    .build_int_compare(
-                        inkwell::IntPredicate::NE,
-                        cond_val,
-                        context.word_type().const_zero(),
-                        "cond_bool",
-                    )
+                    .build_int_compare(inkwell::IntPredicate::NE, cond_val, cond_zero, "cond_bool")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
                 let then_block = context.append_basic_block("if_then");
@@ -1067,19 +1218,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 outputs,
             } => {
                 let scrut_val = self.translate_value(scrutinee)?.into_int_value();
-                // Switch scrutinee must be word type to match case constants
-                let scrut_val = self.ensure_word_type(context, scrut_val, "switch_scrut")?;
+                // Use scrutinee at its native width - case constants will match
+                let scrut_type = scrut_val.get_type();
                 let join_block = context.append_basic_block("switch_join");
 
-                // Create case blocks
+                // Create case blocks with constants matching scrutinee width
                 let mut case_blocks = Vec::new();
                 for (idx, case) in cases.iter().enumerate() {
                     let case_block = context.append_basic_block(&format!("switch_case_{}", idx));
-                    let case_val = context.word_const(
-                        case.value
-                            .to_u64()
-                            .unwrap_or_else(|| panic!("Case value too large")),
-                    );
+                    let case_u64 = case
+                        .value
+                        .to_u64()
+                        .unwrap_or_else(|| panic!("Case value too large"));
+                    let case_val = scrut_type.const_int(case_u64, false);
                     case_blocks.push((case_val, case_block, &case.body));
                 }
 
@@ -1279,16 +1430,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
 
                 // Evaluate condition
-                let cond_val = self.generate_expr(condition, context)?;
-                // Ensure condition is word type before comparing
-                let cond_val =
-                    self.ensure_word_type(context, cond_val.into_int_value(), "for_cond")?;
+                let cond_val = self.generate_expr(condition, context)?.into_int_value();
+                // Compare at native width - no need to extend to word type
+                let cond_zero = cond_val.get_type().const_zero();
                 let cond_bool = context
                     .builder()
                     .build_int_compare(
                         inkwell::IntPredicate::NE,
                         cond_val,
-                        context.word_type().const_zero(),
+                        cond_zero,
                         "for_cond_bool",
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -1362,22 +1512,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.set_basic_block(body_block);
                 self.generate_region(body, context)?;
 
-                // Body falls through to continue_landing
+                // Compute body yield values BEFORE the branch terminator,
+                // since translate_value_as_word may emit zext instructions.
                 let body_end_block = context.basic_block();
+                let mut body_yield_vals: Vec<inkwell::values::BasicValueEnum<'ctx>> = Vec::new();
+                if has_body_yields {
+                    for (i, yield_ref) in body.yields.iter().enumerate() {
+                        let yield_val = self.translate_value_as_word(
+                            yield_ref,
+                            context,
+                            &format!("body_yield_{}", i),
+                        )?;
+                        body_yield_vals.push(yield_val.as_basic_value_enum());
+                    }
+                }
+
+                // Body falls through to continue_landing
                 context.build_unconditional_branch(continue_landing);
 
                 // Add body-end values to the landing phis
-                if has_body_yields {
-                    for (i, phi) in landing_phis.iter().enumerate() {
-                        if i < body.yields.len() {
-                            let yield_val = self.translate_value_as_word(
-                                &body.yields[i],
-                                context,
-                                &format!("body_yield_{}", i),
-                            )?;
-                            phi.add_incoming(&[(&yield_val, body_end_block)]);
-                        }
-                    }
+                for (phi, yield_val) in landing_phis.iter().zip(body_yield_vals.iter()) {
+                    phi.add_incoming(&[(yield_val, body_end_block)]);
                 }
 
                 // Pop the post and break phis info
@@ -1605,9 +1760,33 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let address_val = self.translate_value(address)?.into_int_value();
                 let address_val = self.ensure_word_type(context, address_val, "call_addr")?;
                 let args_offset_val = self.translate_value(args_offset)?.into_int_value();
+                let args_offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    args_offset_val,
+                    args_offset.id,
+                    "call_args_offset_narrow",
+                )?;
                 let args_length_val = self.translate_value(args_length)?.into_int_value();
+                let args_length_val = self.narrow_offset_for_pointer(
+                    context,
+                    args_length_val,
+                    args_length.id,
+                    "call_args_length_narrow",
+                )?;
                 let ret_offset_val = self.translate_value(ret_offset)?.into_int_value();
+                let ret_offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    ret_offset_val,
+                    ret_offset.id,
+                    "call_ret_offset_narrow",
+                )?;
                 let ret_length_val = self.translate_value(ret_length)?.into_int_value();
+                let ret_length_val = self.narrow_offset_for_pointer(
+                    context,
+                    ret_length_val,
+                    ret_length.id,
+                    "call_ret_length_narrow",
+                )?;
 
                 let call_result = match kind {
                     CallKind::Call => {
@@ -1674,7 +1853,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let value_val = self.translate_value(value)?.into_int_value();
                 let value_val = self.ensure_word_type(context, value_val, "create_value")?;
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "create_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "create_length_narrow",
+                )?;
                 let salt_val = match (kind, salt) {
                     (CreateKind::Create2, Some(s)) => {
                         let s_val = self.translate_value(s)?.into_int_value();
@@ -1695,7 +1886,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 topics,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "log_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "log_length_narrow",
+                )?;
                 // Topics must be word type for the log function
                 let topic_vals: Vec<BasicValueEnum<'ctx>> = topics
                     .iter()
@@ -1759,8 +1962,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
                 // In deploy code, codecopy copies from calldata
                 let dest_val = self.translate_value(dest)?.into_int_value();
+                let dest_val = self.narrow_offset_for_pointer(
+                    context,
+                    dest_val,
+                    dest.id,
+                    "codecopy_dest_narrow",
+                )?;
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "codecopy_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "codecopy_length_narrow",
+                )?;
                 revive_llvm_context::polkavm_evm_calldata::copy(
                     context, dest_val, offset_val, length_val,
                 )?;
@@ -1779,8 +2000,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 length,
             } => {
                 let dest_val = self.translate_value(dest)?.into_int_value();
+                let dest_val = self.narrow_offset_for_pointer(
+                    context,
+                    dest_val,
+                    dest.id,
+                    "returndatacopy_dest_narrow",
+                )?;
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "returndatacopy_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "returndatacopy_length_narrow",
+                )?;
                 revive_llvm_context::polkavm_evm_return_data::copy(
                     context, dest_val, offset_val, length_val,
                 )?;
@@ -1795,6 +2034,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // This is used in create patterns: datacopy(dest, dataoffset("deployed"), datasize("deployed"))
                 // The offset is actually the contract hash to write
                 let dest_val = self.translate_value(dest)?.into_int_value();
+                let dest_val = self.narrow_offset_for_pointer(
+                    context,
+                    dest_val,
+                    dest.id,
+                    "datacopy_dest_narrow",
+                )?;
                 let hash_val = self.translate_value(offset)?.into_int_value();
                 let hash_val = self.ensure_word_type(context, hash_val, "datacopy_hash")?;
                 revive_llvm_context::polkavm_evm_memory::store(context, dest_val, hash_val)?;
@@ -1806,8 +2051,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 length,
             } => {
                 let dest_val = self.translate_value(dest)?.into_int_value();
+                let dest_val = self.narrow_offset_for_pointer(
+                    context,
+                    dest_val,
+                    dest.id,
+                    "calldatacopy_dest_narrow",
+                )?;
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "calldatacopy_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "calldatacopy_length_narrow",
+                )?;
                 revive_llvm_context::polkavm_evm_calldata::copy(
                     context, dest_val, offset_val, length_val,
                 )?;
@@ -1882,6 +2145,53 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
 
+                    // For add/sub/mul: when type inference proves the result fits in
+                    // i64, do the arithmetic at i64 width (native RISC-V ops).
+                    // Otherwise extend to i256 for correct modular semantics.
+                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                        let lhs_inferred = self.inferred_width(lhs.id);
+                        let rhs_inferred = self.inferred_width(rhs.id);
+                        let result_width = match op {
+                            BinOp::Add => {
+                                crate::type_inference::widen_by_one(lhs_inferred.max(rhs_inferred))
+                            }
+                            BinOp::Sub => BitWidth::I256,
+                            BinOp::Mul => {
+                                crate::type_inference::double_width(lhs_inferred.max(rhs_inferred))
+                            }
+                            _ => unreachable!(),
+                        };
+
+                        if result_width.bits() <= 64 {
+                            // Result fits in i64 — use narrow arithmetic.
+                            // Extend both operands to at least i64 for headroom.
+                            let (lhs_val, rhs_val) =
+                                self.ensure_min_width(context, lhs_val, rhs_val, 64, "arith")?;
+                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                        } else {
+                            // Result needs > i64 — use i256 for correct wrapping.
+                            let lhs_val = self.ensure_word_type(context, lhs_val, "arith_lhs")?;
+                            let rhs_val = self.ensure_word_type(context, rhs_val, "arith_rhs")?;
+                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                        }
+                    }
+
+                    // For div/mod with narrow operands, use native LLVM ops
+                    // instead of expensive 256-bit runtime calls
+                    BinOp::Div | BinOp::Mod => {
+                        let lhs_width = lhs_val.get_type().get_bit_width();
+                        let rhs_width = rhs_val.get_type().get_bit_width();
+                        if lhs_width <= 64 && rhs_width <= 64 {
+                            let (lhs_val, rhs_val) =
+                                self.ensure_same_type(context, lhs_val, rhs_val, "narrow_divmod")?;
+                            self.generate_narrow_divmod(*op, lhs_val, rhs_val, context)
+                        } else {
+                            let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
+                            let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
+                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                        }
+                    }
+
                     _ => {
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
@@ -1917,7 +2227,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let operand_val = self.translate_value(operand)?.into_int_value();
                 match op {
                     UnaryOp::IsZero => {
-                        // IsZero: EVM returns 1 if operand == 0, else 0 (as 256-bit word)
+                        // Return i1 directly - avoid i256 zero-extension.
+                        // Downstream uses will extend via ensure_word_type when needed.
                         let zero = operand_val.get_type().const_zero();
                         let is_zero = context
                             .builder()
@@ -1928,12 +2239,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 "iszero",
                             )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        // Zero-extend i1 to word type for EVM compatibility
-                        let result = context
-                            .builder()
-                            .build_int_z_extend(is_zero, context.word_type(), "iszero_ext")
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        Ok(result.as_basic_value_enum())
+                        Ok(is_zero.as_basic_value_enum())
                     }
                     UnaryOp::Not => {
                         // Bitwise NOT: XOR with all-ones mask at word (256-bit) width.
@@ -2089,6 +2395,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         offset_xlen,
                     )?)
                 } else {
+                    let offset_val = self.narrow_offset_for_pointer(
+                        context,
+                        offset_val,
+                        offset.id,
+                        "mload_offset_narrow",
+                    )?;
                     Ok(revive_llvm_context::polkavm_evm_memory::load(
                         context, offset_val,
                     )?)
@@ -2178,7 +2490,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::Keccak256 { offset, length } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                let offset_val = self.narrow_offset_for_pointer(
+                    context,
+                    offset_val,
+                    offset.id,
+                    "keccak_offset_narrow",
+                )?;
                 let length_val = self.translate_value(length)?.into_int_value();
+                let length_val = self.narrow_offset_for_pointer(
+                    context,
+                    length_val,
+                    length.id,
+                    "keccak_length_narrow",
+                )?;
                 Ok(revive_llvm_context::polkavm_evm_crypto::sha3(
                     context, offset_val, length_val,
                 )?)
@@ -2219,7 +2543,58 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
-    /// Generates a narrowed unsigned division or remainder with explicit masking.
+    /// Generates a narrow (64-bit or less) unsigned division or modulo.
+    /// Uses native LLVM udiv/urem instead of expensive 256-bit runtime calls.
+    /// Handles division by zero (returns 0 per EVM spec).
+    fn generate_narrow_divmod(
+        &mut self,
+        op: BinOp,
+        lhs: IntValue<'ctx>,
+        rhs: IntValue<'ctx>,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let int_type = lhs.get_type();
+        let zero = int_type.const_zero();
+
+        // Check for division by zero
+        let is_zero = context
+            .builder()
+            .build_int_compare(inkwell::IntPredicate::EQ, rhs, zero, "divmod_iszero")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        let non_zero_block = context.append_basic_block("divmod_nonzero");
+        let join_block = context.append_basic_block("divmod_join");
+        let current_block = context.basic_block();
+
+        context.build_conditional_branch(is_zero, join_block, non_zero_block)?;
+
+        // Non-zero path: do the division
+        context.set_basic_block(non_zero_block);
+        let result = match op {
+            BinOp::Div => context
+                .builder()
+                .build_int_unsigned_div(lhs, rhs, "narrow_div")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?,
+            BinOp::Mod => context
+                .builder()
+                .build_int_unsigned_rem(lhs, rhs, "narrow_mod")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?,
+            _ => unreachable!(),
+        };
+        let non_zero_exit = context.basic_block();
+        context.build_unconditional_branch(join_block);
+
+        // Join: phi between 0 (zero divisor) and result (non-zero divisor)
+        context.set_basic_block(join_block);
+        let phi = context
+            .builder()
+            .build_phi(int_type, "divmod_result")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        phi.add_incoming(&[(&zero, current_block), (&result, non_zero_exit)]);
+
+        Ok(phi.as_basic_value().as_basic_value_enum())
+    }
+
     /// Generates a binary operation.
     fn generate_binop(
         &mut self,
@@ -2274,61 +2649,41 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?,
             ),
             BinOp::Lt => {
-                // EVM comparison: result is 0 or 1 as 256-bit word
+                // Return i1 directly - avoid i256 zero-extension.
+                // Downstream uses will extend via ensure_word_type when needed.
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::ULT, lhs, rhs, "lt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "lt_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Gt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::UGT, lhs, rhs, "gt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "gt_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Slt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::SLT, lhs, rhs, "slt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "slt_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Sgt => {
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::SGT, lhs, rhs, "sgt")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "sgt_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Eq => {
-                // Equal comparison: result is 0 or 1 as 256-bit word
                 let cmp = context
                     .builder()
                     .build_int_compare(inkwell::IntPredicate::EQ, lhs, rhs, "eq")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                let result = context
-                    .builder()
-                    .build_int_z_extend(cmp, context.word_type(), "eq_ext")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(result.as_basic_value_enum())
+                Ok(cmp.as_basic_value_enum())
             }
             BinOp::Byte => Ok(revive_llvm_context::polkavm_evm_bitwise::byte(
                 context, lhs, rhs,

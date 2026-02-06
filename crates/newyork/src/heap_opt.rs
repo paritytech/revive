@@ -411,7 +411,7 @@ impl HeapAnalysis {
                         // AND with mask can improve alignment knowledge
                         // e.g., x & 0xFFFFFFE0 ensures 32-byte alignment
                         if let Some(mask) = rhs_info.and_then(|i| i.static_value) {
-                            let align = compute_alignment(!mask + 1);
+                            let align = compute_alignment((!mask).wrapping_add(1));
                             Some(OffsetInfo {
                                 static_value: None,
                                 alignment: align.max(1),

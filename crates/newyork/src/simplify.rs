@@ -1416,7 +1416,7 @@ fn eliminate_dead_code_in_stmts(stmts: &mut Vec<Statement>, extra_used: &BTreeSe
 
     // Phase 1: Recursively DCE nested regions (bottom-up)
     for stmt in stmts.iter_mut() {
-        total_removed += eliminate_dead_code_in_nested(stmt);
+        total_removed += eliminate_dead_code_in_nested(stmt, extra_used);
     }
 
     // Phase 2: DCE at this level with fixpoint iteration
@@ -1448,7 +1448,10 @@ fn eliminate_dead_code_in_stmts(stmts: &mut Vec<Statement>, extra_used: &BTreeSe
 }
 
 /// Recursively DCE inside nested regions of a statement.
-fn eliminate_dead_code_in_nested(stmt: &mut Statement) -> usize {
+/// `parent_extra_used` contains ValueIds from the parent scope that must be preserved
+/// (e.g., function return values). These are propagated into Block regions because
+/// Blocks in Yul can define values that are referenced by the parent scope.
+fn eliminate_dead_code_in_nested(stmt: &mut Statement, parent_extra_used: &BTreeSet<u32>) -> usize {
     match stmt {
         Statement::If {
             then_region,
@@ -1477,7 +1480,11 @@ fn eliminate_dead_code_in_nested(stmt: &mut Statement) -> usize {
             removed
         }
         Statement::Block(region) => {
-            let extra = yields_as_used(&region.yields);
+            // Block regions can define values used by the parent scope (e.g., function
+            // return values assigned inside a scoped block). Propagate parent's extra_used
+            // so those definitions are not incorrectly DCE'd.
+            let mut extra = yields_as_used(&region.yields);
+            extra.extend(parent_extra_used);
             eliminate_dead_code_in_stmts(&mut region.statements, &extra)
         }
         // Skip For loops - complex loop_var/phi semantics

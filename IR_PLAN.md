@@ -1048,14 +1048,20 @@ inline if benefit > cost
    - No semantic changes (conservative approach ensures correctness)
    - Code size improvements verified (ERC20: -3.5%, SHA1: -0.5%)
 
-### Phase 4: Custom Inliner ❌ NOT STARTED
+### Phase 4: Custom Inliner ✅ COMPLETE
 
 **Goal**: Better inlining decisions than LLVM
 
-1. **Call graph construction** ❌
-2. **Cost-benefit analysis** ❌ (but `size_estimate` field exists)
-3. **Inline transformation** ❌
-4. **Re-run type inference** ❌
+1. **Call graph construction** ✅ - Tarjan SCC for recursion detection, call count tracking
+2. **Cost-benefit analysis** ✅ - AlwaysInline/NeverInline/CostBenefit decisions based on size, call count, recursion
+3. **Inline transformation** ✅ - Full IR-level inlining with Leave elimination via "exit flag" pattern
+4. **LLVM inline hints** ✅ - Non-inlined functions get AlwaysInline/NoInline LLVM attributes
+
+**Key challenges solved:**
+- Leave elimination: Leave → done flag + accum assignments + If guards with phi outputs
+- Functions with Leave inside For loops deferred to LLVM's inliner
+- Must preserve original If/Switch inputs/outputs/yields when adding accum+done values
+- FibonacciIterative: -3.1% vs standard pipeline (1200 vs 1239 bytes)
 
 ### Phase 5: Pattern Rewrites ❌ NOT STARTED
 
@@ -1304,21 +1310,40 @@ Implementation approach:
 10. [ ] Activate dead store elimination (infrastructure ready, needs testing)
 11. [x] Apply byte-swap elimination for native-safe regions ✅ **DONE**
 
-### Future Phases
-12. [ ] Build call graph for inlining
-13. [ ] Implement single-call function inlining
-14. [ ] Implement pattern rewrite framework
+### Phase 4 Completion ✅ DONE
+12. [x] Build call graph for inlining - Tarjan SCC, call counting
+13. [x] Implement single-call function inlining with Leave elimination
+14. [x] LLVM inline hints for non-inlined functions
+
+### Phase 5a: Simplification Pass ✅ DONE
+15. [x] **Constant folding** - Fold constant expressions at IR level (binary, unary, ternary)
+16. [x] **Algebraic identities** - add(x,0)→x, mul(x,1)→x, and(x,0)→0, sub(x,x)→0, etc.
+17. [x] **ERC20/SHA1 regression fixed** - newyork now beats standard pipeline on ALL contracts
+18. [ ] **Dead code elimination** - DCE infrastructure exists but disabled (scope analysis issues)
+
+### Next Optimization Targets
+19. [ ] **Pattern rewrites** - Transform EVM idioms to efficient PVM equivalents
+20. [ ] **Larger contract fixtures** - Test with bigger contracts from resolc std json fixtures
+21. [ ] **More aggressive type narrowing** - Use inferred narrow types in more LLVM codegen paths
+22. [ ] **Fix DCE** - Scope-aware dead code elimination (values used in nested regions)
 
 ### Code Size Reduction Goals (Target: 50%)
-> Current byte-swap optimizations achieved ~20% reduction. To reach 50%, these areas need work:
+> Current status: newyork vs standard pipeline (2026-02-06, after simplification pass):
+> - Flipper: 1089 vs 1682 (**-35.3%** - newyork wins big!)
+> - FibonacciIterative: 1200 vs 1239 (-3.2% - newyork wins)
+> - ERC20: 16603 vs 16757 (-0.9% - newyork wins)
+> - SHA1: 7259 vs 7277 (-0.2% - newyork wins)
+> - Baseline/Events/Computation/DivisionArithmetics: identical
+>
+> To reach 50% reduction on larger contracts, these areas need work:
 
-15. [ ] **Eliminate unused runtime function metadata** - Every contract includes import metadata for all 34+ runtime functions even if unused. Strip unused imports at link time.
-16. [ ] **More aggressive dead code elimination** at the PolkaVM linker level - Currently dead code from unused runtime paths persists in final blob.
-17. [ ] **Better 256-bit arithmetic lowering** - The 256-bit division/modulo functions are particularly large. Consider:
+20. [ ] **Eliminate unused runtime function metadata** - Every contract includes import metadata for all 34+ runtime functions even if unused. Strip unused imports at link time.
+21. [ ] **More aggressive dead code elimination** at the PolkaVM linker level - Currently dead code from unused runtime paths persists in final blob.
+22. [ ] **Better 256-bit arithmetic lowering** - The 256-bit division/modulo functions are particularly large. Consider:
     - Specializing for common cases (small divisors, power-of-2)
     - Using runtime calls instead of inline expansion
     - Detecting when 64-bit arithmetic suffices
-18. [ ] **Function inlining improvements** - Some small helper functions could be inlined to eliminate call overhead and enable further optimization.
+23. [ ] **Pattern rewrites for EVM idioms** - Convert patterns like `and(x, 0xff)` to `trunc i8` + `zext`, memory copy loops to memcpy intrinsics, etc.
 
 ---
 

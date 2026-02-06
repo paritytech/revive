@@ -70,6 +70,13 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let ir_object = translation_result.object;
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
+        let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =
+            translation_result
+                .inline_results
+                .decisions
+                .into_iter()
+                .map(|(fid, decision)| (fid.0, decision))
+                .collect();
 
         // Check if we can use native-only heap mode (no byte-swapping needed)
         let use_native_heap = heap_opt.all_native();
@@ -118,7 +125,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             context.set_code_type(PolkaVMCodeType::Runtime);
 
             // Generate the runtime code using newyork IR
-            let mut codegen = LlvmCodegen::new(heap_opt.clone(), type_info.clone());
+            let mut codegen = LlvmCodegen::new(
+                heap_opt.clone(),
+                type_info.clone(),
+                inline_decisions.clone(),
+            );
             codegen
                 .generate_object(&ir_object, context)
                 .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
@@ -168,7 +179,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally
-            let mut codegen = LlvmCodegen::new(heap_opt, type_info);
+            let mut codegen = LlvmCodegen::new(heap_opt, type_info, inline_decisions);
             codegen
                 .generate_object(&ir_object, context)
                 .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;

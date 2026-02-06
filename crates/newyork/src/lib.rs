@@ -28,6 +28,7 @@
 //! - [`type_inference`] - Type inference pass for narrowing integer widths
 //! - [`heap_opt`] - Heap optimization for partial big-endian emulation
 //! - [`mem_opt`] - Memory optimization (load-after-store, dead store elimination)
+//! - [`inline`] - Function inlining with custom heuristics for PolkaVM
 //!
 //! For now, allow missing docs while the crate is in development.
 #![allow(missing_docs)]
@@ -35,9 +36,11 @@
 
 pub mod from_yul;
 pub mod heap_opt;
+pub mod inline;
 pub mod ir;
 pub mod mem_opt;
 pub mod printer;
+pub mod simplify;
 pub mod ssa;
 pub mod to_llvm;
 pub mod type_inference;
@@ -48,6 +51,9 @@ pub use from_yul::{TranslationError, YulTranslator};
 pub use heap_opt::{
     AccessPattern, HeapAnalysis, HeapAnalysisStats, HeapOptResults, MemorySlot, OffsetInfo,
 };
+pub use inline::{
+    analyze_call_graph, inline_functions, CallGraphAnalysis, InlineDecision, InlineResults,
+};
 pub use ir::{
     AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
@@ -56,6 +62,7 @@ pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
     print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
+pub use simplify::{Simplifier, SimplifyResults};
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
@@ -71,6 +78,8 @@ pub struct TranslationResult {
     pub type_info: TypeInference,
     /// Memory optimization results (load-after-store, dead store elimination).
     pub mem_opt: MemOptResults,
+    /// Inlining results (which functions were inlined and removed).
+    pub inline_results: InlineResults,
 }
 
 /// Translates a Yul object to newyork IR.
@@ -93,23 +102,26 @@ pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
-    let ir_object = translator.translate_object(yul_object)?;
+    let mut ir_object = translator.translate_object(yul_object)?;
 
-    // Run memory optimization pass (load-after-store and dead store elimination)
-    let mut ir_object = ir_object;
-    let mut mem_optimizer = MemoryOptimizer::new();
-    let mem_opt = mem_optimizer.optimize_object(&mut ir_object);
+    // Run optimization passes on the entire object tree (including subobjects).
+    // Subobjects contain the deployed (runtime) contract code, which is where
+    // most functions live and where optimizations have the biggest impact.
+    let inline_results = optimize_object_tree(&mut ir_object);
 
-    // Run heap analysis to identify optimization opportunities
+    // Run analysis passes on the full object tree
     let mut heap_analysis = HeapAnalysis::new();
     heap_analysis.analyze_object(&ir_object);
-
-    // Build optimization results
     let heap_opt = HeapOptResults::from_analysis(&heap_analysis);
 
-    // Run type inference to determine minimum bit-widths
     let mut type_info = TypeInference::new();
     type_info.infer_object(&ir_object);
+
+    // Also analyze subobjects
+    for subobject in &ir_object.subobjects {
+        heap_analysis.analyze_object(subobject);
+        type_info.infer_object(subobject);
+    }
 
     // Validate IR correctness in debug builds
     #[cfg(debug_assertions)]
@@ -121,36 +133,40 @@ pub fn translate_yul_object(
         }
     }
 
-    // Log analysis statistics in debug builds
-    #[cfg(debug_assertions)]
-    {
-        let stats = heap_analysis.statistics();
-        if stats.total_accesses > 0 {
-            log::debug!(
-                "Heap analysis for {}: {} accesses ({} aligned, {} static), {} tainted regions, {} escaping regions, {} native-safe regions",
-                ir_object.name,
-                stats.total_accesses,
-                stats.aligned_accesses,
-                stats.static_accesses,
-                stats.tainted_regions,
-                stats.escaping_regions,
-                heap_opt.native_safe_regions.len()
-            );
-        }
-        let type_constraints = type_info.constraints().len();
-        if type_constraints > 0 {
-            log::debug!(
-                "Type inference for {}: {} values with constraints",
-                ir_object.name,
-                type_constraints
-            );
-        }
-    }
-
     Ok(TranslationResult {
         object: ir_object,
         heap_opt,
         type_info,
-        mem_opt,
+        mem_opt: MemOptResults::default(),
+        inline_results,
     })
+}
+
+/// Runs optimization passes on an object and all its subobjects recursively.
+/// Returns the combined inline results from all objects.
+fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
+    // Run inlining pass first - this exposes more optimization opportunities
+    let mut inline_results = inline_functions(object);
+
+    // Run simplification pass (constant folding, algebraic identities, copy propagation, DCE)
+    // This cleans up the IR after inlining, eliminating redundant operations.
+    let mut simplifier = Simplifier::new();
+    let _simplify_stats = simplifier.simplify_object(object);
+
+    // Run memory optimization pass (load-after-store elimination)
+    let mut mem_optimizer = MemoryOptimizer::new();
+    mem_optimizer.optimize_object(object);
+
+    // Recursively optimize subobjects
+    for subobject in &mut object.subobjects {
+        let sub_results = optimize_object_tree(subobject);
+        // Merge sub-results into main results
+        inline_results.inlined_call_sites += sub_results.inlined_call_sites;
+        inline_results
+            .removed_functions
+            .extend(sub_results.removed_functions);
+        inline_results.decisions.extend(sub_results.decisions);
+    }
+
+    inline_results
 }

@@ -127,12 +127,10 @@ impl MemoryOptimizer {
             self.optimize_block(&mut function.body);
         }
 
-        // Recursively optimize subobjects
-        for subobject in &mut object.subobjects {
-            let sub_stats = self.optimize_object(subobject);
-            self.stats.loads_eliminated += sub_stats.loads_eliminated;
-            self.stats.stores_eliminated += sub_stats.stores_eliminated;
-        }
+        // NOTE: Do NOT recurse into subobjects here. The optimize_object_tree
+        // in lib.rs handles subobject recursion. Processing subobjects here would
+        // cause them to be optimized BEFORE inlining runs on them, breaking the
+        // required pass ordering (inline -> simplify -> mem_opt).
 
         std::mem::take(&mut self.stats)
     }
@@ -471,22 +469,23 @@ impl MemoryOptimizer {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = static_offset / 32 * 32;
 
-                        // Check if there's a pending store to this offset that wasn't read
-                        // If so, mark it as dead (it will be overwritten before being read)
-                        if let Some(&prev_idx) = self.pending_stores.get(&word_offset) {
-                            // Previous store is dead - mark it for removal
+                        // Check if there's a pending store to the exact same byte offset
+                        // that wasn't read. Only kill if offsets match exactly, because
+                        // overlapping stores (e.g., mstore(0,X) + mstore(4,Y)) only
+                        // partially overwrite, and the first store is still needed.
+                        if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
                             self.dead_store_indices.insert(prev_idx);
                             self.stats.stores_eliminated += 1;
                             log::trace!(
                                 "Dead store at index {} (offset {}) - overwritten at index {}",
                                 prev_idx,
-                                word_offset,
+                                static_offset,
                                 idx
                             );
                         }
 
-                        // Track this store as pending
-                        self.pending_stores.insert(word_offset, idx);
+                        // Track this store as pending at the exact byte offset
+                        self.pending_stores.insert(static_offset, idx);
 
                         self.memory_state.insert(
                             word_offset,
@@ -798,11 +797,17 @@ impl MemoryOptimizer {
         result
     }
 
-    /// Optimizes an expression with read tracking for dead store elimination.
+    /// Tracks memory reads for dead store elimination.
+    ///
+    /// Note: Load-after-store elimination (replacing MLoad with the stored value)
+    /// is disabled because the LLVM codegen uses narrow types for small literals.
+    /// A stored i64 value would be returned instead of the i256 that MLoad produces,
+    /// causing type mismatches downstream. The dead store tracking is still needed
+    /// to correctly identify which stores are read.
     fn optimize_expr_with_read_tracking(&mut self, expr: Expr) -> Expr {
         match expr {
             Expr::MLoad { offset, region } => {
-                // Check if we can eliminate this load
+                // Track that this offset is being read (for dead store elimination)
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = static_offset / 32 * 32;
 
@@ -810,17 +815,8 @@ impl MemoryOptimizer {
                     self.pending_stores.remove(&word_offset);
 
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
-                        // Only eliminate if the offsets match exactly
                         if tracked.offset == static_offset {
                             tracked.was_read = true;
-                            self.stats.loads_eliminated += 1;
-                            log::trace!(
-                                "Eliminated load at offset {} (using stored value {:?})",
-                                static_offset,
-                                tracked.stored_value.id
-                            );
-                            // Return a Var reference to the stored value
-                            return Expr::Var(tracked.stored_value.id);
                         }
                     }
                 } else {
@@ -1107,15 +1103,17 @@ mod tests {
 
         let stats = opt.optimize_object(&mut object);
 
-        // Should have eliminated 1 load
-        assert_eq!(stats.loads_eliminated, 1);
+        // Load-after-store elimination is disabled (type mismatch with narrow literals),
+        // so loads should NOT be eliminated
+        assert_eq!(stats.loads_eliminated, 0);
 
-        // The mload should be replaced with Expr::Var(value_id)
+        // The mload should remain as MLoad (not replaced with Var)
         if let Statement::Let { value, .. } = &object.code.statements[3] {
-            match value {
-                Expr::Var(id) => assert_eq!(*id, value_id),
-                other => panic!("Expected Var, got {:?}", other),
-            }
+            assert!(
+                matches!(value, Expr::MLoad { .. }),
+                "Expected MLoad, got {:?}",
+                value
+            );
         } else {
             panic!("Expected Let statement");
         }
@@ -1398,8 +1396,8 @@ mod tests {
         // Should have eliminated 0 stores (the first is read, the second is live at end)
         assert_eq!(stats.stores_eliminated, 0);
 
-        // But should have eliminated 1 load (load-after-store)
-        assert_eq!(stats.loads_eliminated, 1);
+        // Load-after-store elimination is disabled, so no loads eliminated
+        assert_eq!(stats.loads_eliminated, 0);
 
         // Should have all 6 statements
         assert_eq!(object.code.statements.len(), 6);

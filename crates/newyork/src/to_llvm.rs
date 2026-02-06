@@ -63,17 +63,25 @@ pub struct LlvmCodegen<'ctx> {
     heap_opt: HeapOptResults,
     /// Type inference results for using narrower types.
     type_info: TypeInference,
+    /// Inline decisions from our IR-level inliner.
+    /// Used to guide LLVM's inliner for functions that couldn't be inlined at IR level.
+    inline_decisions: BTreeMap<u32, crate::InlineDecision>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
     /// Creates a new code generator with optimization results.
-    pub fn new(heap_opt: HeapOptResults, type_info: TypeInference) -> Self {
+    pub fn new(
+        heap_opt: HeapOptResults,
+        type_info: TypeInference,
+        inline_decisions: BTreeMap<u32, crate::InlineDecision>,
+    ) -> Self {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             generated_functions: BTreeSet::new(),
             heap_opt,
             type_info,
+            inline_decisions,
         }
     }
 
@@ -83,6 +91,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         generated_functions: BTreeSet<String>,
         heap_opt: HeapOptResults,
         type_info: TypeInference,
+        inline_decisions: BTreeMap<u32, crate::InlineDecision>,
     ) -> Self {
         LlvmCodegen {
             values: BTreeMap::new(),
@@ -90,6 +99,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             generated_functions,
             heap_opt,
             type_info,
+            inline_decisions,
         }
     }
 
@@ -164,35 +174,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
         None
     }
 
-    /// Returns true when ALL heap accesses can use native byte order.
-    /// In this mode we use the native function call variants (defined once, called many times)
-    /// which avoids emitting byte-swapping functions entirely.
-    fn is_all_native(&self) -> bool {
-        self.heap_opt.all_native()
-    }
-
     /// Checks if a memory operation at the given offset can use native byte order.
     ///
-    /// Three tiers:
-    /// 1. `all_native()` — every access is safe, use function-call native ops
-    /// 2. Per-access — only when ALL offsets are static (unknown_accesses == 0)
-    ///    and this particular offset is native-safe, use inline native ops
-    /// 3. Otherwise — standard byte-swapping path
+    /// Only enables native memory when ALL accesses are safe (all_native mode).
+    /// This avoids defining both native and byte-swapping functions.
     ///
-    /// The `unknown_accesses == 0` guard is critical: without it, a dynamic offset
-    /// could alias a "native-safe" static offset, causing store-native/load-byteswap
-    /// corruption.
+    /// Per-access native mode is disabled: mixing native and byte-swapped
+    /// operations at different offsets is fragile and hard to verify correct
+    /// in all cases (aliasing, control flow, subobjects).
+    #[allow(unused_variables)]
     fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
-        if self.heap_opt.all_native() {
-            return true;
-        }
-        // Per-access: safe only when ALL accesses are static (no aliasing risk)
-        if self.heap_opt.unknown_accesses == 0 {
-            if let Some(const_offset) = self.try_extract_const_offset(offset) {
-                return self.heap_opt.can_use_native(const_offset);
-            }
-        }
-        false
+        self.heap_opt.all_native()
     }
 
     /// Truncates a 256-bit offset to 32-bit for use with native memory operations.
@@ -235,8 +227,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets the LLVM int type for a given bit-width.
-    /// Phase 2 infrastructure: available for future optimizations.
-    #[allow(dead_code)]
     fn int_type_for_width(
         &self,
         context: &PolkaVMContext<'ctx>,
@@ -383,6 +373,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.function_names.insert(func_id.0, function.name.clone());
         }
 
+        // Set LLVM inline attributes based on our custom heuristics.
+        // This guides LLVM's inliner for functions that survived our IR-level inlining.
+        for function in object.functions.values() {
+            self.set_inline_attributes(function, context);
+        }
+
         // Second pass: generate function bodies
         for function in object.functions.values() {
             self.generate_function(function, context)?;
@@ -439,6 +435,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.generated_functions.clone(),
                 self.heap_opt.clone(),
                 self.type_info.clone(),
+                self.inline_decisions.clone(),
             );
             subobject_codegen.generate_object(subobject, context)?;
             // Merge back any new generated functions
@@ -480,6 +477,63 @@ impl<'ctx> LlvmCodegen<'ctx> {
         )?;
 
         Ok(())
+    }
+
+    /// Sets LLVM inline attributes on a declared function based on our custom heuristics.
+    ///
+    /// This provides guidance to LLVM's inliner for functions that survived our IR-level
+    /// inlining pass. Functions that our heuristics marked as AlwaysInline but couldn't
+    /// be inlined at IR level (e.g., due to Leave statements) get LLVM AlwaysInline.
+    fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
+        let llvm_func = match context.get_function(&function.name, true) {
+            Some(func_ref) => func_ref.borrow().declaration().value,
+            None => return,
+        };
+
+        let llvm_ctx = context.llvm();
+
+        // Check if our IR-level inliner made a decision for this function
+        let ir_decision = self.inline_decisions.get(&function.id.0).copied();
+
+        let attr = match ir_decision {
+            // Our heuristics say always inline - trust them (they have domain knowledge)
+            Some(crate::InlineDecision::AlwaysInline) => {
+                Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
+            }
+            // Our heuristics say never inline
+            Some(crate::InlineDecision::NeverInline) => {
+                Some(revive_llvm_context::PolkaVMAttribute::NoInline)
+            }
+            // Our heuristics say cost doesn't justify inlining everywhere.
+            // For multi-call functions, prevent LLVM from inlining to avoid
+            // code duplication.
+            Some(crate::InlineDecision::CostBenefit) => {
+                if function.call_count >= 3 {
+                    Some(revive_llvm_context::PolkaVMAttribute::NoInline)
+                } else {
+                    None
+                }
+            }
+            // No decision (function not analyzed): use size/call-count heuristics
+            None => {
+                if function.size_estimate <= 8 {
+                    Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
+                } else if function.size_estimate >= 100 || function.call_count >= 10 {
+                    Some(revive_llvm_context::PolkaVMAttribute::NoInline)
+                } else if function.call_count <= 2 && function.size_estimate <= 30 {
+                    Some(revive_llvm_context::PolkaVMAttribute::InlineHint)
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(attr) = attr {
+            llvm_func.add_attribute(
+                inkwell::attributes::AttributeLoc::Function,
+                llvm_ctx.create_enum_attribute(attr as u32, 0),
+            );
+        }
     }
 
     /// Generates LLVM IR for a function body.
@@ -730,21 +784,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
-                    if self.is_all_native() {
-                        // All-native: use function call variant (defined once)
-                        revive_llvm_context::polkavm_evm_memory::store_native(
-                            context,
-                            offset_xlen,
-                            value_val,
-                        )?;
-                    } else {
-                        // Per-access: use inline variant (no extra function defined)
-                        revive_llvm_context::polkavm_evm_memory::store_native_inline(
-                            context,
-                            offset_xlen,
-                            value_val,
-                        )?;
-                    }
+                    revive_llvm_context::polkavm_evm_memory::store_native(
+                        context,
+                        offset_xlen,
+                        value_val,
+                    )?;
                 } else {
                     revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
                 }
@@ -1858,19 +1902,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                    if self.is_all_native() {
-                        // All-native: use function call variant (defined once)
-                        Ok(revive_llvm_context::polkavm_evm_memory::load_native(
-                            context,
-                            offset_xlen,
-                        )?)
-                    } else {
-                        // Per-access: use inline variant (no extra function defined)
-                        Ok(revive_llvm_context::polkavm_evm_memory::load_native_inline(
-                            context,
-                            offset_xlen,
-                        )?)
-                    }
+                    Ok(revive_llvm_context::polkavm_evm_memory::load_native(
+                        context,
+                        offset_xlen,
+                    )?)
                 } else {
                     Ok(revive_llvm_context::polkavm_evm_memory::load(
                         context, offset_val,
@@ -2002,6 +2037,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
+    /// Generates a narrowed unsigned division or remainder with explicit masking.
     /// Generates a binary operation.
     fn generate_binop(
         &mut self,
@@ -2182,6 +2218,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
 impl Default for LlvmCodegen<'_> {
     fn default() -> Self {
-        Self::new(HeapOptResults::default(), TypeInference::default())
+        Self::new(
+            HeapOptResults::default(),
+            TypeInference::default(),
+            BTreeMap::new(),
+        )
     }
 }

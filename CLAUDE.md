@@ -14,7 +14,7 @@ Revive is a Solidity compiler targeting RISC-V on PolkaVM. It uses `solc` (Ether
 
 ## Build Commands
 
-**Prerequisites:** Requires `LLVM_SYS_181_PREFIX` environment variable pointing to a compatible LLVM 18.1.8 build. Download from releases or build with `make install-llvm`.
+**Prerequisites:** Requires `LLVM_SYS_211_PREFIX` environment variable pointing to a compatible LLVM 18.1.8 build. Download from releases or build with `make install-llvm`.
 
 ```bash
 # Install resolc binary

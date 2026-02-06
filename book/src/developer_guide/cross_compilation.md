@@ -11,7 +11,7 @@ The `REVIVE_LLVM_TARGET_PREFIX` environment variable is used to control the targ
 ```sh
 # Build the host LLVM dependency with PolkaVM target support
 make install-llvm
-export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+export LLVM_SYS_211_PREFIX=${PWD}/target-llvm/gnu/target-final
 
 # Build the target LLVM dependency with PolkaVM target support
 revive-llvm emsdk

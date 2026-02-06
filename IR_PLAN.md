@@ -1367,45 +1367,78 @@ Implementation approach:
     - Pointer-site narrowing: memory offsets/lengths narrowed at use sites
     - **Bugs found and fixed**: condition_stmts forward inference was missing (constants in for-loop conditions got default I1 width instead of their actual width); signed value exclusion needed for sgt/slt/signextend operands
     - **Impact**: Computation -3.0%, FibonacciIterative -3.1% (modest because LLVM already optimizes well for small contracts)
-25. [ ] **Larger contract fixtures** - Test with Marketplace.sol, forge-std, OpenZeppelin wizard contracts
-26. [ ] **Common prefix hoisting for switch cases** - Generalize callvalue hoisting to any common prefix
+25. [x] **Larger contract fixtures** - Tested with OZ ERC20/ERC721/ERC1155 wizard contracts via `run_openzeppelin_example_compilation.sh`
+26. [~] **Common prefix hoisting for switch cases** - Callvalue hoisting done; generalizing to arbitrary prefixes deferred (complexity/benefit unfavorable)
 27. [ ] **Common subexpression elimination** - Hoist common computations before switch (e.g., calldatasize - 4)
 28. [ ] **Pattern rewrites for EVM idioms** - Convert patterns like `and(x, 0xff)` to efficient equivalents
 
-### Code Size Reduction Goals (Target: 50%)
-> Current status: newyork vs standard pipeline (2026-02-06, after type-inference-driven narrowing):
->
-> | Contract | Newyork | Standard | Change |
-> |----------|---------|----------|--------|
-> | Baseline | 681 | 681 | 0% (equal) |
-> | Computation | 1794 | 1849 | **-3.0%** |
-> | DivisionArithmetics | 13797 | 14002 | **-1.5%** |
-> | ERC20 | 16380 | 16757 | **-2.3%** |
-> | Events | 1474 | 1474 | 0% (equal) |
-> | FibonacciIterative | 1200 | 1239 | **-3.1%** |
-> | Flipper | 1682 | 1682 | 0% (equal) |
-> | SHA1 | 7314 | 7277 | +0.5% (minor regression) |
->
-> **Summary**: Newyork pipeline now beats or matches standard on 7 of 8 benchmarks.
-> SHA1 is the only remaining regression (+37 bytes, from over-inlining `usr$readword`).
->
-> **Large contract results** (OpenZeppelin wizard contracts, 2026-02-06):
->
-> | Contract | Newyork | Standard | Change |
-> |----------|---------|----------|--------|
-> | OZ ERC20 MyToken | 81,440 | 84,364 | **-3.5%** |
-> | OZ ERC721 MyToken | 90,119 | 93,730 | **-3.9%** |
-> | OZ ERC1155 MyToken | 60,380 | 60,566 | **-0.3%** |
->
-> To reach 50% reduction on larger contracts, these areas need work:
+### Phase 5c: Revert Deduplication ✅ DONE (updated 2026-02-06)
+29. [x] **Generalized revert(0, K) deduplication** - ✅ IMPLEMENTED. Deduplicate ALL constant-length revert patterns.
+    - **Critical bug fixed**: `get_zero_extended_constant()` returns `None` for i256 values even when they're zero.
+      The original implementation never actually worked for i256 values! The detection `value.is_const().then(|| value.get_zero_extended_constant()).flatten() == Some(0)` always failed for i256 0.
+      Fixed by adding `try_extract_const_u64()` helper that parses the string representation for i256 constants.
+    - **Generalized from revert(0,0) to revert(0,K)**: Now creates shared blocks for ANY constant-length revert:
+      - `revert(0, 0)`: callvalue checks, ABI decoding, overflow guards (100+ sites on OZ ERC20)
+      - `revert(0, 36)`: Solidity custom error messages with string data (70+ sites)
+      - `revert(0, 4)`: custom error selectors (20+ sites)
+      - `revert(0, 68)`: errors with two arguments (17+ sites)
+    - Uses a `BTreeMap<u64, BasicBlock>` keyed by constant length instead of a single `Option<BasicBlock>`
+    - **Results**: ERC20 -5.1% (was -3.6%), SHA1 -1.4% (was +0.1% regression, now fixed!)
+    - **Key insight**: The original revert(0,0) dedup appeared to work on tests but the i256 constant detection was broken. All improvements previously attributed to it were actually from other optimizations. The real dedup impact is now realized.
 
-29. [x] **Type-inference-driven codegen** - ✅ IMPLEMENTED. Three levels of narrowing (Let-binding, arithmetic dispatch, pointer-site). Impact was modest (~3%) because:
+### Phase 5d: Free Memory Pointer Range Proof ✅ DONE (2026-02-06)
+35. [x] **Free memory pointer range proof** - ✅ IMPLEMENTED. Truncate-and-extend the result of mload(64) to create a range proof.
+    - **Mechanism**: After `mload(64)` (free memory pointer load), emit `trunc i256 → i64` then `zext i64 → i256`. This proves to LLVM that the value fits in 64 bits.
+    - **Why it works**: The free memory pointer (FMP) is always a valid PolkaVM heap pointer < 2^32. The truncate-extend creates a range bound that LLVM propagates to ALL downstream uses.
+    - **Impact**: Massive code size reduction across all contracts. LLVM eliminates overflow checks AND simplifies surrounding arithmetic using the range information.
+    - Detection: `is_free_pointer_load()` checks if the LLVM offset value is constant 0x40.
+    - **Results**: See table below. OZ ERC20 -11.7% (was -6.5%), integration ERC20 -10.8% (was -5.1%).
+
+### Code Size Reduction Goals (Target: 50%)
+> Current status: newyork vs standard pipeline (2026-02-06, after FMP range proof):
+>
+> | Contract | Newyork | Standard | Change |
+> |----------|---------|----------|--------|
+> | Baseline | 663 | 681 | **-2.6%** |
+> | Computation | 1711 | 1849 | **-7.5%** |
+> | DivisionArithmetics | 13583 | 14002 | **-3.0%** |
+> | ERC20 | 14946 | 16757 | **-10.8%** |
+> | Events | 1438 | 1474 | **-2.4%** |
+> | FibonacciIterative | 1183 | 1239 | **-4.5%** |
+> | Flipper | 1558 | 1682 | **-7.4%** |
+> | SHA1 | 6700 | 7277 | **-7.9%** |
+>
+> **Large contract results** (OpenZeppelin wizard contracts):
+> | Contract | Newyork | Standard | Change |
+> |----------|---------|----------|--------|
+> | OZ ERC20 | 74,508 | 84,364 | **-11.7%** |
+> | OZ ERC721 | 84,950 | 93,730 | **-9.4%** |
+> | OZ ERC1155 | 56,398 | 60,566 | **-6.9%** |
+>
+> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -10.8%, SHA1 -7.9%, Computation -7.5%, Flipper -7.4%.
+>
+> **Remaining optimization targets** (OZ ERC20 optimized LLVM IR analysis):
+> - `bswap.i256`: 58 calls (storage and event byte-swaps, very expensive on 32-bit RISC-V)
+> - `consume_all_gas`: 162 call sites (overflow checks from i256→i32 truncation)
+> - `__revive_store_heap_word`: 268 calls (heap stores with byte-swap)
+> - `__revive_load_heap_word`: 97 calls (heap loads with byte-swap)
+> - `__runtime` function: 843 LLVM IR lines (3x larger than standard due to IR-level inlining)
+>
+> **Approaches for deeper reductions**:
+> - **Storage bswap optimization**: Use 4×bswap.i64 instead of bswap.i256 in storage functions (requires llvm-context changes)
+> - **ABI encoding specialization**: ABI encode/decode patterns generate substantial code; specialize for common types
+> - **Function outlining for cold paths**: Move error handling code to separate functions
+> - **Adaptive inlining threshold**: Scale single-call inline threshold based on total inlining budget
+
+30. [x] **Type-inference-driven codegen** - ✅ IMPLEMENTED. Three levels of narrowing (Let-binding, arithmetic dispatch, pointer-site). Impact was modest (~3%) because:
     - LLVM's constant propagation already handles many cases where operands are compile-time constants
     - The `safe_truncate_int_to_xlen` overhead (3-block overflow check) is already eliminated by LLVM when it can prove the value is small
     - Real impact will compound on larger contracts with more dynamic arithmetic
     - **Key bugs found**: (1) forward inference missed condition_stmts in for-loops, (2) signed values need special handling to avoid truncation + zero-extension corrupting negative numbers
-30. [ ] **Eliminate unused runtime function metadata** - Runtime functions use LinkOnceODR + --gc-sections, so unused functions ARE eliminated. But metadata overhead may still exist.
-31. [ ] **Better 256-bit division lowering** - The 256-bit div/mod functions are particularly large. Specialize for common cases.
+31. [ ] **Eliminate unused runtime function metadata** - Runtime functions use LinkOnceODR + --gc-sections, so unused functions ARE eliminated. But metadata overhead may still exist.
+32. [ ] **Better 256-bit division lowering** - The 256-bit div/mod functions are particularly large. Specialize for common cases.
+33. [~] **Return path deduplication** - Investigated. Return paths have dynamic offsets (free memory pointer), so they can't be easily deduplicated like revert(0,K). Only `return(0,0)` could be shared but it's too rare (2 sites in ERC20) to matter. Deferred.
+34. [x] **Overflow check elimination via FMP range proof** - ✅ RESOLVED. The FMP range proof (item 35) eliminates overflow checks for free-memory-pointer-derived values by proving they fit in 64 bits. This lets `safe_truncate_int_to_xlen` take the cheap i64→i32 direct truncation path instead of the expensive i256→i32 overflow check.
 
 ---
 
@@ -1528,6 +1561,38 @@ fn optimize_statements(&mut self, stmts: Vec<Statement>) -> Vec<Statement> {
 ```
 
 This pattern applies to any optimization pass that tracks state across statement sequences and recurses into nested control flow.
+
+### 11. LLVM IntValue API Has i256 Blind Spots
+
+`inkwell::values::IntValue::get_zero_extended_constant()` returns `None` for i256 values, even for small constants like 0. This is because the i256 type is wider than 64 bits, so the value can't be represented as a `u64` even when it numerically fits. This caused a subtle bug where the `revert(0, 0)` deduplication never fired for i256 operands.
+
+**The bug**: `value.is_const().then(|| value.get_zero_extended_constant()).flatten() == Some(0)` evaluates to `false` for `i256 0` because `get_zero_extended_constant()` returns `None`, not `Some(0)`.
+
+**The fix**: Use `print_to_string()` to extract the textual representation and parse it:
+```rust
+fn try_extract_const_u64(value: IntValue<'ctx>) -> Option<u64> {
+    if !value.is_const() { return None; }
+    if let Some(v) = value.get_zero_extended_constant() { return Some(v); }
+    // For i256 constants, parse the string representation
+    let s = value.print_to_string().to_string();
+    if let Some(val_str) = s.strip_prefix("i256 ") {
+        val_str.trim().parse::<u64>().ok()
+    } else { None }
+}
+```
+
+**Lesson**: Always test with i256 constants when working with LLVM IntValue APIs. The API behavior differs by bit-width in non-obvious ways.
+
+### 12. Range Proofs via Truncate-Extend Are Extremely Powerful
+
+Adding `trunc i256 → i64` followed by `zext i64 → i256` after loading the free memory pointer creates a "range proof" that LLVM propagates aggressively. Despite only eliminating ~3 direct overflow checks, the OZ ERC20 shrank by **4,347 bytes** because LLVM uses the range information to:
+
+1. Simplify arithmetic expressions involving the bounded value
+2. Fold comparisons that are trivially true/false given the range
+3. Eliminate dead code paths that are unreachable with bounded inputs
+4. Use cheaper instruction sequences for operations on known-small values
+
+**Key insight**: The code size reduction is ~15x larger than expected from just eliminating overflow checks. The range propagation has a multiplicative effect on downstream optimization quality. This technique should be applied to any value known to be < 2^64 (e.g., calldatasize, returndata offsets).
 
 ---
 

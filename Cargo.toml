@@ -49,10 +49,10 @@ which = "8.0"
 path-slash = "0.2"
 rayon = "1.11"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.30.0"
-polkavm-linker = "0.30.0"
-polkavm-disassembler = "0.30.0"
-polkavm = "0.30.0"
+polkavm-common = "0.31.0"
+polkavm-linker = "0.31.0"
+polkavm-disassembler = "0.31.0"
+polkavm = "0.31.0"
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
 alloy-genesis = "1.1.2"
@@ -81,7 +81,7 @@ polkadot-sdk = { version = "=2507.4.0" }
 [workspace.dependencies.inkwell]
 version = "0.8.0"
 default-features = false
-features = ["serde", "llvm18-1", "no-libffi-linking", "target-riscv"]
+features = ["serde", "llvm21-1", "no-libffi-linking", "target-riscv"]
 
 [profile.bench]
 inherits = "release"

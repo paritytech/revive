@@ -1,7 +1,7 @@
 [submodule "llvm"]
 	path = llvm
 	url = https://github.com/llvm/llvm-project.git
-	branch = release/18.x
+	branch = release/21.x
 [submodule "revive-differential-tests"]
 	path = revive-differential-tests
 	url = https://github.com/paritytech/revive-differential-tests.git

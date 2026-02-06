@@ -340,6 +340,7 @@ impl Simplifier {
                 condition_stmts,
                 condition,
                 body,
+                post_input_vars,
                 post,
                 outputs,
             } => {
@@ -367,6 +368,7 @@ impl Simplifier {
                     condition_stmts,
                     condition,
                     body,
+                    post_input_vars,
                     post,
                     outputs,
                 }]

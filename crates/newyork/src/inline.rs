@@ -579,6 +579,7 @@ impl InlineRemapper {
                 condition_stmts,
                 condition,
                 body,
+                post_input_vars,
                 post,
                 outputs,
             } => Statement::For {
@@ -590,6 +591,10 @@ impl InlineRemapper {
                     .collect(),
                 condition: self.remap_expr(condition),
                 body: self.remap_region(body),
+                post_input_vars: post_input_vars
+                    .iter()
+                    .map(|v| self.remap_value_id(*v))
+                    .collect(),
                 post: self.remap_region(post),
                 outputs: outputs.iter().map(|o| self.remap_value_id(*o)).collect(),
             },
@@ -842,6 +847,7 @@ fn find_max_value_id(object: &Object) -> u32 {
                 condition_stmts,
                 condition,
                 body,
+                post_input_vars,
                 post,
                 outputs,
             } => {
@@ -856,6 +862,9 @@ fn find_max_value_id(object: &Object) -> u32 {
                 }
                 scan_expr(condition, max_id);
                 scan_region(body, max_id);
+                for v in post_input_vars {
+                    update_max_from_value_id(v, max_id);
+                }
                 scan_region(post, max_id);
                 for o in outputs {
                     update_max_from_value_id(o, max_id);
@@ -1909,6 +1918,7 @@ fn inline_in_statements(
                 condition_stmts,
                 condition,
                 body,
+                post_input_vars,
                 post,
                 outputs,
             } => {
@@ -1931,6 +1941,7 @@ fn inline_in_statements(
                         next_value_id,
                         inlined_count,
                     ),
+                    post_input_vars: post_input_vars.clone(),
                     post: inline_in_region(
                         post,
                         inlineable,

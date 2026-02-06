@@ -363,6 +363,7 @@ impl Validator {
                 body,
                 post,
                 outputs,
+                ..
             } => {
                 // Validate init values
                 for v in init_values {

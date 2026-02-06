@@ -468,8 +468,12 @@ pub enum Statement {
         condition_stmts: Vec<Statement>,
         /// Condition expression (evaluated each iteration after condition_stmts).
         condition: Expr,
-        /// Loop body.
+        /// Loop body (yields current values of loop-carried variables).
         body: Region,
+        /// Input ValueIds for the post region, one per loop-carried variable.
+        /// These receive the body's yielded values (merged with continue-site values
+        /// via phi nodes in the LLVM codegen).
+        post_input_vars: Vec<ValueId>,
         /// Post-iteration block (yields updated loop vars).
         post: Region,
         /// Final values after loop exits.

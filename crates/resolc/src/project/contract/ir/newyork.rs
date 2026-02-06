@@ -44,8 +44,23 @@ impl NewYork {
 
     /// Translate the Yul AST to newyork IR with heap optimization analysis.
     fn translate_to_ir(&self) -> anyhow::Result<TranslationResult> {
-        revive_newyork::translate_yul_object(&self.yul_object)
-            .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
+        let result = revive_newyork::translate_yul_object(&self.yul_object)
+            .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))?;
+
+        // Debug: dump IR if RESOLC_DEBUG_IR is set
+        if std::env::var("RESOLC_DEBUG_IR").is_ok() {
+            use std::io::Write;
+            let ir_text = revive_newyork::print_object(&result.object);
+            let _ = writeln!(
+                std::io::stderr(),
+                "=== newyork IR for {} ===\n{}",
+                result.object.name,
+                ir_text
+            );
+            let _ = std::io::stderr().flush();
+        }
+
+        Ok(result)
     }
 }
 
@@ -68,6 +83,16 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // Translate Yul AST to newyork IR with optimization analysis
         let translation_result = self.translate_to_ir()?;
         let ir_object = translation_result.object;
+
+        // Debug: dump IR if RESOLC_DEBUG_IR is set
+        if std::env::var("RESOLC_DEBUG_IR").is_ok() {
+            use std::io::Write;
+            let ir_text = revive_newyork::print_object(&ir_object);
+            let debug_file = format!("/tmp/newyork_ir_{}.txt", ir_object.name.replace('/', "_"));
+            if let Ok(mut f) = std::fs::File::create(&debug_file) {
+                let _ = writeln!(f, "{}", ir_text);
+            }
+        }
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
         let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =

@@ -496,6 +496,7 @@ impl<'a> Printer<'a> {
                 body,
                 post,
                 outputs,
+                ..
             } => {
                 self.write_indent();
 

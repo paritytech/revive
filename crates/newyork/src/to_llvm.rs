@@ -51,6 +51,31 @@ impl From<anyhow::Error> for CodegenError {
 pub type Result<T> = std::result::Result<T, CodegenError>;
 
 /// LLVM code generator for newyork IR.
+/// Tracks phi nodes at the continue-landing block of a for loop.
+/// These phi nodes merge values from the body's normal exit and from continue sites.
+struct ForLoopPostPhis<'ctx> {
+    /// Phi nodes at the continue-landing block, one per body yield.
+    /// The phi merges body-end values with continue-site values.
+    phis: Vec<inkwell::values::PhiValue<'ctx>>,
+    /// The loop-carried variable ValueIds (from the cond phi nodes).
+    /// Used as fallback values when continue is taken before a body yield is defined.
+    loop_var_phi_values: Vec<BasicValueEnum<'ctx>>,
+    /// The ValueIds from body.yields, used to check if they're defined at the continue site.
+    body_yield_value_ids: Vec<ValueId>,
+}
+
+/// Tracks phi nodes at the join block of a for loop.
+/// These merge values from the normal loop exit (condition false) and break sites.
+struct ForLoopBreakPhis<'ctx> {
+    /// Phi nodes at the join block, one per loop-carried variable.
+    phis: Vec<inkwell::values::PhiValue<'ctx>>,
+    /// The loop-carried variable phi values (from the cond phi nodes).
+    /// Used as fallback values when break is taken before a body yield is defined.
+    loop_var_phi_values: Vec<BasicValueEnum<'ctx>>,
+    /// The ValueIds from body.yields, used to check if they're defined at the break site.
+    body_yield_value_ids: Vec<ValueId>,
+}
+
 pub struct LlvmCodegen<'ctx> {
     /// Value table: maps IR ValueId to LLVM value.
     values: BTreeMap<u32, BasicValueEnum<'ctx>>,
@@ -66,6 +91,10 @@ pub struct LlvmCodegen<'ctx> {
     /// Inline decisions from our IR-level inliner.
     /// Used to guide LLVM's inliner for functions that couldn't be inlined at IR level.
     inline_decisions: BTreeMap<u32, crate::InlineDecision>,
+    /// Stack of for-loop post-block phi info, for continue to contribute values.
+    for_loop_post_phis: Vec<ForLoopPostPhis<'ctx>>,
+    /// Stack of for-loop join-block phi info, for break to contribute values.
+    for_loop_break_phis: Vec<ForLoopBreakPhis<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -82,6 +111,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             heap_opt,
             type_info,
             inline_decisions,
+            for_loop_post_phis: Vec::new(),
+            for_loop_break_phis: Vec::new(),
         }
     }
 
@@ -100,6 +131,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             heap_opt,
             type_info,
             inline_decisions,
+            for_loop_post_phis: Vec::new(),
+            for_loop_break_phis: Vec::new(),
         }
     }
 
@@ -1199,6 +1232,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 condition_stmts,
                 condition,
                 body,
+                post_input_vars,
                 post,
                 outputs,
             } => {
@@ -1215,14 +1249,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let entry_block = context.basic_block();
                 let cond_block = context.append_basic_block("for_cond");
                 let body_block = context.append_basic_block("for_body");
+                // Landing block merges body-end and continue paths before the post
+                let continue_landing = context.append_basic_block("for_continue_landing");
                 let post_block = context.append_basic_block("for_post");
                 let join_block = context.append_basic_block("for_join");
 
                 context.build_unconditional_branch(cond_block);
                 context.set_basic_block(cond_block);
 
-                // Create phi nodes for loop-carried variables
+                // Create phi nodes for loop-carried variables at the condition block
                 let mut loop_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
+                let mut loop_phi_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for (i, loop_var) in loop_vars.iter().enumerate() {
                     let phi = context
                         .builder()
@@ -1236,6 +1273,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                     // Make the phi value available as the loop variable
                     self.set_value(*loop_var, phi.as_basic_value());
+                    loop_phi_values.push(phi.as_basic_value());
                     loop_phis.push(phi);
                 }
 
@@ -1259,19 +1297,112 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
+                // Create phi nodes at the join block to merge values from
+                // the condition-false exit and any break sites.
+                context.set_basic_block(join_block);
+                let mut join_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
+                let has_loop_vars = !loop_vars.is_empty();
+                if has_loop_vars {
+                    for i in 0..loop_vars.len() {
+                        let phi = context
+                            .builder()
+                            .build_phi(context.word_type(), &format!("join_phi_{}", i))
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        join_phis.push(phi);
+                    }
+                }
+
+                // The condition-false path: loop exits normally, values are the
+                // current loop phi values. Add incoming from cond_block.
+                context.set_basic_block(cond_block);
                 context.build_conditional_branch(cond_bool, body_block, join_block)?;
+                if has_loop_vars {
+                    for (i, phi) in join_phis.iter().enumerate() {
+                        phi.add_incoming(&[(&loop_phi_values[i], cond_block)]);
+                    }
+                }
 
-                // Push loop for break/continue
-                context.push_loop(body_block, post_block, join_block);
-
-                context.set_basic_block(body_block);
-                self.generate_region(body, context)?;
+                // Create phi nodes at the continue_landing block.
+                // These merge body-end values with continue-site values.
+                context.set_basic_block(continue_landing);
+                let mut landing_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
+                let has_body_yields = !body.yields.is_empty();
+                if has_body_yields {
+                    for i in 0..body.yields.len() {
+                        let phi = context
+                            .builder()
+                            .build_phi(context.word_type(), &format!("continue_landing_{}", i))
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        landing_phis.push(phi);
+                    }
+                }
                 context.build_unconditional_branch(post_block);
 
+                // Push loop info for break/continue.
+                // continue_block points to continue_landing so continue contributes to the phis.
+                context.push_loop(body_block, continue_landing, join_block);
+
+                // Push the post phis info so Continue handler can contribute values
+                let body_yield_ids: Vec<ValueId> = body.yields.iter().map(|v| v.id).collect();
+                self.for_loop_post_phis.push(ForLoopPostPhis {
+                    phis: landing_phis.clone(),
+                    loop_var_phi_values: loop_phi_values.clone(),
+                    body_yield_value_ids: body_yield_ids.clone(),
+                });
+
+                // Push break phis info so Break handler can contribute values
+                self.for_loop_break_phis.push(ForLoopBreakPhis {
+                    phis: join_phis.clone(),
+                    loop_var_phi_values: loop_phi_values.clone(),
+                    body_yield_value_ids: body_yield_ids,
+                });
+
+                // Generate the body
+                context.set_basic_block(body_block);
+                self.generate_region(body, context)?;
+
+                // Body falls through to continue_landing
+                let body_end_block = context.basic_block();
+                context.build_unconditional_branch(continue_landing);
+
+                // Add body-end values to the landing phis
+                if has_body_yields {
+                    for (i, phi) in landing_phis.iter().enumerate() {
+                        if i < body.yields.len() {
+                            let yield_val = self.translate_value_as_word(
+                                &body.yields[i],
+                                context,
+                                &format!("body_yield_{}", i),
+                            )?;
+                            phi.add_incoming(&[(&yield_val, body_end_block)]);
+                        }
+                    }
+                }
+
+                // Pop the post and break phis info
+                self.for_loop_post_phis.pop();
+                self.for_loop_break_phis.pop();
+
+                // Now generate the post block. The landing phi values are the
+                // "body output" values that the post should use.
                 context.set_basic_block(post_block);
+
+                // Map the post's fresh input ValueIds to the landing phi values.
+                // The post region references post_input_vars[i] for loop-carried
+                // variables. The landing phis merge body-end and continue-site values,
+                // so mapping post_input_vars to phi outputs gives the post correct values
+                // regardless of whether the body fell through or hit a continue.
+                if has_body_yields {
+                    for (i, phi) in landing_phis.iter().enumerate() {
+                        if i < post_input_vars.len() {
+                            self.set_value(post_input_vars[i], phi.as_basic_value());
+                        }
+                    }
+                }
+
                 self.generate_region(post, context)?;
 
-                // Collect yields from post region and wire up phi nodes (ensure word type)
+                // Collect yields from post region and wire up cond-block phi nodes
                 let post_end_block = context.basic_block();
                 for (i, phi) in loop_phis.iter().enumerate() {
                     if i < post.yields.len() {
@@ -1289,15 +1420,54 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.pop_loop();
                 context.set_basic_block(join_block);
 
-                // Set outputs to the final phi values (values when loop exits)
-                for (i, output_id) in outputs.iter().enumerate() {
-                    if i < loop_phis.len() {
-                        self.set_value(*output_id, loop_phis[i].as_basic_value());
+                // Set outputs to the join phi values which merge condition-exit
+                // and break-site values, giving the correct final iteration values.
+                if has_loop_vars {
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        if i < join_phis.len() {
+                            self.set_value(*output_id, join_phis[i].as_basic_value());
+                        }
+                    }
+                } else {
+                    // No loop vars, fall back to loop phis
+                    for (i, output_id) in outputs.iter().enumerate() {
+                        if i < loop_phis.len() {
+                            self.set_value(*output_id, loop_phis[i].as_basic_value());
+                        }
                     }
                 }
             }
 
             Statement::Break => {
+                // Before branching to the join block, contribute values to
+                // the join phis. For each loop-carried variable:
+                // - If the body yield value has been defined, use it.
+                //   This handles the case where the body modified a loop var before break.
+                // - Otherwise, fall back to the loop phi value (start-of-iteration value).
+                if let Some(break_phis) = self.for_loop_break_phis.last() {
+                    let current_block = context.basic_block();
+                    for (i, phi) in break_phis.phis.iter().enumerate() {
+                        let value = if let Some(&llvm_val) =
+                            self.values.get(&break_phis.body_yield_value_ids[i].0)
+                        {
+                            // Ensure word type for phi compatibility
+                            if llvm_val.is_int_value() {
+                                self.ensure_word_type(
+                                    context,
+                                    llvm_val.into_int_value(),
+                                    "break_val",
+                                )?
+                                .as_basic_value_enum()
+                            } else {
+                                llvm_val
+                            }
+                        } else {
+                            break_phis.loop_var_phi_values[i]
+                        };
+                        phi.add_incoming(&[(&value, current_block)]);
+                    }
+                }
+
                 let join_block = context.r#loop().join_block;
                 context.build_unconditional_branch(join_block);
                 // Create unreachable block for dead code after break
@@ -1306,6 +1476,37 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Continue => {
+                // Before branching to the continue landing, contribute values to
+                // the landing phis. For each body yield variable:
+                // - If the value has been defined (it's in self.values), use it.
+                //   This handles the case where the body modified a loop var before continue.
+                // - Otherwise, fall back to the loop phi value (the value at iteration start).
+                //   This handles the case where continue is taken before the modification.
+                if let Some(post_phis) = self.for_loop_post_phis.last() {
+                    let current_block = context.basic_block();
+                    for (i, phi) in post_phis.phis.iter().enumerate() {
+                        let value = if let Some(&llvm_val) =
+                            self.values.get(&post_phis.body_yield_value_ids[i].0)
+                        {
+                            // Ensure word type for phi compatibility
+                            if llvm_val.is_int_value() {
+                                self.ensure_word_type(
+                                    context,
+                                    llvm_val.into_int_value(),
+                                    "continue_val",
+                                )?
+                                .as_basic_value_enum()
+                            } else {
+                                llvm_val
+                            }
+                        } else {
+                            // Not yet defined - use loop phi value (start-of-iteration value)
+                            post_phis.loop_var_phi_values[i]
+                        };
+                        phi.add_incoming(&[(&value, current_block)]);
+                    }
+                }
+
                 let continue_block = context.r#loop().continue_block;
                 context.build_unconditional_branch(continue_block);
                 let unreachable = context.append_basic_block("continue_unreachable");

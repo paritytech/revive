@@ -280,6 +280,7 @@ impl MemoryOptimizer {
                     body,
                     post,
                     outputs,
+                    ..
                 } => {
                     for v in init_values {
                         visit_value(v, max_id);
@@ -654,6 +655,7 @@ impl MemoryOptimizer {
                     mut condition_stmts,
                     condition,
                     mut body,
+                    post_input_vars,
                     mut post,
                     outputs,
                 } => {
@@ -681,6 +683,7 @@ impl MemoryOptimizer {
                         condition_stmts,
                         condition,
                         body,
+                        post_input_vars,
                         post,
                         outputs,
                     });

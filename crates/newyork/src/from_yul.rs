@@ -433,11 +433,12 @@ impl YulTranslator {
             _ => {}
         }
 
-        // First, translate all arguments
+        // Translate arguments in RIGHT-TO-LEFT order per the Yul/EVM spec,
+        // then reverse to restore left-to-right order for the call.
         let mut stmts = Vec::new();
         let mut args = Vec::new();
 
-        for arg_expr in &call.arguments {
+        for arg_expr in call.arguments.iter().rev() {
             let (arg_stmts, arg_expr) = self.translate_expression(arg_expr)?;
             stmts.extend(arg_stmts);
 
@@ -458,6 +459,7 @@ impl YulTranslator {
             };
             args.push(arg_value);
         }
+        args.reverse();
 
         // Translate the function call based on its name
         let expr = self.translate_builtin_or_call(&call.name, args, &mut stmts)?;
@@ -1196,19 +1198,41 @@ impl YulTranslator {
         // not before the loop, because they may reference loop_vars
         let (condition_stmts, cond_expr) = self.translate_expression(&for_loop.condition)?;
 
-        // Translate body and post in a shared scope so body modifications are visible in post
-        // The body can modify loop-carried variables, and post can modify them too
-        // Both modifications should be accumulated and then fed back via phi nodes
+        // Translate body in its own scope. The body may modify loop-carried variables.
+        // Body yields the current values of ALL loop-carried variables at end of body.
+        // These yields are used by the LLVM codegen to create phi nodes at the post-block
+        // entry, merging body-end values with continue-site values.
         self.ssa.enter_scope();
-        let body_region = self.translate_region(&for_loop.body)?;
-        // Don't exit scope - continue in same scope so body's modifications are visible to post
-        let mut post_region = self.translate_region(&for_loop.finalizer)?;
-        let combined_scope = self.ssa.exit_scope();
+        let mut body_region = self.translate_region(&for_loop.body)?;
+        let body_scope = self.ssa.exit_scope();
 
-        // Add yields for loop-carried variables using the combined scope
-        // (contains modifications from both body and post)
+        // Body yields: for each loop-carried variable, yield the body's final value.
+        for (name, loop_var_id) in &loop_vars {
+            if let Some(&value) = body_scope.get(name) {
+                body_region.yields.push(value);
+            } else {
+                let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
+                body_region.yields.push(Value::new(*loop_var_id, ty));
+            }
+        }
+
+        // Translate post in its own scope. The post receives body outputs as fresh
+        // ValueIds (mapped to landing phi values by the LLVM codegen).
+        self.ssa.enter_scope();
+        let mut post_input_var_ids = Vec::new();
+        for (name, _) in loop_vars.iter() {
+            let post_var_id = self.ssa.fresh_value();
+            post_input_var_ids.push(post_var_id);
+            let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
+            self.ssa.define(name, Value::new(post_var_id, ty));
+        }
+
+        let mut post_region = self.translate_region(&for_loop.finalizer)?;
+        let post_scope = self.ssa.exit_scope();
+
+        // Post yields: the final values of loop-carried variables after the post runs.
         for (name, _) in &loop_vars {
-            if let Some(&value) = combined_scope.get(name) {
+            if let Some(&value) = post_scope.get(name) {
                 post_region.yields.push(value);
             }
         }
@@ -1237,6 +1261,7 @@ impl YulTranslator {
             condition_stmts,
             condition: cond_expr,
             body: body_region,
+            post_input_vars: post_input_var_ids,
             post: post_region,
             outputs,
         });
@@ -1339,14 +1364,86 @@ impl YulTranslator {
                 }
             }
             LexicalLiteral::String(str_lit) => {
-                // String literals are converted to their byte representation
-                // They are padded to 32 bytes (BYTE_LENGTH_WORD) with zeros on the right
-                // to match the Yul pipeline behavior
-                let bytes = str_lit.inner.as_bytes();
-                let mut padded = vec![0u8; 32]; // BYTE_LENGTH_WORD = 32
-                let len = bytes.len().min(32);
-                padded[..len].copy_from_slice(&bytes[..len]);
-                Ok(BigUint::from_bytes_be(&padded))
+                // String/hex literals are converted to their byte representation,
+                // right-padded to 32 bytes. Escape sequences are processed for
+                // regular strings (not hex strings).
+                let string = &str_lit.inner;
+                let mut hex_string = if str_lit.is_hexadecimal {
+                    string.clone()
+                } else {
+                    let mut hex = std::string::String::with_capacity(64);
+                    let mut index = 0;
+                    let bytes = string.as_bytes();
+                    while index < bytes.len() {
+                        if bytes[index] == b'\\' {
+                            index += 1;
+                            if index >= bytes.len() {
+                                break;
+                            }
+                            match bytes[index] {
+                                b'x' => {
+                                    // \xNN - two hex digit escape
+                                    if index + 2 < bytes.len() {
+                                        hex.push(bytes[index + 1] as char);
+                                        hex.push(bytes[index + 2] as char);
+                                    }
+                                    index += 3;
+                                }
+                                b'u' => {
+                                    // \uNNNN - unicode escape
+                                    if index + 4 < bytes.len() {
+                                        let cp_str = &string[index + 1..index + 5];
+                                        if let Ok(codepoint) = u32::from_str_radix(cp_str, 16) {
+                                            if let Some(ch) = char::from_u32(codepoint) {
+                                                let mut buf = [0u8; 4];
+                                                let encoded = ch.encode_utf8(&mut buf);
+                                                for byte in encoded.bytes() {
+                                                    hex.push_str(&format!("{byte:02x}"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    index += 5;
+                                }
+                                b't' => {
+                                    hex.push_str("09");
+                                    index += 1;
+                                }
+                                b'n' => {
+                                    hex.push_str("0a");
+                                    index += 1;
+                                }
+                                b'r' => {
+                                    hex.push_str("0d");
+                                    index += 1;
+                                }
+                                b'\n' => {
+                                    // Line continuation - skip
+                                    index += 1;
+                                }
+                                other => {
+                                    hex.push_str(&format!("{other:02x}"));
+                                    index += 1;
+                                }
+                            }
+                        } else {
+                            hex.push_str(&format!("{:02x}", bytes[index]));
+                            index += 1;
+                        }
+                    }
+                    hex
+                };
+
+                // Truncate if too long, then right-pad to 32 bytes (64 hex chars)
+                if hex_string.len() > 64 {
+                    hex_string.truncate(64);
+                }
+                while hex_string.len() < 64 {
+                    hex_string.push('0');
+                }
+
+                BigUint::parse_bytes(hex_string.as_bytes(), 16)
+                    .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
             }
         }
     }

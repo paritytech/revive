@@ -501,9 +501,15 @@ impl Simplifier {
             Statement::Expr(expr) => vec![Statement::Expr(self.simplify_expr(expr))],
 
             // Pass-through statements with no values to simplify
-            Statement::Stop | Statement::Invalid | Statement::Break | Statement::Continue => {
-                vec![stmt]
-            }
+            Statement::Stop | Statement::Invalid => vec![stmt],
+
+            Statement::Break { values } => vec![Statement::Break {
+                values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
+            }],
+
+            Statement::Continue { values } => vec![Statement::Continue {
+                values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
+            }],
 
             Statement::SelfDestruct { address } => vec![Statement::SelfDestruct {
                 address: self.resolve_value(address),
@@ -1390,7 +1396,12 @@ fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
         }
         Statement::Expr(expr) => collect_used_in_expr(expr, used),
         Statement::SelfDestruct { address } => collect_used_in_value(address, used),
-        Statement::Stop | Statement::Invalid | Statement::Break | Statement::Continue => {}
+        Statement::Stop | Statement::Invalid => {}
+        Statement::Break { values } | Statement::Continue { values } => {
+            for v in values {
+                collect_used_in_value(v, used);
+            }
+        }
     }
 }
 

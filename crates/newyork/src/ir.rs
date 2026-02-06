@@ -480,9 +480,18 @@ pub enum Statement {
         outputs: Vec<ValueId>,
     },
 
-    /// Loop control.
-    Break,
-    Continue,
+    /// Loop control - break out of the innermost for loop.
+    /// Carries the current values of loop-carried variables at the point of break.
+    Break {
+        /// Current values of loop-carried variables at the break point.
+        values: Vec<Value>,
+    },
+    /// Loop control - continue to the next iteration of the innermost for loop.
+    /// Carries the current values of loop-carried variables at the continue point.
+    Continue {
+        /// Current values of loop-carried variables at the continue point.
+        values: Vec<Value>,
+    },
     /// Leave the current function, returning the given values.
     Leave {
         /// The current values of the return variables to return.

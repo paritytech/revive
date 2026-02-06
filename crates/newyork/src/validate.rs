@@ -427,8 +427,10 @@ impl Validator {
                 }
             }
 
-            Statement::Break | Statement::Continue => {
-                // No values to validate
+            Statement::Break { values } | Statement::Continue { values } => {
+                for v in values {
+                    self.use_value(v, context);
+                }
             }
 
             Statement::Leave { return_values } => {

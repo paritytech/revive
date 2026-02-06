@@ -412,7 +412,12 @@ impl MemoryOptimizer {
                 }
                 Statement::Expr(e) => visit_expr(e, max_id),
                 Statement::SetImmutable { value, .. } => visit_value(value, max_id),
-                Statement::Break | Statement::Continue | Statement::Stop | Statement::Invalid => {}
+                Statement::Break { values } | Statement::Continue { values } => {
+                    for v in values {
+                        visit_value(v, max_id);
+                    }
+                }
+                Statement::Stop | Statement::Invalid => {}
             }
         }
 
@@ -773,8 +778,8 @@ impl MemoryOptimizer {
                 | Statement::SelfDestruct { .. }
                 | Statement::Stop
                 | Statement::Invalid
-                | Statement::Break
-                | Statement::Continue
+                | Statement::Break { .. }
+                | Statement::Continue { .. }
                 | Statement::Leave { .. } => {
                     processed.push(stmt);
                 }

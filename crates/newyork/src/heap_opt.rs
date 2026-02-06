@@ -300,8 +300,8 @@ impl HeapAnalysis {
             Statement::SStore { .. }
             | Statement::TStore { .. }
             | Statement::SelfDestruct { .. }
-            | Statement::Break
-            | Statement::Continue
+            | Statement::Break { .. }
+            | Statement::Continue { .. }
             | Statement::Leave { .. }
             | Statement::Stop
             | Statement::Invalid

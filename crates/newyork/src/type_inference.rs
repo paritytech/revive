@@ -748,8 +748,8 @@ impl TypeInference {
             }
 
             // These don't define or use values
-            Statement::Break
-            | Statement::Continue
+            Statement::Break { .. }
+            | Statement::Continue { .. }
             | Statement::Leave { .. }
             | Statement::Stop
             | Statement::Invalid => {}

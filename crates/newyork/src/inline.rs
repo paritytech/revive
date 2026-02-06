@@ -598,8 +598,12 @@ impl InlineRemapper {
                 post: self.remap_region(post),
                 outputs: outputs.iter().map(|o| self.remap_value_id(*o)).collect(),
             },
-            Statement::Break => Statement::Break,
-            Statement::Continue => Statement::Continue,
+            Statement::Break { values } => Statement::Break {
+                values: values.iter().map(|v| self.remap_value(v)).collect(),
+            },
+            Statement::Continue { values } => Statement::Continue {
+                values: values.iter().map(|v| self.remap_value(v)).collect(),
+            },
             Statement::Leave { return_values } => Statement::Leave {
                 return_values: return_values.iter().map(|v| self.remap_value(v)).collect(),
             },
@@ -967,7 +971,12 @@ fn find_max_value_id(object: &Object) -> u32 {
             Statement::Block(region) => scan_region(region, max_id),
             Statement::Expr(expr) => scan_expr(expr, max_id),
             Statement::SetImmutable { value, .. } => update_max_from_value(value, max_id),
-            Statement::Stop | Statement::Invalid | Statement::Break | Statement::Continue => {}
+            Statement::Break { values } | Statement::Continue { values } => {
+                for v in values {
+                    update_max_from_value(v, max_id);
+                }
+            }
+            Statement::Stop | Statement::Invalid => {}
         }
     }
 
@@ -1016,7 +1025,7 @@ fn can_inline(function: &Function) -> bool {
 
     fn check_stmt_for_break_continue(stmt: &Statement) -> bool {
         match stmt {
-            Statement::Break | Statement::Continue => true,
+            Statement::Break { .. } | Statement::Continue { .. } => true,
             // Recurse into non-loop control flow (break/continue in a For is fine)
             Statement::If {
                 then_region,

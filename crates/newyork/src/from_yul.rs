@@ -63,6 +63,9 @@ pub struct YulTranslator {
     /// Return variable names for the current function being translated.
     /// Used to look up current SSA values when translating `leave` statements.
     current_return_var_names: Vec<String>,
+    /// Stack of loop-carried variable names for the enclosing for loops.
+    /// Used to collect current values when translating `break` and `continue`.
+    loop_var_names_stack: Vec<Vec<String>>,
 }
 
 impl Default for YulTranslator {
@@ -81,6 +84,7 @@ impl YulTranslator {
             functions: BTreeMap::new(),
             factory_dependencies: HashSet::new(),
             current_return_var_names: Vec::new(),
+            loop_var_names_stack: Vec::new(),
         }
     }
 
@@ -234,8 +238,14 @@ impl YulTranslator {
             YulStatement::FunctionDefinition(func_def) => {
                 self.translate_function_definition(func_def)
             }
-            YulStatement::Continue(_) => Ok(vec![Statement::Continue]),
-            YulStatement::Break(_) => Ok(vec![Statement::Break]),
+            YulStatement::Continue(_) => {
+                let values = self.collect_loop_var_values();
+                Ok(vec![Statement::Continue { values }])
+            }
+            YulStatement::Break(_) => {
+                let values = self.collect_loop_var_values();
+                Ok(vec![Statement::Break { values }])
+            }
             YulStatement::Leave(_) => {
                 // Collect current values of return variables
                 let mut return_values = Vec::new();
@@ -1202,9 +1212,16 @@ impl YulTranslator {
         // Body yields the current values of ALL loop-carried variables at end of body.
         // These yields are used by the LLVM codegen to create phi nodes at the post-block
         // entry, merging body-end values with continue-site values.
+        //
+        // Push loop var names so break/continue can collect current values.
+        let loop_var_names: Vec<String> = loop_vars.iter().map(|(n, _)| n.clone()).collect();
+        self.loop_var_names_stack.push(loop_var_names);
+
         self.ssa.enter_scope();
         let mut body_region = self.translate_region(&for_loop.body)?;
         let body_scope = self.ssa.exit_scope();
+
+        self.loop_var_names_stack.pop();
 
         // Body yields: for each loop-carried variable, yield the body's final value.
         for (name, loop_var_id) in &loop_vars {
@@ -1336,6 +1353,22 @@ impl YulTranslator {
 
         // Function definitions don't produce statements in the containing block
         Ok(vec![])
+    }
+
+    /// Collects the current SSA values of the innermost loop's carried variables.
+    /// Used by break/continue to carry the right values to the loop's join/post blocks.
+    fn collect_loop_var_values(&self) -> Vec<Value> {
+        let Some(var_names) = self.loop_var_names_stack.last() else {
+            return Vec::new();
+        };
+        var_names
+            .iter()
+            .map(|name| {
+                self.ssa
+                    .lookup(name)
+                    .unwrap_or(Value::new(crate::ir::ValueId::new(0), Type::default()))
+            })
+            .collect()
     }
 
     /// Parses a Yul literal to a BigUint.

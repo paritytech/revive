@@ -567,13 +567,13 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
-            Statement::Break => {
+            Statement::Break { .. } => {
                 self.write_indent();
                 self.output.push_str("break");
                 self.write_newline();
             }
 
-            Statement::Continue => {
+            Statement::Continue { .. } => {
                 self.write_indent();
                 self.output.push_str("continue");
                 self.write_newline();

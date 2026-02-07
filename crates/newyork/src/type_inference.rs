@@ -305,6 +305,65 @@ impl TypeInference {
         }
     }
 
+    /// Narrows function parameter types based on how they're used within the function body.
+    ///
+    /// After type inference, each parameter's uses are recorded. If a parameter is only
+    /// used in narrow contexts (e.g., as a memory offset), its type can be narrowed from
+    /// I256 to a smaller width. This allows the LLVM function signature to use narrower
+    /// types, eliminating expensive overflow checks at call sites.
+    ///
+    /// Only narrows parameters whose uses are ALL in contexts that allow narrowing.
+    /// Parameters used in storage, external calls, or as function returns stay at I256.
+    pub fn narrow_function_params(&self, object: &mut Object) {
+        for function in object.functions.values_mut() {
+            for (param_id, param_ty) in &mut function.params {
+                // Only narrow integer parameters
+                if !matches!(param_ty, Type::Int(BitWidth::I256)) {
+                    continue;
+                }
+
+                // Check uses of this parameter
+                let uses = match self.uses.get(&param_id.0) {
+                    Some(uses) => uses,
+                    None => continue, // No uses recorded, leave as-is
+                };
+
+                // Skip if any use requires full width
+                let all_narrow = uses.iter().all(|u| match u {
+                    UseContext::MemoryOffset => true,
+                    UseContext::Comparison => true,
+                    UseContext::FunctionArg => false,
+                    UseContext::FunctionReturn => false,
+                    UseContext::ExternalCall => false,
+                    UseContext::StorageAccess => false,
+                    UseContext::MemoryValue => false,
+                    UseContext::Arithmetic => false,
+                    UseContext::General => false,
+                });
+
+                if !all_narrow || uses.is_empty() {
+                    continue;
+                }
+
+                // Find the narrowest width that satisfies all uses
+                let narrowest = uses
+                    .iter()
+                    .map(|u| u.max_width_needed())
+                    .max()
+                    .unwrap_or(BitWidth::I256);
+
+                if narrowest < BitWidth::I256 {
+                    *param_ty = Type::Int(narrowest);
+                }
+            }
+        }
+
+        // Recurse into subobjects
+        for subobject in &mut object.subobjects {
+            self.narrow_function_params(subobject);
+        }
+    }
+
     /// Forward pass: infers minimum types for a block.
     fn infer_block_forward(&mut self, block: &Block) {
         for stmt in &block.statements {

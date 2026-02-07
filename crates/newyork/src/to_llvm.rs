@@ -85,6 +85,9 @@ pub struct LlvmCodegen<'ctx> {
     values: BTreeMap<u32, BasicValueEnum<'ctx>>,
     /// Function table: maps IR FunctionId to function name.
     function_names: BTreeMap<u32, String>,
+    /// Function parameter types: maps IR FunctionId to parameter types.
+    /// Used by call sites to match argument types to narrowed parameter types.
+    function_param_types: BTreeMap<u32, Vec<Type>>,
     /// Set of function names that have already been generated.
     /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
     generated_functions: BTreeSet<String>,
@@ -115,6 +118,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
+            function_param_types: BTreeMap::new(),
             generated_functions: BTreeSet::new(),
             heap_opt,
             type_info,
@@ -136,6 +140,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         LlvmCodegen {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
+            function_param_types: BTreeMap::new(),
             generated_functions,
             heap_opt,
             type_info,
@@ -618,6 +623,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         for (func_id, function) in &object.functions {
             self.declare_function(function, context)?;
             self.function_names.insert(func_id.0, function.name.clone());
+            self.function_param_types.insert(
+                func_id.0,
+                function.params.iter().map(|(_, ty)| *ty).collect(),
+            );
         }
 
         // Set LLVM inline attributes based on our custom heuristics.
@@ -826,10 +835,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        // Set up parameters - use the parameter values directly
-        for (index, (param_id, _param_ty)) in function.params.iter().enumerate() {
+        // Set up parameters. For narrowed parameters, zero-extend back to word type.
+        // This creates an implicit range proof: LLVM knows the value fits in the
+        // narrower type, which eliminates overflow checks downstream.
+        for (index, (param_id, param_ty)) in function.params.iter().enumerate() {
             let param_value = context.current_function().borrow().get_nth_param(index);
-            self.set_value(*param_id, param_value);
+            let stored_value = match param_ty {
+                Type::Int(width) if *width < BitWidth::I256 => {
+                    let narrow_val = param_value.into_int_value();
+                    context
+                        .builder()
+                        .build_int_z_extend(
+                            narrow_val,
+                            context.word_type(),
+                            &format!("param_{}_extend", index),
+                        )
+                        .map_err(|e| anyhow::anyhow!("LLVM error: {e}"))?
+                        .as_basic_value_enum()
+                }
+                _ => param_value,
+            };
+            self.set_value(*param_id, stored_value);
         }
 
         // Initialize return values to zero
@@ -2566,14 +2592,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .ok_or(CodegenError::UndefinedFunction(*function))?
                     .clone();
 
-                // Ensure all arguments are word type (function parameters expect word type)
+                // Match argument types to callee's parameter types.
+                // If the callee has narrowed parameters (e.g., I64 instead of I256),
+                // truncate arguments to match rather than extending to word type.
+                let param_types = self.function_param_types.get(&function.0);
                 let mut arg_vals = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
-                    arg_vals.push(self.translate_value_as_word(
-                        arg,
-                        context,
-                        &format!("call_arg_{}", i),
-                    )?);
+                    let param_ty = param_types.and_then(|pts| pts.get(i));
+                    let val = match param_ty {
+                        Some(Type::Int(width)) if *width < BitWidth::I256 => {
+                            let llvm_val = self.translate_value(arg)?;
+                            let int_val = llvm_val.into_int_value();
+                            let target_type = context.integer_type(width.bits() as usize);
+                            context
+                                .builder()
+                                .build_int_truncate(int_val, target_type, &format!("call_arg_narrow_{}", i))
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .as_basic_value_enum()
+                        }
+                        _ => self.translate_value_as_word(
+                            arg,
+                            context,
+                            &format!("call_arg_{}", i),
+                        )?,
+                    };
+                    arg_vals.push(val);
                 }
 
                 // Ensure debug location is set for function calls

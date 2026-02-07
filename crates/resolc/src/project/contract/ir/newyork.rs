@@ -103,6 +103,23 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 .map(|(fid, decision)| (fid.0, decision))
                 .collect();
 
+        // Count heap operations to decide whether __sbrk_internal should be outlined.
+        // For large contracts with many heap operations (MLoad/MStore/MCopy), outlining
+        // sbrk saves significant code because the sbrk body (~7 basic blocks) is deduplicated.
+        // For small contracts, the function call overhead outweighs the savings.
+        let heap_op_count = ir_object.count_heap_operations();
+        const SBRK_NOINLINE_THRESHOLD: usize = 20;
+        if heap_op_count > SBRK_NOINLINE_THRESHOLD {
+            if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
+                revive_llvm_context::PolkaVMFunction::set_attributes(
+                    context.llvm(),
+                    sbrk_func.borrow().declaration(),
+                    &[revive_llvm_context::PolkaVMAttribute::NoInline],
+                    true,
+                );
+            }
+        }
+
         // Check if we can use native-only heap mode (no byte-swapping needed)
         let use_native_heap = heap_opt.all_native();
 

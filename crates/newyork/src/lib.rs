@@ -123,6 +123,11 @@ pub fn translate_yul_object(
         type_info.infer_object(subobject);
     }
 
+    // Narrow function parameter types based on usage within function bodies.
+    // This enables LLVM function signatures with smaller types, eliminating
+    // overflow checks when parameters are used only as memory offsets.
+    type_info.narrow_function_params(&mut ir_object);
+
     // Validate IR correctness in debug builds
     #[cfg(debug_assertions)]
     {

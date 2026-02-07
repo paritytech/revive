@@ -644,4 +644,91 @@ impl Object {
             data: BTreeMap::new(),
         }
     }
+
+    /// Counts the total number of heap memory operations (MLoad, MStore, MStore8, MCopy)
+    /// in this object including all functions and subobjects.
+    /// This is used to estimate the number of `__sbrk_internal` call sites after LLVM codegen.
+    pub fn count_heap_operations(&self) -> usize {
+        let mut count = count_heap_ops_in_block(&self.code);
+        for function in self.functions.values() {
+            count += count_heap_ops_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            count += subobject.count_heap_operations();
+        }
+        count
+    }
+}
+
+/// Counts heap memory operations in a block recursively.
+fn count_heap_ops_in_block(block: &Block) -> usize {
+    let mut count = 0;
+    for stmt in &block.statements {
+        count += count_heap_ops_in_statement(stmt);
+    }
+    count
+}
+
+/// Counts heap memory operations in a single statement recursively.
+fn count_heap_ops_in_statement(stmt: &Statement) -> usize {
+    match stmt {
+        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => 1,
+        Statement::Let { value, .. } => count_heap_ops_in_expr(value),
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            let mut n = count_heap_ops_in_region(then_region);
+            if let Some(r) = else_region {
+                n += count_heap_ops_in_region(r);
+            }
+            n
+        }
+        Statement::Switch {
+            cases, default, ..
+        } => {
+            let mut n = 0;
+            for case in cases {
+                n += count_heap_ops_in_region(&case.body);
+            }
+            if let Some(r) = default {
+                n += count_heap_ops_in_region(r);
+            }
+            n
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            let mut n = 0;
+            for s in condition_stmts {
+                n += count_heap_ops_in_statement(s);
+            }
+            n += count_heap_ops_in_region(body);
+            n += count_heap_ops_in_region(post);
+            n
+        }
+        Statement::Block(region) => count_heap_ops_in_region(region),
+        _ => 0,
+    }
+}
+
+/// Counts heap memory operations in an expression (only MLoad).
+fn count_heap_ops_in_expr(expr: &Expr) -> usize {
+    match expr {
+        Expr::MLoad { .. } => 1,
+        _ => 0,
+    }
+}
+
+/// Counts heap memory operations in a region.
+fn count_heap_ops_in_region(region: &Region) -> usize {
+    let mut count = 0;
+    for stmt in &region.statements {
+        count += count_heap_ops_in_statement(stmt);
+    }
+    count
 }

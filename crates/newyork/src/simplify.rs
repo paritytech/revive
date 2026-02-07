@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, Zero};
 
 use crate::ir::{
-    BinOp, BitWidth, Block, CallKind, Expr, FunctionId, Object, Region, Statement, SwitchCase,
-    Type, UnaryOp, Value, ValueId,
+    BinOp, BitWidth, Block, CallKind, Expr, FunctionId, MemoryRegion, Object, Region, Statement,
+    SwitchCase, Type, UnaryOp, Value, ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -77,6 +77,15 @@ impl Simplifier {
         let id = ValueId(self.next_value_id);
         self.next_value_id += 1;
         id
+    }
+
+    /// Resolves the memory region for a value if its offset is a known constant.
+    fn resolve_region(&self, value: &Value) -> MemoryRegion {
+        if let Some(addr) = self.constants.get(&value.id.0) {
+            MemoryRegion::from_address(addr)
+        } else {
+            MemoryRegion::Unknown
+        }
     }
 
     /// Simplifies an entire object in place.
@@ -177,21 +186,37 @@ impl Simplifier {
                 offset,
                 value,
                 region,
-            } => vec![Statement::MStore {
-                offset: self.resolve_value(offset),
-                value: self.resolve_value(value),
-                region,
-            }],
+            } => {
+                let offset = self.resolve_value(offset);
+                let region = if region == MemoryRegion::Unknown {
+                    self.resolve_region(&offset)
+                } else {
+                    region
+                };
+                vec![Statement::MStore {
+                    offset,
+                    value: self.resolve_value(value),
+                    region,
+                }]
+            }
 
             Statement::MStore8 {
                 offset,
                 value,
                 region,
-            } => vec![Statement::MStore8 {
-                offset: self.resolve_value(offset),
-                value: self.resolve_value(value),
-                region,
-            }],
+            } => {
+                let offset = self.resolve_value(offset);
+                let region = if region == MemoryRegion::Unknown {
+                    self.resolve_region(&offset)
+                } else {
+                    region
+                };
+                vec![Statement::MStore8 {
+                    offset,
+                    value: self.resolve_value(value),
+                    region,
+                }]
+            }
 
             Statement::MCopy { dest, src, length } => vec![Statement::MCopy {
                 dest: self.resolve_value(dest),
@@ -673,6 +698,17 @@ impl Simplifier {
             Expr::Var(id) => {
                 let resolved = self.resolve_copy(id);
                 Expr::Var(resolved)
+            }
+
+            // MLoad: resolve offset and annotate memory region from constant offsets
+            Expr::MLoad { offset, region } => {
+                let offset = self.resolve_value(offset);
+                let region = if region == MemoryRegion::Unknown {
+                    self.resolve_region(&offset)
+                } else {
+                    region
+                };
+                Expr::MLoad { offset, region }
             }
 
             // All other expressions pass through unchanged

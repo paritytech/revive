@@ -1386,48 +1386,60 @@ Implementation approach:
     - **Results**: ERC20 -5.1% (was -3.6%), SHA1 -1.4% (was +0.1% regression, now fixed!)
     - **Key insight**: The original revert(0,0) dedup appeared to work on tests but the i256 constant detection was broken. All improvements previously attributed to it were actually from other optimizations. The real dedup impact is now realized.
 
-### Phase 5d: Free Memory Pointer Range Proof ✅ DONE (2026-02-06)
+### Phase 5d: Free Memory Pointer Range Proof ✅ DONE (updated 2026-02-07)
 35. [x] **Free memory pointer range proof** - ✅ IMPLEMENTED. Truncate-and-extend the result of mload(64) to create a range proof.
-    - **Mechanism**: After `mload(64)` (free memory pointer load), emit `trunc i256 → i64` then `zext i64 → i256`. This proves to LLVM that the value fits in 64 bits.
-    - **Why it works**: The free memory pointer (FMP) is always a valid PolkaVM heap pointer < 2^32. The truncate-extend creates a range bound that LLVM propagates to ALL downstream uses.
-    - **Impact**: Massive code size reduction across all contracts. LLVM eliminates overflow checks AND simplifies surrounding arithmetic using the range information.
+    - **Mechanism**: After `mload(64)` (free memory pointer load), emit `trunc i256 → i32` then `zext i32 → i256`. This proves to LLVM that the value fits in 32 bits.
+    - **Critical insight**: The range proof MUST use 32 bits (not 64!) to match `safe_truncate_int_to_xlen`'s 32-bit check. With 64-bit proof, `icmp ult i256 %val, 4294967296` can't be folded because i64 > i32. With 32-bit proof, LLVM sees `zext i32 → i256` and knows the value is already < 2^32.
+    - **Impact**: Changing from 64-bit to 32-bit FMP range proof gave additional -2.0% on ERC20 (300 bytes) by eliminating 60 more overflow trap sites and 192 more overflow checks.
     - Detection: `is_free_pointer_load()` checks if the LLVM offset value is constant 0x40.
-    - **Results**: See table below. OZ ERC20 -11.7% (was -6.5%), integration ERC20 -10.8% (was -5.1%).
+    - **Refactored**: Created `apply_range_proof()` helper for reuse; also applied to timestamp (64-bit), number (64-bit), chainid (64-bit), basefee (128-bit).
+    - **Most builtins DON'T need explicit range proofs**: calldatasize, returndatasize, gas, gas_limit, gas_price, msize already return `zext i32 → i256`. Address builtins (caller, address, origin, coinbase) already return `zext i160 → i256` after bswap. Only block context values loaded from memory as full i256 need explicit proofs.
+
+### Phase 5e: Memory Region Annotation ⚠️ IN PROGRESS (2026-02-07)
+36. [~] **Memory region annotation in simplify pass** - Partially implemented. Annotates MemoryRegion on MLoad/MStore/MStore8 using constant tracking.
+    - **Mechanism**: `resolve_region()` helper checks if a memory offset is a known constant and maps it to `MemoryRegion::FreePointerSlot`, `Scratch`, or `Dynamic` using `MemoryRegion::from_address()`.
+    - **Status**: Region annotation works in simplify.rs. Attempted to use it in type_inference.rs (return I32 for FMP MLoad), but this CAUSED A REGRESSION (+252 bytes on ERC20). The LLVM-level range proof already communicates the constraint; the type inference change just added redundant trunc/extend operations that confused LLVM's optimizer.
+    - **Lesson**: The LLVM range proof and the newyork type inference serve different purposes. The range proof communicates to LLVM. The type inference controls codegen intermediate types. Changing type inference for a value that already has a range proof is harmful because it introduces redundant narrowing that LLVM can't optimize away.
 
 ### Code Size Reduction Goals (Target: 50%)
-> Current status: newyork vs standard pipeline (2026-02-06, after FMP range proof):
+> Current status: newyork vs standard pipeline (2026-02-07, after 32-bit FMP range proof):
 >
 > | Contract | Newyork | Standard | Change |
 > |----------|---------|----------|--------|
 > | Baseline | 663 | 681 | **-2.6%** |
-> | Computation | 1711 | 1849 | **-7.5%** |
-> | DivisionArithmetics | 13583 | 14002 | **-3.0%** |
-> | ERC20 | 14946 | 16757 | **-10.8%** |
+> | Computation | 1654 | 1849 | **-10.5%** |
+> | DivisionArithmetics | 13501 | 14002 | **-3.6%** |
+> | ERC20 | 14646 | 16757 | **-12.6%** |
 > | Events | 1438 | 1474 | **-2.4%** |
 > | FibonacciIterative | 1183 | 1239 | **-4.5%** |
-> | Flipper | 1558 | 1682 | **-7.4%** |
-> | SHA1 | 6700 | 7277 | **-7.9%** |
+> | Flipper | 1500 | 1682 | **-10.8%** |
+> | SHA1 | 6730 | 7277 | **-7.5%** |
 >
-> **Large contract results** (OpenZeppelin wizard contracts):
-> | Contract | Newyork | Standard | Change |
-> |----------|---------|----------|--------|
-> | OZ ERC20 | 74,508 | 84,364 | **-11.7%** |
-> | OZ ERC721 | 84,950 | 93,730 | **-9.4%** |
-> | OZ ERC1155 | 56,398 | 60,566 | **-6.9%** |
+> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -12.6%, Flipper -10.8%, Computation -10.5%.
 >
-> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -10.8%, SHA1 -7.9%, Computation -7.5%, Flipper -7.4%.
+> **Remaining overflow checks** (integration ERC20 optimized LLVM IR analysis, 2026-02-07):
+> - 18 `consume_all_gas` calls (down from ~30 before 32-bit FMP proof)
+> - Sources: heap_load values (10), addition results (2), subtraction results (2), function parameters (4)
+> - Function parameter checks can't be eliminated without interprocedural type narrowing
 >
-> **Remaining optimization targets** (OZ ERC20 optimized LLVM IR analysis):
-> - `bswap.i256`: 58 calls (storage and event byte-swaps, very expensive on 32-bit RISC-V)
-> - `consume_all_gas`: 162 call sites (overflow checks from i256→i32 truncation)
-> - `__revive_store_heap_word`: 268 calls (heap stores with byte-swap)
-> - `__revive_load_heap_word`: 97 calls (heap loads with byte-swap)
-> - `__runtime` function: 843 LLVM IR lines (3x larger than standard due to IR-level inlining)
+> **__runtime function analysis** (812 LLVM IR lines):
+> - Heap size management boilerplate (`__sbrk_internal` inlined ~32 times): 19.7% of function
+> - Stack allocations (61 `alloca i256` for function arguments by-ptr): 15.1%
+> - Heap operations (81 load/store): 10.0%
+> - Keccak+bswap patterns: 5.0%
+> - Overflow checks: 5.2%
+>
+> **Approaches investigated and results**:
+> - ❌ **Storage bswap decomposition** (4×bswap.i64): REGRESSED +62/+183 bytes. LLVM -Oz handles bswap.i256 intrinsic better than manual decomposition.
+> - ❌ **Shared overflow trap block**: Mixed results (SHA1 -75, ERC20 +58). Prevents LLVM from eliminating individual dead overflow checks.
+> - ❌ **NoInline on __revive_int_truncate**: Massive regression (+62% on Baseline). PolkaVM function call overhead exceeds inline code cost.
+> - ❓ **NoInline on __sbrk_internal**: ERC20 -359 bytes but all small contracts regressed (+9.8% Baseline). Needs per-contract or threshold-based gating.
+> - ❌ **Type inference FMP → I32**: Regressed ERC20 +252 bytes. Redundant narrowing conflicts with existing LLVM range proof.
 >
 > **Approaches for deeper reductions**:
-> - **Storage bswap optimization**: Use 4×bswap.i64 instead of bswap.i256 in storage functions (requires llvm-context changes)
+> - **Interprocedural parameter narrowing**: Change function signatures like `abi_encode_string_runtime(i256, i256)` → `(i32, i32)` to eliminate overflow checks at function entry
+> - **Conditional sbrk NoInline**: Only apply NoInline when contract exceeds size threshold
 > - **ABI encoding specialization**: ABI encode/decode patterns generate substantial code; specialize for common types
-> - **Function outlining for cold paths**: Move error handling code to separate functions
 > - **Adaptive inlining threshold**: Scale single-call inline threshold based on total inlining budget
 
 30. [x] **Type-inference-driven codegen** - ✅ IMPLEMENTED. Three levels of narrowing (Let-binding, arithmetic dispatch, pointer-site). Impact was modest (~3%) because:
@@ -1438,7 +1450,7 @@ Implementation approach:
 31. [ ] **Eliminate unused runtime function metadata** - Runtime functions use LinkOnceODR + --gc-sections, so unused functions ARE eliminated. But metadata overhead may still exist.
 32. [ ] **Better 256-bit division lowering** - The 256-bit div/mod functions are particularly large. Specialize for common cases.
 33. [~] **Return path deduplication** - Investigated. Return paths have dynamic offsets (free memory pointer), so they can't be easily deduplicated like revert(0,K). Only `return(0,0)` could be shared but it's too rare (2 sites in ERC20) to matter. Deferred.
-34. [x] **Overflow check elimination via FMP range proof** - ✅ RESOLVED. The FMP range proof (item 35) eliminates overflow checks for free-memory-pointer-derived values by proving they fit in 64 bits. This lets `safe_truncate_int_to_xlen` take the cheap i64→i32 direct truncation path instead of the expensive i256→i32 overflow check.
+34. [x] **Overflow check elimination via FMP range proof** - ✅ RESOLVED. The FMP range proof (item 35) eliminates overflow checks for free-memory-pointer-derived values by proving they fit in 32 bits. This lets `safe_truncate_int_to_xlen` noop (i32 = xlen) instead of the expensive i256→i32 overflow check.
 
 ---
 
@@ -1585,14 +1597,39 @@ fn try_extract_const_u64(value: IntValue<'ctx>) -> Option<u64> {
 
 ### 12. Range Proofs via Truncate-Extend Are Extremely Powerful
 
-Adding `trunc i256 → i64` followed by `zext i64 → i256` after loading the free memory pointer creates a "range proof" that LLVM propagates aggressively. Despite only eliminating ~3 direct overflow checks, the OZ ERC20 shrank by **4,347 bytes** because LLVM uses the range information to:
+Adding `trunc i256 → i32` followed by `zext i32 → i256` after loading the free memory pointer creates a "range proof" that LLVM propagates aggressively. Despite only eliminating ~3 direct overflow checks, the OZ ERC20 shrank by **4,347+ bytes** because LLVM uses the range information to:
 
 1. Simplify arithmetic expressions involving the bounded value
 2. Fold comparisons that are trivially true/false given the range
 3. Eliminate dead code paths that are unreachable with bounded inputs
 4. Use cheaper instruction sequences for operations on known-small values
 
-**Key insight**: The code size reduction is ~15x larger than expected from just eliminating overflow checks. The range propagation has a multiplicative effect on downstream optimization quality. This technique should be applied to any value known to be < 2^64 (e.g., calldatasize, returndata offsets).
+**Key insight**: The code size reduction is ~15x larger than expected from just eliminating overflow checks. The range propagation has a multiplicative effect on downstream optimization quality.
+
+**Critical: range proof width must match the consumer**. The FMP range proof must use i32 (not i64!) because `safe_truncate_int_to_xlen` checks against XLEN=32 bits. With `trunc i256 → i64; zext i64 → i256`, LLVM knows the value fits in 64 bits but still needs the overflow check for `icmp ult i256 %val, 4294967296` (2^32). With `trunc i256 → i32; zext i32 → i256`, LLVM knows the value fits in 32 bits and can eliminate the check entirely. Switching from 64-bit to 32-bit proof gave an additional -300 bytes on integration ERC20.
+
+### 13. LLVM Trap Block Deduplication Has Limits
+
+LLVM does NOT merge identical trap blocks (`call @consume_all_gas; unreachable`) even with `-Oz`. Each inlined `__revive_int_truncate` creates its own trap block. Attempts to consolidate them:
+- **Shared trap block per function**: Mixed results (helps SHA1 -75 bytes, hurts ERC20 +58 bytes). The shared block prevents LLVM from eliminating individual dead overflow branches.
+- **NoInline on __revive_int_truncate**: Massive regression (+62% on small contracts). Function call overhead on PolkaVM exceeds the cost of the inlined check code.
+- **Lesson**: On PolkaVM, inlining is almost always better than function calls for small functions. The break-even point is very high.
+
+### 14. sbrk Inlining Is the Dominant Code Bloat Source
+
+`__sbrk_internal` (heap memory manager) gets inlined ~32 times in ERC20, creating 19.7% of the `__runtime` function. Adding `NoInline` to sbrk saves -359 bytes on ERC20 but regresses Baseline by +9.8%. The function is called at every heap GEP (through `build_heap_gep`), so it's called from nearly every memory operation.
+
+**Possible approaches**: Conditional NoInline based on contract size, or bypass sbrk entirely for memory regions where the heap is already allocated.
+
+### 15. Most EVM Builtins Have Implicit Range Proofs
+
+Before adding explicit range proofs to builtins, check if the llvm-context implementation already constrains the return type:
+- `calldatasize`, `returndatasize`, `gas`, `gas_limit`, `gas_price`, `msize`: Return `zext i32 → i256`
+- `caller`, `address`, `origin`, `coinbase`: Return `zext i160 → i256` (after bswap)
+- `codesize`, `extcodesize`: Return `zext i32 → i256`
+- `difficulty`: Returns a constant
+
+Only block context values loaded from memory as raw i256 need explicit proofs: `timestamp`, `number`, `chainid`, `basefee`.
 
 ---
 

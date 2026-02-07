@@ -226,6 +226,28 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Self::try_extract_const_u64(offset) == Some(0x40)
     }
 
+    /// Applies a range proof to a value by truncating to a narrower type and zero-extending
+    /// back to word type. This proves to LLVM that the value fits in the narrow type,
+    /// enabling overflow check elimination and arithmetic simplification downstream.
+    fn apply_range_proof(
+        context: &PolkaVMContext<'ctx>,
+        value: BasicValueEnum<'ctx>,
+        narrow_bits: u32,
+        name: &str,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let value_int = value.into_int_value();
+        let narrow_type = context.integer_type(narrow_bits as usize);
+        let truncated = context
+            .builder()
+            .build_int_truncate(value_int, narrow_type, &format!("{name}_narrow"))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let extended = context
+            .builder()
+            .build_int_z_extend(truncated, context.word_type(), &format!("{name}_extend"))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        Ok(extended.as_basic_value_enum())
+    }
+
     /// Checks if a memory operation at the given offset can use native byte order.
     ///
     /// Only enables native memory when ALL accesses are safe (all_native mode).
@@ -2363,16 +2385,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::CallValue => Ok(revive_llvm_context::polkavm_evm_ether_gas::value(context)?),
 
+            // caller already returns zext i160 → i256 (after byte-swap).
             Expr::Caller => Ok(revive_llvm_context::polkavm_evm_contract_context::caller(
                 context,
             )?),
 
+            // origin already returns zext i160 → i256 (after byte-swap).
             Expr::Origin => Ok(revive_llvm_context::polkavm_evm_contract_context::origin(
                 context,
             )?),
 
+            // calldatasize already returns zext i32 → i256, so LLVM knows
+            // it fits in 32 bits. No additional range proof needed.
             Expr::CallDataSize => Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?),
 
+            // codesize: both calldatasize and ext_code::size already return zext i32 → i256.
             Expr::CodeSize => match context.code_type() {
                 Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
                     Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
@@ -2385,10 +2412,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )),
             },
 
+            // gas_price already returns zext i32 → i256.
             Expr::GasPrice => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_price(context)?)
             }
 
+            // extcodesize returns zext i32 → i256.
             Expr::ExtCodeSize { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
                 let addr_val = self.ensure_word_type(context, addr_val, "extcodesize_addr")?;
@@ -2398,6 +2427,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?)
             }
 
+            // returndatasize already returns zext i32 → i256.
             Expr::ReturnDataSize => {
                 Ok(revive_llvm_context::polkavm_evm_return_data::size(context)?)
             }
@@ -2420,47 +2450,58 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )
             }
 
+            // coinbase already returns zext i160 → i256 (after byte-swap).
             Expr::Coinbase => Ok(revive_llvm_context::polkavm_evm_contract_context::coinbase(
                 context,
             )?),
 
             Expr::Timestamp => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::block_timestamp(context)?)
+                let val =
+                    revive_llvm_context::polkavm_evm_contract_context::block_timestamp(context)?;
+                Self::apply_range_proof(context, val, 64, "timestamp")
             }
 
             Expr::Number => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::block_number(context)?)
+                let val = revive_llvm_context::polkavm_evm_contract_context::block_number(context)?;
+                Self::apply_range_proof(context, val, 64, "number")
             }
 
+            // difficulty returns a constant, no range proof needed.
             Expr::Difficulty => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::difficulty(context)?)
             }
 
+            // gas_limit already returns zext i32 → i256.
             Expr::GasLimit => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_limit(context)?)
             }
 
-            Expr::ChainId => Ok(revive_llvm_context::polkavm_evm_contract_context::chain_id(
-                context,
-            )?),
+            Expr::ChainId => {
+                let val = revive_llvm_context::polkavm_evm_contract_context::chain_id(context)?;
+                Self::apply_range_proof(context, val, 64, "chainid")
+            }
 
             Expr::SelfBalance => Ok(revive_llvm_context::polkavm_evm_ether_gas::self_balance(
                 context,
             )?),
 
-            Expr::BaseFee => Ok(revive_llvm_context::polkavm_evm_contract_context::basefee(
-                context,
-            )?),
+            Expr::BaseFee => {
+                let val = revive_llvm_context::polkavm_evm_contract_context::basefee(context)?;
+                Self::apply_range_proof(context, val, 128, "basefee")
+            }
 
             Expr::BlobHash { .. } | Expr::BlobBaseFee => {
                 // Blob opcodes return 0 for now (EIP-4844)
                 Ok(context.word_const(0).as_basic_value_enum())
             }
 
+            // gas already returns zext i32 → i256.
             Expr::Gas => Ok(revive_llvm_context::polkavm_evm_ether_gas::gas(context)?),
 
+            // msize already returns zext i32 → i256.
             Expr::MSize => Ok(revive_llvm_context::polkavm_evm_memory::msize(context)?),
 
+            // address already returns zext i160 → i256 (after byte-swap).
             Expr::Address => Ok(revive_llvm_context::polkavm_evm_contract_context::address(
                 context,
             )?),
@@ -2490,20 +2531,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
                 };
                 // The free memory pointer (mload(64)) is always a valid heap
-                // pointer that fits in 32 bits. Truncate-and-extend to create
-                // a range proof so LLVM eliminates downstream overflow checks.
+                // pointer that fits in 32 bits on PolkaVM (xlen=32).
+                // Truncate to i32 and extend back to create a range proof that
+                // matches safe_truncate_int_to_xlen's 32-bit check, allowing
+                // LLVM to eliminate all downstream overflow checks.
                 if is_free_pointer {
-                    let loaded_int = loaded.into_int_value();
-                    let i64_type = context.llvm().i64_type();
-                    let truncated = context
-                        .builder()
-                        .build_int_truncate(loaded_int, i64_type, "fmp_narrow")
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    let extended = context
-                        .builder()
-                        .build_int_z_extend(truncated, context.word_type(), "fmp_extend")
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    Ok(extended.as_basic_value_enum())
+                    Self::apply_range_proof(context, loaded, 32, "fmp")
                 } else {
                     Ok(loaded)
                 }

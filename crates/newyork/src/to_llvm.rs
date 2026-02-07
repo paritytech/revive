@@ -449,15 +449,44 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(value);
         }
 
-        // Truncate to i64 (not the exact inferred width) to avoid
-        // proliferating many small LLVM types. All values ≤ 64 bits
-        // are stored uniformly as i64.
+        // Check if the value already has a range proof from a zext instruction.
+        // For example, the FMP range proof emits `trunc i256 → i32; zext i32 → i256`.
+        // If we blindly truncate to i64, we lose the tighter 32-bit constraint.
+        // Preserve the tightest existing proof by truncating to the source width.
+        let existing_proof_width = Self::detect_zext_source_width(int_val);
+        if let Some(src_width) = existing_proof_width {
+            if src_width <= 64 {
+                // Value already has a range proof at src_width bits.
+                // Truncate to that width to preserve the tight constraint.
+                let narrow_type = context.integer_type(src_width as usize);
+                let truncated = context
+                    .builder()
+                    .build_int_truncate(int_val, narrow_type, "narrow_let")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                return Ok(truncated.as_basic_value_enum());
+            }
+        }
+
+        // Default: truncate to i64 to avoid proliferating many small LLVM types.
         let i64_type = context.llvm().i64_type();
         let truncated = context
             .builder()
             .build_int_truncate(int_val, i64_type, "narrow_let")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         Ok(truncated.as_basic_value_enum())
+    }
+
+    /// Detects if an IntValue was produced by a ZExt instruction and returns the
+    /// source type's bit width. This preserves range proofs: if a value is
+    /// `zext i32 → i256`, the source width is 32.
+    fn detect_zext_source_width(value: IntValue<'ctx>) -> Option<u32> {
+        use inkwell::values::InstructionOpcode;
+        let instruction = value.as_instruction_value()?;
+        if instruction.get_opcode() != InstructionOpcode::ZExt {
+            return None;
+        }
+        let operand = instruction.get_operand(0)?.value()?;
+        Some(operand.into_int_value().get_type().get_bit_width())
     }
 
     /// Converts a value to the inferred type for storage.

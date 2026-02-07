@@ -139,6 +139,12 @@ impl Simplifier {
             result.extend(simplified);
         }
 
+        // Post-pass: outline Solidity panic revert patterns.
+        // Pattern: mstore(0, panic_selector) + mstore(4, code) + revert(0, 0x24)
+        // Replace with PanicRevert { code } which deduplicates to a shared block.
+        // Use self.constants which still has all accumulated constants from this scope.
+        result = outline_panic_patterns(result, &self.constants);
+
         self.constants = outer_constants;
         self.copies = outer_copies;
 
@@ -583,7 +589,7 @@ impl Simplifier {
             Statement::Expr(expr) => vec![Statement::Expr(self.simplify_expr(expr))],
 
             // Pass-through statements with no values to simplify
-            Statement::Stop | Statement::Invalid => vec![stmt],
+            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => vec![stmt],
 
             Statement::Break { values } => vec![Statement::Break {
                 values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
@@ -610,6 +616,9 @@ impl Simplifier {
             let simplified = self.simplify_statement(stmt);
             statements.extend(simplified);
         }
+
+        // Outline panic revert patterns using the full accumulated constants for this scope
+        statements = outline_panic_patterns(statements, &self.constants);
 
         // Resolve yields BEFORE restoring outer scope, since yield values
         // reference definitions from inside the region.
@@ -862,6 +871,161 @@ impl Simplifier {
             _ => None,
         }
     }
+}
+
+/// The Solidity Panic(uint256) ABI selector: `keccak256("Panic(uint256)")` left-padded.
+const PANIC_SELECTOR_HEX: &str = "4e487b7100000000000000000000000000000000000000000000000000000000";
+
+/// Detects and replaces the Solidity panic revert pattern in a statement list.
+///
+/// The pattern is a sequence of statements ending with:
+///   let bindings for constants, mstore(0, 0x4e487b71...), more let bindings,
+///   mstore(4, error_code), more let bindings, revert(0, 0x24)
+///
+/// Each match is replaced with `PanicRevert { code }`, and the preceding
+/// Let bindings used only by the panic are left for DCE to remove.
+///
+/// This function merges the caller's constant map with local Let-literal bindings
+/// to correctly resolve constants defined either in the current scope or in outer scopes
+/// (after copy propagation may have replaced local definitions with outer references).
+fn outline_panic_patterns(
+    stmts: Vec<Statement>,
+    scope_constants: &BTreeMap<u32, BigUint>,
+) -> Vec<Statement> {
+    // Quick check: does this list even contain a Revert statement?
+    let has_revert = stmts.iter().any(|s| matches!(s, Statement::Revert { .. }));
+    if !has_revert {
+        return stmts;
+    }
+
+    // Build a merged constant map: start from scope constants, add local literals
+    let mut constants: BTreeMap<u32, BigUint> = scope_constants.clone();
+    for stmt in &stmts {
+        if let Statement::Let {
+            bindings,
+            value: Expr::Literal { value, .. },
+        } = stmt
+        {
+            if bindings.len() == 1 {
+                constants.insert(bindings[0].0, value.clone());
+            }
+        }
+    }
+
+    let mut result = Vec::with_capacity(stmts.len());
+
+    for stmt in stmts {
+        // Check if this is a revert(0, 0x24) - the terminal of a panic pattern
+        if let Statement::Revert {
+            ref offset,
+            ref length,
+        } = stmt
+        {
+            if is_const_value(offset.id, 0, &constants)
+                && is_const_value(length.id, 0x24, &constants)
+            {
+                if let Some((panic_start, error_code)) =
+                    find_panic_pattern_backwards(&result, &constants)
+                {
+                    result.truncate(panic_start);
+                    result.push(Statement::PanicRevert { code: error_code });
+                    continue;
+                }
+            }
+        }
+
+        result.push(stmt);
+    }
+
+    result
+}
+
+/// Looks backwards from the end of a statement list to find the panic pattern:
+///   mstore(0, panic_selector), [let bindings]*, mstore(4, code), [let bindings]*
+///
+/// Returns `(start_index, error_code)` if the pattern is found.
+fn find_panic_pattern_backwards(
+    stmts: &[Statement],
+    constants: &BTreeMap<u32, BigUint>,
+) -> Option<(usize, u8)> {
+    let len = stmts.len();
+    if len < 2 {
+        return None;
+    }
+
+    // Find the mstore(4, code) - must be within the last few statements (allow some Let bindings)
+    let mut mstore4_idx = None;
+    let mut error_code = None;
+    let search_limit = len.saturating_sub(10);
+
+    for j in (search_limit..len).rev() {
+        match &stmts[j] {
+            Statement::MStore { offset, value, .. } => {
+                if is_const_value(offset.id, 4, constants) {
+                    if let Some(code_val) = constants.get(&value.id.0) {
+                        if let Some(code_u8) = code_val.to_u64_digits().first() {
+                            if *code_u8 <= 0xFF {
+                                mstore4_idx = Some(j);
+                                error_code = Some(*code_u8 as u8);
+                                break;
+                            }
+                        }
+                        // Handle zero code
+                        if code_val.is_zero() {
+                            mstore4_idx = Some(j);
+                            error_code = Some(0u8);
+                            break;
+                        }
+                    }
+                }
+            }
+            Statement::Let { .. } | Statement::Expr(..) => continue,
+            _ => break,
+        }
+    }
+
+    let mstore4_idx = mstore4_idx?;
+    let error_code = error_code?;
+
+    // Now find mstore(0, panic_selector) before mstore4_idx
+    let search_limit2 = mstore4_idx.saturating_sub(10);
+    for j in (search_limit2..mstore4_idx).rev() {
+        match &stmts[j] {
+            Statement::MStore { offset, value, .. } => {
+                if is_const_value(offset.id, 0, constants) {
+                    if let Some(sel_val) = constants.get(&value.id.0) {
+                        let sel_hex = format!("{sel_val:064x}");
+                        if sel_hex == PANIC_SELECTOR_HEX {
+                            // Verify that between j and the end there are only mstores, let
+                            // bindings, and dead expressions (no side effects we'd be removing)
+                            let only_safe = stmts[j..].iter().all(|s| {
+                                matches!(
+                                    s,
+                                    Statement::Let { .. }
+                                        | Statement::MStore { .. }
+                                        | Statement::Expr(..)
+                                )
+                            });
+                            if only_safe {
+                                return Some((j, error_code));
+                            }
+                        }
+                    }
+                }
+            }
+            Statement::Let { .. } | Statement::Expr(..) => continue,
+            _ => break,
+        }
+    }
+
+    None
+}
+
+/// Checks if a ValueId maps to a specific constant value.
+fn is_const_value(id: ValueId, expected: u64, constants: &BTreeMap<u32, BigUint>) -> bool {
+    constants
+        .get(&id.0)
+        .is_some_and(|v| *v == BigUint::from(expected))
 }
 
 /// Returns the result type for a binary operation.
@@ -1619,7 +1783,7 @@ fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
         }
         Statement::Expr(expr) => collect_used_in_expr(expr, used),
         Statement::SelfDestruct { address } => collect_used_in_value(address, used),
-        Statement::Stop | Statement::Invalid => {}
+        Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
         Statement::Break { values } | Statement::Continue { values } => {
             for v in values {
                 collect_used_in_value(v, used);
@@ -1739,6 +1903,7 @@ fn is_terminator(stmt: &Statement) -> bool {
             | Statement::Return { .. }
             | Statement::Stop
             | Statement::Invalid
+            | Statement::PanicRevert { .. }
             | Statement::Leave { .. }
             | Statement::SelfDestruct { .. }
     )
@@ -2073,7 +2238,7 @@ fn find_max_value_id_in_object(object: &Object) -> u32 {
             }
             Statement::Expr(expr) => visit_expr(expr, max_id),
             Statement::SelfDestruct { address } => visit_value(address, max_id),
-            Statement::Stop | Statement::Invalid => {}
+            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
             Statement::Break { values } | Statement::Continue { values } => {
                 for v in values {
                     visit_value(v, max_id);
@@ -2570,6 +2735,10 @@ impl Canonicalizer {
             }
             Statement::Stop => buf.push(0x92),
             Statement::Invalid => buf.push(0x93),
+            Statement::PanicRevert { code } => {
+                buf.push(0xA2);
+                buf.push(*code);
+            }
             Statement::ExternalCall {
                 kind,
                 gas,

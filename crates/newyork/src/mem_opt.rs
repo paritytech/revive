@@ -429,7 +429,7 @@ impl MemoryOptimizer {
                         visit_value(v, max_id);
                     }
                 }
-                Statement::Stop | Statement::Invalid => {}
+                Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
             }
         }
 
@@ -790,6 +790,7 @@ impl MemoryOptimizer {
                 | Statement::SelfDestruct { .. }
                 | Statement::Stop
                 | Statement::Invalid
+                | Statement::PanicRevert { .. }
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::Leave { .. } => {

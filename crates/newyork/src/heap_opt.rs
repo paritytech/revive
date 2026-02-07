@@ -305,6 +305,7 @@ impl HeapAnalysis {
             | Statement::Leave { .. }
             | Statement::Stop
             | Statement::Invalid
+            | Statement::PanicRevert { .. }
             | Statement::SetImmutable { .. } => {}
         }
     }

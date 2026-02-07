@@ -528,6 +528,14 @@ pub enum Statement {
         address: Value,
     },
 
+    /// Solidity panic revert: emits `Panic(uint256)` ABI encoding and reverts.
+    /// Equivalent to: mstore(0, 0x4e487b71...), mstore(4, code), revert(0, 0x24).
+    /// Outlined to a shared helper function to avoid duplicating the pattern.
+    PanicRevert {
+        /// The panic error code (e.g., 0x11 = overflow, 0x22 = encoding, 0x41 = memory).
+        code: u8,
+    },
+
     // External calls
     ExternalCall {
         kind: CallKind,

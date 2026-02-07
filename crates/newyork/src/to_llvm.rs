@@ -58,6 +58,11 @@ const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
 /// IR-level decision was made. Very small functions benefit from inlining.
 const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
 
+/// Maximum function size for AlwaysInline when called exactly twice (CostBenefit).
+/// Functions larger than this are left to LLVM's judgment or marked NoInline to avoid
+/// code duplication that outweighs interprocedural optimization benefits.
+const COST_BENEFIT_INLINE_SIZE_LIMIT: usize = 20;
+
 /// LLVM code generator for newyork IR.
 /// Tracks phi nodes at the continue-landing block of a for loop.
 /// These phi nodes merge values from the body's normal exit and from continue sites.
@@ -106,6 +111,12 @@ pub struct LlvmCodegen<'ctx> {
     /// Each block contains the full exit sequence for that revert pattern.
     /// Created on first use within each entry point function (deploy/runtime).
     revert_blocks: BTreeMap<u64, inkwell::basic_block::BasicBlock<'ctx>>,
+    /// Shared basic blocks for `return(offset, length)` patterns where both are constants.
+    /// Keyed by `(offset, length)` pair. Created on first use within each entry point.
+    return_blocks: BTreeMap<(u64, u64), inkwell::basic_block::BasicBlock<'ctx>>,
+    /// Shared basic blocks for Solidity panic revert patterns (keyed by error code).
+    /// Each block stores the Panic(uint256) ABI encoding and branches to revert(0, 0x24).
+    panic_blocks: BTreeMap<u8, inkwell::basic_block::BasicBlock<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -126,6 +137,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             for_loop_post_phis: Vec::new(),
             for_loop_break_phis: Vec::new(),
             revert_blocks: BTreeMap::new(),
+            return_blocks: BTreeMap::new(),
+            panic_blocks: BTreeMap::new(),
         }
     }
 
@@ -148,6 +161,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             for_loop_post_phis: Vec::new(),
             for_loop_break_phis: Vec::new(),
             revert_blocks: BTreeMap::new(),
+            return_blocks: BTreeMap::new(),
+            panic_blocks: BTreeMap::new(),
         }
     }
 
@@ -631,6 +646,89 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(revert_block)
     }
 
+    /// Gets or creates a shared basic block for a Solidity panic revert with a given error code.
+    /// The block stores `Panic(uint256)` ABI encoding to scratch memory and reverts.
+    /// This deduplicates the common pattern: mstore(0, 0x4e487b71...), mstore(4, code), revert(0, 36).
+    fn get_or_create_panic_block(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+        error_code: u8,
+    ) -> Result<inkwell::basic_block::BasicBlock<'ctx>> {
+        if let Some(&block) = self.panic_blocks.get(&error_code) {
+            return Ok(block);
+        }
+
+        // Save current insertion point
+        let current_block = context.basic_block();
+
+        // Create the shared panic block
+        let block_name = format!("panic_0x{error_code:02x}");
+        let panic_block = context.append_basic_block(&block_name);
+        context.set_basic_block(panic_block);
+
+        // Emit: mstore(0, 0x4e487b7100000000000000000000000000000000000000000000000000000000)
+        let zero_offset = context.word_const(0);
+        let panic_selector = context
+            .word_const_str_hex("4e487b7100000000000000000000000000000000000000000000000000000000");
+        revive_llvm_context::polkavm_evm_memory::store(context, zero_offset, panic_selector)?;
+
+        // Emit: mstore(4, error_code)
+        let four_offset = context.word_const(4);
+        let code_val = context.word_const(error_code as u64);
+        revive_llvm_context::polkavm_evm_memory::store(context, four_offset, code_val)?;
+
+        // Branch to the shared revert(0, 0x24) block
+        let revert_block = self.get_or_create_revert_block(context, 0x24)?;
+        context.build_unconditional_branch(revert_block);
+
+        // Restore insertion point
+        context.set_basic_block(current_block);
+
+        self.panic_blocks.insert(error_code, panic_block);
+        Ok(panic_block)
+    }
+
+    /// Gets or creates a shared basic block for a `return(offset, length)` pattern
+    /// where both offset and length are constants. This deduplicates identical return
+    /// sequences (e.g., `return(0x80, 0x20)` appearing 7 times in ERC20 runtime).
+    /// Each shared block contains the full exit sequence including `store_immutable_data`
+    /// for deploy code.
+    fn get_or_create_return_block(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+        const_offset: u64,
+        const_length: u64,
+    ) -> Result<inkwell::basic_block::BasicBlock<'ctx>> {
+        let key = (const_offset, const_length);
+        if let Some(&block) = self.return_blocks.get(&key) {
+            return Ok(block);
+        }
+
+        // Save current insertion point
+        let current_block = context.basic_block();
+
+        // Create the shared return block at the end of the current function
+        let block_name = format!("return_shared_{const_offset:x}_{const_length:x}");
+        let return_block = context.append_basic_block(&block_name);
+        context.set_basic_block(return_block);
+
+        // Emit the return(offset, length) exit sequence
+        let offset_val = context.word_const(const_offset);
+        let length_val = context.word_const(const_length);
+        revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Ensure the block has a terminator. The seal_return call is noreturn
+        // but LLVM needs an explicit unreachable terminator in the basic block.
+        context.build_unreachable();
+
+        // Restore insertion point
+        context.set_basic_block(current_block);
+
+        self.return_blocks.insert(key, return_block);
+        Ok(return_block)
+    }
+
     /// Generates LLVM IR for a complete object.
     pub fn generate_object(
         &mut self,
@@ -639,6 +737,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<()> {
         // Reset per-function shared blocks for the new entry point
         self.revert_blocks.clear();
+        self.return_blocks.clear();
+        self.panic_blocks.clear();
 
         // Determine if this is deploy or runtime code and set the code type
         let is_runtime = object.name.ends_with("_deployed");
@@ -799,14 +899,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 }
             }
-            // CostBenefit: tune inlining based on call count.
-            // Functions called exactly 2 times get AlwaysInline because the duplication
-            // is minimal and inlining enables interprocedural optimizations (range proof
-            // propagation, constant folding through arguments) that eliminate more code
-            // than the duplication adds. Functions with 3+ call sites get NoInline to
-            // prevent code bloat from excessive duplication.
+            // CostBenefit: tune inlining based on call count and function size.
+            // Small functions called exactly 2 times get AlwaysInline because inlining
+            // enables interprocedural optimizations (range proof propagation, constant
+            // folding through arguments) that eliminate more code than the duplication
+            // adds. Larger functions called 2 times are left to LLVM's judgment (which
+            // respects MinSize). Functions with 3+ call sites get NoInline to prevent
+            // code bloat from excessive duplication.
             Some(crate::InlineDecision::CostBenefit) => {
-                if function.call_count == 2 {
+                if function.call_count == 2
+                    && function.size_estimate <= COST_BENEFIT_INLINE_SIZE_LIMIT
+                {
                     Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
                 } else if function.call_count >= 3 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
@@ -860,6 +963,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         // Reset shared blocks for this function scope
         let saved_revert_blocks = std::mem::take(&mut self.revert_blocks);
+        let saved_return_blocks = std::mem::take(&mut self.return_blocks);
+        let saved_panic_blocks = std::mem::take(&mut self.panic_blocks);
 
         // Save the current values map and start fresh for this function
         // Each function has its own SSA namespace
@@ -984,6 +1089,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Restore the saved values map, shared blocks, and caches from before this function
         self.values = saved_values;
         self.revert_blocks = saved_revert_blocks;
+        self.return_blocks = saved_return_blocks;
+        self.panic_blocks = saved_panic_blocks;
 
         Ok(())
     }
@@ -1043,6 +1150,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::Break { .. } => "Break",
             Statement::Stop => "Stop",
             Statement::Invalid => "Invalid",
+            Statement::PanicRevert { .. } => "PanicRevert",
             Statement::DataCopy { .. } => "DataCopy",
         };
 
@@ -1886,8 +1994,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Return { offset, length } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
                 let length_val = self.translate_value(length)?.into_int_value();
+
+                // Deduplicate return(const_offset, const_length) patterns by
+                // creating ONE shared block per (offset, length) pair and branching to it.
+                if let (Some(const_off), Some(const_len)) = (
+                    Self::try_extract_const_u64(offset_val),
+                    Self::try_extract_const_u64(length_val),
+                ) {
+                    let return_block =
+                        self.get_or_create_return_block(context, const_off, const_len)?;
+                    context.build_unconditional_branch(return_block);
+                    let dead_block = context.append_basic_block("return_dedup_dead");
+                    context.set_basic_block(dead_block);
+                    return Ok(());
+                }
+
+                let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
                 let length_val = self.ensure_word_type(context, length_val, "return_length")?;
                 revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)?;
             }
@@ -1898,6 +2021,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Invalid => {
                 revive_llvm_context::polkavm_evm_return::invalid(context)?;
+            }
+
+            Statement::PanicRevert { code } => {
+                let panic_block = self.get_or_create_panic_block(context, *code)?;
+                context.build_unconditional_branch(panic_block);
+                let dead_block = context.append_basic_block("panic_dedup_dead");
+                context.set_basic_block(dead_block);
             }
 
             Statement::SelfDestruct { address } => {

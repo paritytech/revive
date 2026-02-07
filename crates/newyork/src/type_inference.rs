@@ -856,7 +856,8 @@ impl TypeInference {
             | Statement::Continue { .. }
             | Statement::Leave { .. }
             | Statement::Stop
-            | Statement::Invalid => {}
+            | Statement::Invalid
+            | Statement::PanicRevert { .. } => {}
 
             Statement::SetImmutable { value, .. } => {
                 // Immutable values are 256-bit

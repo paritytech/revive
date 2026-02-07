@@ -627,6 +627,12 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
+            Statement::PanicRevert { code } => {
+                self.write_indent();
+                self.output.push_str(&format!("panic_revert(0x{code:02x})"));
+                self.write_newline();
+            }
+
             Statement::SelfDestruct { address } => {
                 self.write_indent();
                 self.output.push_str("selfdestruct(");

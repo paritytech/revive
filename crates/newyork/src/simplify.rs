@@ -41,6 +41,31 @@ pub struct SimplifyResults {
     pub dead_bindings_removed: usize,
     /// Number of constant branches eliminated.
     pub branches_eliminated: usize,
+    /// Number of environment reads eliminated by CSE.
+    pub env_reads_eliminated: usize,
+}
+
+/// Categories of pure environment reads that can be CSE'd.
+/// These are values that remain constant for the entire contract invocation.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum EnvRead {
+    CallDataSize,
+    CallValue,
+    Caller,
+    Origin,
+    Address,
+}
+
+/// Returns the `EnvRead` kind for an expression if it is a pure environment read.
+fn env_read_kind(expr: &Expr) -> Option<EnvRead> {
+    match expr {
+        Expr::CallDataSize => Some(EnvRead::CallDataSize),
+        Expr::CallValue => Some(EnvRead::CallValue),
+        Expr::Caller => Some(EnvRead::Caller),
+        Expr::Origin => Some(EnvRead::Origin),
+        Expr::Address => Some(EnvRead::Address),
+        _ => None,
+    }
 }
 
 /// IR simplification pass.
@@ -51,6 +76,11 @@ pub struct Simplifier {
     copies: BTreeMap<u32, ValueId>,
     /// Counter for fresh value IDs when creating new bindings (strength reduction).
     next_value_id: u32,
+    /// CSE cache for pure environment reads (calldatasize, caller, etc.).
+    /// Maps the read category to the first ValueId that bound this expression.
+    /// Saved/restored in region scopes to ensure LLVM SSA domination correctness:
+    /// a binding from one branch must not be referenced from a sibling branch.
+    env_reads: BTreeMap<EnvRead, ValueId>,
     /// Statistics.
     stats: SimplifyResults,
 }
@@ -68,6 +98,7 @@ impl Simplifier {
             constants: BTreeMap::new(),
             copies: BTreeMap::new(),
             next_value_id: 0,
+            env_reads: BTreeMap::new(),
             stats: SimplifyResults::default(),
         }
     }
@@ -102,6 +133,7 @@ impl Simplifier {
         for function in object.functions.values_mut() {
             self.constants.clear();
             self.copies.clear();
+            self.env_reads.clear();
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
 
@@ -179,6 +211,12 @@ impl Simplifier {
                         if let Some(c) = self.constants.get(&resolved.0).cloned() {
                             self.constants.insert(bindings[0].0, c);
                         }
+                    }
+
+                    // Record first binding for pure environment reads (CSE).
+                    // Subsequent reads of the same kind will be replaced with Var(id).
+                    if let Some(kind) = env_read_kind(&simplified_expr) {
+                        self.env_reads.entry(kind).or_insert(bindings[0]);
                     }
                 }
 
@@ -607,9 +645,10 @@ impl Simplifier {
 
     /// Simplifies a region in place.
     fn simplify_region(&mut self, region: Region) -> Region {
-        // Save outer scope state
+        // Save outer scope state (including env reads to prevent cross-branch leaking)
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
+        let outer_env_reads = self.env_reads.clone();
 
         let mut statements = Vec::with_capacity(region.statements.len());
         for stmt in region.statements {
@@ -631,6 +670,7 @@ impl Simplifier {
         // Restore outer scope
         self.constants = outer_constants;
         self.copies = outer_copies;
+        self.env_reads = outer_env_reads;
 
         Region { statements, yields }
     }
@@ -661,6 +701,12 @@ impl Simplifier {
                     self.stats.identities_simplified += 1;
                     return simplified;
                 }
+
+                // NOTE: AND mask elimination (and(x, MASK) = x when x fits in MASK bits)
+                // was implemented but causes a code size INCREASE because LLVM uses AND
+                // operations as range hints for its own optimization passes. Removing them
+                // makes LLVM generate more conservative code. The type inference pass
+                // already handles narrow types for the LLVM codegen.
 
                 Expr::Binary { op, lhs, rhs }
             }
@@ -720,8 +766,27 @@ impl Simplifier {
                 Expr::MLoad { offset, region }
             }
 
+            // CSE for pure environment reads: replace with cached binding if available.
+            // These values are invariant for the entire contract invocation.
+            Expr::CallDataSize => self.cse_env_read(EnvRead::CallDataSize, expr),
+            Expr::CallValue => self.cse_env_read(EnvRead::CallValue, expr),
+            Expr::Caller => self.cse_env_read(EnvRead::Caller, expr),
+            Expr::Origin => self.cse_env_read(EnvRead::Origin, expr),
+            Expr::Address => self.cse_env_read(EnvRead::Address, expr),
+
             // All other expressions pass through unchanged
             other => other,
+        }
+    }
+
+    /// Checks if an environment read has been cached and returns a Var reference
+    /// to the first binding if so. Otherwise returns the original expression.
+    fn cse_env_read(&mut self, kind: EnvRead, original: Expr) -> Expr {
+        if let Some(&cached_id) = self.env_reads.get(&kind) {
+            self.stats.env_reads_eliminated += 1;
+            Expr::Var(cached_id)
+        } else {
+            original
         }
     }
 

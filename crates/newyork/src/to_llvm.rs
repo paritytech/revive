@@ -2574,10 +2574,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::CallValue => Ok(revive_llvm_context::polkavm_evm_ether_gas::value(context)?),
 
-            // caller already returns zext i160 → i256 (after byte-swap).
-            Expr::Caller => Ok(revive_llvm_context::polkavm_evm_contract_context::caller(
-                context,
-            )?),
+            // Use outlined caller_word function to avoid inlining
+            // syscall + bswap + zext at each call site.
+            Expr::Caller => {
+                Ok(revive_llvm_context::polkavm_evm_contract_context::caller_word(context)?)
+            }
 
             // origin already returns zext i160 → i256 (after byte-swap).
             Expr::Origin => Ok(revive_llvm_context::polkavm_evm_contract_context::origin(

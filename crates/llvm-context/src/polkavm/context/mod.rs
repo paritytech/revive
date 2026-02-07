@@ -693,23 +693,11 @@ impl<'ctx> Context<'ctx> {
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        // TODO: Revisit. While at entry should be preferred in theory:
-        // - It has negligible code size impact on real word contracts.
-        // - Sometimes has negative impact on code size.
-        // - Messes up debug information used to analyze code size issues.
+        // Allocas at entry coalesce into the stack frame, eliminating per-alloca
+        // dynamic alignment. However, for large functions (e.g. __runtime with 11
+        // switch cases), entry allocas prevent stack slot reuse across disjoint paths,
+        // increasing total stack frame size. Keep allocas at use site for now.
         self.build_alloca(r#type, name)
-
-        // let current_block = self.basic_block();
-        // let entry_block = self.current_function().borrow().entry_block();
-
-        // match entry_block.get_first_instruction() {
-        //     Some(instruction) => self.builder().position_before(&instruction),
-        //     None => self.builder().position_at_end(entry_block),
-        // }
-
-        // let pointer = self.build_alloca(r#type, name);
-        // self.set_basic_block(current_block);
-        // pointer
     }
 
     /// Builds an aligned stack allocation at the current position.

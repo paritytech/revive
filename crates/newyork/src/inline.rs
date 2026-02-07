@@ -502,6 +502,13 @@ impl InlineRemapper {
                 offset: self.remap_value(offset),
                 length: self.remap_value(length),
             },
+            Expr::Keccak256Pair { word0, word1 } => Expr::Keccak256Pair {
+                word0: self.remap_value(word0),
+                word1: self.remap_value(word1),
+            },
+            Expr::Keccak256Single { word0 } => Expr::Keccak256Single {
+                word0: self.remap_value(word0),
+            },
             Expr::DataOffset { id } => Expr::DataOffset { id: id.clone() },
             Expr::DataSize { id } => Expr::DataSize { id: id.clone() },
             Expr::LoadImmutable { key } => Expr::LoadImmutable { key: key.clone() },
@@ -790,6 +797,13 @@ fn find_max_value_id(object: &Object) -> u32 {
             Expr::Keccak256 { offset, length } => {
                 update_max_from_value(offset, max_id);
                 update_max_from_value(length, max_id);
+            }
+            Expr::Keccak256Pair { word0, word1 } => {
+                update_max_from_value(word0, max_id);
+                update_max_from_value(word1, max_id);
+            }
+            Expr::Keccak256Single { word0 } => {
+                update_max_from_value(word0, max_id);
             }
             _ => {}
         }

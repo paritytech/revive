@@ -37,6 +37,8 @@ pub use self::polkavm::context::function::runtime::FUNCTION_RUNTIME_CODE as Polk
 pub use self::polkavm::context::function::yul_data::YulData as PolkaVMFunctionYulData;
 pub use self::polkavm::context::function::Function as PolkaVMFunction;
 pub use self::polkavm::context::global::Global as PolkaVMGlobal;
+pub use self::polkavm::context::pointer::heap::Keccak256OneWord as PolkaVMKeccak256OneWordFunction;
+pub use self::polkavm::context::pointer::heap::Keccak256TwoWords as PolkaVMKeccak256TwoWordsFunction;
 pub use self::polkavm::context::pointer::heap::LoadWord as PolkaVMLoadHeapWordFunction;
 pub use self::polkavm::context::pointer::heap::LoadWordNative as PolkaVMLoadHeapWordNativeFunction;
 pub use self::polkavm::context::pointer::heap::StoreWord as PolkaVMStoreHeapWordFunction;

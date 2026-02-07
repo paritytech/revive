@@ -799,12 +799,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 }
             }
-            // CostBenefit: prevent LLVM from inlining multi-call functions to avoid
-            // code duplication. Functions called 3+ times get NoInline to prevent
-            // LLVM from duplicating their body at every call site. Functions called
-            // only 2 times get no attribute, letting LLVM decide.
+            // CostBenefit: tune inlining based on call count.
+            // Functions called exactly 2 times get AlwaysInline because the duplication
+            // is minimal and inlining enables interprocedural optimizations (range proof
+            // propagation, constant folding through arguments) that eliminate more code
+            // than the duplication adds. Functions with 3+ call sites get NoInline to
+            // prevent code bloat from excessive duplication.
             Some(crate::InlineDecision::CostBenefit) => {
-                if function.call_count >= 3 {
+                if function.call_count == 2 {
+                    Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
+                } else if function.call_count >= 3 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
                 } else {
                     None
@@ -977,7 +981,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.pop_debug_scope();
 
-        // Restore the saved values map and shared blocks from before this function
+        // Restore the saved values map, shared blocks, and caches from before this function
         self.values = saved_values;
         self.revert_blocks = saved_revert_blocks;
 
@@ -2585,13 +2589,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     )?;
                     revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
                 };
-                // The free memory pointer (mload(64)) is always a valid heap
-                // pointer that fits in 32 bits on PolkaVM (xlen=32).
-                // Truncate to i32 and extend back to create a range proof that
-                // matches safe_truncate_int_to_xlen's 32-bit check, allowing
-                // LLVM to eliminate all downstream overflow checks.
+                // The free memory pointer (mload(64)) is bounded by the heap size
+                // (enforced by sbrk). Use a tight range proof: compute the minimum
+                // number of bits needed to represent the heap size, then truncate
+                // to that width. This proves to LLVM that fmp + small_offset < 2^32,
+                // allowing elimination of ALL downstream overflow checks in
+                // safe_truncate_int_to_xlen.
                 if is_free_pointer {
-                    Self::apply_range_proof(context, loaded, 32, "fmp")
+                    // The FMP is bounded by the heap size (enforced by sbrk).
+                    // Use a tight range proof so LLVM can prove fmp + offset < 2^32,
+                    // eliminating overflow checks in safe_truncate_int_to_xlen.
+                    let heap_size = context
+                        .heap_size()
+                        .get_zero_extended_constant()
+                        .unwrap_or(131072);
+                    let raw_bits = 64 - heap_size.leading_zeros();
+                    let range_bits = raw_bits.clamp(8, 31);
+                    Self::apply_range_proof(context, loaded, range_bits, "fmp")
                 } else {
                     Ok(loaded)
                 }
@@ -2623,7 +2637,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 // Match argument types to callee's parameter types.
                 // If the callee has narrowed parameters (e.g., I64 instead of I256),
-                // truncate arguments to match rather than extending to word type.
+                // cast arguments to match. Handle cases where the argument may be
+                // wider (truncate), narrower (zero-extend), or same width (no-op).
                 let param_types = self.function_param_types.get(&function.0);
                 let mut arg_vals = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
@@ -2633,17 +2648,35 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             let llvm_val = self.translate_value(arg)?;
                             let int_val = llvm_val.into_int_value();
                             let target_type = context.integer_type(width.bits() as usize);
-                            context
-                                .builder()
-                                .build_int_truncate(int_val, target_type, &format!("call_arg_narrow_{}", i))
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-                                .as_basic_value_enum()
+                            let arg_bits = int_val.get_type().get_bit_width();
+                            let target_bits = target_type.get_bit_width();
+                            if arg_bits > target_bits {
+                                context
+                                    .builder()
+                                    .build_int_truncate(
+                                        int_val,
+                                        target_type,
+                                        &format!("call_arg_narrow_{}", i),
+                                    )
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    .as_basic_value_enum()
+                            } else if arg_bits < target_bits {
+                                context
+                                    .builder()
+                                    .build_int_z_extend(
+                                        int_val,
+                                        target_type,
+                                        &format!("call_arg_widen_{}", i),
+                                    )
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    .as_basic_value_enum()
+                            } else {
+                                int_val.as_basic_value_enum()
+                            }
                         }
-                        _ => self.translate_value_as_word(
-                            arg,
-                            context,
-                            &format!("call_arg_{}", i),
-                        )?,
+                        _ => {
+                            self.translate_value_as_word(arg, context, &format!("call_arg_{}", i))?
+                        }
                     };
                     arg_vals.push(val);
                 }
@@ -2712,6 +2745,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?;
                 Ok(revive_llvm_context::polkavm_evm_crypto::sha3(
                     context, offset_val, length_val,
+                )?)
+            }
+
+            Expr::Keccak256Pair { word0, word1 } => {
+                let word0_val = self.translate_value(word0)?.into_int_value();
+                let word0_val = self.ensure_word_type(context, word0_val, "keccak_word0")?;
+                let word1_val = self.translate_value(word1)?.into_int_value();
+                let word1_val = self.ensure_word_type(context, word1_val, "keccak_word1")?;
+                Ok(revive_llvm_context::polkavm_evm_crypto::sha3_two_words(
+                    context, word0_val, word1_val,
+                )?)
+            }
+
+            Expr::Keccak256Single { word0 } => {
+                let word0_val = self.translate_value(word0)?.into_int_value();
+                let word0_val = self.ensure_word_type(context, word0_val, "keccak_word0")?;
+                Ok(revive_llvm_context::polkavm_evm_crypto::sha3_one_word(
+                    context, word0_val,
                 )?)
             }
 

@@ -674,6 +674,15 @@ impl Validator {
                 self.use_value(length, context);
             }
 
+            Expr::Keccak256Pair { word0, word1 } => {
+                self.use_value(word0, context);
+                self.use_value(word1, context);
+            }
+
+            Expr::Keccak256Single { word0 } => {
+                self.use_value(word0, context);
+            }
+
             Expr::DataOffset { .. }
             | Expr::DataSize { .. }
             | Expr::LoadImmutable { .. }

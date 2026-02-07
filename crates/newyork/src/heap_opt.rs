@@ -462,6 +462,9 @@ impl HeapAnalysis {
             Expr::Keccak256 { offset, .. } => {
                 let _ = self.classify_access(offset);
             }
+            Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => {
+                // Keccak256Pair/Single use scratch memory internally; nothing to classify
+            }
             _ => {}
         }
     }

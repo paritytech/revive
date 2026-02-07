@@ -146,6 +146,9 @@ pub struct TypeInference {
     uses: BTreeMap<u32, BTreeSet<UseContext>>,
     /// Whether any constraint changed in the last iteration.
     changed: bool,
+    /// Function parameter ValueIds, keyed by FunctionId.
+    /// Used during the forward pass to propagate caller argument widths to callee parameters.
+    function_params: BTreeMap<u32, Vec<(ValueId, Type)>>,
 }
 
 impl TypeInference {
@@ -155,6 +158,7 @@ impl TypeInference {
             constraints: BTreeMap::new(),
             uses: BTreeMap::new(),
             changed: false,
+            function_params: BTreeMap::new(),
         }
     }
 
@@ -230,6 +234,13 @@ impl TypeInference {
 
     /// Runs type inference on an object with both forward and backward passes.
     pub fn infer_object(&mut self, object: &Object) {
+        // Pre-populate function_params so the forward pass can propagate
+        // caller argument widths to callee parameters.
+        for (func_id, function) in &object.functions {
+            self.function_params
+                .insert(func_id.0, function.params.clone());
+        }
+
         // Phase 1: Forward propagation - determine minimum widths
         loop {
             self.changed = false;
@@ -261,12 +272,17 @@ impl TypeInference {
 
     /// Forward pass for a function.
     fn infer_function_forward(&mut self, function: &Function) {
-        // Parameters come from outside, assume full width
+        // Don't unconditionally widen params to I256.
+        // Instead, let call sites determine parameter widths via Expr::Call propagation.
+        // This enables interprocedural narrowing: if all callers pass values that fit in I32,
+        // the parameter stays narrow, which produces a narrow LLVM function signature.
+        //
+        // Only widen to the declared type's width as a floor (for non-I256 types).
         for (param_id, param_ty) in &function.params {
             if let Type::Int(width) = param_ty {
-                self.widen(*param_id, *width);
-            } else {
-                self.widen(*param_id, BitWidth::I256);
+                if *width < BitWidth::I256 {
+                    self.widen(*param_id, *width);
+                }
             }
         }
 
@@ -305,55 +321,42 @@ impl TypeInference {
         }
     }
 
-    /// Narrows function parameter types based on how they're used within the function body.
+    /// Narrows function parameter types based on interprocedural analysis.
     ///
-    /// After type inference, each parameter's uses are recorded. If a parameter is only
-    /// used in narrow contexts (e.g., as a memory offset), its type can be narrowed from
-    /// I256 to a smaller width. This allows the LLVM function signature to use narrower
-    /// types, eliminating expensive overflow checks at call sites.
+    /// Uses the forward-inferred min_width for each parameter, which reflects the
+    /// maximum width across all call sites (propagated via Expr::Call during the
+    /// forward pass). This is more precise than the backward use-context analysis
+    /// because it narrows based on what callers actually PASS, not how the function
+    /// internally USES the parameter.
     ///
-    /// Only narrows parameters whose uses are ALL in contexts that allow narrowing.
-    /// Parameters used in storage, external calls, or as function returns stay at I256.
+    /// Safety: The function body zero-extends narrowed parameters back to word type,
+    /// creating an implicit LLVM range proof. This is sound because:
+    /// 1. All callers pass values fitting in the narrow width (by forward inference)
+    /// 2. The zero-extension preserves the value
+    /// 3. LLVM uses the range proof to eliminate downstream overflow checks
     pub fn narrow_function_params(&self, object: &mut Object) {
         for function in object.functions.values_mut() {
             for (param_id, param_ty) in &mut function.params {
-                // Only narrow integer parameters
+                // Only narrow I256 integer parameters
                 if !matches!(param_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                // Check uses of this parameter
-                let uses = match self.uses.get(&param_id.0) {
-                    Some(uses) => uses,
-                    None => continue, // No uses recorded, leave as-is
-                };
+                let constraint = self.get(*param_id);
 
-                // Skip if any use requires full width
-                let all_narrow = uses.iter().all(|u| match u {
-                    UseContext::MemoryOffset => true,
-                    UseContext::Comparison => true,
-                    UseContext::FunctionArg => false,
-                    UseContext::FunctionReturn => false,
-                    UseContext::ExternalCall => false,
-                    UseContext::StorageAccess => false,
-                    UseContext::MemoryValue => false,
-                    UseContext::Arithmetic => false,
-                    UseContext::General => false,
-                });
-
-                if !all_narrow || uses.is_empty() {
+                // Skip signed values (truncation + zero-extension doesn't preserve sign)
+                if constraint.is_signed {
                     continue;
                 }
 
-                // Find the narrowest width that satisfies all uses
-                let narrowest = uses
-                    .iter()
-                    .map(|u| u.max_width_needed())
-                    .max()
-                    .unwrap_or(BitWidth::I256);
-
-                if narrowest < BitWidth::I256 {
-                    *param_ty = Type::Int(narrowest);
+                // Use the forward-inferred min_width. This reflects the max width
+                // across all call sites. Only narrow if it's strictly smaller than I256.
+                let inferred = constraint.min_width;
+                if inferred < BitWidth::I256 {
+                    // Clamp to at least I32 for safety (XLEN is 32-bit on PolkaVM).
+                    // Narrower types (I1, I8) can cause issues with LLVM calling conventions.
+                    let clamped = inferred.max(BitWidth::I32);
+                    *param_ty = Type::Int(clamped);
                 }
             }
         }
@@ -597,6 +600,13 @@ impl TypeInference {
                 self.narrow_from_use(offset.id, BitWidth::I64);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
+            }
+            Expr::Keccak256Pair { word0, word1 } => {
+                self.record_use(word0.id, UseContext::FunctionArg);
+                self.record_use(word1.id, UseContext::FunctionArg);
+            }
+            Expr::Keccak256Single { word0 } => {
+                self.record_use(word0.id, UseContext::FunctionArg);
             }
             Expr::Call { args, .. } => {
                 for arg in args {
@@ -997,11 +1007,15 @@ impl TypeInference {
                 BitWidth::I256
             }
 
-            Expr::Call { args, .. } => {
-                // Function calls could return anything
-                for arg in args {
-                    // Don't constrain args here, let the function definition do it
-                    let _ = self.get(arg.id);
+            Expr::Call { function, args } => {
+                // Propagate caller argument widths to callee parameters.
+                // This enables interprocedural narrowing: if all callers pass small values,
+                // the parameter type can be narrowed from I256.
+                if let Some(callee_params) = self.function_params.get(&function.0).cloned() {
+                    for (arg, (param_id, _param_ty)) in args.iter().zip(callee_params.iter()) {
+                        let arg_width = self.get(arg.id).min_width;
+                        self.widen(*param_id, arg_width);
+                    }
                 }
                 BitWidth::I256
             }
@@ -1015,6 +1029,8 @@ impl TypeInference {
                 self.widen(length.id, BitWidth::I64);
                 BitWidth::I256
             }
+
+            Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => BitWidth::I256,
 
             // DataOffset returns a contract code hash (256-bit), not an actual offset.
             Expr::DataOffset { .. } => BitWidth::I256,

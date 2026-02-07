@@ -1347,6 +1347,8 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
         expr,
         Expr::Call { .. }
             | Expr::Keccak256 { .. }
+            | Expr::Keccak256Pair { .. }
+            | Expr::Keccak256Single { .. }
             | Expr::MLoad { .. }
             | Expr::SLoad { .. }
             | Expr::TLoad { .. }
@@ -1405,6 +1407,13 @@ fn collect_used_in_expr(expr: &Expr, used: &mut BTreeSet<u32>) {
         Expr::Keccak256 { offset, length } => {
             collect_used_in_value(offset, used);
             collect_used_in_value(length, used);
+        }
+        Expr::Keccak256Pair { word0, word1 } => {
+            collect_used_in_value(word0, used);
+            collect_used_in_value(word1, used);
+        }
+        Expr::Keccak256Single { word0 } => {
+            collect_used_in_value(word0, used);
         }
         Expr::CallValue
         | Expr::Caller
@@ -1858,6 +1867,13 @@ fn find_max_value_id_in_object(object: &Object) -> u32 {
                 visit_value(offset, max_id);
                 visit_value(length, max_id);
             }
+            Expr::Keccak256Pair { word0, word1 } => {
+                visit_value(word0, max_id);
+                visit_value(word1, max_id);
+            }
+            Expr::Keccak256Single { word0 } => {
+                visit_value(word0, max_id);
+            }
         }
     }
 
@@ -2307,6 +2323,15 @@ impl Canonicalizer {
                 buf.push(0x14);
                 self.encode_value(offset, buf);
                 self.encode_value(length, buf);
+            }
+            Expr::Keccak256Pair { word0, word1 } => {
+                buf.push(0x24);
+                self.encode_value(word0, buf);
+                self.encode_value(word1, buf);
+            }
+            Expr::Keccak256Single { word0 } => {
+                buf.push(0x25);
+                self.encode_value(word0, buf);
             }
             Expr::Truncate { value, to } => {
                 buf.push(0x15);

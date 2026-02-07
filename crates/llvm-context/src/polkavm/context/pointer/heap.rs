@@ -337,3 +337,171 @@ impl WriteLLVM for StoreWordNative {
         <Self as RuntimeFunction>::emit(&self, context)
     }
 }
+
+/// Keccak256 hash of one 256-bit word from scratch memory.
+/// Equivalent to: mstore(0, word0); sha3(0, 32)
+/// Deduplicated into a single function to reduce code size for storage slot lookups.
+pub struct Keccak256OneWord;
+
+impl Keccak256OneWord {
+    /// The function name.
+    pub const NAME: &'static str = "__revive_keccak256_one_word";
+}
+
+impl RuntimeFunction for Keccak256OneWord {
+    const NAME: &'static str = "__revive_keccak256_one_word";
+
+    const ATTRIBUTES: &'static [crate::polkavm::context::Attribute] = &[
+        crate::polkavm::context::Attribute::NoFree,
+        crate::polkavm::context::Attribute::NoRecurse,
+        crate::polkavm::context::Attribute::WillReturn,
+        crate::polkavm::context::Attribute::NoInline,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context
+            .word_type()
+            .fn_type(&[context.word_type().into()], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
+        let word0 = Self::paramater(context, 0).into_int_value();
+
+        // Store word0 at heap offset 0
+        let offset0 = context.xlen_type().const_int(0, false);
+        let store_fn = context
+            .get_function(StoreWord::NAME, false)
+            .expect("__revive_store_heap_word should be declared");
+        context.build_call(
+            store_fn.borrow().declaration(),
+            &[offset0.into(), word0.into()],
+            "store_word0",
+        );
+
+        // sbrk(0, 32) to get the heap pointer
+        let length = context
+            .xlen_type()
+            .const_int(BYTE_LENGTH_WORD as u64, false);
+        let input_pointer = context.build_heap_gep(offset0, length)?;
+
+        // Allocate output on stack
+        let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
+
+        // Call hash_keccak_256
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::HASH_KECCAK_256,
+            &[
+                input_pointer.to_int(context).into(),
+                length.into(),
+                output_pointer.to_int(context).into(),
+            ],
+        );
+
+        // Load result and byte-swap
+        let result = context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?)?;
+        Ok(Some(result))
+    }
+}
+
+impl WriteLLVM for Keccak256OneWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Keccak256 hash of two 256-bit words from scratch memory.
+/// Equivalent to: mstore(0, word0); mstore(32, word1); sha3(0, 64)
+/// Deduplicated into a single function to reduce code size for mapping lookups.
+pub struct Keccak256TwoWords;
+
+impl Keccak256TwoWords {
+    /// The function name.
+    pub const NAME: &'static str = "__revive_keccak256_two_words";
+}
+
+impl RuntimeFunction for Keccak256TwoWords {
+    const NAME: &'static str = "__revive_keccak256_two_words";
+
+    const ATTRIBUTES: &'static [crate::polkavm::context::Attribute] = &[
+        crate::polkavm::context::Attribute::NoFree,
+        crate::polkavm::context::Attribute::NoRecurse,
+        crate::polkavm::context::Attribute::WillReturn,
+        crate::polkavm::context::Attribute::NoInline,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(
+            &[context.word_type().into(), context.word_type().into()],
+            false,
+        )
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
+        let word0 = Self::paramater(context, 0).into_int_value();
+        let word1 = Self::paramater(context, 1).into_int_value();
+
+        // Store word0 at heap offset 0
+        let offset0 = context.xlen_type().const_int(0, false);
+        let store_fn = context
+            .get_function(StoreWord::NAME, false)
+            .expect("__revive_store_heap_word should be declared");
+        context.build_call(
+            store_fn.borrow().declaration(),
+            &[offset0.into(), word0.into()],
+            "store_word0",
+        );
+
+        // Store word1 at heap offset 32
+        let offset32 = context
+            .xlen_type()
+            .const_int(BYTE_LENGTH_WORD as u64, false);
+        context.build_call(
+            store_fn.borrow().declaration(),
+            &[offset32.into(), word1.into()],
+            "store_word1",
+        );
+
+        // sbrk(0, 64) to get the heap pointer
+        let length = context
+            .xlen_type()
+            .const_int(2 * BYTE_LENGTH_WORD as u64, false);
+        let input_pointer = context.build_heap_gep(offset0, length)?;
+
+        // Allocate output on stack
+        let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
+
+        // Call hash_keccak_256
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::HASH_KECCAK_256,
+            &[
+                input_pointer.to_int(context).into(),
+                length.into(),
+                output_pointer.to_int(context).into(),
+            ],
+        );
+
+        // Load result and byte-swap
+        let result = context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?)?;
+        Ok(Some(result))
+    }
+}
+
+impl WriteLLVM for Keccak256TwoWords {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}

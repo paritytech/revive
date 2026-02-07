@@ -318,6 +318,21 @@ pub enum Expr {
         length: Value,
     },
 
+    /// Keccak256 hash of two 256-bit words stored at scratch memory.
+    /// Equivalent to: mstore(0, word0); mstore(32, word1); keccak256(0, 64)
+    /// but lowered to a single function call to avoid code duplication.
+    Keccak256Pair {
+        word0: Value,
+        word1: Value,
+    },
+
+    /// Keccak256 hash of one 256-bit word stored at scratch memory.
+    /// Equivalent to: mstore(0, word0); keccak256(0, 32)
+    /// but lowered to a single function call to avoid code duplication.
+    Keccak256Single {
+        word0: Value,
+    },
+
     /// Data offset (for deployed bytecode).
     DataOffset {
         id: String,
@@ -685,9 +700,7 @@ fn count_heap_ops_in_statement(stmt: &Statement) -> usize {
             }
             n
         }
-        Statement::Switch {
-            cases, default, ..
-        } => {
+        Statement::Switch { cases, default, .. } => {
             let mut n = 0;
             for case in cases {
                 n += count_heap_ops_in_region(&case.body);

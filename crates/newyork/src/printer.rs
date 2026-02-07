@@ -1029,6 +1029,20 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
+            Expr::Keccak256Pair { word0, word1 } => {
+                self.output.push_str("keccak256_pair(");
+                self.write_value(word0);
+                self.output.push_str(", ");
+                self.write_value(word1);
+                self.output.push(')');
+            }
+
+            Expr::Keccak256Single { word0 } => {
+                self.output.push_str("keccak256_single(");
+                self.write_value(word0);
+                self.output.push(')');
+            }
+
             Expr::DataOffset { id } => {
                 let _ = write!(self.output, "dataoffset(\"{}\")", id);
             }

@@ -1388,9 +1388,10 @@ Implementation approach:
 
 ### Phase 5d: Free Memory Pointer Range Proof ✅ DONE (updated 2026-02-07)
 35. [x] **Free memory pointer range proof** - ✅ IMPLEMENTED. Truncate-and-extend the result of mload(64) to create a range proof.
-    - **Mechanism**: After `mload(64)` (free memory pointer load), emit `trunc i256 → i32` then `zext i32 → i256`. This proves to LLVM that the value fits in 32 bits.
-    - **Critical insight**: The range proof MUST use 32 bits (not 64!) to match `safe_truncate_int_to_xlen`'s 32-bit check. With 64-bit proof, `icmp ult i256 %val, 4294967296` can't be folded because i64 > i32. With 32-bit proof, LLVM sees `zext i32 → i256` and knows the value is already < 2^32.
-    - **Impact**: Changing from 64-bit to 32-bit FMP range proof gave additional -2.0% on ERC20 (300 bytes) by eliminating 60 more overflow trap sites and 192 more overflow checks.
+    - **Mechanism**: After `mload(64)` (free memory pointer load), emit `trunc i256 → iN` then `zext iN → i256` where N = ceil(log2(heap_size)). For the default 128KB heap, N=17.
+    - **Critical insight**: The range proof should be as tight as possible. The FMP is bounded by the heap size (enforced by sbrk), so for a 128KB heap (2^17 bytes), the FMP can never exceed 131072. Using `trunc i256 → i17; zext i17 → i256` proves fmp < 2^17, which means fmp + any_reasonable_offset << 2^32, eliminating ALL downstream overflow checks.
+    - **Evolution**: Started with i64 (too wide), then i32 (matched safe_truncate_int_to_xlen check), then heap-size-based (tightest possible). Each tightening improved results.
+    - **Impact**: SHA1 -9.4% (-647 bytes), small regressions on Computation (+0.4%) and DivisionArithmetics (+0.2%). Net positive.
     - Detection: `is_free_pointer_load()` checks if the LLVM offset value is constant 0x40.
     - **Refactored**: Created `apply_range_proof()` helper for reuse; also applied to timestamp (64-bit), number (64-bit), chainid (64-bit), basefee (128-bit).
     - **Most builtins DON'T need explicit range proofs**: calldatasize, returndatasize, gas, gas_limit, gas_price, msize already return `zext i32 → i256`. Address builtins (caller, address, origin, coinbase) already return `zext i160 → i256` after bswap. Only block context values loaded from memory as full i256 need explicit proofs.
@@ -1401,33 +1402,55 @@ Implementation approach:
     - **Status**: Region annotation works in simplify.rs. Attempted to use it in type_inference.rs (return I32 for FMP MLoad), but this CAUSED A REGRESSION (+252 bytes on ERC20). The LLVM-level range proof already communicates the constraint; the type inference change just added redundant trunc/extend operations that confused LLVM's optimizer.
     - **Lesson**: The LLVM range proof and the newyork type inference serve different purposes. The range proof communicates to LLVM. The type inference controls codegen intermediate types. Changing type inference for a value that already has a range proof is harmful because it introduces redundant narrowing that LLVM can't optimize away.
 
+### Phase 5f: Keccak256 Deduplication ✅ DONE (updated 2026-02-07)
+37. [x] **Keccak256 two-word helper function** - ✅ IMPLEMENTED. Deduplicate `mstore(0,w0)+mstore(32,w1)+keccak256(0,64)` sequences.
+    - **Mechanism**: Memory optimization pass (mem_opt.rs) detects when `Keccak256 { offset: 0, length: 64 }` follows stores to offsets 0 and 32. Rewrites to `Keccak256Pair { word0, word1 }` and marks the stores as dead.
+    - **LLVM helper**: `__revive_keccak256_two_words(i256, i256) -> i256` runtime function declared with `NoInline` to force deduplication. Body calls `__revive_store_heap_word` twice, then `sbrk(0,64)`, `hash_keccak_256`, and `bswap`.
+    - **Results**: ERC20 14263→13734 bytes (**-529 bytes, -3.7%**). 13 call sites fused, each replacing ~7-line store+sbrk+alloca+hash+bswap sequence with a single call.
+    - **Single-word variant tested but rejected**: `keccak256_one_word` for `mstore(0,w)+keccak256(0,32)` (3 sites) INCREASED size by +83 bytes. The function definition cost exceeds the savings from only 3 call sites.
+    - **Key insight**: Deduplication helpers only pay off when call count × per-site savings > function definition cost. For the two-word variant: 13 sites × ~50 bytes = 650 bytes saved, minus ~120 bytes function = net 530 bytes saved.
+
+38. [x] **Load-after-store forwarding** - ✅ IMPLEMENTED. Forward stored values on `mload` when the store target matches.
+    - **Mechanism**: In mem_opt.rs, when `MLoad { offset }` matches a tracked `MStore` to the same static offset, forward the stored value directly. If the stored value type is narrower than I256, wrap in `ZeroExtend { value, to: I256 }`.
+    - **Results**: ERC20 14355→14263 bytes (**-92 bytes, -0.64%**). Eliminates redundant `__revive_load_heap_word` calls after stores.
+
+39. [x] **2-call AlwaysInline for CostBenefit functions** - ✅ IMPLEMENTED. Functions with `call_count==2` and `CostBenefit` inline decision get `AlwaysInline`.
+    - **Results**: ERC20 15364→14355 bytes (**-1009 bytes, -6.6%**). Enables interprocedural optimizations like FMP range proof propagation.
+    - **Size<=20 expansion rejected**: Inlining small functions with 5-7 call sites regressed ERC20 by +861 bytes due to excessive code duplication.
+
+### Phase 5g: Interprocedural Parameter Narrowing ✅ DONE (updated 2026-02-07)
+40. [x] **Caller-driven interprocedural parameter narrowing** - ✅ IMPLEMENTED. Propagate caller argument widths to callee parameters during forward pass.
+    - **Mechanism**: In the type inference forward pass, when `Expr::Call` is encountered, propagate each caller argument's inferred width to the corresponding callee parameter via `widen()`. This replaces the previous approach where all function params were unconditionally widened to I256.
+    - **Changes**:
+      - `type_inference.rs`: Added `function_params` field to pre-populate callee parameter ValueIds. Changed `infer_function_forward()` to NOT widen params to I256. Changed `Expr::Call` in `infer_expr_width()` to propagate caller widths. Rewrote `narrow_function_params()` to use forward-inferred min_width (skip signed, clamp to I32 minimum).
+      - `to_llvm.rs`: Fixed call-site argument type matching to handle arg_bits > target_bits (truncate), arg_bits < target_bits (zero-extend), and same width (no-op). Previously only truncate was handled.
+    - **Example narrowed signatures**: `assert_helper(i32)`, `finalize_allocation(i64, i256)`, `abi_decode_bool_fromMemory(i64, i160)`
+    - **Results**: ERC20 -0.67%, Flipper -0.86% (standalone). Combined with tight FMP proof, SHA1 -9.4%.
+    - **Bug fixed**: LLVM "Invalid cast!" assertion when caller arg is narrower than callee param (e.g., I32 arg to I64 param). Fixed by adding zero-extend path at call sites.
+
 ### Code Size Reduction Goals (Target: 50%)
-> Current status: newyork vs standard pipeline (2026-02-07, after 32-bit FMP range proof):
+> Current status: newyork vs standard pipeline (2026-02-07, after interprocedural narrowing + tight FMP proof):
 >
 > | Contract | Newyork | Standard | Change |
 > |----------|---------|----------|--------|
 > | Baseline | 663 | 681 | **-2.6%** |
-> | Computation | 1654 | 1849 | **-10.5%** |
-> | DivisionArithmetics | 13501 | 14002 | **-3.6%** |
-> | ERC20 | 14646 | 16757 | **-12.6%** |
+> | Computation | 1660 | 1849 | **-10.2%** |
+> | DivisionArithmetics | 13524 | 14002 | **-3.4%** |
+> | ERC20 | 13799 | 16757 | **-17.7%** |
 > | Events | 1438 | 1474 | **-2.4%** |
 > | FibonacciIterative | 1183 | 1239 | **-4.5%** |
-> | Flipper | 1500 | 1682 | **-10.8%** |
-> | SHA1 | 6730 | 7277 | **-7.5%** |
+> | Flipper | 1507 | 1682 | **-10.4%** |
+> | SHA1 | 6226 | 7277 | **-14.4%** |
 >
-> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -12.6%, Flipper -10.8%, Computation -10.5%.
+> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -17.7%, SHA1 -14.4%, Flipper -10.4%, Computation -10.2%.
 >
-> **Remaining overflow checks** (integration ERC20 optimized LLVM IR analysis, 2026-02-07):
-> - 18 `consume_all_gas` calls (down from ~30 before 32-bit FMP proof)
-> - Sources: heap_load values (10), addition results (2), subtraction results (2), function parameters (4)
-> - Function parameter checks can't be eliminated without interprocedural type narrowing
->
-> **__runtime function analysis** (812 LLVM IR lines):
-> - Heap size management boilerplate (`__sbrk_internal` inlined ~32 times): 19.7% of function
-> - Stack allocations (61 `alloca i256` for function arguments by-ptr): 15.1%
-> - Heap operations (81 load/store): 10.0%
-> - Keccak+bswap patterns: 5.0%
-> - Overflow checks: 5.2%
+> **Remaining LLVM IR analysis** (ERC20 optimized, 2026-02-07, 1685 lines):
+> - 18 `consume_all_gas` overflow trap sites
+> - ~78 `__sbrk_internal` calls (reduced from 91 after keccak fusion)
+> - 50 `llvm.bswap.i256` calls
+> - 83 `alloca` instructions (stack allocations for 256-bit arguments)
+> - 13 `__revive_keccak256_two_words` calls + 1 function definition
+> - 3 remaining single-word `hash_keccak_256` calls (not worth deduplicating)
 >
 > **Approaches investigated and results**:
 > - ❌ **Storage bswap decomposition** (4×bswap.i64): REGRESSED +62/+183 bytes. LLVM -Oz handles bswap.i256 intrinsic better than manual decomposition.
@@ -1435,12 +1458,18 @@ Implementation approach:
 > - ❌ **NoInline on __revive_int_truncate**: Massive regression (+62% on Baseline). PolkaVM function call overhead exceeds inline code cost.
 > - ❓ **NoInline on __sbrk_internal**: ERC20 -359 bytes but all small contracts regressed (+9.8% Baseline). Needs per-contract or threshold-based gating.
 > - ❌ **Type inference FMP → I32**: Regressed ERC20 +252 bytes. Redundant narrowing conflicts with existing LLVM range proof.
+> - ❌ **FMP native memory (inline)**: Mixed results - Baseline -12.5% but ERC20 +4.7% from inline sbrk bloat.
+> - ❌ **FMP native memory (function call)**: Requires declaring native heap functions (+200 bytes overhead), not cost-effective for ~19 FMP accesses.
+> - ❌ **Keccak256 single-word helper**: +83 bytes on ERC20. 3 call sites too few to amortize function definition cost.
 >
 > **Approaches for deeper reductions**:
-> - **Interprocedural parameter narrowing**: Change function signatures like `abi_encode_string_runtime(i256, i256)` → `(i32, i32)` to eliminate overflow checks at function entry
+> - ✅ **Interprocedural parameter narrowing**: DONE - see Phase 5g above
 > - **Conditional sbrk NoInline**: Only apply NoInline when contract exceeds size threshold
 > - **ABI encoding specialization**: ABI encode/decode patterns generate substantial code; specialize for common types
 > - **Adaptive inlining threshold**: Scale single-call inline threshold based on total inlining budget
+> - **Further deduplication patterns**: Look for repeated error handling sequences (5× Panic(0x22) pattern), repeated return(0, ptr, 32) sequences
+> - **External call outlining**: Factor the repeated "call_evm + return_data revert" pattern into a shared helper (~1000 bytes savings on ERC20Tester deploy)
+> - **Let-binding range proof propagation**: Extend range proofs beyond FMP to other values with known bounds
 
 30. [x] **Type-inference-driven codegen** - ✅ IMPLEMENTED. Three levels of narrowing (Let-binding, arithmetic dispatch, pointer-site). Impact was modest (~3%) because:
     - LLVM's constant propagation already handles many cases where operands are compile-time constants
@@ -1630,6 +1659,25 @@ Before adding explicit range proofs to builtins, check if the llvm-context imple
 - `difficulty`: Returns a constant
 
 Only block context values loaded from memory as raw i256 need explicit proofs: `timestamp`, `number`, `chainid`, `basefee`.
+
+### 16. Tighter Range Proofs Yield Diminishing But Nonzero Returns
+
+The FMP range proof evolved through three stages: i64 → i32 → heap-size-based (i17 for 128KB). Each tightening helped different contracts:
+- i64 → i32: ERC20 -300 bytes (the big win, matching safe_truncate_int_to_xlen's 32-bit check)
+- i32 → i17: SHA1 -647 bytes (9.4%), but small regressions on Computation (+6) and DivisionArithmetics (+23)
+
+The i17 proof helps because it proves `fmp + any_offset < 2^17 + offset << 2^32`, which is even stronger than the i32 proof. LLVM can then eliminate not just the overflow check but also optimize address arithmetic more aggressively. However, non-standard bit widths (like i17) can occasionally confuse LLVM's pattern matching, leading to small regressions on some contracts.
+
+**Decision framework**: Accept tight range proofs when the biggest winner's savings exceed all losers' regressions combined. Here: SHA1 -647 >> Computation +6 + DivisionArithmetics +23 + ERC20 -65 (net improvement).
+
+### 17. Interprocedural Narrowing Requires Bidirectional Call-Site Type Matching
+
+When callee parameters are narrowed (e.g., from I256 to I64), call sites must handle three cases:
+1. **Caller arg wider than param** (I256 → I64): Truncate
+2. **Caller arg narrower than param** (I32 → I64): Zero-extend
+3. **Same width**: No-op
+
+The initial implementation only handled case 1 (truncate), causing an LLVM assertion failure ("Invalid cast!") when a caller's argument was narrower than the callee's parameter. This happens when Let-binding narrowing narrows a value to I32, but the callee expects I64.
 
 ---
 

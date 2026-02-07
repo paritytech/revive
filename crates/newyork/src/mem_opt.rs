@@ -54,7 +54,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use num::{BigUint, Zero};
 
-use crate::ir::{BinOp, Block, Expr, Object, Region, Statement, Value, ValueId};
+use crate::ir::{
+    BinOp, BitWidth, Block, Expr, FunctionId, MemoryRegion, Object, Region, Statement, Type, Value,
+    ValueId,
+};
 
 /// Results of memory optimization.
 #[derive(Clone, Debug, Default)]
@@ -65,6 +68,8 @@ pub struct MemOptResults {
     pub stores_eliminated: usize,
     /// Number of values tracked.
     pub values_tracked: usize,
+    /// Number of keccak256 calls fused into keccak256_pair.
+    pub keccak_pairs_fused: usize,
 }
 
 /// Memory optimization pass.
@@ -178,6 +183,13 @@ impl MemoryOptimizer {
                 Expr::Keccak256 { offset, length } => {
                     visit_value(offset, max_id);
                     visit_value(length, max_id);
+                }
+                Expr::Keccak256Pair { word0, word1 } => {
+                    visit_value(word0, max_id);
+                    visit_value(word1, max_id);
+                }
+                Expr::Keccak256Single { word0 } => {
+                    visit_value(word0, max_id);
                 }
                 _ => {}
             }
@@ -805,13 +817,12 @@ impl MemoryOptimizer {
         result
     }
 
-    /// Tracks memory reads for dead store elimination.
+    /// Tracks memory reads for dead store elimination and load-after-store forwarding.
     ///
-    /// Note: Load-after-store elimination (replacing MLoad with the stored value)
-    /// is disabled because the LLVM codegen uses narrow types for small literals.
-    /// A stored i64 value would be returned instead of the i256 that MLoad produces,
-    /// causing type mismatches downstream. The dead store tracking is still needed
-    /// to correctly identify which stores are read.
+    /// When a load follows a store to the same static offset, the stored value is
+    /// forwarded directly, eliminating the redundant memory round-trip. If the stored
+    /// value has a narrower type than I256 (what MLoad produces), a ZeroExtend is
+    /// inserted to maintain type correctness.
     fn optimize_expr_with_read_tracking(&mut self, expr: Expr) -> Expr {
         match expr {
             Expr::MLoad { offset, region } => {
@@ -825,6 +836,22 @@ impl MemoryOptimizer {
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
                         if tracked.offset == static_offset {
                             tracked.was_read = true;
+
+                            // Forward the stored value instead of loading from memory.
+                            let stored = tracked.stored_value;
+                            self.stats.loads_eliminated += 1;
+                            log::trace!("Load-after-store forwarding at offset {}", static_offset);
+
+                            // If the stored value is narrower than I256, wrap in ZeroExtend
+                            // to match the MLoad return type (always I256).
+                            return match stored.ty {
+                                Type::Int(BitWidth::I256) => Expr::Var(stored.id),
+                                Type::Int(width) if width < BitWidth::I256 => Expr::ZeroExtend {
+                                    value: stored,
+                                    to: BitWidth::I256,
+                                },
+                                _ => Expr::Var(stored.id),
+                            };
                         }
                     }
                 } else {
@@ -835,11 +862,57 @@ impl MemoryOptimizer {
             }
 
             Expr::Keccak256 { offset, length } => {
+                let static_offset = self.try_get_static_offset(&offset);
+                let static_length = self.try_get_static_offset(&length);
+
+                // Try to fuse mstore(0, w0) + mstore(32, w1) + keccak256(0, 64)
+                // into keccak256_pair(w0, w1) to deduplicate the hash boilerplate.
+                if static_offset == Some(0) && static_length == Some(64) {
+                    if let (Some(tracked0), Some(tracked32)) =
+                        (self.memory_state.get(&0), self.memory_state.get(&32))
+                    {
+                        if tracked0.offset == 0 && tracked32.offset == 32 {
+                            let word0 = tracked0.stored_value;
+                            let word1 = tracked32.stored_value;
+                            // Mark the scratch stores as dead since keccak256_pair
+                            // handles the stores internally.
+                            if let Some(&idx0) = self.pending_stores.get(&0) {
+                                self.dead_store_indices.insert(idx0);
+                                self.stats.stores_eliminated += 1;
+                            }
+                            if let Some(&idx32) = self.pending_stores.get(&32) {
+                                self.dead_store_indices.insert(idx32);
+                                self.stats.stores_eliminated += 1;
+                            }
+                            self.stats.keccak_pairs_fused += 1;
+                            self.pending_stores.clear();
+                            log::trace!("Fused keccak256(0, 64) into keccak256_pair");
+                            return Expr::Keccak256Pair { word0, word1 };
+                        }
+                    }
+                }
+
+                // NOTE: keccak256(0, 32) single-word fusion was tested but the function
+                // definition cost (~100 bytes) exceeds savings from 3-4 call sites (~35 each)
+                // due to i256 calling convention overhead on RISC-V.
+
                 // Keccak256 reads multiple words from memory (offset..offset+length).
                 // Conservatively clear ALL pending stores since determining the exact
                 // range of words read is complex and error-prone.
                 self.pending_stores.clear();
                 Expr::Keccak256 { offset, length }
+            }
+
+            Expr::Keccak256Pair { word0, word1 } => {
+                // Keccak256Pair/Single don't read from tracked memory; they use arguments.
+                // But they write to scratch memory internally, so clear state.
+                self.pending_stores.clear();
+                Expr::Keccak256Pair { word0, word1 }
+            }
+
+            Expr::Keccak256Single { word0 } => {
+                self.pending_stores.clear();
+                Expr::Keccak256Single { word0 }
             }
 
             // All other expressions pass through unchanged
@@ -972,6 +1045,499 @@ impl MemoryOptimizer {
 impl Default for MemoryOptimizer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Free memory pointer (FMP) propagation pass.
+///
+/// Replaces `mload(0x40)` with the known FMP value when provably unchanged.
+/// This eliminates expensive heap loads (`__revive_load_heap_word(64)` with sbrk + bswap)
+/// in favor of cheap constant materialization.
+///
+/// In Solidity-generated Yul, the runtime code starts with `mstore(0x40, 0x80)` and
+/// most switch cases never update FMP. This pass detects those cases and propagates
+/// the constant 0x80 through them.
+pub struct FmpPropagation {
+    /// Number of FMP loads eliminated.
+    pub loads_eliminated: usize,
+    /// Set of function IDs that may write to FMP (directly or transitively).
+    fmp_writers: BTreeSet<FunctionId>,
+}
+
+impl FmpPropagation {
+    /// Creates a new FMP propagation pass.
+    pub fn new(_next_value_id: u32) -> Self {
+        FmpPropagation {
+            loads_eliminated: 0,
+            fmp_writers: BTreeSet::new(),
+        }
+    }
+
+    /// Runs FMP propagation on an object.
+    pub fn propagate_object(&mut self, object: &mut Object) {
+        // Pre-analyze which functions write to FMP (directly or transitively).
+        self.fmp_writers = Self::find_fmp_writers(object);
+
+        self.propagate_block(&mut object.code);
+        for function in object.functions.values_mut() {
+            self.propagate_block(&mut function.body);
+        }
+    }
+
+    /// Finds all functions that may write to FMP, including transitive callers.
+    fn find_fmp_writers(object: &Object) -> BTreeSet<FunctionId> {
+        let mut direct_writers = BTreeSet::new();
+        let mut callers: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
+
+        for (fid, func) in &object.functions {
+            if Self::statements_write_fmp(&func.body.statements) {
+                direct_writers.insert(*fid);
+            }
+            // Build reverse call graph: for each function called by func,
+            // record that fid calls it
+            Self::collect_callees(&func.body.statements, &mut |callee| {
+                callers.entry(callee).or_default().push(*fid);
+            });
+        }
+
+        // Also check the main code block
+        Self::collect_callees(&object.code.statements, &mut |_callee| {});
+
+        // Propagate: if f writes FMP, then any function that calls f
+        // also (transitively) writes FMP
+        let mut writers = direct_writers.clone();
+        let mut worklist: Vec<FunctionId> = direct_writers.into_iter().collect();
+        while let Some(fid) = worklist.pop() {
+            if let Some(caller_list) = callers.get(&fid) {
+                for caller in caller_list {
+                    if writers.insert(*caller) {
+                        worklist.push(*caller);
+                    }
+                }
+            }
+        }
+
+        writers
+    }
+
+    /// Collects all function IDs called in a statement list.
+    fn collect_callees(stmts: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Let { value, .. } | Statement::Expr(value) => {
+                    if let Expr::Call { function, .. } = value {
+                        cb(*function);
+                    }
+                }
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    Self::collect_callees(&then_region.statements, cb);
+                    if let Some(er) = else_region {
+                        Self::collect_callees(&er.statements, cb);
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for case in cases {
+                        Self::collect_callees(&case.body.statements, cb);
+                    }
+                    if let Some(d) = default {
+                        Self::collect_callees(&d.statements, cb);
+                    }
+                }
+                Statement::For {
+                    condition_stmts,
+                    body,
+                    post,
+                    ..
+                } => {
+                    Self::collect_callees(condition_stmts, cb);
+                    Self::collect_callees(&body.statements, cb);
+                    Self::collect_callees(&post.statements, cb);
+                }
+                Statement::Block(region) => {
+                    Self::collect_callees(&region.statements, cb);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Propagates FMP through a block.
+    fn propagate_block(&mut self, block: &mut Block) {
+        let statements = std::mem::take(&mut block.statements);
+        block.statements = self.propagate_statements(statements, None);
+    }
+
+    /// Propagates FMP through a region.
+    fn propagate_region(&mut self, region: &mut Region, fmp_value: Option<BigUint>) {
+        let statements = std::mem::take(&mut region.statements);
+        region.statements = self.propagate_statements(statements, fmp_value);
+    }
+
+    /// Propagates FMP value through a statement list.
+    ///
+    /// Tracks constant values to resolve MStore/MLoad offsets, and maintains the
+    /// known FMP value across control flow when provably safe.
+    fn propagate_statements(
+        &mut self,
+        statements: Vec<Statement>,
+        initial_fmp: Option<BigUint>,
+    ) -> Vec<Statement> {
+        let mut fmp_value = initial_fmp;
+        let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+        let mut result = Vec::with_capacity(statements.len());
+
+        for stmt in statements {
+            match stmt {
+                Statement::MStore {
+                    offset,
+                    value,
+                    region,
+                } => {
+                    // Check if this is a store to offset 0x40 (FMP slot)
+                    let resolved_offset = Self::resolve_offset(&constants, &offset);
+                    let is_fmp_store =
+                        region == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40);
+
+                    if is_fmp_store {
+                        // Try to resolve the stored value to a constant
+                        let new_fmp = Self::resolve_value(&constants, &value);
+                        fmp_value = new_fmp;
+                    }
+
+                    result.push(Statement::MStore {
+                        offset,
+                        value,
+                        region,
+                    });
+                }
+
+                Statement::Let { bindings, value } => {
+                    // Check for MLoad of FMP that we can constant-fold
+                    let new_value = if let Expr::MLoad {
+                        ref offset,
+                        ref region,
+                    } = value
+                    {
+                        let resolved_offset = Self::resolve_offset(&constants, offset);
+                        let is_fmp_load = *region == MemoryRegion::FreePointerSlot
+                            || resolved_offset == Some(0x40);
+
+                        if is_fmp_load {
+                            if let Some(ref known_fmp) = fmp_value {
+                                self.loads_eliminated += 1;
+                                Some(Expr::Literal {
+                                    value: known_fmp.clone(),
+                                    ty: Type::Int(BitWidth::I256),
+                                })
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    let final_value = new_value.unwrap_or(value);
+
+                    // Track constants for offset resolution
+                    if bindings.len() == 1 {
+                        if let Some(c) = Self::eval_const(&constants, &final_value) {
+                            constants.insert(bindings[0].0, c);
+                        }
+                    }
+
+                    // Only invalidate FMP for calls to functions that write FMP
+                    if let Expr::Call { function, .. } = &final_value {
+                        if self.fmp_writers.contains(function) {
+                            fmp_value = None;
+                        }
+                    }
+
+                    result.push(Statement::Let {
+                        bindings,
+                        value: final_value,
+                    });
+                }
+
+                // Control flow: propagate FMP into branches, invalidate if any branch writes FMP
+                Statement::If {
+                    condition,
+                    inputs,
+                    mut then_region,
+                    else_region,
+                    outputs,
+                } => {
+                    // Propagate known FMP into then branch
+                    self.propagate_region(&mut then_region, fmp_value.clone());
+                    let then_writes = Self::region_writes_fmp(&then_region);
+
+                    let else_region = if let Some(mut er) = else_region {
+                        self.propagate_region(&mut er, fmp_value.clone());
+                        let else_writes = Self::region_writes_fmp(&er);
+                        if then_writes || else_writes {
+                            fmp_value = None;
+                        }
+                        Some(er)
+                    } else {
+                        if then_writes {
+                            fmp_value = None;
+                        }
+                        None
+                    };
+
+                    result.push(Statement::If {
+                        condition,
+                        inputs,
+                        then_region,
+                        else_region,
+                        outputs,
+                    });
+                }
+
+                Statement::Switch {
+                    scrutinee,
+                    inputs,
+                    mut cases,
+                    default,
+                    outputs,
+                } => {
+                    let mut any_writes = false;
+
+                    for case in &mut cases {
+                        self.propagate_region(&mut case.body, fmp_value.clone());
+                        if Self::region_writes_fmp(&case.body) {
+                            any_writes = true;
+                        }
+                    }
+
+                    let default = if let Some(mut d) = default {
+                        self.propagate_region(&mut d, fmp_value.clone());
+                        if Self::region_writes_fmp(&d) {
+                            any_writes = true;
+                        }
+                        Some(d)
+                    } else {
+                        None
+                    };
+
+                    if any_writes {
+                        fmp_value = None;
+                    }
+
+                    result.push(Statement::Switch {
+                        scrutinee,
+                        inputs,
+                        cases,
+                        default,
+                        outputs,
+                    });
+                }
+
+                Statement::For {
+                    init_values,
+                    loop_vars,
+                    mut condition_stmts,
+                    condition,
+                    mut body,
+                    post_input_vars,
+                    mut post,
+                    outputs,
+                } => {
+                    // For loops: conservatively check if the loop body writes FMP
+                    self.propagate_region(&mut body, fmp_value.clone());
+                    // Process condition_stmts as a region-like sequence
+                    condition_stmts = self.propagate_statements(condition_stmts, fmp_value.clone());
+                    self.propagate_region(&mut post, fmp_value.clone());
+
+                    if Self::statements_write_fmp(&body.statements)
+                        || Self::statements_write_fmp(&condition_stmts)
+                        || Self::statements_write_fmp(&post.statements)
+                    {
+                        fmp_value = None;
+                    }
+
+                    result.push(Statement::For {
+                        init_values,
+                        loop_vars,
+                        condition_stmts,
+                        condition,
+                        body,
+                        post_input_vars,
+                        post,
+                        outputs,
+                    });
+                }
+
+                // MCopy with dest=0x40 could modify FMP
+                Statement::MCopy { dest, src, length } => {
+                    if Self::resolve_offset(&constants, &dest) == Some(0x40) {
+                        fmp_value = None;
+                    }
+                    result.push(Statement::MCopy { dest, src, length });
+                }
+
+                // Nested block: propagate FMP into the block
+                Statement::Block(mut region) => {
+                    self.propagate_region(&mut region, fmp_value.clone());
+                    // Check if the block writes FMP
+                    if Self::region_writes_fmp(&region) {
+                        fmp_value = None;
+                    }
+                    result.push(Statement::Block(region));
+                }
+
+                // Side-effect expression: check for calls to FMP-writing functions
+                Statement::Expr(ref expr) => {
+                    if let Expr::Call { function, .. } = expr {
+                        if self.fmp_writers.contains(function) {
+                            fmp_value = None;
+                        }
+                    }
+                    result.push(stmt);
+                }
+
+                // External calls and creates can modify memory (including FMP)
+                Statement::ExternalCall { .. } | Statement::Create { .. } => {
+                    fmp_value = None;
+                    result.push(stmt);
+                }
+
+                // All other statements pass through unchanged
+                other => {
+                    result.push(other);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Checks if a region writes to offset 0x40 (the FMP slot).
+    fn region_writes_fmp(region: &Region) -> bool {
+        Self::statements_write_fmp(&region.statements)
+    }
+
+    /// Checks if any statement in a list writes to offset 0x40.
+    fn statements_write_fmp(statements: &[Statement]) -> bool {
+        for stmt in statements {
+            match stmt {
+                Statement::MStore { region, .. } if *region == MemoryRegion::FreePointerSlot => {
+                    return true;
+                }
+                Statement::MStore { .. } => {
+                    // Could be a dynamic offset store to 0x40, but we can't easily resolve
+                    // without constant tracking. The MemoryRegion annotation is reliable
+                    // since the IR translator marks FMP stores explicitly.
+                }
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    if Self::region_writes_fmp(then_region) {
+                        return true;
+                    }
+                    if let Some(er) = else_region {
+                        if Self::region_writes_fmp(er) {
+                            return true;
+                        }
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for case in cases {
+                        if Self::region_writes_fmp(&case.body) {
+                            return true;
+                        }
+                    }
+                    if let Some(d) = default {
+                        if Self::region_writes_fmp(d) {
+                            return true;
+                        }
+                    }
+                }
+                Statement::For {
+                    condition_stmts,
+                    body,
+                    post,
+                    ..
+                } => {
+                    if Self::statements_write_fmp(condition_stmts)
+                        || Self::region_writes_fmp(body)
+                        || Self::region_writes_fmp(post)
+                    {
+                        return true;
+                    }
+                }
+                Statement::MCopy { .. } => {
+                    // MCopy could theoretically write to 0x40 but this is extremely unlikely
+                    // in Solidity-generated code. Being conservative here would defeat the
+                    // optimization for all cases. Instead, we rely on the MemoryRegion
+                    // annotation for MStore.
+                }
+                Statement::Block(region) => {
+                    if Self::region_writes_fmp(region) {
+                        return true;
+                    }
+                }
+                // External calls and creates can modify memory (including FMP)
+                Statement::ExternalCall { .. } | Statement::Create { .. } => {
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Resolves a Value to a constant offset if known.
+    fn resolve_offset(constants: &BTreeMap<u32, BigUint>, value: &Value) -> Option<u64> {
+        constants.get(&value.id.0).and_then(|big| {
+            let digits = big.to_u64_digits();
+            if digits.is_empty() {
+                Some(0)
+            } else if digits.len() == 1 {
+                Some(digits[0])
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Resolves a Value to a constant BigUint if known.
+    fn resolve_value(constants: &BTreeMap<u32, BigUint>, value: &Value) -> Option<BigUint> {
+        constants.get(&value.id.0).cloned()
+    }
+
+    /// Evaluates an expression to a constant if possible.
+    fn eval_const(constants: &BTreeMap<u32, BigUint>, expr: &Expr) -> Option<BigUint> {
+        match expr {
+            Expr::Literal { value, .. } => Some(value.clone()),
+            Expr::Var(id) => constants.get(&id.0).cloned(),
+            Expr::Binary { op, lhs, rhs } => {
+                let l = constants.get(&lhs.id.0)?;
+                let r = constants.get(&rhs.id.0)?;
+                match op {
+                    BinOp::Add => Some(l + r),
+                    BinOp::Sub => {
+                        if l >= r {
+                            Some(l - r)
+                        } else {
+                            None
+                        }
+                    }
+                    BinOp::And => Some(l & r),
+                    BinOp::Or => Some(l | r),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 }
 
@@ -1111,15 +1677,15 @@ mod tests {
 
         let stats = opt.optimize_object(&mut object);
 
-        // Load-after-store elimination is disabled (type mismatch with narrow literals),
-        // so loads should NOT be eliminated
-        assert_eq!(stats.loads_eliminated, 0);
+        // Load-after-store elimination should forward the stored value.
+        // Since the stored value is I256, it should be replaced with Var.
+        assert_eq!(stats.loads_eliminated, 1);
 
-        // The mload should remain as MLoad (not replaced with Var)
+        // The mload should be replaced with Var (forwarding the stored value)
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             assert!(
-                matches!(value, Expr::MLoad { .. }),
-                "Expected MLoad, got {:?}",
+                matches!(value, Expr::Var(_)),
+                "Expected Var (forwarded value), got {:?}",
                 value
             );
         } else {
@@ -1404,10 +1970,79 @@ mod tests {
         // Should have eliminated 0 stores (the first is read, the second is live at end)
         assert_eq!(stats.stores_eliminated, 0);
 
-        // Load-after-store elimination is disabled, so no loads eliminated
-        assert_eq!(stats.loads_eliminated, 0);
+        // Load-after-store elimination should forward the stored value
+        assert_eq!(stats.loads_eliminated, 1);
 
-        // Should have all 6 statements
+        // Should have all 6 statements (load is replaced, not removed)
         assert_eq!(object.code.statements.len(), 6);
+    }
+
+    #[test]
+    fn test_fmp_propagation_basic() {
+        use crate::ir::{MemoryRegion, Object};
+        use num::BigUint;
+
+        // Build a simple IR:
+        //   let v1 = 0x80
+        //   let v2 = 0x40
+        //   mstore(v2, v1) /* free_ptr */
+        //   let v3 = mload(v2) /* free_ptr */
+        let v1 = make_value(1);
+        let v2 = make_value(2);
+        let v3_id = ValueId(3);
+
+        let stmts = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expr::Literal {
+                    value: BigUint::from(0x80u64),
+                    ty: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![ValueId(2)],
+                value: Expr::Literal {
+                    value: BigUint::from(0x40u64),
+                    ty: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::MStore {
+                offset: v2,
+                value: v1,
+                region: MemoryRegion::FreePointerSlot,
+            },
+            Statement::Let {
+                bindings: vec![v3_id],
+                value: Expr::MLoad {
+                    offset: v2,
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements: stmts },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+
+        let mut fmp = FmpPropagation::new(0);
+        fmp.propagate_object(&mut object);
+
+        assert_eq!(fmp.loads_eliminated, 1, "Should eliminate 1 FMP load");
+
+        // The 4th statement should now be a Literal(0x80) instead of MLoad
+        if let Statement::Let { value, .. } = &object.code.statements[3] {
+            match value {
+                Expr::Literal { value: v, .. } => {
+                    assert_eq!(*v, BigUint::from(0x80u64), "FMP should be 0x80");
+                }
+                other => panic!("Expected Literal, got {:?}", other),
+            }
+        } else {
+            panic!("Expected Let statement");
+        }
     }
 }

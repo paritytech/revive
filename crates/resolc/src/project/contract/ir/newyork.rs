@@ -76,6 +76,10 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // in the same contract increases code size. The native function definitions
         // (~200+ bytes) outweigh the savings from skipping byte-swap instructions (~40 bytes).
         // See to_llvm.rs can_use_native_memory() for details.
+
+        // Declare keccak256 two-words helper for deduplicating mapping hash patterns
+        revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.declare(context)?;
+
         Ok(())
     }
 
@@ -218,6 +222,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
 
             revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally

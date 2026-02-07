@@ -165,6 +165,10 @@ fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
     let mut mem_optimizer = MemoryOptimizer::new();
     mem_optimizer.optimize_object(object);
 
+    // Run FMP propagation pass (replace mload(0x40) with known constant)
+    let mut fmp_prop = mem_opt::FmpPropagation::new(0);
+    fmp_prop.propagate_object(object);
+
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {
         let sub_results = optimize_object_tree(subobject);

@@ -3206,8 +3206,34 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         if differing_positions.is_empty() {
             continue; // Exact duplicates - handled by existing dedup
         }
-        if differing_positions.len() > MAX_FUZZY_LITERAL_DIFFS {
-            continue; // Too many differences to parameterize
+
+        // Group differing positions by their value signature across all functions.
+        // Positions that have the same value in every function member share one parameter.
+        // For example, if a storage slot constant appears at positions {1,2,7,21,23} and
+        // it's the only value that differs, we need 1 parameter, not 5.
+        let mut value_sig_to_group: BTreeMap<Vec<Vec<u8>>, Vec<usize>> = BTreeMap::new();
+        for &pos in &differing_positions {
+            let sig: Vec<Vec<u8>> = group_literals
+                .iter()
+                .map(|(_, lits)| lits[pos].to_bytes_le())
+                .collect();
+            value_sig_to_group.entry(sig).or_default().push(pos);
+        }
+
+        let unique_param_count = value_sig_to_group.len();
+        if unique_param_count > MAX_FUZZY_LITERAL_DIFFS {
+            continue; // Too many unique differences to parameterize
+        }
+
+        // Build mapping: for each differing position, which unique parameter index?
+        // Sorted by first position in each group for deterministic ordering.
+        let mut param_groups: Vec<Vec<usize>> = value_sig_to_group.into_values().collect();
+        param_groups.sort_by_key(|g| g[0]);
+        let mut pos_to_param_idx: BTreeMap<usize, usize> = BTreeMap::new();
+        for (param_idx, positions) in param_groups.iter().enumerate() {
+            for &pos in positions {
+                pos_to_param_idx.insert(pos, param_idx);
+            }
         }
 
         // The canonical function is the first in the group
@@ -3229,13 +3255,19 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         // Build the parameterized canonical function:
-        // Add one i256 parameter for each differing literal position
+        // Add one i256 parameter for each unique differing value group
         let mut new_param_ids: Vec<ValueId> = Vec::new();
-        for _ in &differing_positions {
+        for _ in 0..unique_param_count {
             let vid = ValueId(next_value_id);
             next_value_id += 1;
             new_param_ids.push(vid);
         }
+
+        // Build the per-position param ID mapping for replacement
+        let position_param_ids: Vec<(usize, ValueId)> = differing_positions
+            .iter()
+            .map(|&pos| (pos, new_param_ids[pos_to_param_idx[&pos]]))
+            .collect();
 
         // Clone canonical function and add new parameters
         let mut parameterized = canonical_func.clone();
@@ -3248,8 +3280,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         replace_literals_with_params(
             &mut parameterized.body,
-            &differing_positions,
-            &new_param_ids,
+            &position_param_ids,
         );
 
         // Replace canonical function with parameterized version
@@ -3257,9 +3288,10 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         // Build call-site redirects and argument mappings
         // For the canonical function's own call sites, add its original literals as args
-        let canonical_extra_args: Vec<BigUint> = differing_positions
+        // (one arg per unique parameter, using the first position in each group)
+        let canonical_extra_args: Vec<BigUint> = param_groups
             .iter()
-            .map(|&pos| canonical_lits[pos].clone())
+            .map(|positions| canonical_lits[positions[0]].clone())
             .collect();
 
         // Update all call sites across the IR
@@ -3268,7 +3300,10 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                 canonical_extra_args.clone()
             } else {
                 let lits = &group_literals.iter().find(|(id, _)| *id == fid).unwrap().1;
-                differing_positions.iter().map(|&pos| lits[pos].clone()).collect()
+                param_groups
+                    .iter()
+                    .map(|positions| lits[positions[0]].clone())
+                    .collect()
             };
 
             // Update all call sites for this function ID to call canonical_id
@@ -3587,38 +3622,41 @@ fn collect_literals_in_region(region: &Region, lits: &mut Vec<BigUint>) {
 }
 
 /// Replaces literal values at differing positions with Var references to new parameters.
+///
+/// `position_param_ids` maps each differing position to its corresponding parameter ValueId.
+/// Multiple positions can map to the same parameter (when they share the same value pattern).
 fn replace_literals_with_params(
     block: &mut Block,
-    differing_positions: &[usize],
-    new_param_ids: &[ValueId],
+    position_param_ids: &[(usize, ValueId)],
 ) {
     let mut lit_counter = 0usize;
-    let position_set: BTreeMap<usize, usize> = differing_positions
+    let position_set: BTreeMap<usize, ValueId> = position_param_ids
         .iter()
-        .enumerate()
-        .map(|(i, &pos)| (pos, i))
+        .map(|&(pos, vid)| (pos, vid))
         .collect();
 
     for stmt in &mut block.statements {
-        replace_literals_in_stmt(stmt, &position_set, new_param_ids, &mut lit_counter);
+        replace_literals_in_stmt(stmt, &position_set, &mut lit_counter);
     }
 }
 
 fn replace_literals_in_expr(
     expr: &mut Expr,
-    positions: &BTreeMap<usize, usize>,
-    params: &[ValueId],
+    positions: &BTreeMap<usize, ValueId>,
     counter: &mut usize,
 ) {
     match expr {
         Expr::Literal { .. } => {
-            if let Some(&param_idx) = positions.get(counter) {
-                *expr = Expr::Var(params[param_idx]);
+            if let Some(&param_vid) = positions.get(counter) {
+                *expr = Expr::Var(param_vid);
             }
             *counter += 1;
         }
-        Expr::SLoad { static_slot: Some(_), .. } => {
-            // static_slot also counts as a literal position
+        Expr::SLoad { static_slot: slot @ Some(_), .. } => {
+            // static_slot counts as a literal position; clear it if parameterized
+            if positions.contains_key(counter) {
+                *slot = None;
+            }
             *counter += 1;
         }
         _ => {}
@@ -3627,45 +3665,48 @@ fn replace_literals_in_expr(
 
 fn replace_literals_in_stmt(
     stmt: &mut Statement,
-    positions: &BTreeMap<usize, usize>,
-    params: &[ValueId],
+    positions: &BTreeMap<usize, ValueId>,
     counter: &mut usize,
 ) {
     match stmt {
         Statement::Let { value, .. } => {
-            replace_literals_in_expr(value, positions, params, counter);
+            replace_literals_in_expr(value, positions, counter);
         }
-        Statement::SStore { static_slot: Some(_), .. } => {
+        Statement::SStore { static_slot: slot @ Some(_), .. } => {
+            // static_slot counts as a literal position; clear it if parameterized
+            if positions.contains_key(counter) {
+                *slot = None;
+            }
             *counter += 1;
         }
         Statement::If { then_region, else_region, .. } => {
-            replace_literals_in_region(then_region, positions, params, counter);
+            replace_literals_in_region(then_region, positions, counter);
             if let Some(r) = else_region {
-                replace_literals_in_region(r, positions, params, counter);
+                replace_literals_in_region(r, positions, counter);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for c in cases {
                 *counter += 1; // case value
-                replace_literals_in_region(&mut c.body, positions, params, counter);
+                replace_literals_in_region(&mut c.body, positions, counter);
             }
             if let Some(d) = default {
-                replace_literals_in_region(d, positions, params, counter);
+                replace_literals_in_region(d, positions, counter);
             }
         }
         Statement::For { condition_stmts, condition, body, post, .. } => {
             for s in condition_stmts {
-                replace_literals_in_stmt(s, positions, params, counter);
+                replace_literals_in_stmt(s, positions, counter);
             }
-            replace_literals_in_expr(condition, positions, params, counter);
-            replace_literals_in_region(body, positions, params, counter);
-            replace_literals_in_region(post, positions, params, counter);
+            replace_literals_in_expr(condition, positions, counter);
+            replace_literals_in_region(body, positions, counter);
+            replace_literals_in_region(post, positions, counter);
         }
         Statement::Block(region) => {
-            replace_literals_in_region(region, positions, params, counter);
+            replace_literals_in_region(region, positions, counter);
         }
         Statement::Expr(expr) => {
-            replace_literals_in_expr(expr, positions, params, counter);
+            replace_literals_in_expr(expr, positions, counter);
         }
         _ => {}
     }
@@ -3673,12 +3714,11 @@ fn replace_literals_in_stmt(
 
 fn replace_literals_in_region(
     region: &mut Region,
-    positions: &BTreeMap<usize, usize>,
-    params: &[ValueId],
+    positions: &BTreeMap<usize, ValueId>,
     counter: &mut usize,
 ) {
     for stmt in &mut region.statements {
-        replace_literals_in_stmt(stmt, positions, params, counter);
+        replace_literals_in_stmt(stmt, positions, counter);
     }
 }
 

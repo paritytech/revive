@@ -15,7 +15,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::{BinOp, BitWidth, Block, Expr, Function, Object, Region, Statement, Type, ValueId};
+use crate::ir::{
+    BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement, Type, ValueId,
+};
 
 /// Type constraint representing the width bounds for a value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1008,9 +1010,18 @@ impl TypeInference {
                 BitWidth::I256
             }
 
-            Expr::MLoad { offset, .. } => {
+            Expr::MLoad { offset, region } => {
                 self.widen(offset.id, BitWidth::I64);
-                BitWidth::I256
+                // The free memory pointer (mload(64)) is bounded by the heap size.
+                // On PolkaVM with a 128KB heap, the FMP value fits in I32 (actually I17).
+                // Returning I32 here enables interprocedural narrowing: functions that
+                // receive FMP-derived values get narrower parameters, eliminating
+                // overflow checks in callees like abi_encode_string_memory_ptr_runtime.
+                if *region == MemoryRegion::FreePointerSlot {
+                    BitWidth::I32
+                } else {
+                    BitWidth::I256
+                }
             }
             Expr::SLoad { key, .. } => {
                 self.widen(key.id, BitWidth::I256);

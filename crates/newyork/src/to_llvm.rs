@@ -650,14 +650,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let revert_block = context.append_basic_block(&block_name);
         context.set_basic_block(revert_block);
 
-        // Emit the revert(0, K) exit sequence
-        let zero = context.word_const(0);
-        let length = context.word_const(const_length);
-        revive_llvm_context::polkavm_evm_return::revert(context, zero, length)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        // Call the outlined __revive_revert functions.
+        // For length 0: use zero-arg __revive_revert_0() (no argument overhead).
+        // For length > 0: use __revive_revert(xlen_length) with pre-truncated xlen arg.
+        if const_length == 0 {
+            revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        } else {
+            let length_xlen = context.xlen_type().const_int(const_length, false);
+            revive_llvm_context::polkavm_evm_return::revert_outlined(context, length_xlen)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        }
 
-        // Ensure the block has a terminator. The seal_return call is noreturn
-        // but LLVM needs an explicit unreachable terminator in the basic block.
+        // __revive_revert is noreturn; add explicit unreachable for LLVM.
         context.build_unreachable();
 
         // Restore insertion point

@@ -312,3 +312,112 @@ impl WriteLLVM for Caller {
         <Self as RuntimeFunction>::emit(&self, context)
     }
 }
+
+/// Outlined `revert(0, 0)` function (empty revert / panic).
+///
+/// This is the most common revert pattern in Solidity contracts (20+ sites in ERC20).
+/// Each inlined site generates sbrk(0, 0) + ptrtoint + seal_return (~8 PVM instructions).
+/// By outlining into a zero-argument noreturn function, each call site becomes a single
+/// `call @__revive_revert_0` (~2 PVM instructions).
+pub struct RevertEmpty;
+
+impl RuntimeFunction for RevertEmpty {
+    const NAME: &'static str = "__revive_revert_0";
+
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoReturn,
+        Attribute::NoFree,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.void_type().fn_type(&[], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let zero = context.xlen_type().const_zero();
+        let heap_pointer = context.build_heap_gep(zero, zero)?;
+        let offset_pointer = context.builder().build_ptr_to_int(
+            heap_pointer.value,
+            context.xlen_type(),
+            "return_data_ptr_to_int",
+        )?;
+        let flags = context.integer_const(crate::polkavm::XLEN, 1);
+
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::RETURN,
+            &[flags.into(), offset_pointer.into(), zero.into()],
+        );
+        context.build_unreachable();
+
+        Ok(None)
+    }
+}
+
+impl WriteLLVM for RevertEmpty {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Outlined `revert(0, length)` function for non-zero constant lengths.
+///
+/// After error data has been stored to heap memory at offset 0, this function
+/// calls seal_return(1, heap_base, length). Used for revert(0, 4), revert(0, 36),
+/// revert(0, 68), revert(0, 100) patterns. ERC20 has 34+ such sites.
+pub struct Revert;
+
+impl RuntimeFunction for Revert {
+    const NAME: &'static str = "__revive_revert";
+
+    const ATTRIBUTES: &'static [Attribute] = &[
+        Attribute::NoReturn,
+        Attribute::NoFree,
+    ];
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context
+            .void_type()
+            .fn_type(&[context.xlen_type().into()], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let length = Self::paramater(context, 0).into_int_value();
+
+        let zero = context.xlen_type().const_zero();
+        let heap_pointer = context.build_heap_gep(zero, length)?;
+        let offset_pointer = context.builder().build_ptr_to_int(
+            heap_pointer.value,
+            context.xlen_type(),
+            "return_data_ptr_to_int",
+        )?;
+        let flags = context.integer_const(crate::polkavm::XLEN, 1);
+
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::RETURN,
+            &[flags.into(), offset_pointer.into(), length.into()],
+        );
+        context.build_unreachable();
+
+        Ok(None)
+    }
+}
+
+impl WriteLLVM for Revert {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}

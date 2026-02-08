@@ -86,6 +86,10 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // Declare outlined caller function for deduplicating msg.sender checks
         revive_llvm_context::PolkaVMCallerFunction.declare(context)?;
 
+        // Declare outlined revert functions for deduplicating revert(0, K) patterns
+        revive_llvm_context::PolkaVMRevertEmptyFunction.declare(context)?;
+        revive_llvm_context::PolkaVMRevertFunction.declare(context)?;
+
         Ok(())
     }
 
@@ -241,6 +245,8 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMCallValueNonzeroFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally

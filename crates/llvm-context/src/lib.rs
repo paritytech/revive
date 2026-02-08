@@ -32,6 +32,8 @@ pub use self::polkavm::context::function::runtime::revive::CallValue as PolkaVMC
 pub use self::polkavm::context::function::runtime::revive::CallValueNonzero as PolkaVMCallValueNonzeroFunction;
 pub use self::polkavm::context::function::runtime::revive::Caller as PolkaVMCallerFunction;
 pub use self::polkavm::context::function::runtime::revive::Exit as PolkaVMExitFunction;
+pub use self::polkavm::context::function::runtime::revive::Revert as PolkaVMRevertFunction;
+pub use self::polkavm::context::function::runtime::revive::RevertEmpty as PolkaVMRevertEmptyFunction;
 pub use self::polkavm::context::function::runtime::revive::WordToPointer as PolkaVMWordToPointerFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::sbrk::Sbrk as PolkaVMSbrkFunction;

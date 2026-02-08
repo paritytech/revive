@@ -77,6 +77,9 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // Declare outlined callvalue function for deduplicating non-payable checks
         revive_llvm_context::PolkaVMCallValueFunction.declare(context)?;
 
+        // Declare outlined callvalue nonzero check for boolean-only callvalue usage
+        revive_llvm_context::PolkaVMCallValueNonzeroFunction.declare(context)?;
+
         // Declare outlined calldataload function for deduplicating ABI decoding
         revive_llvm_context::PolkaVMCallDataLoadFunction.declare(context)?;
 
@@ -235,6 +238,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallValueFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMCallValueNonzeroFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
 

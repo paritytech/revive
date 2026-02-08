@@ -50,6 +50,26 @@ pub fn value_outlined<'ctx>(
     Ok(result)
 }
 
+/// Calls the outlined `__revive_callvalue_nonzero() -> i1` runtime function.
+///
+/// Returns true (i1) if callvalue is nonzero. This is more efficient than
+/// `value_outlined()` followed by `icmp ne i256 %cv, 0` because the
+/// 256-bit comparison is done once inside the outlined function body,
+/// and each call site only receives a single boolean flag.
+pub fn value_nonzero_outlined<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    use crate::polkavm::context::function::runtime::revive::CallValueNonzero;
+    use crate::polkavm::context::runtime::RuntimeFunction;
+    let function = context
+        .get_function(CallValueNonzero::NAME, false)
+        .expect("__revive_callvalue_nonzero should be declared");
+    let result = context
+        .build_call(function.borrow().declaration(), &[], "callvalue_nonzero")
+        .expect("__revive_callvalue_nonzero should return a value");
+    Ok(result)
+}
+
 /// Translates the `balance` instructions.
 pub fn balance<'ctx>(
     context: &mut Context<'ctx>,

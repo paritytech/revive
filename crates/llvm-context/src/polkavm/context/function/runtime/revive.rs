@@ -176,6 +176,58 @@ impl WriteLLVM for CallValue {
     }
 }
 
+/// Outlined `callvalue() != 0` function that returns a boolean flag.
+///
+/// In ERC20 and similar contracts, callvalue is ONLY used for non-payable
+/// checks: `if (callvalue()) { revert(0, 0) }`. Each such check compares
+/// a 256-bit value against zero, generating 4 limb comparisons in PVM.
+/// By outlining the check into a function returning `i1`, each call site
+/// saves ~15 bytes (4 comparisons + OR vs. a single branch on i1).
+/// OpenZeppelin ERC20 has ~20 such checks, saving ~300 bytes.
+pub struct CallValueNonzero;
+
+impl RuntimeFunction for CallValueNonzero {
+    const NAME: &'static str = "__revive_callvalue_nonzero";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.llvm().bool_type().fn_type(&[], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let output_pointer =
+            context.build_alloca_at_entry(context.value_type(), "value_transferred");
+        context.build_store(output_pointer, context.word_const(0))?;
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::VALUE_TRANSFERRED,
+            &[output_pointer.to_int(context).into()],
+        );
+        let value = context
+            .build_load(output_pointer, "value_transferred")?
+            .into_int_value();
+        let zero = context.word_type().const_zero();
+        let is_nonzero = context.builder().build_int_compare(
+            inkwell::IntPredicate::NE,
+            value,
+            zero,
+            "callvalue_nonzero",
+        )?;
+        Ok(Some(is_nonzero.into()))
+    }
+}
+
+impl WriteLLVM for CallValueNonzero {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
 /// Outlined `calldataload(offset)` function that reads 32 bytes from call data.
 ///
 /// The `call_data_load` runtime API writes a 256-bit value to a buffer.

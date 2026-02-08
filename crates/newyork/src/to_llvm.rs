@@ -126,6 +126,10 @@ pub struct LlvmCodegen<'ctx> {
     /// Whether to use the outlined `__revive_caller()` runtime function.
     /// True when the contract has enough caller sites for outlining to pay off.
     use_outlined_caller: bool,
+    /// Set of ValueIds that are bound to `Expr::CallValue`.
+    /// When these are used as If conditions, we emit `__revive_callvalue_nonzero()`
+    /// returning i1 instead of the full i256 value + comparison.
+    callvalue_value_ids: BTreeSet<u32>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -151,6 +155,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_callvalue: false,
             use_outlined_calldataload: false,
             use_outlined_caller: false,
+            callvalue_value_ids: BTreeSet::new(),
         }
     }
 
@@ -178,6 +183,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_callvalue: false,
             use_outlined_calldataload: false,
             use_outlined_caller: false,
+            callvalue_value_ids: BTreeSet::new(),
         }
     }
 
@@ -995,6 +1001,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Save the current values map and start fresh for this function
         // Each function has its own SSA namespace
         let saved_values = std::mem::take(&mut self.values);
+        let saved_callvalue_ids = std::mem::take(&mut self.callvalue_value_ids);
 
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
@@ -1114,6 +1121,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         // Restore the saved values map, shared blocks, and caches from before this function
         self.values = saved_values;
+        self.callvalue_value_ids = saved_callvalue_ids;
         self.revert_blocks = saved_revert_blocks;
         self.return_blocks = saved_return_blocks;
         self.panic_blocks = saved_panic_blocks;
@@ -1197,6 +1205,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<()> {
         match stmt {
             Statement::Let { bindings, value } => {
+                // Track ValueIds bound to CallValue for boolean optimization
+                if bindings.len() == 1 && matches!(value, Expr::CallValue) {
+                    self.callvalue_value_ids.insert(bindings[0].0);
+                }
                 let llvm_value = self.generate_expr(value, context)?;
                 if bindings.len() == 1 {
                     let binding_id = bindings[0];
@@ -1359,14 +1371,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 else_region,
                 outputs,
             } => {
-                let cond_val = self.translate_value(condition)?.into_int_value();
-                // Compare at native width - no need to extend to word type
-                // since comparing != 0 works correctly at any integer width
-                let cond_zero = cond_val.get_type().const_zero();
-                let cond_bool = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::NE, cond_val, cond_zero, "cond_bool")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                // Optimization: if the condition is a callvalue-bound value and we have
+                // the outlined callvalue, use __revive_callvalue_nonzero() which returns
+                // i1 directly. This avoids a 256-bit comparison at every call site.
+                // In OZ ERC20, this saves ~20 sites × ~15 bytes = ~300 bytes.
+                let cond_bool = if self.use_outlined_callvalue
+                    && self.callvalue_value_ids.contains(&condition.id.0)
+                {
+                    revive_llvm_context::polkavm_evm_ether_gas::value_nonzero_outlined(context)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .into_int_value()
+                } else {
+                    let cond_val = self.translate_value(condition)?.into_int_value();
+                    // Compare at native width - no need to extend to word type
+                    // since comparing != 0 works correctly at any integer width
+                    let cond_zero = cond_val.get_type().const_zero();
+                    context
+                        .builder()
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            cond_val,
+                            cond_zero,
+                            "cond_bool",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                };
 
                 let then_block = context.append_basic_block("if_then");
                 let join_block = context.append_basic_block("if_join");

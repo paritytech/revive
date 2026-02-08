@@ -28,22 +28,30 @@ pub fn sha3<'ctx>(
 /// Translates keccak256 of one 256-bit word via a deduplicated helper function.
 /// Equivalent to: mstore(0, word0); sha3(0, 32)
 /// but emitted as a single function call to reduce code size.
+///
+/// Falls back to inline code if the helper function is not declared
+/// (e.g. when there are too few call sites to justify the function body cost).
 pub fn sha3_one_word<'ctx>(
     context: &mut Context<'ctx>,
     word0: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     use crate::polkavm::context::pointer::heap::Keccak256OneWord;
-    let function = context
-        .get_function(Keccak256OneWord::NAME, false)
-        .expect("__revive_keccak256_one_word should be declared");
-    let result = context
-        .build_call(
-            function.borrow().declaration(),
-            &[word0.into()],
-            "keccak256_single_result",
-        )
-        .expect("should always return a value");
-    Ok(result)
+    if let Some(function) = context.get_function(Keccak256OneWord::NAME, false) {
+        let result = context
+            .build_call(
+                function.borrow().declaration(),
+                &[word0.into()],
+                "keccak256_single_result",
+            )
+            .expect("should always return a value");
+        Ok(result)
+    } else {
+        // Inline fallback: mstore(0, word0); sha3(0, 32)
+        let offset = context.word_const(0);
+        let length = context.word_const(32);
+        crate::polkavm::evm::memory::store(context, offset, word0)?;
+        sha3(context, offset, length)
+    }
 }
 
 /// Translates keccak256 of two 256-bit words via a deduplicated helper function.

@@ -695,6 +695,21 @@ impl Object {
         }
         count
     }
+
+    /// Counts the total number of `Keccak256Single` expression nodes in this object
+    /// (including functions and subobjects).
+    /// Used to conditionally emit the `__revive_keccak256_one_word` helper function
+    /// only when enough call sites exist to justify the function body cost.
+    pub fn count_keccak256_single(&self) -> usize {
+        let mut count = count_keccak_single_in_block(&self.code);
+        for function in self.functions.values() {
+            count += count_keccak_single_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            count += subobject.count_keccak256_single();
+        }
+        count
+    }
 }
 
 /// Counts the occurrences of callvalue and calldataload expressions.
@@ -709,6 +724,9 @@ pub struct SyscallCounts {
     pub calldataload: usize,
     /// Number of `caller()` expression sites.
     pub caller: usize,
+    /// Number of heap memory operations (MStore, MLoad, MStore8, MCopy, etc.)
+    /// that translate to sbrk calls at the LLVM level.
+    pub heap_operations: usize,
 }
 
 impl std::ops::AddAssign for SyscallCounts {
@@ -716,6 +734,7 @@ impl std::ops::AddAssign for SyscallCounts {
         self.callvalue += rhs.callvalue;
         self.calldataload += rhs.calldataload;
         self.caller += rhs.caller;
+        self.heap_operations += rhs.heap_operations;
     }
 }
 
@@ -745,6 +764,30 @@ fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
 fn count_syscalls_in_statement(stmt: &Statement) -> SyscallCounts {
     match stmt {
         Statement::Let { value, .. } => count_syscalls_in_expr(value),
+        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
+            SyscallCounts {
+                heap_operations: 1,
+                ..Default::default()
+            }
+        }
+        Statement::Revert { .. }
+        | Statement::Return { .. }
+        | Statement::CodeCopy { .. }
+        | Statement::ExtCodeCopy { .. }
+        | Statement::ReturnDataCopy { .. }
+        | Statement::DataCopy { .. }
+        | Statement::CallDataCopy { .. } => SyscallCounts {
+            heap_operations: 1,
+            ..Default::default()
+        },
+        Statement::ExternalCall { .. } | Statement::Create { .. } => SyscallCounts {
+            heap_operations: 2,
+            ..Default::default()
+        },
+        Statement::Log { topics, .. } => SyscallCounts {
+            heap_operations: 1 + topics.len(),
+            ..Default::default()
+        },
         Statement::If {
             then_region,
             else_region,
@@ -797,6 +840,10 @@ fn count_syscalls_in_expr(expr: &Expr) -> SyscallCounts {
         },
         Expr::Caller => SyscallCounts {
             caller: 1,
+            ..Default::default()
+        },
+        Expr::MLoad { .. } | Expr::Keccak256 { .. } => SyscallCounts {
+            heap_operations: 1,
             ..Default::default()
         },
         _ => SyscallCounts::default(),
@@ -942,4 +989,67 @@ fn count_exit_ops_in_region(region: &Region) -> usize {
         count += count_exit_ops_in_statement(stmt);
     }
     count
+}
+
+/// Counts `Keccak256Single` expression nodes in a block.
+fn count_keccak_single_in_block(block: &Block) -> usize {
+    block
+        .statements
+        .iter()
+        .map(count_keccak_single_in_statement)
+        .sum()
+}
+
+/// Counts `Keccak256Single` expression nodes in a statement (recursively).
+fn count_keccak_single_in_statement(stmt: &Statement) -> usize {
+    match stmt {
+        Statement::Let { value, .. } | Statement::Expr(value) => {
+            if matches!(value, Expr::Keccak256Single { .. }) {
+                1
+            } else {
+                0
+            }
+        }
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            count_keccak_single_in_region(then_region)
+                + else_region
+                    .as_ref()
+                    .map_or(0, count_keccak_single_in_region)
+        }
+        Statement::Switch { cases, default, .. } => {
+            cases
+                .iter()
+                .map(|c| count_keccak_single_in_region(&c.body))
+                .sum::<usize>()
+                + default.as_ref().map_or(0, count_keccak_single_in_region)
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            condition_stmts
+                .iter()
+                .map(count_keccak_single_in_statement)
+                .sum::<usize>()
+                + count_keccak_single_in_region(body)
+                + count_keccak_single_in_region(post)
+        }
+        Statement::Block(region) => count_keccak_single_in_region(region),
+        _ => 0,
+    }
+}
+
+/// Counts `Keccak256Single` expression nodes in a region.
+fn count_keccak_single_in_region(region: &Region) -> usize {
+    region
+        .statements
+        .iter()
+        .map(count_keccak_single_in_statement)
+        .sum()
 }

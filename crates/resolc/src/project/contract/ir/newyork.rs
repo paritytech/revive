@@ -71,8 +71,10 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // is available for the newyork IR codegen.
         self.yul_object.declare(context)?;
 
-        // Declare keccak256 two-words helper for deduplicating mapping hash patterns
+        // Declare keccak256 helpers for deduplicating hash patterns
         revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.declare(context)?;
+        // Note: Keccak256OneWord is declared conditionally in into_llvm()
+        // based on whether the contract has any Keccak256Single IR nodes.
 
         // Declare outlined callvalue function for deduplicating non-payable checks
         revive_llvm_context::PolkaVMCallValueFunction.declare(context)?;
@@ -117,30 +119,16 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 .map(|(fid, decision)| (fid.0, decision))
                 .collect();
 
-        // Count heap operations to decide whether __sbrk_internal should be outlined.
-        // For large contracts with many heap operations (MLoad/MStore/MCopy), outlining
-        // sbrk saves significant code because the sbrk body (~7 basic blocks) is deduplicated.
-        // For small contracts, the function call overhead outweighs the savings.
+        // Count heap operations for conditional sbrk outlining (applied after sbrk is emitted).
         let heap_op_count = ir_object.count_heap_operations();
-        const SBRK_NOINLINE_THRESHOLD: usize = 20;
-        if heap_op_count > SBRK_NOINLINE_THRESHOLD {
-            if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
-                revive_llvm_context::PolkaVMFunction::set_attributes(
-                    context.llvm(),
-                    sbrk_func.borrow().declaration(),
-                    &[revive_llvm_context::PolkaVMAttribute::NoInline],
-                    true,
-                );
-            }
-        }
 
-        // NOTE: __revive_store_heap_word / __revive_load_heap_word NoInline was tested but
-        // had ZERO effect on OZ contracts. LLVM's -Oz already keeps these as function calls.
-
-        // NOTE: __revive_exit NoInline was tested but REGRESSED all OZ contracts by 2-4%.
-        // When exit is not inlined, LLVM can't propagate range proofs (FMP, etc.) into the
-        // exit function, forcing it to keep all overflow checks in safe_truncate_int_to_xlen.
-        // The exit function is best left as AlwaysInline.
+        // Count single-word keccak256 patterns in the IR.
+        // The outlined helper function body costs ~150 bytes, so it only pays off
+        // when enough call sites exist (each saving ~20 bytes from deduplication).
+        // With fewer than 8 sites, the function body cost exceeds the savings.
+        let keccak_single_count = ir_object.count_keccak256_single();
+        const KECCAK_SINGLE_THRESHOLD: usize = 8;
+        let has_keccak_single = keccak_single_count >= KECCAK_SINGLE_THRESHOLD;
 
         // Check if we can use native-only heap mode (no byte-swapping needed)
         let use_native_heap = heap_opt.all_native();
@@ -241,12 +229,33 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
             revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
+            if has_keccak_single {
+                revive_llvm_context::PolkaVMKeccak256OneWordFunction.declare(context)?;
+                revive_llvm_context::PolkaVMKeccak256OneWordFunction.into_llvm(context)?;
+            }
             revive_llvm_context::PolkaVMCallValueFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallValueNonzeroFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
+
+            // Mark __sbrk_internal as NoInline for contracts with many heap operations.
+            // sbrk has 5 basic blocks with bounds checking; when inlined at many sites,
+            // the duplicated code exceeds the function call overhead on PolkaVM.
+            // This must be done AFTER sbrk is emitted above, as the function doesn't
+            // exist in the LLVM module before that point.
+            const SBRK_NOINLINE_THRESHOLD: usize = 30;
+            if heap_op_count > SBRK_NOINLINE_THRESHOLD {
+                if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
+                    revive_llvm_context::PolkaVMFunction::set_attributes(
+                        context.llvm(),
+                        sbrk_func.borrow().declaration(),
+                        &[revive_llvm_context::PolkaVMAttribute::NoInline],
+                        true,
+                    );
+                }
+            }
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally

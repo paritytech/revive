@@ -70,6 +70,8 @@ pub struct MemOptResults {
     pub values_tracked: usize,
     /// Number of keccak256 calls fused into keccak256_pair.
     pub keccak_pairs_fused: usize,
+    /// Number of keccak256 calls fused into keccak256_single.
+    pub keccak_singles_fused: usize,
 }
 
 /// Memory optimization pass.
@@ -893,9 +895,27 @@ impl MemoryOptimizer {
                     }
                 }
 
-                // NOTE: keccak256(0, 32) single-word fusion was tested but the function
-                // definition cost (~100 bytes) exceeds savings from 3-4 call sites (~35 each)
-                // due to i256 calling convention overhead on RISC-V.
+                // Try to fuse mstore(0, w0) + keccak256(0, 32)
+                // into keccak256_single(w0) to deduplicate the hash boilerplate.
+                // This pays off on OpenZeppelin contracts where 15-20 single-word
+                // keccak sites exist (storage slot hashing for ERC20Votes, etc.).
+                if static_offset == Some(0) && static_length == Some(32) {
+                    if let Some(tracked0) = self.memory_state.get(&0) {
+                        if tracked0.offset == 0 {
+                            let word0 = tracked0.stored_value;
+                            // Mark the scratch store as dead since keccak256_single
+                            // handles the store internally.
+                            if let Some(&idx0) = self.pending_stores.get(&0) {
+                                self.dead_store_indices.insert(idx0);
+                                self.stats.stores_eliminated += 1;
+                            }
+                            self.stats.keccak_singles_fused += 1;
+                            self.pending_stores.clear();
+                            log::trace!("Fused keccak256(0, 32) into keccak256_single");
+                            return Expr::Keccak256Single { word0 };
+                        }
+                    }
+                }
 
                 // Keccak256 reads multiple words from memory (offset..offset+length).
                 // Conservatively clear ALL pending stores since determining the exact

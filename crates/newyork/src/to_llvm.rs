@@ -2109,7 +2109,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Stop => {
-                revive_llvm_context::polkavm_evm_return::stop(context)?;
+                // Stop is equivalent to return(0, 0) - use the shared return block
+                let return_block =
+                    self.get_or_create_return_block(context, 0, 0)?;
+                context.build_unconditional_branch(return_block);
+                let dead_block = context.append_basic_block("stop_dedup_dead");
+                context.set_basic_block(dead_block);
             }
 
             Statement::Invalid => {

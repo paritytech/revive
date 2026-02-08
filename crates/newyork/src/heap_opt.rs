@@ -83,6 +83,14 @@ pub struct HeapAnalysis {
     tainted_regions: BTreeSet<u64>,
     /// Memory regions that escape to external code.
     escaping_regions: BTreeSet<u64>,
+    /// Whether any memory escaping statement (return, revert, external call, log, create)
+    /// has a dynamic (non-static) offset. When true, we cannot determine which regions
+    /// escape and must conservatively disable native-only mode.
+    has_dynamic_escapes: bool,
+    /// Whether any memory access (mstore, mstore8, mcopy, mload) has a dynamic
+    /// (non-static) offset that we cannot track. When true, some accesses are invisible
+    /// to the analysis.
+    has_dynamic_accesses: bool,
 }
 
 /// Information about a value used as a memory offset.
@@ -111,6 +119,8 @@ impl HeapAnalysis {
             offset_values: BTreeMap::new(),
             tainted_regions: BTreeSet::new(),
             escaping_regions: BTreeSet::new(),
+            has_dynamic_escapes: false,
+            has_dynamic_accesses: false,
         }
     }
 
@@ -157,12 +167,16 @@ impl HeapAnalysis {
                         self.offset_values.insert(binding.0, offset_info.clone());
                     }
                 }
+                // Also check for memory side effects in the expression
+                self.analyze_expr_side_effects(value);
             }
 
             Statement::MStore { offset, region, .. } => {
                 let pattern = self.classify_access(offset);
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
+                } else {
+                    self.has_dynamic_accesses = true;
                 }
                 // If region is known scratch or free pointer, it's more likely aligned
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
@@ -181,6 +195,8 @@ impl HeapAnalysis {
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
                     self.tainted_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_accesses = true;
                 }
             }
 
@@ -188,6 +204,12 @@ impl HeapAnalysis {
                 // Memory copies can create complex access patterns
                 let dest_pattern = self.classify_access(dest);
                 let src_pattern = self.classify_access(src);
+
+                if self.extract_static_offset(dest).is_none()
+                    || self.extract_static_offset(src).is_none()
+                {
+                    self.has_dynamic_accesses = true;
+                }
 
                 // If source is tainted, destination becomes tainted
                 if let Some(src_addr) = self.extract_static_offset(src) {
@@ -219,11 +241,15 @@ impl HeapAnalysis {
                 // Mark input region as escaping
                 if let Some(addr) = self.extract_static_offset(args_offset) {
                     self.escaping_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_escapes = true;
                 }
                 // Mark return region as escaping (will be written by external code)
                 if let Some(addr) = self.extract_static_offset(ret_offset) {
                     self.escaping_regions.insert(addr / 32 * 32);
                     self.tainted_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_escapes = true;
                 }
                 let _ = (args_length, ret_length);
             }
@@ -232,6 +258,8 @@ impl HeapAnalysis {
                 // Return/revert data escapes to the caller
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.escaping_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_escapes = true;
                 }
             }
 
@@ -239,6 +267,8 @@ impl HeapAnalysis {
                 // Log data escapes
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.escaping_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_escapes = true;
                 }
             }
 
@@ -246,6 +276,8 @@ impl HeapAnalysis {
                 // Create data escapes
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.escaping_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_escapes = true;
                 }
             }
 
@@ -293,6 +325,8 @@ impl HeapAnalysis {
                 // External data copies write big-endian data
                 if let Some(addr) = self.extract_static_offset(dest) {
                     self.tainted_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_accesses = true;
                 }
             }
 
@@ -454,14 +488,20 @@ impl HeapAnalysis {
     }
 
     /// Analyzes expression side effects on memory.
-    fn analyze_expr_side_effects(&self, expr: &Expr) {
+    fn analyze_expr_side_effects(&mut self, expr: &Expr) {
         // MLoad doesn't have side effects but we track what regions are read
         match expr {
             Expr::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
+                if self.extract_static_offset(offset).is_none() {
+                    self.has_dynamic_accesses = true;
+                }
             }
             Expr::Keccak256 { offset, .. } => {
                 let _ = self.classify_access(offset);
+                if self.extract_static_offset(offset).is_none() {
+                    self.has_dynamic_accesses = true;
+                }
             }
             Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => {
                 // Keccak256Pair/Single use scratch memory internally; nothing to classify
@@ -498,6 +538,16 @@ impl HeapAnalysis {
     /// Returns the set of escaping memory regions.
     pub fn escaping_regions(&self) -> &BTreeSet<u64> {
         &self.escaping_regions
+    }
+
+    /// Returns whether any escaping statement has a dynamic (non-static) offset.
+    pub fn has_dynamic_escapes(&self) -> bool {
+        self.has_dynamic_escapes
+    }
+
+    /// Returns whether any memory access has a dynamic (non-static) offset.
+    pub fn has_dynamic_accesses(&self) -> bool {
+        self.has_dynamic_accesses
     }
 
     /// Returns statistics about the analysis.
@@ -567,6 +617,10 @@ pub struct HeapOptResults {
     pub tainted_count: usize,
     /// Number of escaping regions (external interfaces).
     pub escaping_count: usize,
+    /// Whether any escaping statement has a dynamic offset we cannot track.
+    pub has_dynamic_escapes: bool,
+    /// Whether any memory access has a dynamic offset we cannot track.
+    pub has_dynamic_accesses: bool,
 }
 
 impl HeapOptResults {
@@ -596,6 +650,8 @@ impl HeapOptResults {
             unknown_accesses,
             tainted_count: analysis.tainted_regions().len(),
             escaping_count: analysis.escaping_regions().len(),
+            has_dynamic_escapes: analysis.has_dynamic_escapes(),
+            has_dynamic_accesses: analysis.has_dynamic_accesses(),
         }
     }
 
@@ -633,10 +689,14 @@ impl HeapOptResults {
         // 2. No unknown/dynamic accesses
         // 3. No tainted regions (unaligned writes)
         // 4. No escaping regions (external interfaces)
+        // 5. No dynamic escapes (return/revert/call/log/create with unresolved offsets)
+        // 6. No dynamic memory accesses (mstore/mload with unresolved offsets)
         self.total_accesses > 0
             && self.unknown_accesses == 0
             && self.tainted_count == 0
             && self.escaping_count == 0
+            && !self.has_dynamic_escapes
+            && !self.has_dynamic_accesses
     }
 
     /// Checks if ANY native optimizations are available.

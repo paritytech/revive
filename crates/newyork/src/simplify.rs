@@ -3165,10 +3165,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         let fuzzy_hash = fuzzy_canonicalize_function(func);
-        fuzzy_groups
-            .entry(fuzzy_hash)
-            .or_default()
-            .push(func.id);
+        fuzzy_groups.entry(fuzzy_hash).or_default().push(func.id);
     }
 
     // Step 2: For each group with 2+ members, find differing literals
@@ -3190,7 +3187,10 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         // All functions must have the same number of literals
         let lit_count = group_literals[0].1.len();
-        if group_literals.iter().any(|(_, lits)| lits.len() != lit_count) {
+        if group_literals
+            .iter()
+            .any(|(_, lits)| lits.len() != lit_count)
+        {
             continue;
         }
 
@@ -3198,7 +3198,10 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         let mut differing_positions: Vec<usize> = Vec::new();
         for pos in 0..lit_count {
             let first_val = &group_literals[0].1[pos];
-            if group_literals.iter().any(|(_, lits)| &lits[pos] != first_val) {
+            if group_literals
+                .iter()
+                .any(|(_, lits)| &lits[pos] != first_val)
+            {
                 differing_positions.push(pos);
             }
         }
@@ -3247,7 +3250,10 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             let func = &object.functions[&fid];
             func.params.len() == canonical_param_count
                 && &func.returns == canonical_returns
-                && func.params.iter().zip(canonical_func.params.iter())
+                && func
+                    .params
+                    .iter()
+                    .zip(canonical_func.params.iter())
                     .all(|((_, t1), (_, t2))| t1 == t2)
         });
         if !all_compatible {
@@ -3278,10 +3284,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         // Replace the differing literals in the parameterized body with Var references
         let canonical_lits = &group_literals[0].1;
 
-        replace_literals_with_params(
-            &mut parameterized.body,
-            &position_param_ids,
-        );
+        replace_literals_with_params(&mut parameterized.body, &position_param_ids);
 
         // Replace canonical function with parameterized version
         object.functions.insert(canonical_id, parameterized);
@@ -3457,7 +3460,11 @@ fn fuzzy_encode_stmt(
             }
             fuzzy_encode_expr(canon, value, buf, lit_counter);
         }
-        Statement::SStore { key, value, static_slot } => {
+        Statement::SStore {
+            key,
+            value,
+            static_slot,
+        } => {
             buf.push(0x84);
             canon.encode_value(key, buf);
             canon.encode_value(value, buf);
@@ -3470,11 +3477,19 @@ fn fuzzy_encode_stmt(
                 buf.push(0);
             }
         }
-        Statement::If { condition, inputs, then_region, else_region, outputs } => {
+        Statement::If {
+            condition,
+            inputs,
+            then_region,
+            else_region,
+            outputs,
+        } => {
             buf.push(0x85);
             canon.encode_value(condition, buf);
             buf.push(inputs.len() as u8);
-            for v in inputs { canon.encode_value(v, buf); }
+            for v in inputs {
+                canon.encode_value(v, buf);
+            }
             fuzzy_encode_region(canon, then_region, buf, lit_counter);
             if let Some(r) = else_region {
                 buf.push(1);
@@ -3483,13 +3498,23 @@ fn fuzzy_encode_stmt(
                 buf.push(0);
             }
             buf.push(outputs.len() as u8);
-            for o in outputs { canon.encode_value_id(*o, buf); }
+            for o in outputs {
+                canon.encode_value_id(*o, buf);
+            }
         }
-        Statement::Switch { scrutinee, inputs, cases, default, outputs } => {
+        Statement::Switch {
+            scrutinee,
+            inputs,
+            cases,
+            default,
+            outputs,
+        } => {
             buf.push(0x86);
             canon.encode_value(scrutinee, buf);
             buf.push(inputs.len() as u8);
-            for v in inputs { canon.encode_value(v, buf); }
+            for v in inputs {
+                canon.encode_value(v, buf);
+            }
             buf.push(cases.len() as u8);
             for c in cases {
                 // Case values are literals - replace with placeholder
@@ -3505,21 +3530,40 @@ fn fuzzy_encode_stmt(
                 buf.push(0);
             }
             buf.push(outputs.len() as u8);
-            for o in outputs { canon.encode_value_id(*o, buf); }
+            for o in outputs {
+                canon.encode_value_id(*o, buf);
+            }
         }
-        Statement::For { init_values, loop_vars, condition_stmts, condition, body, post, outputs, .. } => {
+        Statement::For {
+            init_values,
+            loop_vars,
+            condition_stmts,
+            condition,
+            body,
+            post,
+            outputs,
+            ..
+        } => {
             buf.push(0x87);
             buf.push(init_values.len() as u8);
-            for v in init_values { canon.encode_value(v, buf); }
+            for v in init_values {
+                canon.encode_value(v, buf);
+            }
             buf.push(loop_vars.len() as u8);
-            for v in loop_vars { canon.encode_value_id(*v, buf); }
+            for v in loop_vars {
+                canon.encode_value_id(*v, buf);
+            }
             buf.push(condition_stmts.len() as u8);
-            for s in condition_stmts { fuzzy_encode_stmt(canon, s, buf, lit_counter); }
+            for s in condition_stmts {
+                fuzzy_encode_stmt(canon, s, buf, lit_counter);
+            }
             fuzzy_encode_expr(canon, condition, buf, lit_counter);
             fuzzy_encode_region(canon, body, buf, lit_counter);
             fuzzy_encode_region(canon, post, buf, lit_counter);
             buf.push(outputs.len() as u8);
-            for o in outputs { canon.encode_value_id(*o, buf); }
+            for o in outputs {
+                canon.encode_value_id(*o, buf);
+            }
         }
         Statement::Block(region) => {
             buf.push(0x88);
@@ -3567,7 +3611,10 @@ fn collect_literals_in_expr(expr: &Expr, lits: &mut Vec<BigUint>) {
         Expr::Literal { value, .. } => {
             lits.push(value.clone());
         }
-        Expr::SLoad { static_slot: Some(slot), .. } => {
+        Expr::SLoad {
+            static_slot: Some(slot),
+            ..
+        } => {
             lits.push(slot.clone());
         }
         _ => {}
@@ -3579,10 +3626,17 @@ fn collect_literals_in_stmt(stmt: &Statement, lits: &mut Vec<BigUint>) {
         Statement::Let { value, .. } => {
             collect_literals_in_expr(value, lits);
         }
-        Statement::SStore { static_slot: Some(slot), .. } => {
+        Statement::SStore {
+            static_slot: Some(slot),
+            ..
+        } => {
             lits.push(slot.clone());
         }
-        Statement::If { then_region, else_region, .. } => {
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
             collect_literals_in_region(then_region, lits);
             if let Some(r) = else_region {
                 collect_literals_in_region(r, lits);
@@ -3597,7 +3651,13 @@ fn collect_literals_in_stmt(stmt: &Statement, lits: &mut Vec<BigUint>) {
                 collect_literals_in_region(d, lits);
             }
         }
-        Statement::For { condition_stmts, condition, body, post, .. } => {
+        Statement::For {
+            condition_stmts,
+            condition,
+            body,
+            post,
+            ..
+        } => {
             for s in condition_stmts {
                 collect_literals_in_stmt(s, lits);
             }
@@ -3625,10 +3685,7 @@ fn collect_literals_in_region(region: &Region, lits: &mut Vec<BigUint>) {
 ///
 /// `position_param_ids` maps each differing position to its corresponding parameter ValueId.
 /// Multiple positions can map to the same parameter (when they share the same value pattern).
-fn replace_literals_with_params(
-    block: &mut Block,
-    position_param_ids: &[(usize, ValueId)],
-) {
+fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize, ValueId)]) {
     let mut lit_counter = 0usize;
     let position_set: BTreeMap<usize, ValueId> = position_param_ids
         .iter()
@@ -3652,7 +3709,10 @@ fn replace_literals_in_expr(
             }
             *counter += 1;
         }
-        Expr::SLoad { static_slot: slot @ Some(_), .. } => {
+        Expr::SLoad {
+            static_slot: slot @ Some(_),
+            ..
+        } => {
             // static_slot counts as a literal position; clear it if parameterized
             if positions.contains_key(counter) {
                 *slot = None;
@@ -3672,14 +3732,21 @@ fn replace_literals_in_stmt(
         Statement::Let { value, .. } => {
             replace_literals_in_expr(value, positions, counter);
         }
-        Statement::SStore { static_slot: slot @ Some(_), .. } => {
+        Statement::SStore {
+            static_slot: slot @ Some(_),
+            ..
+        } => {
             // static_slot counts as a literal position; clear it if parameterized
             if positions.contains_key(counter) {
                 *slot = None;
             }
             *counter += 1;
         }
-        Statement::If { then_region, else_region, .. } => {
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
             replace_literals_in_region(then_region, positions, counter);
             if let Some(r) = else_region {
                 replace_literals_in_region(r, positions, counter);
@@ -3694,7 +3761,13 @@ fn replace_literals_in_stmt(
                 replace_literals_in_region(d, positions, counter);
             }
         }
-        Statement::For { condition_stmts, condition, body, post, .. } => {
+        Statement::For {
+            condition_stmts,
+            condition,
+            body,
+            post,
+            ..
+        } => {
             for s in condition_stmts {
                 replace_literals_in_stmt(s, positions, counter);
             }
@@ -3754,7 +3827,10 @@ fn rewrite_stmts_with_extra_args(
     for mut stmt in stmts {
         // Check if this statement contains a call to old_id
         match &mut stmt {
-            Statement::Let { value: Expr::Call { function, args }, .. }
+            Statement::Let {
+                value: Expr::Call { function, args },
+                ..
+            }
             | Statement::Expr(Expr::Call { function, args })
                 if *function == old_id =>
             {
@@ -3797,7 +3873,11 @@ fn rewrite_stmt_regions(
     next_id: &mut u32,
 ) {
     match stmt {
-        Statement::If { then_region, else_region, .. } => {
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
             rewrite_region_with_extra_args(then_region, old_id, new_id, extra_args, next_id);
             if let Some(r) = else_region {
                 rewrite_region_with_extra_args(r, old_id, new_id, extra_args, next_id);
@@ -3811,7 +3891,12 @@ fn rewrite_stmt_regions(
                 rewrite_region_with_extra_args(d, old_id, new_id, extra_args, next_id);
             }
         }
-        Statement::For { condition_stmts, body, post, .. } => {
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
             *condition_stmts = rewrite_stmts_with_extra_args(
                 std::mem::take(condition_stmts),
                 old_id,

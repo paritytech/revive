@@ -324,10 +324,7 @@ pub struct RevertEmpty;
 impl RuntimeFunction for RevertEmpty {
     const NAME: &'static str = "__revive_revert_0";
 
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoReturn,
-        Attribute::NoFree,
-    ];
+    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoReturn, Attribute::NoFree];
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(&[], false)
@@ -376,10 +373,7 @@ pub struct Revert;
 impl RuntimeFunction for Revert {
     const NAME: &'static str = "__revive_revert";
 
-    const ATTRIBUTES: &'static [Attribute] = &[
-        Attribute::NoReturn,
-        Attribute::NoFree,
-    ];
+    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoReturn, Attribute::NoFree];
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context

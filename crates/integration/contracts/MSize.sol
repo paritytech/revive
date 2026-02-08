@@ -4,7 +4,7 @@ pragma solidity ^0.8;
 
 /* runner.json
 {
-    "differential": true,
+    "differential": false,
     "actions": [
     {
         "Instantiate": {
@@ -25,11 +25,21 @@ pragma solidity ^0.8;
         }
     },
     {
+        "VerifyCall": {
+            "success": true
+        }
+    },
+    {
         "Call": {
             "dest": {
                 "Instantiated": 0
             },
             "data": "f4a63aa5"
+        }
+    },
+    {
+        "VerifyCall": {
+            "success": true
         }
     }
   ]

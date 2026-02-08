@@ -1248,46 +1248,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::MStore {
                 offset,
                 value,
-                region,
+                region: _,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
 
-                // Free memory pointer slot (offset 0x40) is never exposed to external
-                // code. Store just the low 32 bits as a native i32 store, avoiding
-                // the 32-byte byte-swap overhead of store_heap_word.
-                // FMP is bounded by the heap size (~17 bits), so i32 is sufficient.
-                let is_fmp_store = matches!(region, MemoryRegion::FreePointerSlot)
-                    || Self::try_extract_const_u64(offset_val) == Some(0x40);
-                if is_fmp_store {
-                    let offset_xlen =
-                        self.truncate_offset_to_xlen(context, offset_val, "fmp_store_offset")?;
-                    // Truncate FMP value to i32 (safe: FMP is always < heap_size < 2^31)
-                    let xlen_type = context.xlen_type();
-                    let value_i32 =
-                        if value_val.get_type().get_bit_width() > xlen_type.get_bit_width() {
-                            context
-                                .builder()
-                                .build_int_truncate(value_val, xlen_type, "fmp_val_trunc")
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-                        } else {
-                            value_val
-                        };
-                    // Direct 4-byte store via unchecked heap GEP. The FMP slot
-                    // (offset 0x40) is always within the statically pre-allocated
-                    // scratch area, so no sbrk is needed.
-                    let pointer = context
-                        .build_heap_gep_unchecked(offset_xlen)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    context
-                        .builder()
-                        .build_store(pointer.value, value_i32)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
-                        .set_alignment(4)
-                        .expect("Alignment is valid");
-                } else if self.can_use_native_memory(offset_val) {
+                if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
                     revive_llvm_context::polkavm_evm_memory::store_native(
@@ -2122,8 +2090,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Stop => {
                 // Stop is equivalent to return(0, 0) - use the shared return block
-                let return_block =
-                    self.get_or_create_return_block(context, 0, 0)?;
+                let return_block = self.get_or_create_return_block(context, 0, 0)?;
                 context.build_unconditional_branch(return_block);
                 let dead_block = context.append_basic_block("stop_dedup_dead");
                 context.set_basic_block(dead_block);
@@ -2842,37 +2809,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 
-                // Free memory pointer slot uses a native 4-byte load to match
-                // the native i32 stores we emit for FreePointerSlot mstores.
-                // This avoids the 32-byte byte-swap overhead of load_heap_word.
-                let loaded = if is_free_pointer {
-                    let offset_xlen =
-                        self.truncate_offset_to_xlen(context, offset_val, "fmp_load_offset")?;
-                    // Load 4 bytes via unchecked heap GEP, then zero-extend to i256.
-                    // FMP slot (0x40) is always within the pre-allocated scratch area.
-                    let pointer = context
-                        .build_heap_gep_unchecked(offset_xlen)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    let i32_val = context
-                        .builder()
-                        .build_load(context.xlen_type(), pointer.value, "fmp_load_i32")
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    context
-                        .basic_block()
-                        .get_last_instruction()
-                        .expect("Always exists")
-                        .set_alignment(4)
-                        .expect("Alignment is valid");
-                    let word_val = context
-                        .builder()
-                        .build_int_z_extend(
-                            i32_val.into_int_value(),
-                            context.word_type(),
-                            "fmp_load_ext",
-                        )
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    word_val.as_basic_value_enum()
-                } else if self.can_use_native_memory(offset_val) {
+                let loaded = if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
                     revive_llvm_context::polkavm_evm_memory::load_native(context, offset_xlen)?
@@ -2892,9 +2829,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // allowing elimination of ALL downstream overflow checks in
                 // safe_truncate_int_to_xlen.
                 if is_free_pointer {
-                    // The FMP is bounded by the heap size (enforced by sbrk).
-                    // Use a tight range proof so LLVM can prove fmp + offset < 2^32,
-                    // eliminating overflow checks in safe_truncate_int_to_xlen.
                     let heap_size = context
                         .heap_size()
                         .get_zero_extended_constant()
@@ -3345,10 +3279,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(wrapper_fn);
         }
 
-        let wrapper_name = format!(
-            "__keccak256_slot_{}",
-            self.keccak256_slot_wrappers.len()
-        );
+        let wrapper_name = format!("__keccak256_slot_{}", self.keccak256_slot_wrappers.len());
 
         // Create the wrapper function type: (i256) -> i256
         let word_type = context.word_type();
@@ -3368,10 +3299,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             revive_llvm_context::PolkaVMAttribute::OptimizeForSize as u32,
             0,
         );
-        let minsize_attr = context.llvm().create_enum_attribute(
-            revive_llvm_context::PolkaVMAttribute::MinSize as u32,
-            0,
-        );
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
         wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
         wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, optsize_attr);
         wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
@@ -3406,8 +3336,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Restore builder position
         context.set_basic_block(saved_block);
 
-        self.keccak256_slot_wrappers
-            .insert(const_str, wrapper_fn);
+        self.keccak256_slot_wrappers.insert(const_str, wrapper_fn);
 
         Ok(wrapper_fn)
     }
@@ -3453,13 +3382,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Default::default(),
                 global_ptr,
             );
-            Ok(PolkaVMArgument::pointer(pointer, "storage_key_global".into()))
+            Ok(PolkaVMArgument::pointer(
+                pointer,
+                "storage_key_global".into(),
+            ))
         } else {
             // Create a new global constant
-            let global_name = format!(
-                "__storage_key_{}",
-                self.storage_key_globals.len()
-            );
+            let global_name = format!("__storage_key_{}", self.storage_key_globals.len());
             let global = context.module().add_global(
                 context.word_type(),
                 Some(inkwell::AddressSpace::default()),
@@ -3478,7 +3407,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Default::default(),
                 global_ptr,
             );
-            Ok(PolkaVMArgument::pointer(pointer, "storage_key_global".into()))
+            Ok(PolkaVMArgument::pointer(
+                pointer,
+                "storage_key_global".into(),
+            ))
         }
     }
 }

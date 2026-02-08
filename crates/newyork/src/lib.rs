@@ -62,7 +62,9 @@ pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
     print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
-pub use simplify::{deduplicate_functions, deduplicate_functions_fuzzy, Simplifier, SimplifyResults};
+pub use simplify::{
+    deduplicate_functions, deduplicate_functions_fuzzy, Simplifier, SimplifyResults,
+};
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};

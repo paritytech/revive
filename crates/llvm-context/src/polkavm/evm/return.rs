@@ -44,9 +44,7 @@ pub fn revert<'ctx>(
 }
 
 /// Calls the outlined `__revive_revert_0()` function for empty reverts.
-pub fn revert_empty_outlined(
-    context: &mut Context,
-) -> anyhow::Result<()> {
+pub fn revert_empty_outlined(context: &mut Context) -> anyhow::Result<()> {
     use crate::polkavm::context::function::runtime::revive::RevertEmpty;
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
@@ -68,7 +66,11 @@ pub fn revert_outlined<'ctx>(
     let function = context
         .get_function(Revert::NAME, false)
         .expect("__revive_revert should be declared");
-    context.build_call(function.borrow().declaration(), &[length.into()], "revert_outlined");
+    context.build_call(
+        function.borrow().declaration(),
+        &[length.into()],
+        "revert_outlined",
+    );
     Ok(())
 }
 

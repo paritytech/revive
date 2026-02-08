@@ -130,6 +130,10 @@ pub struct LlvmCodegen<'ctx> {
     /// When these are used as If conditions, we emit `__revive_callvalue_nonzero()`
     /// returning i1 instead of the full i256 value + comparison.
     callvalue_value_ids: BTreeSet<u32>,
+    /// Cache of global constants for i256 storage keys.
+    /// Maps the string representation of the constant to the global's pointer value.
+    /// This avoids materializing the same 256-bit constant at every storage access site.
+    storage_key_globals: BTreeMap<String, inkwell::values::PointerValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -156,6 +160,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_calldataload: false,
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
+            storage_key_globals: BTreeMap::new(),
         }
     }
 
@@ -184,6 +189,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_calldataload: false,
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
+            storage_key_globals: BTreeMap::new(),
         }
     }
 
@@ -1356,7 +1362,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 value,
                 static_slot: _,
             } => {
-                let key_arg = self.value_to_argument(key, context)?;
+                let key_arg = self.value_to_storage_key_argument(key, context)?;
                 let value_arg = self.value_to_argument(value, context)?;
                 revive_llvm_context::polkavm_evm_storage::store(context, &key_arg, &value_arg)?;
             }
@@ -2899,7 +2905,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 key,
                 static_slot: _,
             } => {
-                let key_arg = self.value_to_argument(key, context)?;
+                let key_arg = self.value_to_storage_key_argument(key, context)?;
                 Ok(revive_llvm_context::polkavm_evm_storage::load(
                     context, &key_arg,
                 )?)
@@ -3291,6 +3297,76 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()))
         } else {
             Ok(PolkaVMArgument::value(llvm_val))
+        }
+    }
+
+    /// Converts a storage key Value to a PolkaVMArgument, using global constants for
+    /// constant keys to avoid materializing the same 256-bit constant at every call site.
+    ///
+    /// When the key is a constant i256, creates a global constant (cached by value) and
+    /// returns a Pointer argument pointing to it. This eliminates the alloca+store pattern
+    /// that `as_pointer()` would otherwise emit at each storage access site.
+    fn value_to_storage_key_argument(
+        &mut self,
+        value: &Value,
+        context: &PolkaVMContext<'ctx>,
+    ) -> Result<PolkaVMArgument<'ctx>> {
+        let llvm_val = self.translate_value(value)?;
+        if !llvm_val.is_int_value() {
+            return Ok(PolkaVMArgument::value(llvm_val));
+        }
+
+        let int_val = llvm_val.into_int_value();
+        let word_val = self.ensure_word_type(context, int_val, "storage_key")?;
+
+        // Only use global constants for actual constants (not runtime values)
+        if !word_val.is_const() {
+            return Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()));
+        }
+
+        // Only use global constants for large constants (>64 bits).
+        // Small constants (0, 1, etc.) are cheap to materialize inline and the
+        // rodata overhead would exceed the savings on small contracts.
+        if Self::try_extract_const_u64(word_val).is_some() {
+            return Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()));
+        }
+
+        // Use the constant's string representation as cache key
+        let const_str = word_val.print_to_string().to_string();
+
+        if let Some(&global_ptr) = self.storage_key_globals.get(&const_str) {
+            // Reuse existing global constant
+            let pointer = revive_llvm_context::PolkaVMPointer::new(
+                context.word_type(),
+                Default::default(),
+                global_ptr,
+            );
+            Ok(PolkaVMArgument::pointer(pointer, "storage_key_global".into()))
+        } else {
+            // Create a new global constant
+            let global_name = format!(
+                "__storage_key_{}",
+                self.storage_key_globals.len()
+            );
+            let global = context.module().add_global(
+                context.word_type(),
+                Some(inkwell::AddressSpace::default()),
+                &global_name,
+            );
+            global.set_linkage(inkwell::module::Linkage::Internal);
+            global.set_constant(true);
+            global.set_initializer(&word_val);
+            global.set_alignment(32);
+
+            let global_ptr = global.as_pointer_value();
+            self.storage_key_globals.insert(const_str, global_ptr);
+
+            let pointer = revive_llvm_context::PolkaVMPointer::new(
+                context.word_type(),
+                Default::default(),
+                global_ptr,
+            );
+            Ok(PolkaVMArgument::pointer(pointer, "storage_key_global".into()))
         }
     }
 }

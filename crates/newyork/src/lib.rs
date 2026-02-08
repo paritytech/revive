@@ -63,7 +63,8 @@ pub use printer::{
     print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
 pub use simplify::{
-    deduplicate_functions, deduplicate_functions_fuzzy, Simplifier, SimplifyResults,
+    deduplicate_functions, deduplicate_functions_fuzzy, fold_constant_keccak, Simplifier,
+    SimplifyResults,
 };
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
@@ -174,6 +175,11 @@ fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
     // Run FMP propagation pass (replace mload(0x40) with known constant)
     let mut fmp_prop = mem_opt::FmpPropagation::new(0);
     fmp_prop.propagate_object(object);
+
+    // Fold constant keccak256 expressions created by the mem_opt pass.
+    // The mem_opt pass creates Keccak256Single/Pair nodes from mstore+keccak256
+    // patterns. When the argument is a constant, we can precompute the hash.
+    simplify::fold_constant_keccak(object);
 
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {

@@ -811,6 +811,38 @@ impl Simplifier {
             Expr::Origin => self.cse_env_read(EnvRead::Origin, expr),
             Expr::Address => self.cse_env_read(EnvRead::Address, expr),
 
+            // Constant keccak256 folding: precompute hash of constant arguments
+            Expr::Keccak256Single { word0 } => {
+                let word0 = self.resolve_value(word0);
+                if let Some(c) = self.try_get_const(&word0) {
+                    let result = fold_keccak256_single(&c);
+                    self.stats.constants_folded += 1;
+                    Expr::Literal {
+                        value: result,
+                        ty: Type::Int(BitWidth::I256),
+                    }
+                } else {
+                    Expr::Keccak256Single { word0 }
+                }
+            }
+
+            Expr::Keccak256Pair { word0, word1 } => {
+                let word0 = self.resolve_value(word0);
+                let word1 = self.resolve_value(word1);
+                if let (Some(c0), Some(c1)) =
+                    (self.try_get_const(&word0), self.try_get_const(&word1))
+                {
+                    let result = fold_keccak256_pair(&c0, &c1);
+                    self.stats.constants_folded += 1;
+                    Expr::Literal {
+                        value: result,
+                        ty: Type::Int(BitWidth::I256),
+                    }
+                } else {
+                    Expr::Keccak256Pair { word0, word1 }
+                }
+            }
+
             // All other expressions pass through unchanged
             other => other,
         }
@@ -1286,8 +1318,33 @@ fn fold_ternary(op: BinOp, a: &BigUint, b: &BigUint, n: &BigUint) -> Option<BigU
     })
 }
 
+/// Encodes a BigUint as a 32-byte big-endian buffer (left-padded with zeros).
+fn biguint_to_be32(val: &BigUint) -> [u8; 32] {
+    let bytes = val.to_bytes_be();
+    let mut buf = [0u8; 32];
+    let start = 32usize.saturating_sub(bytes.len());
+    buf[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
+    buf
+}
+
+/// Computes keccak256 of a single 256-bit word at compile time.
+fn fold_keccak256_single(word0: &BigUint) -> BigUint {
+    let buf = biguint_to_be32(word0);
+    let hash = revive_common::Keccak256::from_slice(&buf);
+    BigUint::from_bytes_be(hash.as_bytes())
+}
+
+/// Computes keccak256 of two 256-bit words at compile time.
+fn fold_keccak256_pair(word0: &BigUint, word1: &BigUint) -> BigUint {
+    let mut buf = [0u8; 64];
+    buf[..32].copy_from_slice(&biguint_to_be32(word0));
+    buf[32..].copy_from_slice(&biguint_to_be32(word1));
+    let hash = revive_common::Keccak256::from_slice(&buf);
+    BigUint::from_bytes_be(hash.as_bytes())
+}
+
 /// Returns the power-of-2 exponent if the value is a power of 2.
-/// E.g., 1 → Some(0), 2 → Some(1), 4 → Some(2), 32 → Some(5), 256 → Some(8).
+/// E.g., 1 -> Some(0), 2 -> Some(1), 4 -> Some(2), 32 -> Some(5), 256 -> Some(8).
 fn log2_exact(val: &BigUint) -> Option<u32> {
     if val.is_zero() || !((val - BigUint::one()) & val).is_zero() {
         return None;
@@ -4003,6 +4060,115 @@ fn redirect_calls_in_stmt(stmt: &mut Statement, redirects: &BTreeMap<FunctionId,
         // All other statements don't contain expressions with function calls
         _ => {}
     }
+}
+
+/// Folds constant `Keccak256Single` and `Keccak256Pair` expressions in an object.
+///
+/// This is a targeted pass designed to run after the mem_opt pass, which creates
+/// `Keccak256Single`/`Keccak256Pair` nodes from `mstore + keccak256` patterns.
+/// When the argument(s) are compile-time constants, the hash is precomputed.
+pub fn fold_constant_keccak(object: &mut Object) {
+    fold_keccak_in_block(&mut object.code);
+    for function in object.functions.values_mut() {
+        fold_keccak_in_block(&mut function.body);
+    }
+}
+
+/// Walks a block's statements and folds constant keccak256 expressions.
+fn fold_keccak_in_block(block: &mut Block) {
+    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+    fold_keccak_in_stmts(&mut block.statements, &mut constants);
+}
+
+/// Processes statements, tracking constants and folding keccak expressions.
+fn fold_keccak_in_stmts(
+    statements: &mut Vec<Statement>,
+    constants: &mut BTreeMap<u32, BigUint>,
+) {
+    for stmt in statements.iter_mut() {
+        match stmt {
+            Statement::Let {
+                bindings,
+                value: expr,
+            } => {
+                // Track literal constants
+                if bindings.len() == 1 {
+                    if let Expr::Literal { value, .. } = expr {
+                        constants.insert(bindings[0].0, value.clone());
+                    }
+                }
+
+                // Fold constant keccak256 calls
+                match expr {
+                    Expr::Keccak256Single { word0 } => {
+                        if let Some(c) = constants.get(&word0.id.0) {
+                            *expr = Expr::Literal {
+                                value: fold_keccak256_single(c),
+                                ty: Type::Int(BitWidth::I256),
+                            };
+                        }
+                    }
+                    Expr::Keccak256Pair { word0, word1 } => {
+                        if let (Some(c0), Some(c1)) =
+                            (constants.get(&word0.id.0), constants.get(&word1.id.0))
+                        {
+                            let c0 = c0.clone();
+                            let c1 = c1.clone();
+                            *expr = Expr::Literal {
+                                value: fold_keccak256_pair(&c0, &c1),
+                                ty: Type::Int(BitWidth::I256),
+                            };
+                        }
+                    }
+                    _ => {}
+                }
+
+                // Record the folded result as a constant too
+                if bindings.len() == 1 {
+                    if let Expr::Literal { value, .. } = expr {
+                        constants.insert(bindings[0].0, value.clone());
+                    }
+                }
+            }
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                fold_keccak_in_region(then_region, constants);
+                if let Some(else_region) = else_region {
+                    fold_keccak_in_region(else_region, constants);
+                }
+            }
+            Statement::Switch {
+                cases, default, ..
+            } => {
+                for case in cases.iter_mut() {
+                    fold_keccak_in_region(&mut case.body, constants);
+                }
+                if let Some(default) = default {
+                    fold_keccak_in_region(default, constants);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                fold_keccak_in_stmts(condition_stmts, constants);
+                fold_keccak_in_region(body, constants);
+                fold_keccak_in_region(post, constants);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Processes a region's statements for keccak folding.
+fn fold_keccak_in_region(region: &mut Region, constants: &mut BTreeMap<u32, BigUint>) {
+    let mut local_constants = constants.clone();
+    fold_keccak_in_stmts(&mut region.statements, &mut local_constants);
 }
 
 #[cfg(test)]

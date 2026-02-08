@@ -17,8 +17,8 @@ use revive_llvm_context::{
 
 use crate::heap_opt::HeapOptResults;
 use crate::ir::{
-    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, Object, Region,
-    Statement, Type, UnaryOp, Value, ValueId,
+    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, MemoryRegion, Object,
+    Region, Statement, Type, UnaryOp, Value, ValueId,
 };
 use crate::type_inference::TypeInference;
 
@@ -117,6 +117,15 @@ pub struct LlvmCodegen<'ctx> {
     /// Shared basic blocks for Solidity panic revert patterns (keyed by error code).
     /// Each block stores the Panic(uint256) ABI encoding and branches to revert(0, 0x24).
     panic_blocks: BTreeMap<u8, inkwell::basic_block::BasicBlock<'ctx>>,
+    /// Whether to use the outlined `__revive_callvalue()` runtime function.
+    /// True when the contract has enough callvalue sites for outlining to pay off.
+    use_outlined_callvalue: bool,
+    /// Whether to use the outlined `__revive_calldataload()` runtime function.
+    /// True when the contract has enough calldataload sites for outlining to pay off.
+    use_outlined_calldataload: bool,
+    /// Whether to use the outlined `__revive_caller()` runtime function.
+    /// True when the contract has enough caller sites for outlining to pay off.
+    use_outlined_caller: bool,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -139,6 +148,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             revert_blocks: BTreeMap::new(),
             return_blocks: BTreeMap::new(),
             panic_blocks: BTreeMap::new(),
+            use_outlined_callvalue: false,
+            use_outlined_calldataload: false,
+            use_outlined_caller: false,
         }
     }
 
@@ -163,6 +175,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             revert_blocks: BTreeMap::new(),
             return_blocks: BTreeMap::new(),
             panic_blocks: BTreeMap::new(),
+            use_outlined_callvalue: false,
+            use_outlined_calldataload: false,
+            use_outlined_caller: false,
         }
     }
 
@@ -740,6 +755,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.return_blocks.clear();
         self.panic_blocks.clear();
 
+        // Decide whether to use outlined syscall functions based on call-site counts.
+        // The function body overhead is only worth paying when there are enough call sites.
+        let syscall_counts = object.count_syscall_sites();
+        const CALLVALUE_OUTLINE_THRESHOLD: usize = 3;
+        const CALLER_OUTLINE_THRESHOLD: usize = 3;
+        self.use_outlined_callvalue = syscall_counts.callvalue >= CALLVALUE_OUTLINE_THRESHOLD;
+        // Calldataload outlining is disabled: function call overhead (register saves, indirect
+        // jump) outweighs the alloca+load savings. Measured as net-negative on OZ ERC20 (+717 bytes).
+        self.use_outlined_calldataload = false;
+        self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
+
         // Determine if this is deploy or runtime code and set the code type
         let is_runtime = object.name.ends_with("_deployed");
         if is_runtime {
@@ -1193,13 +1219,46 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::MStore {
                 offset,
                 value,
-                region: _,
+                region,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
-                if self.can_use_native_memory(offset_val) {
+
+                // Free memory pointer slot (offset 0x40) is never exposed to external
+                // code. Store just the low 32 bits as a native i32 store, avoiding
+                // the 32-byte byte-swap overhead of store_heap_word.
+                // FMP is bounded by the heap size (~17 bits), so i32 is sufficient.
+                let is_fmp_store = matches!(region, MemoryRegion::FreePointerSlot)
+                    || Self::try_extract_const_u64(offset_val) == Some(0x40);
+                if is_fmp_store {
+                    let offset_xlen =
+                        self.truncate_offset_to_xlen(context, offset_val, "fmp_store_offset")?;
+                    // Truncate FMP value to i32 (safe: FMP is always < heap_size < 2^31)
+                    let xlen_type = context.xlen_type();
+                    let value_i32 =
+                        if value_val.get_type().get_bit_width() > xlen_type.get_bit_width() {
+                            context
+                                .builder()
+                                .build_int_truncate(value_val, xlen_type, "fmp_val_trunc")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        } else {
+                            value_val
+                        };
+                    // Direct 4-byte store via unchecked heap GEP. The FMP slot
+                    // (offset 0x40) is always within the statically pre-allocated
+                    // scratch area, so no sbrk is needed.
+                    let pointer = context
+                        .build_heap_gep_unchecked(offset_xlen)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    context
+                        .builder()
+                        .build_store(pointer.value, value_i32)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .set_alignment(4)
+                        .expect("Alignment is valid");
+                } else if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
                     revive_llvm_context::polkavm_evm_memory::store_native(
@@ -2567,17 +2626,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::CallDataLoad { offset } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                Ok(revive_llvm_context::polkavm_evm_calldata::load(
-                    context, offset_val,
-                )?)
+                if self.use_outlined_calldataload {
+                    Ok(revive_llvm_context::polkavm_evm_calldata::load_outlined(
+                        context, offset_val,
+                    )?)
+                } else {
+                    Ok(revive_llvm_context::polkavm_evm_calldata::load(
+                        context, offset_val,
+                    )?)
+                }
             }
 
-            Expr::CallValue => Ok(revive_llvm_context::polkavm_evm_ether_gas::value(context)?),
+            Expr::CallValue => {
+                if self.use_outlined_callvalue {
+                    Ok(revive_llvm_context::polkavm_evm_ether_gas::value_outlined(
+                        context,
+                    )?)
+                } else {
+                    Ok(revive_llvm_context::polkavm_evm_ether_gas::value(context)?)
+                }
+            }
 
-            // Use outlined caller_word function to avoid inlining
-            // syscall + bswap + zext at each call site.
+            // caller already returns zext i160 → i256 (after byte-swap).
             Expr::Caller => {
-                Ok(revive_llvm_context::polkavm_evm_contract_context::caller_word(context)?)
+                if self.use_outlined_caller {
+                    Ok(
+                        revive_llvm_context::polkavm_evm_contract_context::caller_outlined(
+                            context,
+                        )?,
+                    )
+                } else {
+                    Ok(revive_llvm_context::polkavm_evm_contract_context::caller(
+                        context,
+                    )?)
+                }
             }
 
             // origin already returns zext i160 → i256 (after byte-swap).
@@ -2704,10 +2786,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?)
             }
 
-            Expr::MLoad { offset, region: _ } => {
+            Expr::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                let is_free_pointer = Self::is_free_pointer_load(offset_val);
-                let loaded = if self.can_use_native_memory(offset_val) {
+                let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
+                    || Self::is_free_pointer_load(offset_val);
+
+                // Free memory pointer slot uses a native 4-byte load to match
+                // the native i32 stores we emit for FreePointerSlot mstores.
+                // This avoids the 32-byte byte-swap overhead of load_heap_word.
+                let loaded = if is_free_pointer {
+                    let offset_xlen =
+                        self.truncate_offset_to_xlen(context, offset_val, "fmp_load_offset")?;
+                    // Load 4 bytes via unchecked heap GEP, then zero-extend to i256.
+                    // FMP slot (0x40) is always within the pre-allocated scratch area.
+                    let pointer = context
+                        .build_heap_gep_unchecked(offset_xlen)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let i32_val = context
+                        .builder()
+                        .build_load(context.xlen_type(), pointer.value, "fmp_load_i32")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    context
+                        .basic_block()
+                        .get_last_instruction()
+                        .expect("Always exists")
+                        .set_alignment(4)
+                        .expect("Alignment is valid");
+                    let word_val = context
+                        .builder()
+                        .build_int_z_extend(
+                            i32_val.into_int_value(),
+                            context.word_type(),
+                            "fmp_load_ext",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    word_val.as_basic_value_enum()
+                } else if self.can_use_native_memory(offset_val) {
                     let offset_xlen =
                         self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
                     revive_llvm_context::polkavm_evm_memory::load_native(context, offset_xlen)?

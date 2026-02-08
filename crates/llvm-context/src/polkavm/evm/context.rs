@@ -148,3 +148,23 @@ pub fn caller<'ctx>(
     );
     context.build_load_address(pointer)
 }
+
+/// Calls the outlined `__revive_caller() -> i256` runtime function.
+///
+/// This is functionally identical to [`caller`] but calls a shared outlined function
+/// instead of inlining the get_global+call+load+bswap+zext sequence at every call site.
+/// For contracts with many msg.sender checks (e.g. OpenZeppelin ERC20: 10+ sites),
+/// this significantly reduces code size.
+pub fn caller_outlined<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    use crate::polkavm::context::function::runtime::revive::Caller;
+    use crate::polkavm::context::runtime::RuntimeFunction;
+    let function = context
+        .get_function(Caller::NAME, false)
+        .expect("__revive_caller should be declared");
+    let result = context
+        .build_call(function.borrow().declaration(), &[], "caller_result")
+        .expect("__revive_caller should return a value");
+    Ok(result)
+}

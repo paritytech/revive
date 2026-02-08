@@ -1205,6 +1205,58 @@ impl<'ctx> Context<'ctx> {
         Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer))
     }
 
+    /// Returns a pointer to `offset` into the heap WITHOUT calling sbrk.
+    /// This is safe only for offsets known to be within the statically
+    /// pre-allocated region (e.g., the scratch area at 0x00-0x7f including
+    /// the free memory pointer slot at 0x40).
+    ///
+    /// # Panics
+    /// Assumes `offset` to be a register sized value.
+    pub fn build_heap_gep_unchecked(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<Pointer<'ctx>> {
+        assert_eq!(offset.get_type(), self.xlen_type());
+        let heap_global: Pointer<'ctx> =
+            self.get_global(crate::polkavm::GLOBAL_HEAP_MEMORY)?.into();
+        let pointer = self.build_gep(
+            heap_global,
+            &[self.xlen_type().const_zero(), offset],
+            self.byte_type(),
+            "heap_unchecked_ptr",
+        );
+        Ok(Pointer::new(
+            self.byte_type(),
+            AddressSpace::Stack,
+            pointer.value,
+        ))
+    }
+
+    /// Ensures the heap size (msize) is at least `min_size`.
+    /// This emits a branchless max(current_msize, min_size) update.
+    /// Used after native stores that bypass sbrk to keep msize consistent.
+    pub fn ensure_heap_size(
+        &self,
+        min_size: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<()> {
+        let current = self
+            .get_global_value(crate::polkavm::GLOBAL_HEAP_SIZE)?
+            .into_int_value();
+        let needs_update = self.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            min_size,
+            current,
+            "msize_needs_update",
+        )?;
+        let new_size = self
+            .builder()
+            .build_select(needs_update, min_size, current, "msize_new")?
+            .into_int_value();
+        let heap_size_global = self.get_global(crate::polkavm::GLOBAL_HEAP_SIZE)?;
+        self.build_store(heap_size_global.into(), new_size)?;
+        Ok(())
+    }
+
     /// Returns a boolean type constant.
     pub fn bool_const(&self, value: bool) -> inkwell::values::IntValue<'ctx> {
         self.bool_type().const_int(u64::from(value), false)

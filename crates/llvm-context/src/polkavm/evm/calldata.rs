@@ -18,6 +18,31 @@ pub fn load<'ctx>(
     context.build_load(output_pointer, "call_data_load_value")
 }
 
+/// Calls the outlined `__revive_calldataload(xlen) -> i256` runtime function.
+///
+/// This is functionally identical to [`load`] but calls a shared outlined function
+/// instead of inlining the alloca+call+load sequence at every call site.
+/// The caller is responsible for truncating the offset to xlen via `clip_to_xlen`.
+pub fn load_outlined<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    use crate::polkavm::context::function::runtime::revive::CallDataLoad;
+    use crate::polkavm::context::runtime::RuntimeFunction;
+    let offset = context.clip_to_xlen(offset)?;
+    let function = context
+        .get_function(CallDataLoad::NAME, false)
+        .expect("__revive_calldataload should be declared");
+    let result = context
+        .build_call(
+            function.borrow().declaration(),
+            &[offset.into()],
+            "calldataload_result",
+        )
+        .expect("__revive_calldataload should return a value");
+    Ok(result)
+}
+
 /// Translates the calldata size.
 pub fn size<'ctx>(
     context: &mut Context<'ctx>,

@@ -71,14 +71,17 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         // is available for the newyork IR codegen.
         self.yul_object.declare(context)?;
 
-        // NOTE: Native heap functions (PolkaVMLoadHeapWordNativeFunction, PolkaVMStoreHeapWordNativeFunction)
-        // are NOT declared here because using BOTH native and non-native heap functions
-        // in the same contract increases code size. The native function definitions
-        // (~200+ bytes) outweigh the savings from skipping byte-swap instructions (~40 bytes).
-        // See to_llvm.rs can_use_native_memory() for details.
-
         // Declare keccak256 two-words helper for deduplicating mapping hash patterns
         revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.declare(context)?;
+
+        // Declare outlined callvalue function for deduplicating non-payable checks
+        revive_llvm_context::PolkaVMCallValueFunction.declare(context)?;
+
+        // Declare outlined calldataload function for deduplicating ABI decoding
+        revive_llvm_context::PolkaVMCallDataLoadFunction.declare(context)?;
+
+        // Declare outlined caller function for deduplicating msg.sender checks
+        revive_llvm_context::PolkaVMCallerFunction.declare(context)?;
 
         Ok(())
     }
@@ -123,6 +126,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 );
             }
         }
+
+        // NOTE: __revive_exit NoInline was tested but REGRESSED all OZ contracts by 2-4%.
+        // When exit is not inlined, LLVM can't propagate range proofs (FMP, etc.) into the
+        // exit function, forcing it to keep all overflow checks in safe_truncate_int_to_xlen.
+        // The exit function is best left as AlwaysInline.
 
         // Check if we can use native-only heap mode (no byte-swapping needed)
         let use_native_heap = heap_opt.all_native();
@@ -223,6 +231,9 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
             revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMCallValueFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
 
             // Generate the deploy code using newyork IR
             // Note: generate_object handles subobjects (inner_object) internally

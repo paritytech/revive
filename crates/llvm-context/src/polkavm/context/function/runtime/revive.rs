@@ -3,6 +3,7 @@
 use inkwell::values::BasicValue;
 
 use crate::polkavm::context::function::Attribute;
+use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -124,6 +125,133 @@ impl RuntimeFunction for Exit {
 }
 
 impl WriteLLVM for Exit {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Outlined `callvalue()` function that reads the value transferred with the call.
+///
+/// The `value_transferred` runtime API writes a 256-bit value to a buffer.
+/// Each inline call site generates: alloca i256 + store 0 + ptrtoint + call + load.
+/// By outlining into a shared function, all call sites reduce to a single `call`.
+/// Contracts with many non-payable checks (OpenZeppelin ERC20: 37 sites) save
+/// significant code size through this deduplication.
+pub struct CallValue;
+
+impl RuntimeFunction for CallValue {
+    const NAME: &'static str = "__revive_callvalue";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(&[], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let output_pointer =
+            context.build_alloca_at_entry(context.value_type(), "value_transferred");
+        context.build_store(output_pointer, context.word_const(0))?;
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::VALUE_TRANSFERRED,
+            &[output_pointer.to_int(context).into()],
+        );
+        let value = context.build_load(output_pointer, "value_transferred")?;
+        Ok(Some(value))
+    }
+}
+
+impl WriteLLVM for CallValue {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Outlined `calldataload(offset)` function that reads 32 bytes from call data.
+///
+/// The `call_data_load` runtime API writes a 256-bit value to a buffer.
+/// Each inline call site generates: alloca i256 + ptrtoint + call + load.
+/// By outlining into a shared function, all call sites reduce to `clip_to_xlen + call`.
+/// Contracts with many ABI parameters (OpenZeppelin ERC20: 51 sites) save
+/// significant code size through this deduplication.
+pub struct CallDataLoad;
+
+impl RuntimeFunction for CallDataLoad {
+    const NAME: &'static str = "__revive_calldataload";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context
+            .word_type()
+            .fn_type(&[context.xlen_type().into()], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let offset = Self::paramater(context, 0).into_int_value();
+        let output_pointer = context.build_alloca_at_entry(context.word_type(), "call_data_output");
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::CALL_DATA_LOAD,
+            &[output_pointer.to_int(context).into(), offset.into()],
+        );
+        let value = context.build_load(output_pointer, "call_data_load_value")?;
+        Ok(Some(value))
+    }
+}
+
+impl WriteLLVM for CallDataLoad {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Outlined `caller()` function that reads the calling account address.
+///
+/// The `caller` runtime API writes a 20-byte address to a buffer.
+/// Each inline call site generates: get_global + ptrtoint + call + load + bswap + zext.
+/// By outlining into a shared function, all call sites reduce to a single `call`.
+/// Contracts with many msg.sender checks (OpenZeppelin ERC20: 10+ sites) save
+/// significant code size through this deduplication.
+pub struct Caller;
+
+impl RuntimeFunction for Caller {
+    const NAME: &'static str = "__revive_caller";
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context.word_type().fn_type(&[], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let pointer: Pointer<'_> = context
+            .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
+            .into();
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::CALLER,
+            &[pointer.to_int(context).into()],
+        );
+        let value = context.build_load_address(pointer)?;
+        Ok(Some(value))
+    }
+}
+
+impl WriteLLVM for Caller {
     fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
         <Self as RuntimeFunction>::declare(self, context)
     }

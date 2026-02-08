@@ -681,6 +681,134 @@ impl Object {
         }
         count
     }
+
+    /// Counts the total number of exit operations (Return, Revert, Stop) in this object
+    /// including all functions and subobjects.
+    /// This is used to estimate the number of `__revive_exit` call sites after LLVM codegen.
+    pub fn count_exit_operations(&self) -> usize {
+        let mut count = count_exit_ops_in_block(&self.code);
+        for function in self.functions.values() {
+            count += count_exit_ops_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            count += subobject.count_exit_operations();
+        }
+        count
+    }
+}
+
+/// Counts the occurrences of callvalue and calldataload expressions.
+///
+/// Returns `(callvalue_count, calldataload_count)`.
+/// Used to decide whether outlining these into shared functions saves code.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SyscallCounts {
+    /// Number of `callvalue()` expression sites.
+    pub callvalue: usize,
+    /// Number of `calldataload(offset)` expression sites.
+    pub calldataload: usize,
+    /// Number of `caller()` expression sites.
+    pub caller: usize,
+}
+
+impl std::ops::AddAssign for SyscallCounts {
+    fn add_assign(&mut self, rhs: Self) {
+        self.callvalue += rhs.callvalue;
+        self.calldataload += rhs.calldataload;
+        self.caller += rhs.caller;
+    }
+}
+
+impl Object {
+    /// Counts the total number of callvalue and calldataload expression sites
+    /// in this object including all functions and subobjects.
+    pub fn count_syscall_sites(&self) -> SyscallCounts {
+        let mut counts = count_syscalls_in_block(&self.code);
+        for function in self.functions.values() {
+            counts += count_syscalls_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            counts += subobject.count_syscall_sites();
+        }
+        counts
+    }
+}
+
+fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
+    let mut counts = SyscallCounts::default();
+    for stmt in &block.statements {
+        counts += count_syscalls_in_statement(stmt);
+    }
+    counts
+}
+
+fn count_syscalls_in_statement(stmt: &Statement) -> SyscallCounts {
+    match stmt {
+        Statement::Let { value, .. } => count_syscalls_in_expr(value),
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            let mut n = count_syscalls_in_region(then_region);
+            if let Some(r) = else_region {
+                n += count_syscalls_in_region(r);
+            }
+            n
+        }
+        Statement::Switch { cases, default, .. } => {
+            let mut n = SyscallCounts::default();
+            for case in cases {
+                n += count_syscalls_in_region(&case.body);
+            }
+            if let Some(r) = default {
+                n += count_syscalls_in_region(r);
+            }
+            n
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            let mut n = SyscallCounts::default();
+            for s in condition_stmts {
+                n += count_syscalls_in_statement(s);
+            }
+            n += count_syscalls_in_region(body);
+            n += count_syscalls_in_region(post);
+            n
+        }
+        Statement::Block(region) => count_syscalls_in_region(region),
+        _ => SyscallCounts::default(),
+    }
+}
+
+fn count_syscalls_in_expr(expr: &Expr) -> SyscallCounts {
+    match expr {
+        Expr::CallValue => SyscallCounts {
+            callvalue: 1,
+            ..Default::default()
+        },
+        Expr::CallDataLoad { .. } => SyscallCounts {
+            calldataload: 1,
+            ..Default::default()
+        },
+        Expr::Caller => SyscallCounts {
+            caller: 1,
+            ..Default::default()
+        },
+        _ => SyscallCounts::default(),
+    }
+}
+
+fn count_syscalls_in_region(region: &Region) -> SyscallCounts {
+    let mut counts = SyscallCounts::default();
+    for stmt in &region.statements {
+        counts += count_syscalls_in_statement(stmt);
+    }
+    counts
 }
 
 /// Counts heap memory operations in a block recursively.
@@ -750,6 +878,68 @@ fn count_heap_ops_in_region(region: &Region) -> usize {
     let mut count = 0;
     for stmt in &region.statements {
         count += count_heap_ops_in_statement(stmt);
+    }
+    count
+}
+
+/// Counts exit operations (Return, Revert, Stop) in a block recursively.
+fn count_exit_ops_in_block(block: &Block) -> usize {
+    let mut count = 0;
+    for stmt in &block.statements {
+        count += count_exit_ops_in_statement(stmt);
+    }
+    count
+}
+
+/// Counts exit operations in a single statement recursively.
+fn count_exit_ops_in_statement(stmt: &Statement) -> usize {
+    match stmt {
+        Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop => 1,
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            let mut n = count_exit_ops_in_region(then_region);
+            if let Some(r) = else_region {
+                n += count_exit_ops_in_region(r);
+            }
+            n
+        }
+        Statement::Switch { cases, default, .. } => {
+            let mut n = 0;
+            for case in cases {
+                n += count_exit_ops_in_region(&case.body);
+            }
+            if let Some(r) = default {
+                n += count_exit_ops_in_region(r);
+            }
+            n
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            let mut n = 0;
+            for s in condition_stmts {
+                n += count_exit_ops_in_statement(s);
+            }
+            n += count_exit_ops_in_region(body);
+            n += count_exit_ops_in_region(post);
+            n
+        }
+        Statement::Block(region) => count_exit_ops_in_region(region),
+        _ => 0,
+    }
+}
+
+/// Counts exit operations in a region.
+fn count_exit_ops_in_region(region: &Region) -> usize {
+    let mut count = 0;
+    for stmt in &region.statements {
+        count += count_exit_ops_in_statement(stmt);
     }
     count
 }

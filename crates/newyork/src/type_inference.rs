@@ -149,6 +149,9 @@ pub struct TypeInference {
     /// Function parameter ValueIds, keyed by FunctionId.
     /// Used during the forward pass to propagate caller argument widths to callee parameters.
     function_params: BTreeMap<u32, Vec<(ValueId, Type)>>,
+    /// Function return value IDs, keyed by FunctionId.
+    /// Used during the forward pass to propagate return value widths to call sites.
+    function_returns: BTreeMap<u32, Vec<ValueId>>,
 }
 
 impl TypeInference {
@@ -159,6 +162,7 @@ impl TypeInference {
             uses: BTreeMap::new(),
             changed: false,
             function_params: BTreeMap::new(),
+            function_returns: BTreeMap::new(),
         }
     }
 
@@ -239,6 +243,15 @@ impl TypeInference {
         for (func_id, function) in &object.functions {
             self.function_params
                 .insert(func_id.0, function.params.clone());
+        }
+
+        // Pre-populate function_returns so the forward pass can propagate
+        // return value widths to call sites interprocedurally.
+        for (func_id, function) in &object.functions {
+            if !function.return_values.is_empty() {
+                self.function_returns
+                    .insert(func_id.0, function.return_values.clone());
+            }
         }
 
         // Phase 1: Forward propagation - determine minimum widths
@@ -1018,7 +1031,29 @@ impl TypeInference {
                         self.widen(*param_id, arg_width);
                     }
                 }
-                BitWidth::I256
+
+                // Propagate callee return value widths to call result.
+                // If the callee's return values have known narrow widths (from the
+                // forward pass over the callee body), use the widest return value's
+                // width instead of I256. This narrows downstream operations at
+                // call sites (e.g., sub(call_result, fmp) can become i64 arithmetic).
+                if let Some(ret_ids) = self.function_returns.get(&function.0).cloned() {
+                    let mut max_ret_width = BitWidth::I1;
+                    for ret_id in &ret_ids {
+                        let ret_width = self.get(*ret_id).min_width;
+                        max_ret_width = max_ret_width.max(ret_width);
+                    }
+                    // Only narrow if we have meaningful return width info.
+                    // Default (I1) means we haven't analyzed the callee yet;
+                    // wait for the next iteration.
+                    if max_ret_width > BitWidth::I1 {
+                        max_ret_width
+                    } else {
+                        BitWidth::I256
+                    }
+                } else {
+                    BitWidth::I256
+                }
             }
 
             Expr::Truncate { to, .. } => *to,

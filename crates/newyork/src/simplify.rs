@@ -447,6 +447,43 @@ impl Simplifier {
                                 d.statements.drain(0..2);
                             }
                         }
+                    } else {
+                        // Partial callvalue read hoisting: when not all cases have
+                        // the full callvalue-revert prefix, but many cases start with
+                        // `let vN = callvalue()`, hoist just the syscall read before
+                        // the switch. Each case that had `let vN = callvalue()` becomes
+                        // `let vN = hoisted_cv` (a copy, no syscall). This eliminates
+                        // N-1 redundant callvalue syscalls.
+                        const PARTIAL_HOIST_THRESHOLD: usize = 3;
+                        let callvalue_case_count = cases
+                            .iter()
+                            .filter(|c| starts_with_callvalue_let(&c.body.statements))
+                            .count();
+                        let default_has_cv = default
+                            .as_ref()
+                            .is_some_and(|d| starts_with_callvalue_let(&d.statements));
+                        let total_cv = callvalue_case_count + if default_has_cv { 1 } else { 0 };
+
+                        if total_cv >= PARTIAL_HOIST_THRESHOLD {
+                            let hoisted_cv_id = self.fresh_id();
+                            hoisted.push(Statement::Let {
+                                bindings: vec![hoisted_cv_id],
+                                value: Expr::CallValue,
+                            });
+                            // Replace callvalue() in each case with Var(hoisted_cv_id)
+                            for case in &mut cases {
+                                replace_leading_callvalue_with_var(
+                                    &mut case.body.statements,
+                                    hoisted_cv_id,
+                                );
+                            }
+                            if let Some(ref mut d) = default {
+                                replace_leading_callvalue_with_var(
+                                    &mut d.statements,
+                                    hoisted_cv_id,
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -2028,6 +2065,34 @@ fn has_callvalue_revert_prefix(stmts: &[Statement]) -> bool {
                 .any(|s| matches!(s, Statement::Revert { .. }))
         }
         _ => false,
+    }
+}
+
+/// Checks if a statement list starts with `let vN = callvalue()`.
+/// Used for partial callvalue read hoisting: we only need the first statement
+/// to be a callvalue binding, not the full callvalue-revert pattern.
+fn starts_with_callvalue_let(stmts: &[Statement]) -> bool {
+    matches!(
+        stmts.first(),
+        Some(Statement::Let {
+            bindings,
+            value: Expr::CallValue,
+        }) if bindings.len() == 1
+    )
+}
+
+/// Replaces the first statement's `callvalue()` expression with `Var(replacement_id)`
+/// if the first statement is `let vN = callvalue()`. This turns the syscall read
+/// into a copy of the already-hoisted value.
+fn replace_leading_callvalue_with_var(stmts: &mut [Statement], replacement_id: ValueId) {
+    if let Some(Statement::Let {
+        bindings,
+        value: value @ Expr::CallValue,
+    }) = stmts.first_mut()
+    {
+        if bindings.len() == 1 {
+            *value = Expr::Var(replacement_id);
+        }
     }
 }
 

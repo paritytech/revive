@@ -27,6 +27,9 @@ pub use self::polkavm::context::function::runtime::arithmetics::SignedDivision a
 pub use self::polkavm::context::function::runtime::arithmetics::SignedRemainder as PolkaVMSignedRemainderFunction;
 pub use self::polkavm::context::function::runtime::deploy_code::DeployCode as PolkaVMDeployCodeFunction;
 pub use self::polkavm::context::function::runtime::entry::Entry as PolkaVMEntryFunction;
+pub use self::polkavm::context::function::runtime::revive::CallDataLoad as PolkaVMCallDataLoadFunction;
+pub use self::polkavm::context::function::runtime::revive::CallValue as PolkaVMCallValueFunction;
+pub use self::polkavm::context::function::runtime::revive::Caller as PolkaVMCallerFunction;
 pub use self::polkavm::context::function::runtime::revive::Exit as PolkaVMExitFunction;
 pub use self::polkavm::context::function::runtime::revive::WordToPointer as PolkaVMWordToPointerFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;

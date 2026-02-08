@@ -83,8 +83,8 @@ export function resolveInputs(sources: SolcInput): SolcInput {
   )
 }
 
-export function version(): string {
-  const v = resolcVersion()
+export async function version(): Promise<string> {
+  const v = await resolcVersion()
   return v.split(' ').pop() ?? v
 }
 

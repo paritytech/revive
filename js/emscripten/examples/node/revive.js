@@ -7,7 +7,7 @@ async function compile(standardJsonInput) {
   }
 
   // Initialize the compiler
-  const compiler = createRevive();
+  const compiler = await createRevive();
   compiler.soljson = soljson;
 
   // Provide input to the compiler

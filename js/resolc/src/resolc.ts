@@ -2,8 +2,8 @@ import soljson from 'solc/soljson'
 import Resolc from './resolc/resolc'
 import type { SolcOutput } from '.'
 
-export function resolc(input: string): SolcOutput {
-  const m = Resolc() as any // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function resolc(input: string): Promise<SolcOutput> {
+  const m = (await Resolc()) as any // eslint-disable-line @typescript-eslint/no-explicit-any
   m.soljson = soljson
   m.writeToStdin(input)
   m.callMain(['--standard-json'])
@@ -16,8 +16,8 @@ export function resolc(input: string): SolcOutput {
   return JSON.parse(m.readFromStdout()) as SolcOutput
 }
 
-export function version(): string {
-  const m = Resolc() as any // eslint-disable-line @typescript-eslint/no-explicit-any
+export async function version(): Promise<string> {
+  const m = (await Resolc()) as any // eslint-disable-line @typescript-eslint/no-explicit-any
   m.soljson = soljson
   m.callMain(['--version'])
   const err = m.readFromStderr()

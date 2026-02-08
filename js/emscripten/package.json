@@ -11,7 +11,8 @@
     "test:bun": "bun test --timeout 60000 node.test",
     "test:all": "npm run test:node && npm run test:bun",
     "format": "prettier --write .",
-    "build:package": "node ./build.js"
+    "patch:resolc": "node ./patch_resolc_js.js",
+    "build:package": "npm run patch:resolc && node ./build.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

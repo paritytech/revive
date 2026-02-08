@@ -118,12 +118,11 @@ pub fn translate_yul_object(
     let heap_opt = HeapOptResults::from_analysis(&heap_analysis);
 
     let mut type_info = TypeInference::new();
-    type_info.infer_object(&ir_object);
+    type_info.infer_object_tree(&ir_object);
 
     // Also analyze subobjects
     for subobject in &ir_object.subobjects {
         heap_analysis.analyze_object(subobject);
-        type_info.infer_object(subobject);
     }
 
     // Narrow function parameter types based on usage within function bodies.

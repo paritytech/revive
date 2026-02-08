@@ -4081,10 +4081,7 @@ fn fold_keccak_in_block(block: &mut Block) {
 }
 
 /// Processes statements, tracking constants and folding keccak expressions.
-fn fold_keccak_in_stmts(
-    statements: &mut Vec<Statement>,
-    constants: &mut BTreeMap<u32, BigUint>,
-) {
+fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u32, BigUint>) {
     for stmt in statements.iter_mut() {
         match stmt {
             Statement::Let {
@@ -4140,9 +4137,7 @@ fn fold_keccak_in_stmts(
                     fold_keccak_in_region(else_region, constants);
                 }
             }
-            Statement::Switch {
-                cases, default, ..
-            } => {
+            Statement::Switch { cases, default, .. } => {
                 for case in cases.iter_mut() {
                     fold_keccak_in_region(&mut case.body, constants);
                 }

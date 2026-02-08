@@ -1740,6 +1740,18 @@ When using `RuntimeFunction::into_llvm()` to emit a function body, the LLVM func
 
 ---
 
+### 20. Type Inference: Cross-Object Namespace Collision and Operand Widening
+
+**Cross-object collision bug (fixed):** The type inference used a flat `BTreeMap<u32, TypeConstraint>` for constraints and `function_params` keyed by `FunctionId.0`. Since each subobject (deploy code, runtime code) gets its own `YulTranslator::new()` with IDs starting at 0, the same FunctionId/ValueId referred to different things in different objects. Sharing one `TypeInference` across all objects caused constraint pollution -- e.g., callers of `extract_byte_array_length` (func_id=0 in ERC20_247) would widen params for `finalize_allocation` (func_id=0 in ERC20Tester_381).
+
+**Fix:** `infer_object_tree()` creates a fresh `TypeInference` per subobject, stored in `sub_inferences: Vec<TypeInference>`. Each subobject uses its own isolated constraint namespace.
+
+**Caller-arg pollution (fixed):** Even within a single object, the old `Expr::Call` handler propagated caller arg widths to callee params via `widen(param, arg_width)`. If an SSA value was used both as a narrow arg (e.g., memory offset) and in a wide context (e.g., `call` value = I256), the wider context polluted the param. Example: `v115 = phi(0, 0)` used as both `finalize_allocation(ptr, v115)` and `call(gas, addr, v115, ...)`. The ExternalCall handler widened v115 to I256, which then propagated to finalize_allocation's size param.
+
+**Fix:** Removed caller→callee arg width propagation entirely. Instead, added **operand widening** in BinOps: when computing `add(param, literal)`, both operands are widened to match. This lets the function body determine param widths from internal uses. `add(v1, 0x1f)` widens v1 to I8, and comparisons propagate naturally.
+
+**Result:** `finalize_allocation(v0: i32, v1: i32)` -- both params narrowed from I256. `checked_sub_uint256` and `checked_add_uint256` params also narrowed to i32.
+
 ## New test cases for size opts
 
 Some OpenZeppelin wizard contracts are good test cases for size opts:

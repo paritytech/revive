@@ -863,12 +863,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         // Recursively handle subobjects (inner_object for deployed code)
         // Each subobject gets a fresh codegen instance for values (SSA values are scoped to objects)
-        // but shares the generated_functions set to avoid regenerating shared utility functions
-        for subobject in &object.subobjects {
+        // but shares the generated_functions set to avoid regenerating shared utility functions.
+        // Each subobject uses its own scoped TypeInference to avoid ValueId namespace collisions.
+        for (i, subobject) in object.subobjects.iter().enumerate() {
+            let sub_type_info = self
+                .type_info
+                .sub_inferences
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| self.type_info.clone());
             let mut subobject_codegen = LlvmCodegen::new_with_shared_functions(
                 self.generated_functions.clone(),
                 self.heap_opt.clone(),
-                self.type_info.clone(),
+                sub_type_info,
                 self.inline_decisions.clone(),
             );
             subobject_codegen.generate_object(subobject, context)?;

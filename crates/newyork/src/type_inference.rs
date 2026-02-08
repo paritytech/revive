@@ -148,12 +148,11 @@ pub struct TypeInference {
     uses: BTreeMap<u32, BTreeSet<UseContext>>,
     /// Whether any constraint changed in the last iteration.
     changed: bool,
-    /// Function parameter ValueIds, keyed by FunctionId.
-    /// Used during the forward pass to propagate caller argument widths to callee parameters.
-    function_params: BTreeMap<u32, Vec<(ValueId, Type)>>,
     /// Function return value IDs, keyed by FunctionId.
     /// Used during the forward pass to propagate return value widths to call sites.
     function_returns: BTreeMap<u32, Vec<ValueId>>,
+    /// Type inference results for subobjects (each subobject has its own namespace).
+    pub sub_inferences: Vec<TypeInference>,
 }
 
 impl TypeInference {
@@ -163,8 +162,8 @@ impl TypeInference {
             constraints: BTreeMap::new(),
             uses: BTreeMap::new(),
             changed: false,
-            function_params: BTreeMap::new(),
             function_returns: BTreeMap::new(),
+            sub_inferences: Vec::new(),
         }
     }
 
@@ -239,14 +238,11 @@ impl TypeInference {
     }
 
     /// Runs type inference on an object with both forward and backward passes.
+    ///
+    /// Each object in the tree (deploy code, runtime code) has its own ValueId
+    /// and FunctionId namespaces (both start at 0 per object). We process each
+    /// object with a fresh context to avoid cross-object constraint pollution.
     pub fn infer_object(&mut self, object: &Object) {
-        // Pre-populate function_params so the forward pass can propagate
-        // caller argument widths to callee parameters.
-        for (func_id, function) in &object.functions {
-            self.function_params
-                .insert(func_id.0, function.params.clone());
-        }
-
         // Pre-populate function_returns so the forward pass can propagate
         // return value widths to call sites interprocedurally.
         for (func_id, function) in &object.functions {
@@ -266,10 +262,6 @@ impl TypeInference {
                 self.infer_function_forward(function);
             }
 
-            for subobject in &object.subobjects {
-                self.infer_object(subobject);
-            }
-
             if !self.changed {
                 break;
             }
@@ -283,6 +275,23 @@ impl TypeInference {
 
         // Phase 3: Apply backward constraints
         self.apply_backward_constraints();
+    }
+
+    /// Runs type inference on an object tree, including subobjects.
+    ///
+    /// Each subobject gets a fresh TypeInference context because different
+    /// objects in the tree have overlapping ValueId/FunctionId namespaces
+    /// (each object's translator allocates IDs starting from 0).
+    pub fn infer_object_tree(&mut self, object: &Object) {
+        self.infer_object(object);
+
+        for subobject in &object.subobjects {
+            let mut sub_inference = TypeInference::new();
+            sub_inference.infer_object_tree(subobject);
+            // Store subobject results in our sub_inferences map for later use
+            // by narrow_function_params and codegen.
+            self.sub_inferences.push(sub_inference);
+        }
     }
 
     /// Forward pass for a function.
@@ -336,36 +345,36 @@ impl TypeInference {
         }
     }
 
-    /// Narrows function parameter types based on interprocedural analysis.
+    /// Narrows function parameter types based on function-body analysis.
     ///
-    /// Uses the forward-inferred min_width for each parameter, which reflects the
-    /// maximum width across all call sites (propagated via Expr::Call during the
-    /// forward pass). This is more precise than the backward use-context analysis
-    /// because it narrows based on what callers actually PASS, not how the function
-    /// internally USES the parameter.
+    /// Uses the forward-inferred min_width for each parameter, which reflects
+    /// how the parameter is used within the function body (via operand widening
+    /// in arithmetic ops, comparisons, memory ops, etc.). This is sound because
+    /// the function body determines the minimum width needed to compute correct
+    /// results, regardless of what callers pass.
     ///
     /// Safety: The function body zero-extends narrowed parameters back to word type,
     /// creating an implicit LLVM range proof. This is sound because:
-    /// 1. All callers pass values fitting in the narrow width (by forward inference)
+    /// 1. The narrow width is sufficient for all internal uses
     /// 2. The zero-extension preserves the value
     /// 3. LLVM uses the range proof to eliminate downstream overflow checks
     pub fn narrow_function_params(&self, object: &mut Object) {
         for function in object.functions.values_mut() {
             for (param_id, param_ty) in &mut function.params {
+                let constraint = self.get(*param_id);
+
                 // Only narrow I256 integer parameters
                 if !matches!(param_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
-
-                let constraint = self.get(*param_id);
 
                 // Skip signed values (truncation + zero-extension doesn't preserve sign)
                 if constraint.is_signed {
                     continue;
                 }
 
-                // Use the forward-inferred min_width. This reflects the max width
-                // across all call sites. Only narrow if it's strictly smaller than I256.
+                // Use the forward-inferred min_width from the function body.
+                // Only narrow if it's strictly smaller than I256.
                 let inferred = constraint.min_width;
                 if inferred < BitWidth::I256 {
                     // Clamp to at least I32 for safety (XLEN is 32-bit on PolkaVM).
@@ -376,9 +385,9 @@ impl TypeInference {
             }
         }
 
-        // Recurse into subobjects
-        for subobject in &mut object.subobjects {
-            self.narrow_function_params(subobject);
+        // Recurse into subobjects using their scoped type inference contexts
+        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
+            sub_inf.narrow_function_params(subobject);
         }
     }
 
@@ -895,9 +904,17 @@ impl TypeInference {
                 let lhs_width = self.get(lhs.id).min_width;
                 let rhs_width = self.get(rhs.id).min_width;
 
+                // Operand widening: widen both operands to match each other.
+                // This propagates meaningful widths from literals/known-width values
+                // to function params. Capped at I64 to prevent mload-I256 pollution
+                // (mload returns I256 but most values fit in I64 for memory ops).
+                let capped_operand_width = lhs_width.max(rhs_width).min(BitWidth::I64);
+
                 match op {
-                    // Arithmetic ops: result can be wider
+                    // Arithmetic ops: result can be wider.
                     BinOp::Add => {
+                        self.widen(lhs.id, capped_operand_width);
+                        self.widen(rhs.id, capped_operand_width);
                         // Addition can overflow by 1 bit
                         widen_by_one(lhs_width.max(rhs_width))
                     }
@@ -907,6 +924,8 @@ impl TypeInference {
                         BitWidth::I256
                     }
                     BinOp::Mul => {
+                        self.widen(lhs.id, capped_operand_width);
+                        self.widen(rhs.id, capped_operand_width);
                         // Multiplication doubles width
                         double_width(lhs_width.max(rhs_width))
                     }
@@ -921,7 +940,11 @@ impl TypeInference {
 
                     // Bitwise ops: preserve width
                     BinOp::And => lhs_width.min(rhs_width), // AND shrinks to smaller
-                    BinOp::Or | BinOp::Xor => lhs_width.max(rhs_width),
+                    BinOp::Or | BinOp::Xor => {
+                        self.widen(lhs.id, capped_operand_width);
+                        self.widen(rhs.id, capped_operand_width);
+                        lhs_width.max(rhs_width)
+                    }
 
                     // Shifts
                     BinOp::Shl => {
@@ -935,7 +958,9 @@ impl TypeInference {
                         rhs_width
                     }
 
-                    // Comparisons: result is boolean
+                    // Comparisons: result is boolean.
+                    // Don't widen operands - comparisons can compare values of
+                    // different widths (the codegen zero-extends as needed).
                     BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
                         // Mark signed ops
                         if matches!(op, BinOp::Slt | BinOp::Sgt) {
@@ -1032,16 +1057,12 @@ impl TypeInference {
                 BitWidth::I256
             }
 
-            Expr::Call { function, args } => {
-                // Propagate caller argument widths to callee parameters.
-                // This enables interprocedural narrowing: if all callers pass small values,
-                // the parameter type can be narrowed from I256.
-                if let Some(callee_params) = self.function_params.get(&function.0).cloned() {
-                    for (arg, (param_id, _param_ty)) in args.iter().zip(callee_params.iter()) {
-                        let arg_width = self.get(arg.id).min_width;
-                        self.widen(*param_id, arg_width);
-                    }
-                }
+            Expr::Call { function, args: _ } => {
+                // Parameter widths are determined by the function body's own forward
+                // pass (how params are used internally), NOT by caller arg widths.
+                // Propagating caller arg widths is unsound: the same SSA value may be
+                // used in both narrow (e.g., memory offset) and wide (e.g., call value)
+                // contexts, and the wider use pollutes the param constraint.
 
                 // Propagate callee return value widths to call result.
                 // If the callee's return values have known narrow widths (from the

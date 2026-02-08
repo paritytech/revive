@@ -134,6 +134,10 @@ pub struct LlvmCodegen<'ctx> {
     /// Maps the string representation of the constant to the global's pointer value.
     /// This avoids materializing the same 256-bit constant at every storage access site.
     storage_key_globals: BTreeMap<String, inkwell::values::PointerValue<'ctx>>,
+    /// Cache of outlined keccak256 slot wrapper functions.
+    /// Maps the constant slot hash string to the wrapper `FunctionValue`.
+    /// Each wrapper is `noinline (i256) -> i256` calling `__revive_keccak256_two_words(word0, CONST)`.
+    keccak256_slot_wrappers: BTreeMap<String, inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -161,6 +165,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
+            keccak256_slot_wrappers: BTreeMap::new(),
         }
     }
 
@@ -190,6 +195,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
+            keccak256_slot_wrappers: BTreeMap::new(),
         }
     }
 
@@ -3043,9 +3049,32 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let word0_val = self.ensure_word_type(context, word0_val, "keccak_word0")?;
                 let word1_val = self.translate_value(word1)?.into_int_value();
                 let word1_val = self.ensure_word_type(context, word1_val, "keccak_word1")?;
-                Ok(revive_llvm_context::polkavm_evm_crypto::sha3_two_words(
-                    context, word0_val, word1_val,
-                )?)
+
+                // Use outlined slot wrapper when word1 is a large constant
+                if word1_val.is_const() && Self::try_extract_const_u64(word1_val).is_none() {
+                    let wrapper_fn =
+                        self.get_or_create_keccak256_slot_wrapper(word1_val, context)?;
+                    let fn_type = context
+                        .word_type()
+                        .fn_type(&[context.word_type().into()], false);
+                    let result = context
+                        .builder()
+                        .build_indirect_call(
+                            fn_type,
+                            wrapper_fn.as_global_value().as_pointer_value(),
+                            &[word0_val.into()],
+                            "keccak256_slot_call",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    Ok(result
+                        .try_as_basic_value()
+                        .basic()
+                        .expect("keccak256 slot wrapper should return a value"))
+                } else {
+                    Ok(revive_llvm_context::polkavm_evm_crypto::sha3_two_words(
+                        context, word0_val, word1_val,
+                    )?)
+                }
             }
 
             Expr::Keccak256Single { word0 } => {
@@ -3298,6 +3327,89 @@ impl<'ctx> LlvmCodegen<'ctx> {
         } else {
             Ok(PolkaVMArgument::value(llvm_val))
         }
+    }
+
+    /// Gets or creates an outlined keccak256 slot wrapper function for a constant slot hash.
+    ///
+    /// Each wrapper is `noinline (i256 word0) -> i256` that calls
+    /// `__revive_keccak256_two_words(word0, CONSTANT_SLOT)`.
+    /// This avoids materializing the large i256 constant at every call site.
+    fn get_or_create_keccak256_slot_wrapper(
+        &mut self,
+        slot_const: IntValue<'ctx>,
+        context: &PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        let const_str = slot_const.print_to_string().to_string();
+
+        if let Some(&wrapper_fn) = self.keccak256_slot_wrappers.get(&const_str) {
+            return Ok(wrapper_fn);
+        }
+
+        let wrapper_name = format!(
+            "__keccak256_slot_{}",
+            self.keccak256_slot_wrappers.len()
+        );
+
+        // Create the wrapper function type: (i256) -> i256
+        let word_type = context.word_type();
+        let fn_type = word_type.fn_type(&[word_type.into()], false);
+
+        let wrapper_fn = context.module().add_function(
+            &wrapper_name,
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        // Set NoInline + OptimizeForSize attributes
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let optsize_attr = context.llvm().create_enum_attribute(
+            revive_llvm_context::PolkaVMAttribute::OptimizeForSize as u32,
+            0,
+        );
+        let minsize_attr = context.llvm().create_enum_attribute(
+            revive_llvm_context::PolkaVMAttribute::MinSize as u32,
+            0,
+        );
+        wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, optsize_attr);
+        wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        // Save current builder position
+        let saved_block = context.basic_block();
+
+        // Build the wrapper function body
+        let entry_block = context.llvm().append_basic_block(wrapper_fn, "entry");
+        context.set_basic_block(entry_block);
+
+        let word0_param = wrapper_fn.get_nth_param(0).unwrap().into_int_value();
+
+        // Get the __revive_keccak256_two_words function
+        let keccak_fn = context
+            .get_function(
+                revive_llvm_context::PolkaVMKeccak256TwoWordsFunction::NAME,
+                false,
+            )
+            .expect("__revive_keccak256_two_words should be declared");
+
+        let result = context
+            .build_call(
+                keccak_fn.borrow().declaration(),
+                &[word0_param.into(), slot_const.into()],
+                "keccak256_slot_result",
+            )
+            .expect("keccak256_two_words should return a value");
+
+        context.build_return(Some(&result));
+
+        // Restore builder position
+        context.set_basic_block(saved_block);
+
+        self.keccak256_slot_wrappers
+            .insert(const_str, wrapper_fn);
+
+        Ok(wrapper_fn)
     }
 
     /// Converts a storage key Value to a PolkaVMArgument, using global constants for

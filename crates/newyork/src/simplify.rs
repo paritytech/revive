@@ -3131,6 +3131,681 @@ fn nullary_expr_tag(expr: &Expr) -> u8 {
     }
 }
 
+// =============================================================================
+// Fuzzy function deduplication (parameterize by differing literals)
+// =============================================================================
+
+/// Maximum number of differing literal positions allowed for fuzzy dedup.
+/// Each differing literal becomes a new i256 parameter, so keep this small.
+const MAX_FUZZY_LITERAL_DIFFS: usize = 4;
+
+/// Minimum function size (in IR statements) for fuzzy dedup.
+/// Smaller functions don't save enough to justify the extra parameter overhead.
+const MIN_FUZZY_DEDUP_SIZE: usize = 20;
+
+/// Deduplicates functions that are structurally identical except for literal constants.
+///
+/// When two functions have the same structure but differ only in literal values,
+/// the duplicate is removed and its call sites are redirected to the canonical
+/// function with the differing literals passed as additional arguments.
+///
+/// Returns the number of functions removed.
+pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
+    if object.functions.len() < 2 {
+        return 0;
+    }
+
+    // Step 1: Compute fuzzy canonical forms (literals replaced by position indices)
+    // Group functions by fuzzy hash
+    let mut fuzzy_groups: BTreeMap<Vec<u8>, Vec<FunctionId>> = BTreeMap::new();
+
+    for func in object.functions.values() {
+        if func.size_estimate < MIN_FUZZY_DEDUP_SIZE {
+            continue;
+        }
+
+        let fuzzy_hash = fuzzy_canonicalize_function(func);
+        fuzzy_groups
+            .entry(fuzzy_hash)
+            .or_default()
+            .push(func.id);
+    }
+
+    // Step 2: For each group with 2+ members, find differing literals
+    let mut total_removed = 0;
+    let mut next_value_id = find_max_value_id_in_object(object) + 1;
+
+    for group in fuzzy_groups.values() {
+        if group.len() < 2 {
+            continue;
+        }
+
+        // Collect literals from each function in the group
+        let mut group_literals: Vec<(FunctionId, Vec<BigUint>)> = Vec::new();
+        for &fid in group {
+            let func = &object.functions[&fid];
+            let lits = collect_literals_ordered(func);
+            group_literals.push((fid, lits));
+        }
+
+        // All functions must have the same number of literals
+        let lit_count = group_literals[0].1.len();
+        if group_literals.iter().any(|(_, lits)| lits.len() != lit_count) {
+            continue;
+        }
+
+        // Find positions where literals differ
+        let mut differing_positions: Vec<usize> = Vec::new();
+        for pos in 0..lit_count {
+            let first_val = &group_literals[0].1[pos];
+            if group_literals.iter().any(|(_, lits)| &lits[pos] != first_val) {
+                differing_positions.push(pos);
+            }
+        }
+
+        if differing_positions.is_empty() {
+            continue; // Exact duplicates - handled by existing dedup
+        }
+        if differing_positions.len() > MAX_FUZZY_LITERAL_DIFFS {
+            continue; // Too many differences to parameterize
+        }
+
+        // The canonical function is the first in the group
+        let canonical_id = group[0];
+        let canonical_func = object.functions.get(&canonical_id).unwrap().clone();
+
+        // Check that all functions have the same parameter count and return types
+        let canonical_param_count = canonical_func.params.len();
+        let canonical_returns = &canonical_func.returns;
+        let all_compatible = group.iter().skip(1).all(|&fid| {
+            let func = &object.functions[&fid];
+            func.params.len() == canonical_param_count
+                && &func.returns == canonical_returns
+                && func.params.iter().zip(canonical_func.params.iter())
+                    .all(|((_, t1), (_, t2))| t1 == t2)
+        });
+        if !all_compatible {
+            continue;
+        }
+
+        // Build the parameterized canonical function:
+        // Add one i256 parameter for each differing literal position
+        let mut new_param_ids: Vec<ValueId> = Vec::new();
+        for _ in &differing_positions {
+            let vid = ValueId(next_value_id);
+            next_value_id += 1;
+            new_param_ids.push(vid);
+        }
+
+        // Clone canonical function and add new parameters
+        let mut parameterized = canonical_func.clone();
+        for &vid in &new_param_ids {
+            parameterized.params.push((vid, Type::Int(BitWidth::I256)));
+        }
+
+        // Replace the differing literals in the parameterized body with Var references
+        let canonical_lits = &group_literals[0].1;
+
+        replace_literals_with_params(
+            &mut parameterized.body,
+            &differing_positions,
+            &new_param_ids,
+        );
+
+        // Replace canonical function with parameterized version
+        object.functions.insert(canonical_id, parameterized);
+
+        // Build call-site redirects and argument mappings
+        // For the canonical function's own call sites, add its original literals as args
+        let canonical_extra_args: Vec<BigUint> = differing_positions
+            .iter()
+            .map(|&pos| canonical_lits[pos].clone())
+            .collect();
+
+        // Update all call sites across the IR
+        for &fid in group {
+            let extra_args: Vec<BigUint> = if fid == canonical_id {
+                canonical_extra_args.clone()
+            } else {
+                let lits = &group_literals.iter().find(|(id, _)| *id == fid).unwrap().1;
+                differing_positions.iter().map(|&pos| lits[pos].clone()).collect()
+            };
+
+            // Update all call sites for this function ID to call canonical_id
+            // with the extra literal arguments appended
+            update_call_sites_with_extra_args(
+                &mut object.code,
+                fid,
+                canonical_id,
+                &extra_args,
+                &mut next_value_id,
+            );
+            for func in object.functions.values_mut() {
+                update_call_sites_with_extra_args(
+                    &mut func.body,
+                    fid,
+                    canonical_id,
+                    &extra_args,
+                    &mut next_value_id,
+                );
+            }
+        }
+
+        // Remove duplicate functions (all except canonical)
+        for &fid in group.iter().skip(1) {
+            object.functions.remove(&fid);
+            total_removed += 1;
+        }
+    }
+
+    total_removed
+}
+
+/// Produces a fuzzy canonical form where literal values are replaced with
+/// position indices. Two functions with the same fuzzy form are structurally
+/// identical except for their literal constant values.
+fn fuzzy_canonicalize_function(func: &crate::ir::Function) -> Vec<u8> {
+    let mut canon = Canonicalizer::new();
+    let mut buf = Vec::new();
+
+    // Encode signature (same as exact dedup)
+    buf.push(func.params.len() as u8);
+    for (_, ty) in &func.params {
+        buf.push(type_tag(ty));
+    }
+    buf.push(func.returns.len() as u8);
+    for ty in &func.returns {
+        buf.push(type_tag(ty));
+    }
+
+    // Register parameters
+    for (param_id, _) in &func.params {
+        canon.get_or_insert(*param_id);
+    }
+    for rv in &func.return_values_initial {
+        canon.get_or_insert(*rv);
+    }
+
+    // Encode body with literals replaced by placeholder
+    let mut lit_counter = 0u32;
+    for stmt in &func.body.statements {
+        fuzzy_encode_stmt(&mut canon, stmt, &mut buf, &mut lit_counter);
+    }
+
+    buf.push(0xFE);
+    for rv in &func.return_values {
+        canon.encode_value_id(*rv, &mut buf);
+    }
+
+    buf
+}
+
+fn fuzzy_encode_expr(
+    canon: &mut Canonicalizer,
+    expr: &Expr,
+    buf: &mut Vec<u8>,
+    lit_counter: &mut u32,
+) {
+    match expr {
+        Expr::Literal { ty, .. } => {
+            buf.push(0x01);
+            // Replace literal value with position index
+            buf.push(0xFF); // marker for "fuzzy literal"
+            buf.extend_from_slice(&lit_counter.to_le_bytes());
+            *lit_counter += 1;
+            buf.push(type_tag(ty));
+        }
+        Expr::Var(id) => {
+            buf.push(0x02);
+            canon.encode_value_id(*id, buf);
+        }
+        Expr::Binary { op, lhs, rhs } => {
+            buf.push(0x03);
+            buf.push(binop_tag(*op));
+            canon.encode_value(lhs, buf);
+            canon.encode_value(rhs, buf);
+        }
+        Expr::Ternary { op, a, b, n } => {
+            buf.push(0x04);
+            buf.push(binop_tag(*op));
+            canon.encode_value(a, buf);
+            canon.encode_value(b, buf);
+            canon.encode_value(n, buf);
+        }
+        Expr::Unary { op, operand } => {
+            buf.push(0x05);
+            buf.push(unaryop_tag(*op));
+            canon.encode_value(operand, buf);
+        }
+        Expr::Call { function, args } => {
+            buf.push(0x06);
+            // For fuzzy dedup, we use a placeholder for FunctionId too,
+            // since the callee may itself be a different duplicate
+            buf.extend_from_slice(&function.0.to_le_bytes());
+            buf.push(args.len() as u8);
+            for arg in args {
+                canon.encode_value(arg, buf);
+            }
+        }
+        Expr::SLoad { key, static_slot } => {
+            buf.push(0x12);
+            canon.encode_value(key, buf);
+            // Replace static_slot with position index (it's a literal)
+            if static_slot.is_some() {
+                buf.push(1);
+                buf.push(0xFF);
+                buf.extend_from_slice(&lit_counter.to_le_bytes());
+                *lit_counter += 1;
+            } else {
+                buf.push(0);
+            }
+        }
+        // For all other expressions, delegate to exact encoding
+        _ => {
+            canon.encode_expr(expr, buf);
+        }
+    }
+}
+
+fn fuzzy_encode_stmt(
+    canon: &mut Canonicalizer,
+    stmt: &Statement,
+    buf: &mut Vec<u8>,
+    lit_counter: &mut u32,
+) {
+    match stmt {
+        Statement::Let { bindings, value } => {
+            buf.push(0x80);
+            buf.push(bindings.len() as u8);
+            for b in bindings {
+                canon.encode_value_id(*b, buf);
+            }
+            fuzzy_encode_expr(canon, value, buf, lit_counter);
+        }
+        Statement::SStore { key, value, static_slot } => {
+            buf.push(0x84);
+            canon.encode_value(key, buf);
+            canon.encode_value(value, buf);
+            if static_slot.is_some() {
+                buf.push(1);
+                buf.push(0xFF);
+                buf.extend_from_slice(&lit_counter.to_le_bytes());
+                *lit_counter += 1;
+            } else {
+                buf.push(0);
+            }
+        }
+        Statement::If { condition, inputs, then_region, else_region, outputs } => {
+            buf.push(0x85);
+            canon.encode_value(condition, buf);
+            buf.push(inputs.len() as u8);
+            for v in inputs { canon.encode_value(v, buf); }
+            fuzzy_encode_region(canon, then_region, buf, lit_counter);
+            if let Some(r) = else_region {
+                buf.push(1);
+                fuzzy_encode_region(canon, r, buf, lit_counter);
+            } else {
+                buf.push(0);
+            }
+            buf.push(outputs.len() as u8);
+            for o in outputs { canon.encode_value_id(*o, buf); }
+        }
+        Statement::Switch { scrutinee, inputs, cases, default, outputs } => {
+            buf.push(0x86);
+            canon.encode_value(scrutinee, buf);
+            buf.push(inputs.len() as u8);
+            for v in inputs { canon.encode_value(v, buf); }
+            buf.push(cases.len() as u8);
+            for c in cases {
+                // Case values are literals - replace with placeholder
+                buf.push(0xFF);
+                buf.extend_from_slice(&lit_counter.to_le_bytes());
+                *lit_counter += 1;
+                fuzzy_encode_region(canon, &c.body, buf, lit_counter);
+            }
+            if let Some(d) = default {
+                buf.push(1);
+                fuzzy_encode_region(canon, d, buf, lit_counter);
+            } else {
+                buf.push(0);
+            }
+            buf.push(outputs.len() as u8);
+            for o in outputs { canon.encode_value_id(*o, buf); }
+        }
+        Statement::For { init_values, loop_vars, condition_stmts, condition, body, post, outputs, .. } => {
+            buf.push(0x87);
+            buf.push(init_values.len() as u8);
+            for v in init_values { canon.encode_value(v, buf); }
+            buf.push(loop_vars.len() as u8);
+            for v in loop_vars { canon.encode_value_id(*v, buf); }
+            buf.push(condition_stmts.len() as u8);
+            for s in condition_stmts { fuzzy_encode_stmt(canon, s, buf, lit_counter); }
+            fuzzy_encode_expr(canon, condition, buf, lit_counter);
+            fuzzy_encode_region(canon, body, buf, lit_counter);
+            fuzzy_encode_region(canon, post, buf, lit_counter);
+            buf.push(outputs.len() as u8);
+            for o in outputs { canon.encode_value_id(*o, buf); }
+        }
+        Statement::Block(region) => {
+            buf.push(0x88);
+            fuzzy_encode_region(canon, region, buf, lit_counter);
+        }
+        Statement::Expr(expr) => {
+            buf.push(0x89);
+            fuzzy_encode_expr(canon, expr, buf, lit_counter);
+        }
+        // For all other statements, delegate to exact encoding
+        _ => {
+            canon.encode_stmt(stmt, buf);
+        }
+    }
+}
+
+fn fuzzy_encode_region(
+    canon: &mut Canonicalizer,
+    region: &Region,
+    buf: &mut Vec<u8>,
+    lit_counter: &mut u32,
+) {
+    buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
+    for stmt in &region.statements {
+        fuzzy_encode_stmt(canon, stmt, buf, lit_counter);
+    }
+    buf.push(region.yields.len() as u8);
+    for y in &region.yields {
+        canon.encode_value(y, buf);
+    }
+}
+
+/// Collects all literal values from a function in order of appearance.
+/// The ordering must match the fuzzy canonicalization's lit_counter.
+fn collect_literals_ordered(func: &crate::ir::Function) -> Vec<BigUint> {
+    let mut lits = Vec::new();
+    for stmt in &func.body.statements {
+        collect_literals_in_stmt(stmt, &mut lits);
+    }
+    lits
+}
+
+fn collect_literals_in_expr(expr: &Expr, lits: &mut Vec<BigUint>) {
+    match expr {
+        Expr::Literal { value, .. } => {
+            lits.push(value.clone());
+        }
+        Expr::SLoad { static_slot: Some(slot), .. } => {
+            lits.push(slot.clone());
+        }
+        _ => {}
+    }
+}
+
+fn collect_literals_in_stmt(stmt: &Statement, lits: &mut Vec<BigUint>) {
+    match stmt {
+        Statement::Let { value, .. } => {
+            collect_literals_in_expr(value, lits);
+        }
+        Statement::SStore { static_slot: Some(slot), .. } => {
+            lits.push(slot.clone());
+        }
+        Statement::If { then_region, else_region, .. } => {
+            collect_literals_in_region(then_region, lits);
+            if let Some(r) = else_region {
+                collect_literals_in_region(r, lits);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for c in cases {
+                lits.push(c.value.clone());
+                collect_literals_in_region(&c.body, lits);
+            }
+            if let Some(d) = default {
+                collect_literals_in_region(d, lits);
+            }
+        }
+        Statement::For { condition_stmts, condition, body, post, .. } => {
+            for s in condition_stmts {
+                collect_literals_in_stmt(s, lits);
+            }
+            collect_literals_in_expr(condition, lits);
+            collect_literals_in_region(body, lits);
+            collect_literals_in_region(post, lits);
+        }
+        Statement::Block(region) => {
+            collect_literals_in_region(region, lits);
+        }
+        Statement::Expr(expr) => {
+            collect_literals_in_expr(expr, lits);
+        }
+        _ => {}
+    }
+}
+
+fn collect_literals_in_region(region: &Region, lits: &mut Vec<BigUint>) {
+    for stmt in &region.statements {
+        collect_literals_in_stmt(stmt, lits);
+    }
+}
+
+/// Replaces literal values at differing positions with Var references to new parameters.
+fn replace_literals_with_params(
+    block: &mut Block,
+    differing_positions: &[usize],
+    new_param_ids: &[ValueId],
+) {
+    let mut lit_counter = 0usize;
+    let position_set: BTreeMap<usize, usize> = differing_positions
+        .iter()
+        .enumerate()
+        .map(|(i, &pos)| (pos, i))
+        .collect();
+
+    for stmt in &mut block.statements {
+        replace_literals_in_stmt(stmt, &position_set, new_param_ids, &mut lit_counter);
+    }
+}
+
+fn replace_literals_in_expr(
+    expr: &mut Expr,
+    positions: &BTreeMap<usize, usize>,
+    params: &[ValueId],
+    counter: &mut usize,
+) {
+    match expr {
+        Expr::Literal { .. } => {
+            if let Some(&param_idx) = positions.get(counter) {
+                *expr = Expr::Var(params[param_idx]);
+            }
+            *counter += 1;
+        }
+        Expr::SLoad { static_slot: Some(_), .. } => {
+            // static_slot also counts as a literal position
+            *counter += 1;
+        }
+        _ => {}
+    }
+}
+
+fn replace_literals_in_stmt(
+    stmt: &mut Statement,
+    positions: &BTreeMap<usize, usize>,
+    params: &[ValueId],
+    counter: &mut usize,
+) {
+    match stmt {
+        Statement::Let { value, .. } => {
+            replace_literals_in_expr(value, positions, params, counter);
+        }
+        Statement::SStore { static_slot: Some(_), .. } => {
+            *counter += 1;
+        }
+        Statement::If { then_region, else_region, .. } => {
+            replace_literals_in_region(then_region, positions, params, counter);
+            if let Some(r) = else_region {
+                replace_literals_in_region(r, positions, params, counter);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for c in cases {
+                *counter += 1; // case value
+                replace_literals_in_region(&mut c.body, positions, params, counter);
+            }
+            if let Some(d) = default {
+                replace_literals_in_region(d, positions, params, counter);
+            }
+        }
+        Statement::For { condition_stmts, condition, body, post, .. } => {
+            for s in condition_stmts {
+                replace_literals_in_stmt(s, positions, params, counter);
+            }
+            replace_literals_in_expr(condition, positions, params, counter);
+            replace_literals_in_region(body, positions, params, counter);
+            replace_literals_in_region(post, positions, params, counter);
+        }
+        Statement::Block(region) => {
+            replace_literals_in_region(region, positions, params, counter);
+        }
+        Statement::Expr(expr) => {
+            replace_literals_in_expr(expr, positions, params, counter);
+        }
+        _ => {}
+    }
+}
+
+fn replace_literals_in_region(
+    region: &mut Region,
+    positions: &BTreeMap<usize, usize>,
+    params: &[ValueId],
+    counter: &mut usize,
+) {
+    for stmt in &mut region.statements {
+        replace_literals_in_stmt(stmt, positions, params, counter);
+    }
+}
+
+/// Updates call sites in a block, changing calls to old_id into calls to new_id
+/// with extra literal arguments appended.
+/// Returns the number of new ValueIds allocated (caller must track next_value_id).
+fn update_call_sites_with_extra_args(
+    block: &mut Block,
+    old_id: FunctionId,
+    new_id: FunctionId,
+    extra_args: &[BigUint],
+    next_value_id: &mut u32,
+) {
+    block.statements = rewrite_stmts_with_extra_args(
+        std::mem::take(&mut block.statements),
+        old_id,
+        new_id,
+        extra_args,
+        next_value_id,
+    );
+}
+
+/// Rewrites a list of statements, inserting Let bindings before calls that need
+/// extra literal arguments.
+fn rewrite_stmts_with_extra_args(
+    stmts: Vec<Statement>,
+    old_id: FunctionId,
+    new_id: FunctionId,
+    extra_args: &[BigUint],
+    next_id: &mut u32,
+) -> Vec<Statement> {
+    let mut result = Vec::with_capacity(stmts.len());
+    for mut stmt in stmts {
+        // Check if this statement contains a call to old_id
+        match &mut stmt {
+            Statement::Let { value: Expr::Call { function, args }, .. }
+            | Statement::Expr(Expr::Call { function, args })
+                if *function == old_id =>
+            {
+                // Emit Let bindings for extra args, then modify the call
+                let mut extra_values = Vec::new();
+                for arg_val in extra_args {
+                    let vid = ValueId(*next_id);
+                    *next_id += 1;
+                    result.push(Statement::Let {
+                        bindings: vec![vid],
+                        value: Expr::Literal {
+                            value: arg_val.clone(),
+                            ty: Type::Int(BitWidth::I256),
+                        },
+                    });
+                    extra_values.push(Value {
+                        id: vid,
+                        ty: Type::Int(BitWidth::I256),
+                    });
+                }
+                *function = new_id;
+                args.extend(extra_values);
+                result.push(stmt);
+            }
+            _ => {
+                // Recurse into nested regions
+                rewrite_stmt_regions(&mut stmt, old_id, new_id, extra_args, next_id);
+                result.push(stmt);
+            }
+        }
+    }
+    result
+}
+
+fn rewrite_stmt_regions(
+    stmt: &mut Statement,
+    old_id: FunctionId,
+    new_id: FunctionId,
+    extra_args: &[BigUint],
+    next_id: &mut u32,
+) {
+    match stmt {
+        Statement::If { then_region, else_region, .. } => {
+            rewrite_region_with_extra_args(then_region, old_id, new_id, extra_args, next_id);
+            if let Some(r) = else_region {
+                rewrite_region_with_extra_args(r, old_id, new_id, extra_args, next_id);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for c in cases {
+                rewrite_region_with_extra_args(&mut c.body, old_id, new_id, extra_args, next_id);
+            }
+            if let Some(d) = default {
+                rewrite_region_with_extra_args(d, old_id, new_id, extra_args, next_id);
+            }
+        }
+        Statement::For { condition_stmts, body, post, .. } => {
+            *condition_stmts = rewrite_stmts_with_extra_args(
+                std::mem::take(condition_stmts),
+                old_id,
+                new_id,
+                extra_args,
+                next_id,
+            );
+            rewrite_region_with_extra_args(body, old_id, new_id, extra_args, next_id);
+            rewrite_region_with_extra_args(post, old_id, new_id, extra_args, next_id);
+        }
+        Statement::Block(region) => {
+            rewrite_region_with_extra_args(region, old_id, new_id, extra_args, next_id);
+        }
+        // Let and Expr with non-Call expressions don't need rewriting
+        _ => {}
+    }
+}
+
+fn rewrite_region_with_extra_args(
+    region: &mut Region,
+    old_id: FunctionId,
+    new_id: FunctionId,
+    extra_args: &[BigUint],
+    next_id: &mut u32,
+) {
+    region.statements = rewrite_stmts_with_extra_args(
+        std::mem::take(&mut region.statements),
+        old_id,
+        new_id,
+        extra_args,
+        next_id,
+    );
+}
+
 /// Redirects function calls in a block, replacing old function IDs with new ones.
 fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, FunctionId>) {
     for stmt in &mut block.statements {

@@ -127,6 +127,9 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             }
         }
 
+        // NOTE: __revive_store_heap_word / __revive_load_heap_word NoInline was tested but
+        // had ZERO effect on OZ contracts. LLVM's -Oz already keeps these as function calls.
+
         // NOTE: __revive_exit NoInline was tested but REGRESSED all OZ contracts by 2-4%.
         // When exit is not inlined, LLVM can't propagate range proofs (FMP, etc.) into the
         // exit function, forcing it to keep all overflow checks in safe_truncate_int_to_xlen.

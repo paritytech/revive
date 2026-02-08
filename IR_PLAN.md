@@ -1399,8 +1399,8 @@ Implementation approach:
 ### Phase 5e: Memory Region Annotation ⚠️ IN PROGRESS (2026-02-07)
 36. [~] **Memory region annotation in simplify pass** - Partially implemented. Annotates MemoryRegion on MLoad/MStore/MStore8 using constant tracking.
     - **Mechanism**: `resolve_region()` helper checks if a memory offset is a known constant and maps it to `MemoryRegion::FreePointerSlot`, `Scratch`, or `Dynamic` using `MemoryRegion::from_address()`.
-    - **Status**: Region annotation works in simplify.rs. Attempted to use it in type_inference.rs (return I32 for FMP MLoad), but this CAUSED A REGRESSION (+252 bytes on ERC20). The LLVM-level range proof already communicates the constraint; the type inference change just added redundant trunc/extend operations that confused LLVM's optimizer.
-    - **Lesson**: The LLVM range proof and the newyork type inference serve different purposes. The range proof communicates to LLVM. The type inference controls codegen intermediate types. Changing type inference for a value that already has a range proof is harmful because it introduces redundant narrowing that LLVM can't optimize away.
+    - **Status**: Region annotation works in simplify.rs. Initial attempt to use it in type_inference.rs (return I32 for FMP MLoad) caused +252 bytes regression on integration ERC20 (small contract). **Later revisited in Phase 5i**: the same change HELPS OZ contracts (-146 to -1069 bytes) because large contracts have many function boundary crossings where interprocedural narrowing propagates the range. Integration test code sizes are neutral (unchanged).
+    - **Lesson**: Test optimizations on BOTH small and large contracts. What regresses on small contracts may be neutral or beneficial on large contracts due to interprocedural effects.
 
 ### Phase 5f: Keccak256 Deduplication ✅ DONE (updated 2026-02-07)
 37. [x] **Keccak256 two-word helper function** - ✅ IMPLEMENTED. Deduplicate `mstore(0,w0)+mstore(32,w1)+keccak256(0,64)` sequences.
@@ -1438,31 +1438,41 @@ Implementation approach:
 42. [x] **sbrk NoInline fix** - Fixed. Moved sbrk NoInline attribute setting AFTER `PolkaVMSbrkFunction.into_llvm()` emission. The previous code set the attribute before the function existed in the LLVM module, making it a complete no-op. Raised threshold from 20 to 30 heap ops to avoid regressions on borderline contracts (integration ERC20 has 27 ops).
 43. [x] **Stale codesize baseline fix** - Updated `codesize_newyork.json` to match actual compiled sizes. Previous values were stale.
 
+### Phase 5i: FMP I32 Type Inference + Keccak Constant Folding (updated 2026-02-08)
+44. [x] **FMP MLoad returns I32 in type inference** - IMPLEMENTED. The free memory pointer (mload(64)) is bounded by the PolkaVM heap size (128KB), so its value always fits in I32. By returning I32 from the type inference forward pass for FreePointerSlot MLoads, interprocedural parameter narrowing propagates the range across function boundaries. Functions receiving FMP-derived values get narrower (i32) parameters, eliminating overflow checks in callees.
+    - **Key insight**: Previous attempt at this (Phase 5e, lesson at line 1402) caused +252 bytes regression on integration ERC20. BUT integration ERC20 is small with few function boundary crossings. OZ contracts (large, many function boundaries) benefit significantly.
+    - **Results**: OZ ERC20 -146, ERC721 -687, ERC1155 -353, Governor -1069, RWA -151, Stablecoin -132 bytes. Integration test code sizes unchanged (neutral on small contracts).
+45. [x] **Compile-time constant keccak256 folding** - IMPLEMENTED. When Keccak256Single or Keccak256Pair IR nodes have constant arguments, precompute the hash at compile time and replace with a literal.
+    - **Mechanism**: Targeted `fold_constant_keccak` pass runs after mem_opt (which creates Keccak256Single/Pair nodes). Walks IR tracking constants, folds keccak expressions with constant args.
+    - **Pass ordering issue**: The simplifier runs BEFORE mem_opt creates Keccak256Single/Pair nodes. Keccak folding in simplify_expr is dead code for now. The targeted pass handles post-mem_opt folding.
+    - **Full simplifier re-run investigated**: Re-running the full simplifier after mem_opt helped integration ERC20 by -293 bytes but REGRESSED OZ Stablecoin by +72 bytes (code layout changes). Targeted keccak-only fold avoids this regression.
+    - **Results**: OZ ERC20 -204, ERC721 -290, ERC1155 -496, Governor -1041, RWA -31, Stablecoin -8 bytes.
+    - **6 constant keccak calls eliminated** in OZ ERC20 (duplicate slot hash computations).
+
 ### Code Size Reduction Goals (Target: 50%)
-> Current status: newyork vs standard pipeline (2026-02-07, after interprocedural narrowing + tight FMP proof):
+> Current status: newyork vs standard pipeline (2026-02-08, after FMP I32 type inference + keccak constant folding):
 >
+> **Integration benchmarks (codesize_newyork.json):**
 > | Contract | Newyork | Standard | Change |
 > |----------|---------|----------|--------|
-> | Baseline | 663 | 681 | **-2.6%** |
-> | Computation | 1660 | 1849 | **-10.2%** |
-> | DivisionArithmetics | 13524 | 14002 | **-3.4%** |
-> | ERC20 | 13799 | 16757 | **-17.7%** |
-> | Events | 1438 | 1474 | **-2.4%** |
-> | FibonacciIterative | 1183 | 1239 | **-4.5%** |
-> | Flipper | 1507 | 1682 | **-10.4%** |
-> | SHA1 | 6226 | 7277 | **-14.4%** |
+> | Baseline | 658 | 681 | **-3.4%** |
+> | Computation | 1594 | 1849 | **-13.8%** |
+> | DivisionArithmetics | 12962 | 14002 | **-7.4%** |
+> | ERC20 | 12333 | 16757 | **-26.4%** |
+> | Events | 1442 | 1474 | **-2.2%** |
+> | FibonacciIterative | 1184 | 1239 | **-4.4%** |
+> | Flipper | 1505 | 1682 | **-10.5%** |
+> | SHA1 | 5942 | 7277 | **-18.3%** |
 >
-> **Summary**: Newyork pipeline beats standard on ALL benchmarks. Best improvements: ERC20 -26.4%, SHA1 -18.3%, Computation -13.8%, Flipper -10.5%.
->
-> **OpenZeppelin contracts (newyork pipeline, keccak single-word fusion delta):**
-> | Contract | Before | After | Change |
-> |----------|--------|-------|--------|
-> | ERC20 | 62541 | 61776 | **-1.22%** |
-> | ERC721 | 68852 | 68048 | **-1.17%** |
-> | ERC1155 | 48983 | 48983 | 0.00% |
-> | Governor | 121628 | 120326 | **-1.07%** |
-> | RWA | 59959 | 59703 | **-0.43%** |
-> | Stablecoin | 64106 | 63815 | **-0.45%** |
+> **OpenZeppelin contracts (newyork vs standard):**
+> | Contract | Standard | Newyork | Change |
+> |----------|---------|---------|--------|
+> | ERC20 | 84364 | 61426 | **-27.2%** |
+> | ERC721 | 93730 | 67071 | **-28.4%** |
+> | ERC1155 | 60566 | 48134 | **-20.5%** |
+> | Governor | 152686 | 118216 | **-22.6%** |
+> | RWA | 80763 | 59521 | **-26.3%** |
+> | Stablecoin | 83282 | 63675 | **-23.5%** |
 >
 > **Remaining LLVM IR analysis** (ERC20 optimized, 2026-02-07, 1685 lines):
 > - 18 `consume_all_gas` overflow trap sites

@@ -4160,6 +4160,9 @@ fn fold_keccak_in_stmts(
                 fold_keccak_in_region(body, constants);
                 fold_keccak_in_region(post, constants);
             }
+            Statement::Block(region) => {
+                fold_keccak_in_region(region, constants);
+            }
             _ => {}
         }
     }

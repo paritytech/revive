@@ -120,10 +120,66 @@ jobs:
           path: ${{ env.OUTPUT_FILE }}
           retention-days: 1
 
-  # TODO: Add compile-and-hash-wasm job.
+  compile-and-hash-wasm:
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-compiler-tests
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-compiler-tests
+          path: resolc-compiler-tests
+
+      - name: Download Wasm Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc.@(js|wasm)
+          path: resolc-wasm
+          merge-multiple: true
+
+      - name: Download soljson.js
+        run: |
+          curl -sSLo resolc-wasm/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Compile Contracts and Collect Hashes
+        # TODO: Set timeout when we know how long everything takes.
+        # timeout-minutes: 100
+        shell: bash
+        run: |
+          RESOLC="resolc-wasm/resolc.js"
+          SOLJSON="resolc-wasm/soljson.js"
+          PLATFORM_LABEL="wasm32-unknown-emscripten"
+          # Set to "true" for verbose output.
+          DEBUG="false"
+
+          node ./revive/.github/scripts/compile-and-hash.mjs \
+              "$RESOLC" \
+              "${{ env.CONTRACTS_DIR }}" \
+              "${{ env.OUTPUT_FILE }}" \
+              "${{ env.OPT_LEVELS }}" \
+              "$PLATFORM_LABEL" \
+              "$SOLJSON" \
+              "$DEBUG"
+
+      - name: Upload Hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_PREFIX }}wasm32-unknown-emscripten
+          path: ${{ env.OUTPUT_FILE }}
+          retention-days: 1
 
   verify-reproducible-builds:
-    needs: [compile-and-hash-native] # TODO: Add compile-and-hash-wasm to list.
+    needs: [compile-and-hash-native, compile-and-hash-wasm]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive

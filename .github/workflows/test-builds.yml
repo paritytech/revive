@@ -4,7 +4,15 @@ on:
   workflow_call:
 
 env:
-  CARGO_TERM_COLOR: always
+  # The directory containing the contracts to be compiled.
+  CONTRACTS_DIR: resolc-compiler-tests/fixtures
+  # The optimization levels to use for compilation.
+  OPT_LEVELS: "0,3,z"
+  # The prefix for hash artifact names (e.g., "hashes-linux-musl").
+  # This allows download steps to only download the relevant artifacts.
+  ARTIFACT_PREFIX: hashes-
+  # The output hash file name used by all platforms.
+  OUTPUT_FILE: hashes.json
 
 jobs:
   build:
@@ -34,7 +42,7 @@ jobs:
           path: resolc-universal-apple-darwin
           retention-days: 1
 
-  compile-and-hash:
+  compile-and-hash-native:
     needs: [build, create-macos-universal]
     strategy:
       fail-fast: false
@@ -80,41 +88,42 @@ jobs:
       - name: Install Solc
         uses: ./revive/.github/actions/get-solc
 
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
       - name: Compile Contracts and Collect Hashes
-        id: compile
-        # Windows needs the longest.
         # TODO: Set timeout when we know how long everything takes.
         # timeout-minutes: 100
         shell: bash
         run: |
-          RESOLC_BIN="resolc-bin/${{ matrix.binary }}"
-          CONTRACTS_DIR="resolc-compiler-tests/fixtures"
-          OUTPUT_DIR="hashes"
-          OPT_LEVELS="0,3,z"
+          RESOLC="resolc-bin/${{ matrix.binary }}"
+          SOLJSON=""
           # Set to "true" for verbose output.
           DEBUG="false"
 
-          chmod +x "$RESOLC_BIN"
-          chmod +x ./revive/.github/scripts/compile-and-hash.sh
-          bash ./revive/.github/scripts/compile-and-hash.sh \
-              "$RESOLC_BIN" \
-              "$CONTRACTS_DIR" \
-              "$OUTPUT_DIR" \
-              "$OPT_LEVELS" \
+          chmod +x "$RESOLC"
+          node ./revive/.github/scripts/compile-and-hash.mjs \
+              "$RESOLC" \
+              "${{ env.CONTRACTS_DIR }}" \
+              "${{ env.OUTPUT_FILE }}" \
+              "${{ env.OPT_LEVELS }}" \
+              "${{ matrix.platform }}" \
+              "$SOLJSON" \
               "$DEBUG"
-          echo "hashes_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload Hashes
         uses: actions/upload-artifact@v4
         with:
-          name: hashes-${{ matrix.platform }}
-          path: ${{ steps.compile.outputs.hashes_dir }}
+          name: ${{ env.ARTIFACT_PREFIX }}${{ matrix.platform }}
+          path: ${{ env.OUTPUT_FILE }}
           retention-days: 1
 
   # TODO: Add compile-and-hash-wasm job.
 
   verify-reproducible-builds:
-    needs: [compile-and-hash] # TODO: Add compile-and-hash-wasm to list.
+    needs: [compile-and-hash-native] # TODO: Add compile-and-hash-wasm to list.
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
@@ -125,18 +134,22 @@ jobs:
       - name: Download All Hashes
         uses: actions/download-artifact@v4
         with:
-          pattern: hashes-*
+          pattern: ${{ env.ARTIFACT_PREFIX }}*
           path: all-hashes
           merge-multiple: false
 
-      - name: Compare Hashes Across Platforms
-        run: |
-          HASHES_DIR="$PWD/all-hashes"
-          OPT_LEVELS="0,3,z"
-          PLATFORM_PREFIX="hashes-"
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
 
-          chmod +x ./revive/.github/scripts/compare-hashes.sh
-          bash ./revive/.github/scripts/compare-hashes.sh \
+      - name: Compare Hashes Across Platforms
+        shell: bash
+        run: |
+          HASHES_DIR="all-hashes"
+          ALL_HASH_FILES="**/${{ env.OUTPUT_FILE }}"
+
+          node ./revive/.github/scripts/compare-hashes.mjs \
               "$HASHES_DIR" \
-              "$OPT_LEVELS" \
-              "$PLATFORM_PREFIX"
+              "$ALL_HASH_FILES" \
+              "${{ env.OPT_LEVELS }}"

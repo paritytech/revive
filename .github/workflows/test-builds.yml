@@ -4,8 +4,12 @@ on:
   workflow_call:
 
 env:
-  # The directory containing the contracts to be compiled.
-  CONTRACTS_DIR: resolc-compiler-tests/fixtures
+  # Common base directory for all directories in `PROJECTS_DIRS`.
+  BASE_PROJECTS_DIR: resolc-compiler-tests/fixtures
+  # The directories containing the contracts to be compiled.
+  # Each subdirectory (e.g. ...solidity/complex/defi) in each of the directories listed are
+  # treated as projects and will be compiled together in order to resolve imports during compilation.
+  PROJECTS_DIRS: "resolc-compiler-tests/fixtures/solidity/simple, resolc-compiler-tests/fixtures/solidity/complex, resolc-compiler-tests/fixtures/solidity/translated_semantic_tests, resolc-compiler-tests/fixtures/yul"
   # The optimization levels to use for compilation.
   OPT_LEVELS: "0,3,z"
   # The prefix for hash artifact names (e.g., "hashes-linux-musl").
@@ -95,7 +99,7 @@ jobs:
 
       - name: Compile Contracts and Collect Hashes
         # TODO: Set timeout when we know how long everything takes.
-        # timeout-minutes: 100
+        # timeout-minutes: 30
         shell: bash
         run: |
           RESOLC="resolc-bin/${{ matrix.binary }}"
@@ -106,7 +110,8 @@ jobs:
           chmod +x "$RESOLC"
           node ./revive/.github/scripts/compile-and-hash.mjs \
               "$RESOLC" \
-              "${{ env.CONTRACTS_DIR }}" \
+              "${{ env.BASE_PROJECTS_DIR }}" \
+              "${{ env.PROJECTS_DIRS }}" \
               "${{ env.OUTPUT_FILE }}" \
               "${{ env.OPT_LEVELS }}" \
               "${{ matrix.platform }}" \
@@ -138,7 +143,7 @@ jobs:
       - name: Download Wasm Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: resolc.@(js|wasm)
+          pattern: resolc.{js,wasm}
           path: resolc-wasm
           merge-multiple: true
 
@@ -153,7 +158,7 @@ jobs:
 
       - name: Compile Contracts and Collect Hashes
         # TODO: Set timeout when we know how long everything takes.
-        # timeout-minutes: 100
+        # timeout-minutes: 30
         shell: bash
         run: |
           RESOLC="resolc-wasm/resolc.js"
@@ -164,7 +169,8 @@ jobs:
 
           node ./revive/.github/scripts/compile-and-hash.mjs \
               "$RESOLC" \
-              "${{ env.CONTRACTS_DIR }}" \
+              "${{ env.BASE_PROJECTS_DIR }}" \
+              "${{ env.PROJECTS_DIRS }}" \
               "${{ env.OUTPUT_FILE }}" \
               "${{ env.OPT_LEVELS }}" \
               "$PLATFORM_LABEL" \

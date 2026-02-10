@@ -30,8 +30,7 @@
  *         "ContractB": "<sha256>"
  *       },
  *       "yul/instructions/byte.yul": {
- *         "ContractA": "<sha256>",
- *         "ContractB": "<sha256>"
+ *         "ContractA": "<sha256>"
  *       },
  *     },
  *     "3": { ... },
@@ -404,7 +403,7 @@ function buildReport(result) {
         "",
         `Platforms compared: ${result.platforms.join(", ")}`,
         "",
-        `Total mismatches: ${totalMismatches}`,
+        `Total mismatches for all optimization levels: ${totalMismatches}`,
         "",
         statusMessage,
         "",

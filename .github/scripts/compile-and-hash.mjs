@@ -3,26 +3,46 @@
 // @ts-check
 
 /**
- * This script compiles all `.sol` and `.yul` files from the provided contracts
- * directory (and its subdirectories) using the provided resolc (either native
+ * This script compiles all `.sol` and `.yul` files from the provided projects
+ * directories (and its subdirectories) using the provided resolc (either native
  * binary or Wasm) and generates SHA256 hashes of each contract's bytecode.
  *
  * This script handles both native binaries and Wasm builds with shared logic.
  * Wasm mode is enabled when soljson is provided.
  *
+ * For Solidity files:
+ * - Each top-level item within each directory provided is treated as a single compilation unit/project:
+ *   - Top-level files are compiled individually
+ *   - Top-level subdirectories are compiled as one unit (their files are compiled together)
+ *
+ * This ensures that imports between files in the same subdirectory resolve automatically
+ * on both native and Wasm platforms, while allowing parallel compilations across units (for native),
+ * failures to be isolated so other units still compile, and a bounded output size.
+ *
+ * For Yul files:
+ * - All Yul files are treated as single-file compilation units as only one input file is supported.
+ *
  * ```
- * Usage: node compile-and-hash.mjs <resolc> <contracts-dir> <output-file> <opt-levels> <platform-label> [soljson] [debug]
+ * Usage: node compile-and-hash.mjs <resolc> <base-dir> <projects-dirs> <output-file> <opt-levels> <platform-label> [soljson] [debug]
  *
  *   resolc:         Path to native binary or Node.js module for Wasm
- *   contracts-dir:  Directory containing .sol (Solidity) and/or .yul (Yul) files
+ *   base-dir:       Common base directory for all directories in `projects-dirs`
+ *   projects-dirs:  Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files
+ *                   - Each top-level file or subdirectory within a projects directory is compiled as a single unit/project
+ *                   - Example:
+ *                     - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"
+ *                     - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",
+ *                                "contracts/solidity/complex", and "contracts/yul" are compiled together as
+ *                                units/projects if Solidity. Yul files are always compiled individually.
  *   output-file:    File path to write the output JSON to (the file and parent directories are created automatically)
  *   opt-levels:     Comma-separated optimization levels (e.g., "0,3,z")
  *   platform-label: Label for the platform (e.g., linux, macos, windows, wasm)
  *   soljson:        Path to soljson for Wasm builds (omit for native or use "")
- *   debug:          "true" or "1" to enable verbose output (default: "false")
+ *   debug:          "true" or "1" to enable verbose debug utput (default: "false")
  * ```
  *
- * Output format:
+ * Examlple output format:
+ * - Hashes are grouped by optimization level
  * - The file paths used as keys are normalized for cross-platform comparison.
  *   They should thereby not be used to access the filesystem.
  *
@@ -36,16 +56,15 @@
  *         "ContractNameB": "<sha256>"
  *       },
  *       "yul/instructions/byte.yul": {
- *         "ContractNameA": "<sha256>",
- *         "ContractNameB": "<sha256>"
+ *         "ContractNameA": "<sha256>"
  *       }
  *     },
  *     "3": { ... },
  *     "z": { ... }
  *   },
- *   "failedFiles": {
+ *   "failedPaths": {
  *     "0": {
- *       "path/to/failed.sol": [
+ *       "path/to/failed/unit": [
  *         "Error message1...",
  *         "Error message2..."
  *       ],
@@ -75,7 +94,7 @@ const require = createRequire(import.meta.url);
 
 const VALID_OPT_LEVELS = ["0", "1", "2", "3", "s", "z"];
 const PVM_BYTECODE_PREFIX = "50564d";
-const DEFAULT_CONCURRENCY = os.availableParallelism?.() ?? os.cpus().length;
+const DEFAULT_CONCURRENCY = Math.min(5, os.availableParallelism?.() ?? os.cpus().length);
 
 const Language = Object.freeze({
     Solidity: "Solidity",
@@ -88,12 +107,19 @@ const Language = Object.freeze({
 
 /**
  * @typedef {Object} SourceFile
- * @property {string} path - The platform-specfic file path.
+ * @property {string} path - The file path.
  * @property {string} content - The file content.
  */
 
 /**
+ * @typedef {Object} CompilationUnit
+ * @property {string} rootPath - The top-level file or directory path of the unit.
+ * @property {SourceFile[]} files - The source files in this unit.
+ */
+
+/**
  * @typedef {Object} Contract
+ * @property {string} path - The file path of the contract.
  * @property {string} name - The name of the contract.
  * @property {string} bytecode - The compiled bytecode as a hex string.
  */
@@ -111,7 +137,7 @@ const Language = Object.freeze({
 /**
  * @typedef {Object} HashResult
  * @property {{[optLevel: string]: {[path: string]: HashEntry}}} hashes - The hashes for each path keyed by optimization level.
- * @property {{[optLevel: string]: {[path: string]: string[]}}} failedFiles - The normalized paths of the files that failed to compile and their errors, keyed by optimization level.
+ * @property {{[optLevel: string]: {[path: string]: string[]}}} failedPaths - The normalized root paths of the units that failed to compile and their errors, keyed by optimization level.
  */
 
 /**
@@ -126,9 +152,8 @@ const Language = Object.freeze({
 /**
  * @typedef {Object} CompileConfig
  * @property {string} resolcPath - The path to the resolc build.
- * @property {string} contractsDir - The base directory for the contracts to compile.
+ * @property {string} baseDir - The common base directory for all units being compiled.
  * @property {string[]} optLevels - The optimization levels to compile with.
- * @property {boolean} isWasm - Whether the Wasm build should be used.
  * @property {(() => ResolcWasm) | null} createResolc - The Wasm resolc factory (null for native).
  * @property {unknown} soljson - The soljson module (null for native).
  * @property {boolean} debug - Whether to enable verbose output.
@@ -157,14 +182,21 @@ class ValidationError extends Error {
  */
 function getUsage() {
     return [
-        "Usage: node compile-and-hash.mjs <resolc> <contracts-dir> <output-file> <opt-levels> <platform-label> [soljson] [debug]",
+        "Usage: node compile-and-hash.mjs <resolc> <base-dir> <projects-dirs> <output-file> <opt-levels> <platform-label> [soljson] [debug]",
         "  resolc:         Path to native binary or Node.js module for Wasm",
-        "  contracts-dir:  Directory containing .sol (Solidity) and/or .yul (Yul) files",
+        '  base-dir:       Common base directory for all directories in "projects-dirs"',
+        "  projects-dirs:  Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files",
+        "                  - Each top-level file or subdirectory within a projects directory is compiled as a single unit/project",
+        "                  - Example:",
+        '                    - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"',
+        '                    - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",',
+        '                               "contracts/solidity/complex", and "contracts/yul" are compiled together as',
+        "                               units/projects if Solidity. Yul files are always compiled individually.",
         "  output-file:    Path to write the output JSON file (parent directories created automatically)",
         "  opt-levels:     Comma-separated optimization levels (e.g., \"0,3,z\")",
         "  platform-label: Label for the platform (e.g., linux, macos, windows, wasm)",
         '  soljson:        Path to soljson for Wasm builds (omit for native or use "")',
-        '  debug:          "true" or "1" to enable verbose output (default: "false")',
+        '  debug:          "true" or "1" to enable verbose debug output (default: "false")',
     ].join("\n");
 }
 
@@ -204,18 +236,111 @@ async function findFiles(directory, extension) {
 }
 
 /**
- * Converts `filePath` to a relative path from `baseDir` and normalizes it with forward slashes.
+ * Discovers and loads all files with `extension` in `directory` and all its
+ * subdirectories as single-file compilation units.
+ * @param {string} directory - The base directory to start the search.
+ * @param {string} extension - The file extension to match.
+ * @returns {Promise<CompilationUnit[]>} Compilation units each containing one file.
+ */
+async function loadSingleFileCompilationUnits(directory, extension) {
+    const filePaths = await findFiles(directory, extension);
+    const files = await Promise.all(filePaths.map(readFile));
+
+    return files.map((file) => ({
+        rootPath: file.path,
+        files: [file],
+    }));
+}
+
+/**
+ * Discovers and loads all files with `extension` in `directory` and all its
+ * subdirectories. Generates compilation units/projects with one or more files
+ * from each top-level item in `directory`, ensuring that imports between files
+ * in the same subdirectory resolve automatically on both native and Wasm platforms,
+ * while allowing parallel compilations across units (for native), failures to be
+ * isolated so other units still compile, and a bounded output size.
+ * - Top-level files become individual compilation units (single file)
+ * - Top-level subdirectories become multi-file compilation units (all files within)
+ * @param {string} directory - The base directory to search.
+ * @param {string} extension - The file extension to match.
+ * @returns {Promise<CompilationUnit[]>} Compilation units each containing its respective files.
+ */
+async function loadTopLevelCompilationUnits(directory, extension) {
+    /** @type {CompilationUnit[]} */
+    const units = [];
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const unitRootPath = path.join(directory, entry.name);
+
+        // Top-level file: single-file unit.
+        if (entry.isFile() && path.extname(entry.name) === extension) {
+            units.push({
+                rootPath: unitRootPath,
+                files: [await readFile(unitRootPath)],
+            });
+        }
+        // Top-level directory: multi-file unit.
+        else if (entry.isDirectory()) {
+            const filePaths = await findFiles(unitRootPath, extension);
+            if (filePaths.length > 0) {
+                units.push({
+                    rootPath: unitRootPath,
+                    files: await Promise.all(filePaths.map(readFile)),
+                });
+            }
+        }
+    }
+
+    return units;
+}
+
+/**
+ * Loads all compilation units/projects from multiple base directories.
+ * @param {string[]} directories - The base directories to search.
+ * @param {LanguageKind} language - The source code language.
+ * @returns {Promise<CompilationUnit[]>} All compilation units each containing its respective files.
+ */
+async function loadCompilationUnits(directories, language) {
+    /** @type {CompilationUnit[][]} */
+    let units = [];
+    switch (language) {
+        case Language.Solidity: {
+            units = await Promise.all(directories.map(dir => loadTopLevelCompilationUnits(dir, ".sol")));
+            break;
+        }
+        case Language.Yul: {
+            // Only one input file is supported in Yul mode.
+            units = await Promise.all(directories.map(dir => loadSingleFileCompilationUnits(dir, ".yul")));
+            break;
+        }
+        default:
+            throw new Error(`Unsupported language: ${language}`);
+    }
+
+    return units.flat();
+}
+
+/**
+ * Converts `filePath` to a relative path from the base directory and normalizes it with forward slashes.
  * This ensures that the file path added as part of a hash entry is consistent, and thus
  * comparable, across platforms. It should thereby not be used to access the filesystem.
- * @param {string} baseDir - The base directory to derive the relative path from.
+ * @param {string} baseDir - The base directory common for all units to derive the relative path from.
  * @param {string} filePath - The file path.
  * @returns {string} The relative path with forward slashes.
  *
  * @example
  * ```
- * baseDir = /path/to/contracts/fixtures
- * filePath = /path/to/contracts/fixtures/solidity/simple/loop/array/simple.sol
- * normalizedPathId = solidity/simple/loop/array/simple.sol
+ * baseDir          = "/home/runner/work/contracts"
+ * filePath         = "/home/runner/work/contracts/solidity/simple/loop.sol"
+ * normalizedPathId = "solidity/simple/loop.sol"
+ * ```
+ *
+ * @example
+ * ```
+ * baseDir          = "C:\\Users\\runner\\work\\contracts"
+ * filePath         = "C:\\Users\\runner\\work\\contracts\\solidity\\simple\\loop.sol"
+ * normalizedPathId = "solidity/simple/loop.sol"
  * ```
  */
 function getNormalizedPathId(baseDir, filePath) {
@@ -232,7 +357,7 @@ function writeResult(outputPath, platform, result) {
     const output = {
         platform,
         hashes: result.hashes,
-        failedFiles: result.failedFiles,
+        failedPaths: result.failedPaths,
     };
     fs.writeFileSync(outputPath, JSON.stringify(output, null, 2) + "\n");
 }
@@ -251,17 +376,21 @@ function countHashes(hashes) {
 
 /**
  * Creates standard JSON input for resolc.
- * @param {SourceFile} file - The source file.
+ * @param {SourceFile[]} files - The source files.
  * @param {LanguageKind} language - The source code language.
- * @param {string} optLevel - The optimization level (e.g., "0", "3", "z").
+ * @param {string} optLevel - The optimization level.
  * @returns {Object} The standard JSON input object.
  */
-function createStandardJsonInput(file, language, optLevel) {
+function createStandardJsonInput(files, language, optLevel) {
+    /** @type {{[path: string]: {content: string}}} */
+    const sources = {};
+    for (const file of files) {
+        sources[file.path] = { content: file.content };
+    }
+
     return {
         language,
-        sources: {
-            [file.path]: { content: file.content },
-        },
+        sources,
         settings: {
             optimizer: {
                 enabled: true,
@@ -293,11 +422,11 @@ function parseStandardJsonOutput(output) {
 
     /** @type {Contract[]} */
     const contracts = [];
-    for (const [, fileContracts] of Object.entries(parsed.contracts || {})) {
+    for (const [filePath, fileContracts] of Object.entries(parsed.contracts || {})) {
         for (const [name, contract] of Object.entries(fileContracts)) {
             const bytecode = contract.evm?.bytecode?.object;
             if (bytecode?.startsWith(PVM_BYTECODE_PREFIX)) {
-                contracts.push({ name, bytecode });
+                contracts.push({ path: filePath, name, bytecode });
             }
         }
     }
@@ -310,25 +439,25 @@ function parseStandardJsonOutput(output) {
 }
 
 /**
- * Compiles a file using the native resolc binary.
+ * Compiles source files using the native resolc binary.
  * @param {string} resolcBinary - The path to the resolc binary.
- * @param {SourceFile} file - The source file to compile.
+ * @param {SourceFile[]} files - The source files to compile.
  * @param {LanguageKind} language - The source code language.
  * @param {string} optLevel - The optimization level (e.g., "0", "3", "z").
  * @returns {Promise<CompilationResult>} The compilation result.
  * @throws {Error} For system-level errors.
  */
-async function compileNative(resolcBinary, file, language, optLevel) {
-    const input = createStandardJsonInput(file, language, optLevel);
+async function compileNative(resolcBinary, files, language, optLevel) {
+    const input = createStandardJsonInput(files, language, optLevel);
 
     // In standard JSON mode, compilation failures are reported as part
     // of the JSON output and will exit in a success state. System-level
     // errors will throw exceptions which are intentionally bubbled up.
     const promise = execFileAsync(resolcBinary, ["--standard-json"], {
-        // 20-second timeout per compilation.
-        timeout: 20_000,
-        // 10MB buffer for large outputs.
-        maxBuffer: 10 * 1024 * 1024,
+        // 200-second timeout for large multi-file units.
+        timeout: 200_000,
+        // 200MB buffer for large outputs.
+        maxBuffer: 200 * 1024 * 1024,
     });
     if (!promise.child?.stdin) {
         throw new Error("Failed to spawn child process for resolc");
@@ -341,20 +470,20 @@ async function compileNative(resolcBinary, file, language, optLevel) {
 }
 
 /**
- * Compiles a file using the Node module for Wasm.
+ * Compiles source files using the Node module for Wasm.
  * @param {() => ResolcWasm} createResolc - The Wasm resolc factory.
  * @param {unknown} soljson - The soljson module.
- * @param {SourceFile} file - The source file to compile.
+ * @param {SourceFile[]} files - The source files to compile.
  * @param {LanguageKind} language - The source code language.
  * @param {string} optLevel - The optimization level (e.g., "0", "3", "z").
  * @returns {CompilationResult} The compilation result.
  * @throws {Error} For system-level errors.
  */
-function compileWasm(createResolc, soljson, file, language, optLevel) {
+function compileWasm(createResolc, soljson, files, language, optLevel) {
     const compiler = createResolc();
     compiler.soljson = soljson;
 
-    const input = createStandardJsonInput(file, language, optLevel);
+    const input = createStandardJsonInput(files, language, optLevel);
     compiler.writeToStdin(JSON.stringify(input));
 
     // In standard JSON mode, compilation failures are reported as part
@@ -364,51 +493,58 @@ function compileWasm(createResolc, soljson, file, language, optLevel) {
 
     if (exitCode !== 0) {
         const stderr = compiler.readFromStderr();
-        throw new Error(`Compiling ${file.path} exited with code ${exitCode}: ${stderr}`);
+        // TODO: Temporarily filtering out resolc ICE errors so that it behaves similar to how
+        //       native resolc outputs the error into the stdout JSON rather than stderr.
+        //       (Should fix this inconsistency in the compiler, plus the ICE.)
+        const isInternalCompilerError = stderr.includes("ICE:");
+        if (isInternalCompilerError) {
+            return { contracts: [], errors: [stderr] };
+        }
+        throw new Error(`Compilation exited with code ${exitCode}: ${stderr}`);
     }
 
     return parseStandardJsonOutput(compiler.readFromStdout());
 }
 
 /**
- * Compiles a single file at all optimization levels provided and hashes the bytecode.
- * Each hash entry has the format {@link HashEntry}.
- * @param {SourceFile} file - The source file to compile.
+ * Compiles a compilation unit at all optimization levels provided and hashes the bytecode.
+ * @param {CompilationUnit} unit - The compilation unit to compile.
  * @param {LanguageKind} language - The source code language.
  * @param {CompileConfig} config - The compilation configuration.
  * @returns {Promise<HashResult>} Hashes and files that failed to compile for each optimization level.
  */
-async function compileAndHashOne(file, language, config) {
-    const { resolcPath, contractsDir, optLevels, isWasm, createResolc, soljson, debug } = config;
+async function compileAndHashUnit(unit, language, config) {
+    const { resolcPath, baseDir, optLevels, createResolc, soljson, debug } = config;
+    const isWasm = typeof createResolc === "function";
 
     if (debug) {
-        console.log(`[DEBUG] Compiling: ${file.path}`);
+        console.log(`[DEBUG] Compiling unit with ${unit.files.length} file${unit.files.length === 1 ? "" : "s"}: ${unit.rootPath}`);
     }
-
-    const normalizedPathId = getNormalizedPathId(contractsDir, file.path);
 
     /** @type {HashResult} */
     const result = {
         hashes: {},
-        failedFiles: {},
+        failedPaths: {},
     };
 
     for (const optLevel of optLevels) {
         result.hashes[optLevel] = {};
-        result.failedFiles[optLevel] = {};
+        result.failedPaths[optLevel] = {};
 
         const { contracts, errors } = isWasm
-            ? compileWasm(/** @type {() => ResolcWasm} */(createResolc), soljson, file, language, optLevel)
-            : await compileNative(resolcPath, file, language, optLevel);
+            ? compileWasm(createResolc, soljson, unit.files, language, optLevel)
+            : await compileNative(resolcPath, unit.files, language, optLevel);
 
         if (errors.length > 0) {
             if (debug) {
-                console.warn(`[DEBUG] Error compiling \`${file.path}\` at optimization \`${optLevel}\`:\n- ${errors.join("\n- ")}`);
+                console.warn(`[DEBUG] Errors compiling file(s) in unit \`${unit.rootPath}\` at optimization \`${optLevel}\`:\n- ${errors.join("\n- ")}`);
             }
-            result.failedFiles[optLevel][normalizedPathId] = errors;
+            const normalizedPathId = getNormalizedPathId(baseDir, unit.rootPath);
+            result.failedPaths[optLevel][normalizedPathId] = errors;
         }
 
-        for (const { name, bytecode } of contracts) {
+        for (const { path: filePath, name, bytecode } of contracts) {
+            const normalizedPathId = getNormalizedPathId(baseDir, filePath);
             if (!result.hashes[optLevel][normalizedPathId]) {
                 result.hashes[optLevel][normalizedPathId] = {};
             }
@@ -420,40 +556,28 @@ async function compileAndHashOne(file, language, config) {
 }
 
 /**
- * Compiles all provided files at all optimization levels provided and hashes the bytecode.
- * @param {string[]} filePaths - The paths to the files to compile.
+ * Compiles all units and collects hashes.
+ * @param {CompilationUnit[]} units - The compilation units to process.
  * @param {LanguageKind} language - The source code language.
  * @param {CompileConfig} config - The compilation configuration.
- * @returns {Promise<HashResult[]>} Per-file hash results.
+ * @returns {Promise<HashResult[]>} Per-unit hash results.
  */
-async function compileAndHashAll(filePaths, language, config) {
+async function compileAndHashAll(units, language, config) {
+    const totalFiles = units.reduce((sum, unit) => sum + unit.files.length, 0);
     console.log();
-    console.log(`=== Compiling ${filePaths.length} ${language} files (batch size: ${DEFAULT_CONCURRENCY}) ===`);
-
-    const files = await Promise.all(filePaths.map(readFile));
+    console.log(`=== Compiling ${totalFiles} ${language} files (${units.length} compilation units, batch size: ${DEFAULT_CONCURRENCY}) ===`);
+    console.log();
 
     // Sort by path (byte-order, not `localCompare()`) for deterministic batch-level processing order, helpful for debugging.
-    files.sort((a, b) => Number(a.path > b.path) - Number(a.path < b.path));
+    units.sort((a, b) => Number(a.rootPath > b.rootPath) - Number(a.rootPath < b.rootPath));
 
-    const PROGRESS_REPORT_INTERVAL = 200;
-    let previousInterval = 0;
-    /** @type {(numFilesProcessed: number) => void} */
-    const reportProgress = (numFilesProcessed) => {
-        if (numFilesProcessed === files.length) {
-            console.log();
-            return console.log(`Total ${language} files processed: ${files.length}`);
-        }
-        const currentInterval = Math.floor(numFilesProcessed / PROGRESS_REPORT_INTERVAL) * PROGRESS_REPORT_INTERVAL;
-        if (currentInterval > previousInterval) {
-            console.log(`Processed ${currentInterval} files...`);
-            previousInterval = currentInterval;
-        }
-    };
+    /** @param {number} numUnitsProcessed */
+    const reportProgress = (numUnitsProcessed) => console.log(`Processed ${numUnitsProcessed}/${units.length} units...`);
 
-    /** @param {SourceFile} file */
-    const compile = (file) => compileAndHashOne(file, language, config);
+    /** @param {CompilationUnit} unit */
+    const compile = (unit) => compileAndHashUnit(unit, language, config);
 
-    return batch(compile, files, DEFAULT_CONCURRENCY, reportProgress);
+    return batch(compile, units, DEFAULT_CONCURRENCY, reportProgress);
 }
 
 /**
@@ -465,18 +589,18 @@ async function compileAndHashAll(filePaths, language, config) {
  * - Failures can be attributed to a specific batch
  * - Log output is comparable across runs and platforms
  * @template T, R
- * @param {(item: T) => Promise<R>} processor - The function to process each item.
+ * @param {(item: T) => Promise<R>} process - The function to process each item.
  * @param {T[]} items - The items to process.
  * @param {number} batchSize - The number of items to process in parallel per batch.
  * @param {((numItemsProcessed: number) => void)|undefined} onBatchComplete - A callback called after each completed batch with the cumulative count processed.
  * @returns {Promise<R[]>} The results from all processed items.
  */
-async function batch(processor, items, batchSize, onBatchComplete) {
+async function batch(process, items, batchSize, onBatchComplete) {
     /** @type {R[]} */
     const result = [];
     for (let i = 0; i < items.length; i += batchSize) {
         const currentBatch = items.slice(i, i + batchSize);
-        const batchResult = await Promise.all(currentBatch.map(processor));
+        const batchResult = await Promise.all(currentBatch.map(process));
         result.push(...batchResult);
 
         if (typeof onBatchComplete === "function") {
@@ -489,8 +613,8 @@ async function batch(processor, items, batchSize, onBatchComplete) {
 }
 
 /**
- * Aggregates multiple per-file compilation and hash results into a single result.
- * @param {HashResult[]} results - The per-file compilation and hash results to aggregate.
+ * Aggregates multiple per-unit compilation and hash results into a single result.
+ * @param {HashResult[]} results - The per-unit compilation and hash results to aggregate.
  * @param {string[]} optLevels - The optimization levels used during compilation.
  * @returns {{result: HashResult, totalHashes: number}} Combined hash results and the total number of hashes generated.
  */
@@ -498,17 +622,17 @@ function aggregateResults(results, optLevels) {
     /** @type {HashResult} */
     const aggregatedResult = {
         hashes: {},
-        failedFiles: {},
+        failedPaths: {},
     };
     let totalHashes = 0;
 
     for (const optLevel of optLevels) {
         aggregatedResult.hashes[optLevel] = {};
-        aggregatedResult.failedFiles[optLevel] = {};
+        aggregatedResult.failedPaths[optLevel] = {};
 
         for (const partialResult of results) {
             Object.assign(aggregatedResult.hashes[optLevel], partialResult.hashes[optLevel]);
-            Object.assign(aggregatedResult.failedFiles[optLevel], partialResult.failedFiles[optLevel]);
+            Object.assign(aggregatedResult.failedPaths[optLevel], partialResult.failedPaths[optLevel]);
         }
 
         totalHashes += countHashes(aggregatedResult.hashes[optLevel]);
@@ -520,9 +644,10 @@ function aggregateResults(results, optLevels) {
 /**
  * Builds a final report from the results.
  * @param {HashResult} result - The aggregated compilation and hash result.
- * @param {number} totalFilesProcessed - The total number of files processed.
+ * @param {number} totalUnits - The total number of units processed.
  * @param {number} totalHashes - The total number of hashes generated.
  * @param {string[]} optLevels - The optimization levels used during compilation.
+ * @param {string} outputFile - The output file where the hash results can be found.
  * @returns {string} The report.
  *
  * @example
@@ -534,47 +659,51 @@ function aggregateResults(results, optLevels) {
  * Optimization level 0:
  * ---------------------
  *
- *     160 hashes generated, 143/145 files compiled
- *     2 files failed to compile:
- *         - solidity/simple/loop/array/simple.sol
- *         - yul/instructions/byte.yul
+ *     2588 hashes generated, 223/225 units compiled
+ *     2 units failed to compile:
+ *         - solidity/simple/immutable_evm
+ *         - yul/precompiles/ecmul_source.yul
  *
  * Optimization level 3:
  * ---------------------
  *
- *     161 hashes generated, 144/145 files compiled
- *     1 files failed to compile:
- *         - solidity/simple/loop/array/simple.sol
+ *     2588 hashes generated, 223/225 units compiled
+ *     2 units failed to compile:
+ *         - solidity/simple/immutable_evm
+ *         - yul/precompiles/ecmul_source.yul
  *
  * Optimization level z:
  * ---------------------
  *
- *     162 hashes generated, 145/145 files compiled
+ *     2588 hashes generated, 223/225 units compiled
+ *     2 units failed to compile:
+ *         - solidity/simple/immutable_evm
+ *         - yul/precompiles/ecmul_source.yul
  *
- * Total hashes: 483
+ * Total hashes: 7764
  * ```
  */
-function buildReport(result, totalFilesProcessed, totalHashes, optLevels) {
+function buildReport(result, totalUnits, totalHashes, optLevels, outputFile) {
     /** @type {string[]} */
     const reportPerOptLevel = [];
 
     for (const optLevel of optLevels) {
         const hashCount = countHashes(result.hashes[optLevel]);
-        const failedFilesAtOptLevel = Object.keys(result.failedFiles[optLevel]);
-        const failedCount = failedFilesAtOptLevel.length;
-        const successCount = totalFilesProcessed - failedCount;
+        const failedPathsAtOptLevel = Object.keys(result.failedPaths[optLevel]);
+        const failedCount = failedPathsAtOptLevel.length;
+        const successCount = totalUnits - failedCount;
 
         reportPerOptLevel.push(
             "",
             `Optimization level ${optLevel}:`,
             "---------------------",
             "",
-            `    ${hashCount} hashes generated, ${successCount}/${totalFilesProcessed} files compiled`,
+            `    ${hashCount} hashes generated, ${successCount}/${totalUnits} units compiled`,
         );
 
         if (failedCount > 0) {
-            reportPerOptLevel.push(`    ${failedCount} files failed to compile:`);
-            for (const file of failedFilesAtOptLevel) {
+            reportPerOptLevel.push(`    ${failedCount} units failed to compile:`);
+            for (const file of failedPathsAtOptLevel) {
                 reportPerOptLevel.push(`        - ${file}`);
             }
         }
@@ -589,6 +718,8 @@ function buildReport(result, totalFilesProcessed, totalHashes, optLevels) {
         "",
         `Total hashes: ${totalHashes}`,
         totalHashes ? "" : "\n❌ FAILURE: No hashes were generated!\n",
+        `(For all hashes generated and failed compilation units, see: ${outputFile})`,
+        "",
         "===========================================",
     ];
 
@@ -614,20 +745,42 @@ async function main() {
         process.exit(0);
     }
 
-    if (args.length < 5 || args.length > 7) {
+    if (args.length < 6 || args.length > 8) {
         throw new ValidationError(`Received an invalid number of arguments, got ${args.length}`, { showUsage: true });
     }
 
     const resolcPath = path.resolve(args[0]);
-    const contractsDir = path.resolve(args[1]);
-    const outputFile = path.resolve(args[2]);
-    const optLevels = [...new Set(args[3].split(",").map((s) => s.trim()))];
-    const platformLabel = args[4];
-    const soljsonPath = args[5] ? path.resolve(args[5]) : null;
-    const debug = ["true", "1"].includes(args[6]?.toLowerCase());
+    const baseDir = path.resolve(args[1]);
+    const projectsDirs = [...new Set(args[2].split(",").map(dir => path.resolve(dir.trim())))];
+    const outputFile = path.resolve(args[3]);
+    const optLevels = [...new Set(args[4].split(",").map((opt) => opt.trim().toLowerCase()))];
+    const platformLabel = args[5];
+    const soljsonPath = args[6] ? path.resolve(args[6]) : null;
+    const debug = ["true", "1"].includes(args[7]?.toLowerCase());
 
     if (!fs.existsSync(resolcPath)) {
         throw new ValidationError(`resolc not found: ${resolcPath}`);
+    }
+
+    if (!fs.existsSync(baseDir)) {
+        throw new ValidationError(`Base directory not found: ${baseDir}`);
+    }
+
+    for (const projectsDir of projectsDirs) {
+        if (!fs.existsSync(projectsDir)) {
+            throw new ValidationError(`Projects directory not found: ${projectsDir}`);
+        }
+
+        const relativePath = path.relative(baseDir, projectsDir);
+        const isAboveBaseDir = relativePath.startsWith("..");
+        const isOnDifferentDrive = path.isAbsolute(relativePath);
+        if (isAboveBaseDir || isOnDifferentDrive) {
+            throw new ValidationError([
+                "Projects directory is not under the base directory:",
+                `- Base directory:     ${baseDir}`,
+                `- Projects directory: ${projectsDir}`,
+            ].join("\n"));
+        }
     }
 
     /** @type {(() => ResolcWasm) | null} */
@@ -674,10 +827,6 @@ async function main() {
         }
     }
 
-    if (!fs.existsSync(contractsDir)) {
-        throw new ValidationError(`Contracts directory not found: ${contractsDir}`);
-    }
-
     for (const optLevel of optLevels) {
         if (!VALID_OPT_LEVELS.includes(optLevel)) {
             const errorPrefix = optLevel === ""
@@ -693,29 +842,35 @@ async function main() {
 
     fs.mkdirSync(path.dirname(outputFile), { recursive: true });
 
-    const [solidityFiles, yulFiles] = await Promise.all([
-        findFiles(contractsDir, ".sol"),
-        findFiles(contractsDir, ".yul"),
+    const [solidityUnits, yulUnits] = await Promise.all([
+        loadCompilationUnits(projectsDirs, Language.Solidity),
+        loadCompilationUnits(projectsDirs, Language.Yul),
     ]);
-    const totalFiles = solidityFiles.length + yulFiles.length;
-    console.log(`Found ${totalFiles} files (${solidityFiles.length} Solidity, ${yulFiles.length} Yul)`);
+
+    const totalSolidityFiles = solidityUnits.reduce((sum, unit) => sum + unit.files.length, 0);
+    const totalYulFiles = yulUnits.reduce((sum, unit) => sum + unit.files.length, 0);
+    const totalFiles = totalSolidityFiles + totalYulFiles;
+    const totalUnits = solidityUnits.length + yulUnits.length;
+
+    console.log(`Found ${totalFiles} files (${totalUnits} compilation units)`);
+    console.log(`  - Solidity: ${totalSolidityFiles} files (${solidityUnits.length} compilation units)`);
+    console.log(`  - Yul: ${totalYulFiles} files (${yulUnits.length} compilation units)`);
 
     /** @type {CompileConfig} */
     const config = {
         resolcPath,
-        contractsDir,
+        baseDir,
         optLevels,
-        isWasm,
         createResolc,
         soljson,
         debug,
     };
-    const solidityResults = await compileAndHashAll(solidityFiles, Language.Solidity, config);
-    const yulResults = await compileAndHashAll(yulFiles, Language.Yul, config);
+    const solidityResults = await compileAndHashAll(solidityUnits, Language.Solidity, config);
+    const yulResults = await compileAndHashAll(yulUnits, Language.Yul, config);
     const { result, totalHashes } = aggregateResults(solidityResults.concat(yulResults), optLevels);
 
     writeResult(outputFile, platformLabel, result);
-    const report = buildReport(result, totalFiles, totalHashes, optLevels);
+    const report = buildReport(result, totalUnits, totalHashes, optLevels, outputFile);
 
     if (totalHashes) {
         console.log(report);

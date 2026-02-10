@@ -154,6 +154,32 @@ impl Simplifier {
         std::mem::take(&mut self.stats)
     }
 
+    /// Runs only DCE (dead code elimination) on an object without the full simplification pass.
+    ///
+    /// This is useful after late-stage passes (mem_opt, keccak folding) that leave
+    /// dead variables behind. Unlike `simplify_object`, this does not run constant folding,
+    /// algebraic identities, or copy propagation, so it cannot change the structure of
+    /// live code or affect downstream LLVM optimization decisions.
+    pub fn dce_object(object: &mut Object) -> usize {
+        let mut total_removed = 0;
+
+        // DCE on main code block
+        total_removed +=
+            eliminate_dead_code_in_stmts(&mut object.code.statements, &BTreeSet::new());
+
+        // DCE on each function body
+        for function in object.functions.values_mut() {
+            let mut extra_used = BTreeSet::new();
+            for ret_id in &function.return_values {
+                extra_used.insert(ret_id.0);
+            }
+            total_removed +=
+                eliminate_dead_code_in_stmts(&mut function.body.statements, &extra_used);
+        }
+
+        total_removed
+    }
+
     /// Simplifies a block in place.
     fn simplify_block(&mut self, block: &mut Block) {
         block.statements = self.simplify_statements(std::mem::take(&mut block.statements));

@@ -93,6 +93,10 @@ pub struct LlvmCodegen<'ctx> {
     /// Function parameter types: maps IR FunctionId to parameter types.
     /// Used by call sites to match argument types to narrowed parameter types.
     function_param_types: BTreeMap<u32, Vec<Type>>,
+    /// Function return value widths: maps IR FunctionId to the max return value width.
+    /// Used by call sites to insert truncate+zext after calls, creating range proofs
+    /// that enable LLVM to eliminate overflow checks downstream.
+    function_return_widths: BTreeMap<u32, BitWidth>,
     /// Set of function names that have already been generated.
     /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
     generated_functions: BTreeSet<String>,
@@ -151,6 +155,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
+            function_return_widths: BTreeMap::new(),
             generated_functions: BTreeSet::new(),
             heap_opt,
             type_info,
@@ -181,6 +186,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
+            function_return_widths: BTreeMap::new(),
             generated_functions,
             heap_opt,
             type_info,

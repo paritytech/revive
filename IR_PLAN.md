@@ -1354,6 +1354,10 @@ Implementation approach:
     - Phi node to join zero/non-zero paths
     - **No codesize impact**: LLVM optimizer handles this already
 
+### Phase 5c: Cleanup & Safety ✅ DONE
+24. [x] **Second DCE pass** - Added `Simplifier::dce_object` to clean up dead code left by memory optimization (e.g. unused constants after mstore elimination).
+25. [x] **Safety fix for narrowing** - Updated `try_narrow_let_binding` to respect `max_width` constraints from backward analysis, preventing unsafe truncation of values used in wide contexts (like storage or arithmetic).
+
 > **Key Insight from Phase 5b**: For small benchmark contracts (1-16KB), LLVM's optimization passes
 > are extremely effective at cleaning up redundancies we eliminate at IR level. Real wins require:
 > 1. Eliminating things LLVM *cannot* see (e.g., 256-bit runtime call paths when type inference proves narrow types)

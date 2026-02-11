@@ -180,7 +180,7 @@ jobs:
       - name: Upload Hashes
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_PREFIX }}wasm32-unknown-emscripten
+          name: ${{ env.ARTIFACT_PREFIX }}wasm
           path: ${{ env.OUTPUT_FILE }}
           retention-days: 1
 

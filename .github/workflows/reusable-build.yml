@@ -65,7 +65,7 @@ jobs:
     #   T4   | Job finishes              | Job starts, cache hit
     #   T5   |                           | Skips build, job finishes
     concurrency:
-      group: build-${{ matrix.target }}-${{ github.sha }}
+      group: ${{ github.workflow }}-${{ matrix.target }}-${{ github.sha }}
       cancel-in-progress: false
     strategy:
       matrix:
@@ -171,7 +171,7 @@ jobs:
     # the first job. This allows the second workflow to use cached builds from the first if
     # it is triggered by the same commit.
     concurrency:
-      group: build-wasm32-unknown-emscripten-${{ github.sha }}
+      group: ${{ github.workflow }}-wasm32-unknown-emscripten-${{ github.sha }}
       cancel-in-progress: false
     env:
       RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm

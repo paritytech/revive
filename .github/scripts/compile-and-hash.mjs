@@ -433,11 +433,11 @@ function parseStandardJsonOutput(output) {
 
     /** @type {Contract[]} */
     const contracts = [];
-    for (const [normalizedPath, fileContracts] of Object.entries(parsed.contracts || {})) {
+    for (const [normalizedPathId, fileContracts] of Object.entries(parsed.contracts || {})) {
         for (const [name, contract] of Object.entries(fileContracts)) {
             const bytecode = contract.evm?.bytecode?.object;
             if (bytecode?.startsWith(PVM_BYTECODE_PREFIX)) {
-                contracts.push({ normalizedPathId: normalizedPath, name, bytecode });
+                contracts.push({ normalizedPathId, name, bytecode });
             }
         }
     }
@@ -553,11 +553,11 @@ async function compileAndHashUnit(unit, language, config) {
             result.failedPaths[optLevel][unit.normalizedRootPathId] = errors;
         }
 
-        for (const { normalizedPathId: normalizedPath, name, bytecode } of contracts) {
-            if (!result.hashes[optLevel][normalizedPath]) {
-                result.hashes[optLevel][normalizedPath] = {};
+        for (const { normalizedPathId, name, bytecode } of contracts) {
+            if (!result.hashes[optLevel][normalizedPathId]) {
+                result.hashes[optLevel][normalizedPathId] = {};
             }
-            result.hashes[optLevel][normalizedPath][name] = sha256(bytecode);
+            result.hashes[optLevel][normalizedPathId][name] = sha256(bytecode);
         }
     }
 

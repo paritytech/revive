@@ -316,19 +316,19 @@ async function compareAll(files, optLevels) {
  * ---------------------
  *
  *     linux vs. macos:
- *         Total mismatches: 0 ✅
+ *         Total mismatches: ✅ 0
  *
  *     linux vs. windows:
- *         Total mismatches: 0 ✅
+ *         Total mismatches: ✅ 0
  *
  * Optimization level 3:
  * ---------------------
  *
  *     linux vs. macos:
- *         Total mismatches: 0 ✅
+ *         Total mismatches: ✅ 0
  *
  *     linux vs. windows:
- *         Total mismatches: 2 ❌
+ *         Total mismatches: ❌ 3 (including 2 missing hashes)
  *
  *         - path: solidity/simple/contract.sol
  *           contract: ContractA
@@ -340,18 +340,23 @@ async function compareAll(files, optLevels) {
  *           linux: 8bf95b3bac1cd204ab235bc4bbe4f6807d420612853ebcb64962e7a49db446b8
  *           windows: MISSING
  *
+ *         - path: solidity/simple/contract.sol
+ *           contract: ContractC
+ *           linux: 7bf95b3bac1cd204ab235bc4bbe4f6807d420612853ebcb64962e7a49db446b1
+ *           windows: MISSING
+ *
  * Optimization level z:
  * ---------------------
  *
  *     linux vs. macos:
- *         Total mismatches: 0 ✅
+ *         Total mismatches: ✅ 0
  *
  *     linux vs. windows:
- *         Total mismatches: 0 ✅
+ *         Total mismatches: ✅ 0
  *
  * Platforms compared: linux, macos, windows
  *
- * Total mismatches: 2
+ * Total mismatches (including missing hashes) for all optimization levels: 2
  *
  * ❌ FAILURE: Reproducible build verification failed!
  *
@@ -371,10 +376,13 @@ function buildReport(result) {
         );
 
         for (const [otherPlatform, mismatches] of Object.entries(mismatchesAtOptLevel)) {
+            const hasMismatches = mismatches.length > 0;
+            const numMissingHashes = mismatches.filter((mismatch) => mismatch.referenceHash === null || mismatch.otherHash === null).length;
+
             reportPerOptLevel.push(
                 "",
                 `    ${result.referencePlatform} vs. ${otherPlatform}:`,
-                `        Total mismatches: ${mismatches.length} ${mismatches.length > 0 ? "❌" : "✅"}`,
+                `        Total mismatches: ${hasMismatches ? "❌" : "✅"} ${mismatches.length} ${hasMismatches ? `(including ${numMissingHashes} missing hashes)` : ""}`,
             );
 
             for (const mismatch of mismatches) {
@@ -404,7 +412,7 @@ function buildReport(result) {
         "",
         `Platforms compared: ${result.platforms.join(", ")}`,
         "",
-        `Total mismatches for all optimization levels: ${totalMismatches}`,
+        `Total mismatches (including missing hashes) for all optimization levels: ${totalMismatches}`,
         "",
         statusMessage,
         "",

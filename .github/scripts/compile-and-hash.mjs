@@ -107,19 +107,21 @@ const Language = Object.freeze({
 
 /**
  * @typedef {Object} SourceFile
- * @property {string} path - The file path.
+ * @property {string} platformSpecificPath - The platform-specific file path.
+ * @property {string} normalizedPathId - The normalized file path for cross-platform consistency.
  * @property {string} content - The file content.
  */
 
 /**
  * @typedef {Object} CompilationUnit
- * @property {string} rootPath - The top-level file or directory path of the unit.
+ * @property {string} platformSpecificRootPath - The top-level platform-specific file or directory path of the unit.
+ * @property {string} normalizedRootPathId - The top-level normalized file or directory path of the unit.
  * @property {SourceFile[]} files - The source files in this unit.
  */
 
 /**
  * @typedef {Object} Contract
- * @property {string} path - The file path of the contract.
+ * @property {string} normalizedPathId - The normalized file path of the contract.
  * @property {string} name - The name of the contract.
  * @property {string} bytecode - The compiled bytecode as a hex string.
  */
@@ -136,7 +138,7 @@ const Language = Object.freeze({
 
 /**
  * @typedef {Object} HashResult
- * @property {{[optLevel: string]: {[path: string]: HashEntry}}} hashes - The hashes for each path keyed by optimization level.
+ * @property {{[optLevel: string]: {[path: string]: HashEntry}}} hashes - The hashes for each normalized path keyed by optimization level.
  * @property {{[optLevel: string]: {[path: string]: string[]}}} failedPaths - The normalized root paths of the units that failed to compile and their errors, keyed by optimization level.
  */
 
@@ -152,7 +154,6 @@ const Language = Object.freeze({
 /**
  * @typedef {Object} CompileConfig
  * @property {string} resolcPath - The path to the resolc build.
- * @property {string} baseDir - The common base directory for all units being compiled.
  * @property {string[]} optLevels - The optimization levels to compile with.
  * @property {(() => ResolcWasm) | null} createResolc - The Wasm resolc factory (null for native).
  * @property {unknown} soljson - The soljson module (null for native).
@@ -210,13 +211,15 @@ function sha256(data) {
 }
 
 /**
- * Reads a file and returns its platform-specific path and content.
+ * Reads a file and returns its path and content.
+ * @param {string} baseDir - The common base directory for all units being compiled (used for normalization).
  * @param {string} filePath - The file path to read.
  * @returns {Promise<SourceFile>} The file with its content.
  */
-async function readFile(filePath) {
+async function readFile(baseDir, filePath) {
     return {
-        path: filePath,
+        platformSpecificPath: filePath,
+        normalizedPathId: getNormalizedPathId(baseDir, filePath),
         content: await fs.promises.readFile(filePath, "utf-8"),
     };
 }
@@ -226,7 +229,7 @@ async function readFile(filePath) {
  * Requires Node.js 20.12.0+ for recursive `readdir` with `parentPath` support.
  * @param {string} directory - The directory to search in.
  * @param {string} extension - The file extension to match (e.g., ".sol").
- * @returns {Promise<string[]>} Normalized file paths in platform-specific format.
+ * @returns {Promise<string[]>} File paths in platform-specific format.
  */
 async function findFiles(directory, extension) {
     const entries = await fs.promises.readdir(directory, { recursive: true, withFileTypes: true });
@@ -238,16 +241,18 @@ async function findFiles(directory, extension) {
 /**
  * Discovers and loads all files with `extension` in `directory` and all its
  * subdirectories as single-file compilation units.
- * @param {string} directory - The base directory to start the search.
+ * @param {string} baseDir - The common base directory for all units being compiled (used for normalization).
+ * @param {string} startDir - The directory to start the search.
  * @param {string} extension - The file extension to match.
  * @returns {Promise<CompilationUnit[]>} Compilation units each containing one file.
  */
-async function loadSingleFileCompilationUnits(directory, extension) {
-    const filePaths = await findFiles(directory, extension);
-    const files = await Promise.all(filePaths.map(readFile));
+async function loadSingleFileCompilationUnits(baseDir, startDir, extension) {
+    const filePaths = await findFiles(startDir, extension);
+    const files = await Promise.all(filePaths.map((filePath) => readFile(baseDir, filePath)));
 
     return files.map((file) => ({
-        rootPath: file.path,
+        platformSpecificRootPath: file.platformSpecificPath,
+        normalizedRootPathId: file.normalizedPathId,
         files: [file],
     }));
 }
@@ -261,23 +266,26 @@ async function loadSingleFileCompilationUnits(directory, extension) {
  * isolated so other units still compile, and a bounded output size.
  * - Top-level files become individual compilation units (single file)
  * - Top-level subdirectories become multi-file compilation units (all files within)
- * @param {string} directory - The base directory to search.
+ * @param {string} baseDir - The common base directory for all units being compiled (used for normalization).
+ * @param {string} startDir - The directory to search.
  * @param {string} extension - The file extension to match.
  * @returns {Promise<CompilationUnit[]>} Compilation units each containing its respective files.
  */
-async function loadTopLevelCompilationUnits(directory, extension) {
+async function loadTopLevelCompilationUnits(baseDir, startDir, extension) {
     /** @type {CompilationUnit[]} */
     const units = [];
-    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    const entries = await fs.promises.readdir(startDir, { withFileTypes: true });
 
     for (const entry of entries) {
-        const unitRootPath = path.join(directory, entry.name);
+        const unitRootPath = path.join(startDir, entry.name);
+        const normalizedUnitRootPathId = getNormalizedPathId(baseDir, unitRootPath);
 
         // Top-level file: single-file unit.
         if (entry.isFile() && path.extname(entry.name) === extension) {
             units.push({
-                rootPath: unitRootPath,
-                files: [await readFile(unitRootPath)],
+                platformSpecificRootPath: unitRootPath,
+                normalizedRootPathId: normalizedUnitRootPathId,
+                files: [await readFile(baseDir, unitRootPath)],
             });
         }
         // Top-level directory: multi-file unit.
@@ -285,8 +293,9 @@ async function loadTopLevelCompilationUnits(directory, extension) {
             const filePaths = await findFiles(unitRootPath, extension);
             if (filePaths.length > 0) {
                 units.push({
-                    rootPath: unitRootPath,
-                    files: await Promise.all(filePaths.map(readFile)),
+                    platformSpecificRootPath: unitRootPath,
+                    normalizedRootPathId: normalizedUnitRootPathId,
+                    files: await Promise.all(filePaths.map((filePath) => readFile(baseDir, filePath))),
                 });
             }
         }
@@ -297,21 +306,22 @@ async function loadTopLevelCompilationUnits(directory, extension) {
 
 /**
  * Loads all compilation units/projects from multiple base directories.
- * @param {string[]} directories - The base directories to search.
+ * @param {string} baseDir - The common base directory for all units being compiled (used for normalization).
+ * @param {string[]} startDirs - The directories to start the searches from.
  * @param {LanguageKind} language - The source code language.
  * @returns {Promise<CompilationUnit[]>} All compilation units each containing its respective files.
  */
-async function loadCompilationUnits(directories, language) {
+async function loadCompilationUnits(baseDir, startDirs, language) {
     /** @type {CompilationUnit[][]} */
     let units = [];
     switch (language) {
         case Language.Solidity: {
-            units = await Promise.all(directories.map(dir => loadTopLevelCompilationUnits(dir, ".sol")));
+            units = await Promise.all(startDirs.map(startDir => loadTopLevelCompilationUnits(baseDir, startDir, ".sol")));
             break;
         }
         case Language.Yul: {
             // Only one input file is supported in Yul mode.
-            units = await Promise.all(directories.map(dir => loadSingleFileCompilationUnits(dir, ".yul")));
+            units = await Promise.all(startDirs.map(startDir => loadSingleFileCompilationUnits(baseDir, startDir, ".yul")));
             break;
         }
         default:
@@ -323,7 +333,7 @@ async function loadCompilationUnits(directories, language) {
 
 /**
  * Converts `filePath` to a relative path from the base directory and normalizes it with forward slashes.
- * This ensures that the file path added as part of a hash entry is consistent, and thus
+ * This ensures that the file path ID added as part of a hash entry is consistent, and thus
  * comparable, across platforms. It should thereby not be used to access the filesystem.
  * @param {string} baseDir - The base directory common for all units to derive the relative path from.
  * @param {string} filePath - The file path.
@@ -385,7 +395,8 @@ function createStandardJsonInput(files, language, optLevel) {
     /** @type {{[path: string]: {content: string}}} */
     const sources = {};
     for (const file of files) {
-        sources[file.path] = { content: file.content };
+        // Use normalized paths as keys to make import resolution consistent across platforms.
+        sources[file.normalizedPathId] = { content: file.content };
     }
 
     return {
@@ -422,11 +433,11 @@ function parseStandardJsonOutput(output) {
 
     /** @type {Contract[]} */
     const contracts = [];
-    for (const [filePath, fileContracts] of Object.entries(parsed.contracts || {})) {
+    for (const [normalizedPath, fileContracts] of Object.entries(parsed.contracts || {})) {
         for (const [name, contract] of Object.entries(fileContracts)) {
             const bytecode = contract.evm?.bytecode?.object;
             if (bytecode?.startsWith(PVM_BYTECODE_PREFIX)) {
-                contracts.push({ path: filePath, name, bytecode });
+                contracts.push({ normalizedPathId: normalizedPath, name, bytecode });
             }
         }
     }
@@ -495,7 +506,7 @@ function compileWasm(createResolc, soljson, files, language, optLevel) {
         const stderr = compiler.readFromStderr();
         // TODO: Temporarily filtering out resolc ICE errors so that it behaves similar to how
         //       native resolc outputs the error into the stdout JSON rather than stderr.
-        //       (Should fix this inconsistency in the compiler, plus the ICE.)
+        //       (See: https://github.com/paritytech/revive/issues/476)
         const isInternalCompilerError = stderr.includes("ICE:");
         if (isInternalCompilerError) {
             return { contracts: [], errors: [stderr] };
@@ -514,11 +525,11 @@ function compileWasm(createResolc, soljson, files, language, optLevel) {
  * @returns {Promise<HashResult>} Hashes and files that failed to compile for each optimization level.
  */
 async function compileAndHashUnit(unit, language, config) {
-    const { resolcPath, baseDir, optLevels, createResolc, soljson, debug } = config;
+    const { resolcPath, optLevels, createResolc, soljson, debug } = config;
     const isWasm = typeof createResolc === "function";
 
     if (debug) {
-        console.log(`[DEBUG] Compiling unit with ${unit.files.length} file${unit.files.length === 1 ? "" : "s"}: ${unit.rootPath}`);
+        console.log(`[DEBUG] Compiling unit with ${unit.files.length} file${unit.files.length === 1 ? "" : "s"}: ${unit.platformSpecificRootPath}`);
     }
 
     /** @type {HashResult} */
@@ -537,18 +548,16 @@ async function compileAndHashUnit(unit, language, config) {
 
         if (errors.length > 0) {
             if (debug) {
-                console.warn(`[DEBUG] Errors compiling file(s) in unit \`${unit.rootPath}\` at optimization \`${optLevel}\`:\n- ${errors.join("\n- ")}`);
+                console.warn(`[DEBUG] Errors compiling file(s) in unit \`${unit.platformSpecificRootPath}\` at optimization \`${optLevel}\`:\n- ${errors.join("\n- ")}`);
             }
-            const normalizedPathId = getNormalizedPathId(baseDir, unit.rootPath);
-            result.failedPaths[optLevel][normalizedPathId] = errors;
+            result.failedPaths[optLevel][unit.normalizedRootPathId] = errors;
         }
 
-        for (const { path: filePath, name, bytecode } of contracts) {
-            const normalizedPathId = getNormalizedPathId(baseDir, filePath);
-            if (!result.hashes[optLevel][normalizedPathId]) {
-                result.hashes[optLevel][normalizedPathId] = {};
+        for (const { normalizedPathId: normalizedPath, name, bytecode } of contracts) {
+            if (!result.hashes[optLevel][normalizedPath]) {
+                result.hashes[optLevel][normalizedPath] = {};
             }
-            result.hashes[optLevel][normalizedPathId][name] = sha256(bytecode);
+            result.hashes[optLevel][normalizedPath][name] = sha256(bytecode);
         }
     }
 
@@ -569,7 +578,7 @@ async function compileAndHashAll(units, language, config) {
     console.log();
 
     // Sort by path (byte-order, not `localCompare()`) for deterministic batch-level processing order, helpful for debugging.
-    units.sort((a, b) => Number(a.rootPath > b.rootPath) - Number(a.rootPath < b.rootPath));
+    units.sort((a, b) => Number(a.normalizedRootPathId > b.normalizedRootPathId) - Number(a.normalizedRootPathId < b.normalizedRootPathId));
 
     /** @param {number} numUnitsProcessed */
     const reportProgress = (numUnitsProcessed) => console.log(`Processed ${numUnitsProcessed}/${units.length} units...`);
@@ -718,7 +727,8 @@ function buildReport(result, totalUnits, totalHashes, optLevels, outputFile) {
         "",
         `Total hashes: ${totalHashes}`,
         totalHashes ? "" : "\n❌ FAILURE: No hashes were generated!\n",
-        `(For all hashes generated and failed compilation units, see: ${outputFile})`,
+        "For all hashes generated and failed compilation units, see uploaded artifact or:",
+        `- ${outputFile})`,
         "",
         "===========================================",
     ];
@@ -836,15 +846,15 @@ async function main() {
         }
     }
 
-    if (!platformLabel) {
+    if (platformLabel === "") {
         throw new ValidationError("Please provide a non-empty platform label");
     }
 
     fs.mkdirSync(path.dirname(outputFile), { recursive: true });
 
     const [solidityUnits, yulUnits] = await Promise.all([
-        loadCompilationUnits(projectsDirs, Language.Solidity),
-        loadCompilationUnits(projectsDirs, Language.Yul),
+        loadCompilationUnits(baseDir, projectsDirs, Language.Solidity),
+        loadCompilationUnits(baseDir, projectsDirs, Language.Yul),
     ]);
 
     const totalSolidityFiles = solidityUnits.reduce((sum, unit) => sum + unit.files.length, 0);
@@ -859,7 +869,6 @@ async function main() {
     /** @type {CompileConfig} */
     const config = {
         resolcPath,
-        baseDir,
         optLevels,
         createResolc,
         soljson,

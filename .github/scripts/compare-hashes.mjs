@@ -27,11 +27,11 @@
  *   "hashes": {
  *     "0": {
  *       "solidity/simple/loop/array/simple.sol": {
- *         "ContractNameA": "<sha256>",
- *         "ContractNameB": "<sha256>"
+ *         "ContractNameA": "<hash>",
+ *         "ContractNameB": "<hash>"
  *       },
  *       "yul/instructions/byte.yul": {
- *         "ContractNameA": "<sha256>"
+ *         "ContractNameA": "<hash>"
  *       }
  *     },
  *     "3": { ... },

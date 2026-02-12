@@ -158,12 +158,12 @@ jobs:
         run: |
           node ./revive/.github/scripts/compile-and-hash.mjs \
               --resolc "resolc-wasm/resolc.js" \
-              --soljson "resolc-wasm/soljson.js"
+              --soljson "resolc-wasm/soljson.js" \
               --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
               --projects-dirs "${{ env.PROJECTS_DIRS }}" \
               --output-file "${{ env.OUTPUT_FILE }}" \
               --opt-levels "${{ env.OPT_LEVELS }}" \
-              --platform-label "wasm32-unknown-emscripten" \
+              --platform-label "wasm32-unknown-emscripten"
 
       - name: Upload Hashes
         uses: actions/upload-artifact@v4

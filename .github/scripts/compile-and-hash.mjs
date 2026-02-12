@@ -16,14 +16,14 @@
  *   - Top-level subdirectories are compiled as one unit (their files are compiled together)
  *
  * This ensures that imports between files in the same subdirectory resolve automatically
- * on both native and Wasm platforms, while allowing parallel compilations across units (for native),
- * failures to be isolated so other units still compile, and a bounded output size.
+ * on both native and Wasm platforms, while allowing parallel compilations across units,
+ * failures to be isolated so other units still continue to compile, and a bounded output size.
  *
  * For Yul files:
  * - All Yul files are treated as single-file compilation units as only one input file is supported.
  *
  * ```
- * Usage: node compile-and-hash.mjs  [options]
+ * Usage: node compile-and-hash.mjs [options]
  *
  * Options:
  *   --resolc:         Path to native binary or Node.js module for Wasm
@@ -39,7 +39,7 @@
  *   --opt-levels:     Comma-separated optimization levels (e.g., "0,3,z")
  *   --platform-label: Label for the platform (e.g., linux, macos, windows, wasm)
  *   [--soljson]:      Path to soljson for Wasm builds (omit for native)
- *   [--debug]:        Enable verbose debug utput
+ *   [--debug]:        Enable verbose debug output
  *   [--help]:         Show the usage
  * ```
  *
@@ -54,11 +54,11 @@
  *   "hashes": {
  *     "0": {
  *       "solidity/simple/loop/array/simple.sol": {
- *         "ContractNameA": "<sha256>",
- *         "ContractNameB": "<sha256>"
+ *         "ContractNameA": "<hash>",
+ *         "ContractNameB": "<hash>"
  *       },
  *       "yul/instructions/byte.yul": {
- *         "ContractNameA": "<sha256>"
+ *         "ContractNameA": "<hash>"
  *       }
  *     },
  *     "3": { ... },
@@ -218,7 +218,7 @@ const ARGUMENT_SPECS = {
     },
     outputFile: {
         cliName: "output-file",
-        description: "File path to write the output JSON to (parent directories created automatically)",
+        description: "File path to write the output JSON to (parent directories are created automatically)",
         type: "string",
         required: true,
         /** @param {string} value */
@@ -305,7 +305,7 @@ function parseArguments() {
     return /** @type {ParsedArguments} */ (Object.fromEntries(
         Object.entries(ARGUMENT_SPECS).map(([name, spec]) => [
             name,
-            // @ts-expect-error - Types have been validated (`util.parseArgs` returns union).
+            // @ts-expect-error - Types have been validated (util.parseArgs's `values` only define unions).
             spec.parse(values[spec.cliName]),
         ])
     ));
@@ -390,8 +390,8 @@ async function loadSingleFileCompilationUnits(baseDir, startDir, extension) {
  * subdirectories. Generates compilation units/projects with one or more files
  * from each top-level item in `directory`, ensuring that imports between files
  * in the same subdirectory resolve automatically on both native and Wasm platforms,
- * while allowing parallel compilations across units (for native), failures to be
- * isolated so other units still compile, and a bounded output size.
+ * while allowing parallel compilations across units, failures to be isolated
+ * so other units still continue to compile, and a bounded output size.
  * - Top-level files become individual compilation units (single file)
  * - Top-level subdirectories become multi-file compilation units (all files within)
  * @param {string} baseDir - The common base directory for all units being compiled (used for normalization).

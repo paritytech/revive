@@ -376,13 +376,12 @@ function buildReport(result) {
         );
 
         for (const [otherPlatform, mismatches] of Object.entries(mismatchesAtOptLevel)) {
-            const hasMismatches = mismatches.length > 0;
             const numMissingHashes = mismatches.filter((mismatch) => mismatch.referenceHash === null || mismatch.otherHash === null).length;
 
             reportPerOptLevel.push(
                 "",
                 `    ${result.referencePlatform} vs. ${otherPlatform}:`,
-                `        Total mismatches: ${hasMismatches ? "❌" : "✅"} ${mismatches.length} ${hasMismatches ? `(including ${numMissingHashes} missing hashes)` : ""}`,
+                `        Total mismatches: ${mismatches.length > 0 ? "❌" : "✅"} ${mismatches.length} ${numMissingHashes > 0 ? `(including ${numMissingHashes} missing hashes)` : ""}`,
             );
 
             for (const mismatch of mismatches) {

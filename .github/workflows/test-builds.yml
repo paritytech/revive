@@ -103,27 +103,22 @@ jobs:
         shell: bash
         run: |
           RESOLC="resolc-bin/${{ matrix.binary }}"
-          SOLJSON=""
-          # Set to "true" for verbose output.
-          DEBUG="false"
-
           chmod +x "$RESOLC"
+
           node ./revive/.github/scripts/compile-and-hash.mjs \
-              "$RESOLC" \
-              "${{ env.BASE_PROJECTS_DIR }}" \
-              "${{ env.PROJECTS_DIRS }}" \
-              "${{ env.OUTPUT_FILE }}" \
-              "${{ env.OPT_LEVELS }}" \
-              "${{ matrix.platform }}" \
-              "$SOLJSON" \
-              "$DEBUG"
+              --resolc "$RESOLC" \
+              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
+              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
+              --output-file "${{ env.OUTPUT_FILE }}" \
+              --opt-levels "${{ env.OPT_LEVELS }}" \
+              --platform-label "${{ matrix.platform }}"
 
       - name: Upload Hashes
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_PREFIX }}${{ matrix.platform }}
           path: ${{ env.OUTPUT_FILE }}
-          retention-days: 1
+          retention-days: 3
 
   compile-and-hash-wasm:
     needs: [build]
@@ -161,28 +156,21 @@ jobs:
         # timeout-minutes: 30
         shell: bash
         run: |
-          RESOLC="resolc-wasm/resolc.js"
-          SOLJSON="resolc-wasm/soljson.js"
-          PLATFORM_LABEL="wasm32-unknown-emscripten"
-          # Set to "true" for verbose output.
-          DEBUG="false"
-
           node ./revive/.github/scripts/compile-and-hash.mjs \
-              "$RESOLC" \
-              "${{ env.BASE_PROJECTS_DIR }}" \
-              "${{ env.PROJECTS_DIRS }}" \
-              "${{ env.OUTPUT_FILE }}" \
-              "${{ env.OPT_LEVELS }}" \
-              "$PLATFORM_LABEL" \
-              "$SOLJSON" \
-              "$DEBUG"
+              --resolc "resolc-wasm/resolc.js" \
+              --soljson "resolc-wasm/soljson.js"
+              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
+              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
+              --output-file "${{ env.OUTPUT_FILE }}" \
+              --opt-levels "${{ env.OPT_LEVELS }}" \
+              --platform-label "wasm32-unknown-emscripten" \
 
       - name: Upload Hashes
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_PREFIX }}wasm
           path: ${{ env.OUTPUT_FILE }}
-          retention-days: 1
+          retention-days: 3
 
   verify-reproducible-builds:
     needs: [compile-and-hash-native, compile-and-hash-wasm]

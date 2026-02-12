@@ -23,22 +23,24 @@
  * - All Yul files are treated as single-file compilation units as only one input file is supported.
  *
  * ```
- * Usage: node compile-and-hash.mjs <resolc> <base-dir> <projects-dirs> <output-file> <opt-levels> <platform-label> [soljson] [debug]
+ * Usage: node compile-and-hash.mjs  [options]
  *
- *   resolc:         Path to native binary or Node.js module for Wasm
- *   base-dir:       Common base directory for all directories in `projects-dirs`
- *   projects-dirs:  Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files
- *                   - Each top-level file or subdirectory within a projects directory is compiled as a single unit/project
- *                   - Example:
- *                     - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"
- *                     - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",
- *                                "contracts/solidity/complex", and "contracts/yul" are compiled together as
- *                                units/projects if Solidity. Yul files are always compiled individually.
- *   output-file:    File path to write the output JSON to (the file and parent directories are created automatically)
- *   opt-levels:     Comma-separated optimization levels (e.g., "0,3,z")
- *   platform-label: Label for the platform (e.g., linux, macos, windows, wasm)
- *   soljson:        Path to soljson for Wasm builds (omit for native or use "")
- *   debug:          "true" or "1" to enable verbose debug utput (default: "false")
+ * Options:
+ *   --resolc:         Path to native binary or Node.js module for Wasm
+ *   --base-dir:       Common base directory for all `projects-dirs`
+ *   --projects-dirs:  Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files
+ *                     - Each top-level file or subdirectory within a projects directory is compiled as a single unit/project
+ *                     - Example:
+ *                       - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"
+ *                       - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",
+ *                                  "contracts/solidity/complex", and "contracts/yul" are compiled together as
+ *                                  units/projects if Solidity. Yul files are always compiled individually.
+ *   --output-file:    File path to write the output JSON to (the file and parent directories are created automatically)
+ *   --opt-levels:     Comma-separated optimization levels (e.g., "0,3,z")
+ *   --platform-label: Label for the platform (e.g., linux, macos, windows, wasm)
+ *   [--soljson]:      Path to soljson for Wasm builds (omit for native)
+ *   [--debug]:        Enable verbose debug utput
+ *   [--help]:         Show the usage
  * ```
  *
  * Examlple output format:
@@ -80,12 +82,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import util from "node:util";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = util.promisify(execFile);
 
 /**
  * Allows loading CommonJS modules (e.g. resolc.js, soljson.js) from ES modules.
@@ -179,26 +181,152 @@ class ValidationError extends Error {
 }
 
 /**
- * @returns {string} The usage for the script.
+ * Argument specifications defining CLI options.
+ */
+const ARGUMENT_SPECS = {
+    resolcPath: {
+        cliName: "resolc",
+        description: "Path to native binary or Node.js module for Wasm",
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => path.resolve(value),
+    },
+    baseDir: {
+        cliName: "base-dir",
+        description: "Common base directory for all projects",
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => path.resolve(value),
+    },
+    projectsDirs: {
+        cliName: "projects-dirs",
+        description: [
+            "Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files",
+            "- Each top-level file or subdirectory within a projects directory is compiled as a single unit/project",
+            "- Example:",
+            '  - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"',
+            '  - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",',
+            '             "contracts/solidity/complex", and "contracts/yul" are compiled together as',
+            "             units/projects if Solidity. Yul files are always compiled individually."
+        ].join("\n".padEnd(24)),
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => [...new Set(value.split(",").map(dir => path.resolve(dir.trim())))],
+    },
+    outputFile: {
+        cliName: "output-file",
+        description: "File path to write the output JSON to (parent directories created automatically)",
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => path.resolve(value),
+    },
+    optLevels: {
+        cliName: "opt-levels",
+        description: 'Comma-separated optimization levels (e.g., "0,3,z")',
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => [...new Set(value.split(",").map((opt) => opt.trim().toLowerCase()))],
+    },
+    platformLabel: {
+        cliName: "platform-label",
+        description: "Label for the platform (e.g., linux, macos, windows, wasm)",
+        type: "string",
+        required: true,
+        /** @param {string} value */
+        parse: (value) => value,
+    },
+    soljsonPath: {
+        cliName: "soljson",
+        description: "Path to soljson for Wasm builds (omit for native)",
+        type: "string",
+        required: false,
+        /** @param {string | undefined} value */
+        parse: (value) => value ? path.resolve(value) : null,
+    },
+    debug: {
+        cliName: "debug",
+        description: "Enable verbose debug output",
+        type: "boolean",
+        required: false,
+        /** @param {boolean | undefined} value */
+        parse: (value) => !!value,
+    },
+    help: {
+        cliName: "help",
+        description: "Show the usage",
+        type: "boolean",
+        required: false,
+        /** @param {boolean | undefined} value */
+        parse: (value) => !!value,
+    },
+};
+
+/**
+ * Parsed arguments derived from {@link ARGUMENT_SPECS}.
+ * Each key maps to the return type of its corresponding parse function.
+ * @typedef {{ [K in keyof typeof ARGUMENT_SPECS]: ReturnType<(typeof ARGUMENT_SPECS)[K]["parse"]> }} ParsedArguments
+ */
+
+/**
+ * Parses and validates command-line arguments.
+ * @returns {ParsedArguments} The parsed arguments.
+ * @throws {ValidationError} If arguments are invalid.
+ */
+function parseArguments() {
+    const argumentSpecs = Object.values(ARGUMENT_SPECS);
+
+    /** @type {util.ParseArgsOptionsConfig} */
+    const optionsConfig = {};
+    for (const spec of argumentSpecs) {
+        optionsConfig[spec.cliName] = /** @type {util.ParseArgsOptionDescriptor} */ ({ type: spec.type });
+    }
+
+    /** @type {ReturnType<typeof util.parseArgs>["values"]} */
+    let values;
+    try {
+        values = util.parseArgs({ options: optionsConfig, strict: true }).values;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new ValidationError(message, { showUsage: true });
+    }
+
+    const missing = argumentSpecs
+        .filter((spec) => spec.required && !values[spec.cliName])
+        .map((spec) => `--${spec.cliName}`);
+    if (missing.length > 0) {
+        throw new ValidationError(`Missing required arguments: ${missing.join(", ")}`, { showUsage: true });
+    }
+
+    return /** @type {ParsedArguments} */ (Object.fromEntries(
+        Object.entries(ARGUMENT_SPECS).map(([name, spec]) => [
+            name,
+            // @ts-expect-error - Types have been validated (`util.parseArgs` returns union).
+            spec.parse(values[spec.cliName]),
+        ])
+    ));
+}
+
+/**
+* @returns {string} The usage for the script.
  */
 function getUsage() {
-    return [
-        "Usage: node compile-and-hash.mjs <resolc> <base-dir> <projects-dirs> <output-file> <opt-levels> <platform-label> [soljson] [debug]",
-        "  resolc:         Path to native binary or Node.js module for Wasm",
-        '  base-dir:       Common base directory for all directories in "projects-dirs"',
-        "  projects-dirs:  Comma-separated list of directories containing .sol (Solidity) and/or .yul (Yul) files",
-        "                  - Each top-level file or subdirectory within a projects directory is compiled as a single unit/project",
-        "                  - Example:",
-        '                    - Input: "contracts/solidity/simple, contracts/solidity/complex, contracts/yul"',
-        '                    - Meaning: All top-level files and subdirectories within "contracts/solidity/simple",',
-        '                               "contracts/solidity/complex", and "contracts/yul" are compiled together as',
-        "                               units/projects if Solidity. Yul files are always compiled individually.",
-        "  output-file:    Path to write the output JSON file (parent directories created automatically)",
-        "  opt-levels:     Comma-separated optimization levels (e.g., \"0,3,z\")",
-        "  platform-label: Label for the platform (e.g., linux, macos, windows, wasm)",
-        '  soljson:        Path to soljson for Wasm builds (omit for native or use "")',
-        '  debug:          "true" or "1" to enable verbose debug output (default: "false")',
-    ].join("\n");
+    const lines = [
+        "Usage: node compile-and-hash.mjs [options]",
+        "",
+        "Options:"
+    ];
+
+    for (const spec of Object.values(ARGUMENT_SPECS)) {
+        const flag = spec.required ? `--${spec.cliName}` : `[--${spec.cliName}]`;
+        lines.push(`  ${flag.padEnd(20)} ${spec.description}`);
+    }
+
+    return lines.join("\n");
 }
 
 /**
@@ -748,25 +876,22 @@ async function main() {
         throw new ValidationError(`Node.js 20.12.0+ required, found ${process.versions.node}`);
     }
 
-    const args = process.argv.slice(2);
+    const {
+        resolcPath,
+        baseDir,
+        projectsDirs,
+        outputFile,
+        optLevels,
+        platformLabel,
+        soljsonPath,
+        debug,
+        help,
+    } = parseArguments();
 
-    if (args.includes("--help") || args.includes("-h")) {
+    if (help) {
         console.log(getUsage());
         process.exit(0);
     }
-
-    if (args.length < 6 || args.length > 8) {
-        throw new ValidationError(`Received an invalid number of arguments, got ${args.length}`, { showUsage: true });
-    }
-
-    const resolcPath = path.resolve(args[0]);
-    const baseDir = path.resolve(args[1]);
-    const projectsDirs = [...new Set(args[2].split(",").map(dir => path.resolve(dir.trim())))];
-    const outputFile = path.resolve(args[3]);
-    const optLevels = [...new Set(args[4].split(",").map((opt) => opt.trim().toLowerCase()))];
-    const platformLabel = args[5];
-    const soljsonPath = args[6] ? path.resolve(args[6]) : null;
-    const debug = ["true", "1"].includes(args[7]?.toLowerCase());
 
     if (!fs.existsSync(resolcPath)) {
         throw new ValidationError(`resolc not found: ${resolcPath}`);

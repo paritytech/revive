@@ -60,3 +60,10 @@ jobs:
 
       - name: Test docs
         run: make doc
+
+  test-builds:
+    # Only run this if `test` successfully completes.
+    needs: test
+    uses: ./.github/workflows/test-builds.yml
+
+  # TODO: Add differential-tests job.

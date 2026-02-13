@@ -22,6 +22,8 @@ pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
 /// The return YUL contract test fixture path.
 pub const YUL_RETURN_CONTRACT_PATH: &str = "src/tests/data/yul/return.yul";
+/// The invalid YUL contract test fixture path (hex literal with odd number of nibbles).
+pub const YUL_INVALID_HEX_NIBBLES_PATH: &str = "src/tests/data/yul/invalid_hex_nibbles.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

@@ -84,7 +84,8 @@ pub fn yul<T: Compiler>(
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
-    solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
+    let solc_output = solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
+    solc_output.exit_on_error();
 
     let linker_symbols = libraries.as_linker_symbols()?;
     let project = Project::try_from_yul_paths(input_files, None, libraries, &debug_config)?;

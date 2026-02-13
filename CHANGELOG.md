@@ -7,6 +7,7 @@ This is a development pre-release.
 ### Fixed
 
 - npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
+- Yul mode now properly exits when solc reports validation errors (e.g., invalid hex literals), matching `--standard-json` behavior. [#477](https://github.com/paritytech/revive/issues/477)
 
 ### Changed
 

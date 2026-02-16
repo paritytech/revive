@@ -1,0 +1,205 @@
+name: Verify Reproducible Builds
+
+on:
+  workflow_call:
+
+env:
+  # Common base directory for all directories in `PROJECTS_DIRS`.
+  BASE_PROJECTS_DIR: resolc-compiler-tests/fixtures
+  # The directories containing the contracts to be compiled.
+  # Each subdirectory (e.g. ...solidity/complex/defi) in each of the directories listed are
+  # treated as projects and will be compiled together in order to resolve imports during compilation.
+  PROJECTS_DIRS: "resolc-compiler-tests/fixtures/solidity/simple, resolc-compiler-tests/fixtures/solidity/complex, resolc-compiler-tests/fixtures/solidity/translated_semantic_tests, resolc-compiler-tests/fixtures/yul"
+  # The optimization levels to use for compilation.
+  OPT_LEVELS: "0,3,z"
+  # The prefix for hash artifact names (e.g., "hashes-linux-musl").
+  # This allows download steps to only download the relevant artifacts.
+  ARTIFACT_PREFIX: hashes-
+  # The output hash file name used by all platforms.
+  OUTPUT_FILE: hashes.json
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: false
+      retention_days: 1
+
+  create-macos-universal:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - name: Download MacOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create MacOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: 1
+
+  compile-and-hash-native:
+    needs: [build, create-macos-universal]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-musl
+            artifact: resolc-x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            binary: resolc-x86_64-unknown-linux-musl
+          - platform: macos-universal
+            artifact: resolc-universal-apple-darwin
+            runner: macos-15
+            binary: resolc-universal-apple-darwin
+          - platform: windows
+            artifact: resolc-x86_64-pc-windows-msvc
+            runner: windows-2022
+            binary: resolc-x86_64-pc-windows-msvc.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # For some deeply nested contracts in `resolc-compiler-tests`, Windows
+      # will generate a "Filename too long" error. This step enables long paths.
+      - name: Enable Git Long Paths (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: git config --system core.longpaths true
+
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-compiler-tests
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-compiler-tests
+          path: resolc-compiler-tests
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: resolc-bin
+
+      - name: Install Solc
+        uses: ./revive/.github/actions/get-solc
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Compile Contracts and Collect Hashes
+        # TODO: Set timeout when we know how long everything takes.
+        # timeout-minutes: 30
+        shell: bash
+        run: |
+          RESOLC="resolc-bin/${{ matrix.binary }}"
+          chmod +x "$RESOLC"
+
+          node ./revive/.github/scripts/compile-and-hash.mjs \
+              --resolc "$RESOLC" \
+              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
+              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
+              --output-file "${{ env.OUTPUT_FILE }}" \
+              --opt-levels "${{ env.OPT_LEVELS }}" \
+              --platform-label "${{ matrix.platform }}"
+
+      - name: Upload Hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_PREFIX }}${{ matrix.platform }}
+          path: ${{ env.OUTPUT_FILE }}
+          retention-days: 3
+
+  compile-and-hash-wasm:
+    needs: [build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Checkout resolc-compiler-tests
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/resolc-compiler-tests
+          path: resolc-compiler-tests
+
+      - name: Download Wasm Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc.{js,wasm}
+          path: resolc-wasm
+          merge-multiple: true
+
+      - name: Download soljson.js
+        run: |
+          curl -sSLo resolc-wasm/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Compile Contracts and Collect Hashes
+        # TODO: Set timeout when we know how long everything takes.
+        # timeout-minutes: 30
+        shell: bash
+        run: |
+          node ./revive/.github/scripts/compile-and-hash.mjs \
+              --resolc "resolc-wasm/resolc.js" \
+              --soljson "resolc-wasm/soljson.js" \
+              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
+              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
+              --output-file "${{ env.OUTPUT_FILE }}" \
+              --opt-levels "${{ env.OPT_LEVELS }}" \
+              --platform-label "wasm32-unknown-emscripten"
+
+      - name: Upload Hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_PREFIX }}wasm
+          path: ${{ env.OUTPUT_FILE }}
+          retention-days: 3
+
+  verify-reproducible-builds:
+    needs: [compile-and-hash-native, compile-and-hash-wasm]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+
+      - name: Download All Hashes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ env.ARTIFACT_PREFIX }}*
+          path: all-hashes
+          merge-multiple: false
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Compare Hashes Across Platforms
+        shell: bash
+        run: |
+          HASHES_DIR="all-hashes"
+          ALL_HASH_FILES="**/${{ env.OUTPUT_FILE }}"
+
+          node ./revive/.github/scripts/compare-hashes.mjs \
+              "$HASHES_DIR" \
+              "$ALL_HASH_FILES" \
+              "${{ env.OPT_LEVELS }}"

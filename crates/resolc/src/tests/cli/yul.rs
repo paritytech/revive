@@ -1,8 +1,8 @@
 //! The tests for running resolc with yul option.
 
 use crate::cli_utils::{
-    assert_command_success, assert_equal_exit_codes, execute_resolc, execute_solc, RESOLC_YUL_FLAG,
-    SOLC_YUL_FLAG, YUL_CONTRACT_PATH,
+    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
+    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH, YUL_INVALID_HEX_NIBBLES_PATH,
 };
 
 #[test]
@@ -18,15 +18,20 @@ fn runs_with_valid_input_file() {
     assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
-/// While the `solc` Solidity mode requires output selection,
-/// the strict-assembly mode does not.
-///
-/// `resolc` exhibits consistent behavior for both modes.
 #[test]
-fn runs_without_input_file() {
+fn fails_without_input_file() {
     let resolc_result = execute_resolc(&[RESOLC_YUL_FLAG]);
-    assert_command_success(&resolc_result, "Omitting an input file");
-    assert!(resolc_result
-        .stderr
-        .contains("Compiler run successful. No output requested"));
+    assert_command_failure(&resolc_result, "Omitting an input file");
+
+    let solc_result = execute_solc(&[SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn bails_with_invalid_input_file() {
+    let resolc_result = execute_resolc(&[YUL_INVALID_HEX_NIBBLES_PATH, RESOLC_YUL_FLAG]);
+    assert_command_failure(&resolc_result, "Providing an invalid input file");
+
+    let solc_result = execute_solc(&[YUL_INVALID_HEX_NIBBLES_PATH, SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
 }

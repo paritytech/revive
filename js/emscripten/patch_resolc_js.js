@@ -37,6 +37,8 @@ const asyncPatterns = [
   },
 ];
 
+// Emscripten generates the factory in one of two forms depending on build
+// configuration
 for (const { from, to } of asyncPatterns) {
   if (content.includes(from)) {
     content = content.replace(from, to);

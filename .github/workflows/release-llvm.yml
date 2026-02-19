@@ -79,6 +79,10 @@ jobs:
           rustflags: ""
           cache-key: ${{ matrix.target }}
 
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
       - name: Install Dependencies
         if: ${{ matrix.host == 'linux' }}
         run: |

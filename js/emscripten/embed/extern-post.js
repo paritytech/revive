@@ -1,0 +1,4 @@
+return Module;
+};
+if (typeof module === "object" && typeof module.exports === "object")
+  module.exports = createRevive;

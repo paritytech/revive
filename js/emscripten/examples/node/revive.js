@@ -1,13 +1,13 @@
 const soljson = require("solc/soljson");
 const createRevive = require("./resolc.js");
 
-async function compile(standardJsonInput) {
+function compile(standardJsonInput) {
   if (!standardJsonInput) {
     throw new Error("Input JSON for the Solidity compiler is required.");
   }
 
   // Initialize the compiler
-  const compiler = await createRevive();
+  const compiler = createRevive();
   compiler.soljson = soljson;
 
   // Provide input to the compiler

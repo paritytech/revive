@@ -19,7 +19,7 @@ async function main() {
   const program = new commander.Command()
 
   program.name('resolcjs')
-  program.version(await resolc.version())
+  program.version(resolc.version())
   program
     .option('--bin', 'Binary of the contracts in hex.')
     .option('--abi', 'ABI of the contracts.')

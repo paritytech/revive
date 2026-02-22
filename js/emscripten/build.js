@@ -3,7 +3,7 @@ const path = require("path");
 const { minify } = require("terser");
 
 const SOLJSON_URI =
-  "https://binaries.soliditylang.org/wasm/soljson-v0.8.33+commit.64118f21.js";
+  "https://binaries.soliditylang.org/wasm/soljson-v0.8.34+commit.80d5c536.js";
 const RESOLC_WASM_URI =
   process.env.RELEASE_RESOLC_WASM_URI || "http://127.0.0.1:8080/resolc.wasm";
 const RESOLC_WASM_TARGET_DIR = path.join(

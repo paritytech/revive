@@ -93,10 +93,6 @@ pub struct LlvmCodegen<'ctx> {
     /// Function parameter types: maps IR FunctionId to parameter types.
     /// Used by call sites to match argument types to narrowed parameter types.
     function_param_types: BTreeMap<u32, Vec<Type>>,
-    /// Function return value widths: maps IR FunctionId to the max return value width.
-    /// Used by call sites to insert truncate+zext after calls, creating range proofs
-    /// that enable LLVM to eliminate overflow checks downstream.
-    function_return_widths: BTreeMap<u32, BitWidth>,
     /// Set of function names that have already been generated.
     /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
     generated_functions: BTreeSet<String>,
@@ -155,7 +151,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
-            function_return_widths: BTreeMap::new(),
             generated_functions: BTreeSet::new(),
             heap_opt,
             type_info,
@@ -186,7 +181,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
-            function_return_widths: BTreeMap::new(),
             generated_functions,
             heap_opt,
             type_info,
@@ -467,17 +461,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok((a_ext, b_ext))
     }
 
-    /// Narrows a Let-bound value to i64 when type inference proves it fits.
-    /// This enables native RISC-V arithmetic for downstream operations.
+    /// Narrows a Let-bound value when the LLVM IR itself proves it fits.
     ///
-    /// Safety: arithmetic operations (Add/Sub/Mul) ensure operands are
-    /// extended to the result's inferred width before operating, so narrow
-    /// values cannot cause incorrect modular wrapping.
+    /// Only narrows based on structural LLVM proofs (zext source, AND mask),
+    /// NOT based on type inference min_width which can be unsound for values
+    /// derived from function parameters.
     fn try_narrow_let_binding(
         &self,
         context: &PolkaVMContext<'ctx>,
         value: BasicValueEnum<'ctx>,
-        binding_id: ValueId,
+        _binding_id: ValueId,
     ) -> Result<BasicValueEnum<'ctx>> {
         let int_val = match value {
             BasicValueEnum::IntValue(v) => v,
@@ -491,28 +484,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(value);
         }
 
-        let constraint = self.type_info.get(binding_id);
-
-        // Don't narrow signed values — truncation followed by zero-extension
-        // doesn't preserve sign information for negative values.
-        if constraint.is_signed {
-            return Ok(value);
-        }
-
-        if constraint.min_width.bits() > 64 {
-            return Ok(value);
-        }
-
-        // Check if the value already has a range proof from a zext instruction.
-        // For example, the FMP range proof emits `trunc i256 → i32; zext i32 → i256`.
-        // If we blindly truncate to i64, we lose the tighter 32-bit constraint.
-        // Preserve the tightest existing proof by truncating to the source width.
-        let existing_proof_width = Self::detect_zext_source_width(int_val);
-        if let Some(src_width) = existing_proof_width {
-            if src_width <= 64 {
-                // Value already has a range proof at src_width bits.
-                // Truncate to that width to preserve the tight constraint.
-                let narrow_type = context.integer_type(src_width as usize);
+        // Check if the value has a structural proof from the LLVM IR itself.
+        // This is sound because the proof is based on the instruction producing
+        // the value, not on type inference heuristics.
+        if let Some(proven_width) = Self::provable_narrow_width(int_val) {
+            if proven_width <= 64 {
+                // Clamp to at least 8 bits for LLVM type compatibility
+                let clamped = proven_width.max(8);
+                let narrow_type = context.integer_type(clamped as usize);
                 let truncated = context
                     .builder()
                     .build_int_truncate(int_val, narrow_type, "narrow_let")
@@ -521,27 +500,69 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
         }
 
-        // Default: truncate to i64 to avoid proliferating many small LLVM types.
-        let i64_type = context.llvm().i64_type();
-        let truncated = context
-            .builder()
-            .build_int_truncate(int_val, i64_type, "narrow_let")
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        Ok(truncated.as_basic_value_enum())
+        Ok(value)
     }
 
-    /// Detects if an IntValue was produced by a ZExt instruction and returns the
-    /// source type's bit width. This preserves range proofs: if a value is
-    /// `zext i32 → i256`, the source width is 32.
-    fn detect_zext_source_width(value: IntValue<'ctx>) -> Option<u32> {
+    /// Returns the provable bit width of an LLVM value based on structural analysis.
+    ///
+    /// Only returns a width when the LLVM IR itself proves the value fits,
+    /// regardless of type inference. Patterns detected:
+    /// - `zext from narrow_type`: value fits in narrow_type's width
+    /// - `and %val, constant_mask`: value fits in mask's bit width
+    /// - `trunc to narrow_type`: value fits in narrow_type's width
+    fn provable_narrow_width(value: IntValue<'ctx>) -> Option<u32> {
         use inkwell::values::InstructionOpcode;
+
         let instruction = value.as_instruction_value()?;
-        if instruction.get_opcode() != InstructionOpcode::ZExt {
-            return None;
+        match instruction.get_opcode() {
+            InstructionOpcode::ZExt => {
+                let operand = instruction.get_operand(0)?.value()?.into_int_value();
+                Some(operand.get_type().get_bit_width())
+            }
+            InstructionOpcode::And => {
+                // and %val, constant_mask → result fits in mask's bit width
+                let op0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let op1 = instruction.get_operand(1)?.value()?.into_int_value();
+                // Check if either operand is a constant mask
+                if op1.is_const() {
+                    Self::constant_effective_width(op1)
+                } else if op0.is_const() {
+                    Self::constant_effective_width(op0)
+                } else {
+                    None
+                }
+            }
+            InstructionOpcode::Trunc => {
+                Some(instruction.get_type().into_int_type().get_bit_width())
+            }
+            _ => None,
         }
-        let operand = instruction.get_operand(0)?.value()?;
-        Some(operand.into_int_value().get_type().get_bit_width())
     }
+
+    /// Returns the effective bit width needed to represent a constant integer value.
+    /// For wide types (> 64 bits), truncates to i64 and verifies roundtrip.
+    fn constant_effective_width(int_val: IntValue<'ctx>) -> Option<u32> {
+        // For types <= 64 bits, use the direct API
+        if let Some(val) = int_val.get_zero_extended_constant() {
+            return Some(if val == 0 { 1 } else { 64 - val.leading_zeros() });
+        }
+
+        // For wider types (e.g., i256), truncate to i64 and verify roundtrip
+        let wide_type = int_val.get_type();
+        if wide_type.get_bit_width() > 64 {
+            let i64_type = wide_type.get_context().i64_type();
+            let truncated = int_val.const_truncate(i64_type);
+            if let Some(val) = truncated.get_zero_extended_constant() {
+                let reconstructed = wide_type.const_int(val, false);
+                if reconstructed == int_val {
+                    return Some(if val == 0 { 1 } else { 64 - val.leading_zeros() });
+                }
+            }
+        }
+
+        None
+    }
+
 
     /// Converts a value to the inferred type for storage.
     /// If the inferred type is narrower, truncates; if wider, zero-extends.
@@ -2565,8 +2586,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
 
-                    // For div/mod with narrow operands, use native LLVM ops
-                    // instead of expensive 256-bit runtime calls
+                    // For div/mod with structurally narrow operands (LLVM type ≤ 64 bits),
+                    // use native ops instead of expensive 256-bit runtime calls.
                     BinOp::Div | BinOp::Mod => {
                         let lhs_width = lhs_val.get_type().get_bit_width();
                         let rhs_width = rhs_val.get_type().get_bit_width();

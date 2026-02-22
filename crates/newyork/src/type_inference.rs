@@ -296,17 +296,16 @@ impl TypeInference {
 
     /// Forward pass for a function.
     fn infer_function_forward(&mut self, function: &Function) {
-        // Don't unconditionally widen params to I256.
-        // Instead, let call sites determine parameter widths via Expr::Call propagation.
-        // This enables interprocedural narrowing: if all callers pass values that fit in I32,
-        // the parameter stays narrow, which produces a narrow LLVM function signature.
-        //
-        // Only widen to the declared type's width as a floor (for non-I256 types).
+        // Widen parameters to their declared type width.
+        // For I256 params (the common case), this ensures that expressions derived
+        // from parameters get correct widths. Without this, params start at I1
+        // (default) and only get widened by body usage patterns, which can be too
+        // narrow — e.g., a param only used in comparisons stays at I1, but the
+        // caller can pass any 256-bit value. Truncating based on body-usage width
+        // is unsound and causes incorrect results.
         for (param_id, param_ty) in &function.params {
             if let Type::Int(width) = param_ty {
-                if *width < BitWidth::I256 {
-                    self.widen(*param_id, *width);
-                }
+                self.widen(*param_id, *width);
             }
         }
 

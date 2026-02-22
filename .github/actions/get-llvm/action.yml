@@ -82,7 +82,7 @@ runs:
           allReleases.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
 
           // Debug: Print all LLVM releases
-          const llvmReleases = allReleases.filter(r => r.tag_name.startsWith('llvm-'));
+          const llvmReleases = allReleases.filter(r => r.tag_name.startsWith('llvm-') && !r.prerelease);
           core.info(`Found ${llvmReleases.length} LLVM releases in total:`);
           llvmReleases.forEach(r => {
             core.info(`  - ${r.tag_name} (published: ${r.published_at})`);

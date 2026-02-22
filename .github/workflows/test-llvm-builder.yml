@@ -33,7 +33,7 @@ jobs:
       - name: Install Dependencies
         if: matrix.runner == 'parity-large'
         run: |
-          sudo apt update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
+          sudo apt update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils build-essential
 
       - name: Install Dependencies
         if: matrix.runner == 'macos-15'

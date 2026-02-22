@@ -3,8 +3,9 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::LazyLock;
+use std::sync::OnceLock;
 
-use once_cell::sync::OnceCell;
 use revive_common::deserialize_from_slice;
 use revive_common::EXIT_CODE_SUCCESS;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
@@ -16,8 +17,12 @@ use super::Input;
 use super::Output;
 use super::Process;
 
-/// The overriden executable name used when the compiler is run as a library.
-pub static EXECUTABLE: OnceCell<PathBuf> = OnceCell::new();
+/// The default executable path, lazily initialized from the current binary.
+static DEFAULT_EXECUTABLE: LazyLock<PathBuf> =
+    LazyLock::new(|| std::env::current_exe().expect("Should have an executable"));
+
+/// Override for the executable path, used when the compiler is run as a library.
+pub static EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
 
 pub struct NativeProcess;
 
@@ -61,10 +66,7 @@ impl Process for NativeProcess {
         I: Serialize,
         O: DeserializeOwned,
     {
-        let executable = EXECUTABLE
-            .get()
-            .cloned()
-            .unwrap_or_else(|| std::env::current_exe().expect("Should have an executable"));
+        let executable = EXECUTABLE.get().unwrap_or(&DEFAULT_EXECUTABLE);
         let mut command = Command::new(executable.as_path());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());

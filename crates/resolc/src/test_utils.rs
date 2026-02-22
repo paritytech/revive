@@ -4,10 +4,8 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
-use once_cell::sync::Lazy;
 use revive_common::MetadataHash;
 use revive_llvm_context::initialize_llvm;
 use revive_llvm_context::DebugConfig;
@@ -24,16 +22,19 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
+use std::sync::LazyLock;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::Compiler;
 
-static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
-    Lazy::new(Default::default);
-static YUL_IR_CACHE: Lazy<Mutex<HashMap<CachedBlob, String>>> = Lazy::new(Default::default);
+static PVM_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static EVM_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static YUL_IR_CACHE: LazyLock<Mutex<HashMap<CachedBlob, String>>> = LazyLock::new(Default::default);
 
 const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
@@ -79,9 +80,6 @@ pub fn build_solidity_with_options(
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -162,9 +160,6 @@ pub fn build_solidity_with_options_evm(
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
-
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
@@ -220,9 +215,6 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
 
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
-
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
     let mut input = SolcStandardJsonInput::try_from_solidity_sources(
@@ -264,9 +256,6 @@ pub fn build_yul<T: ToString + Display>(
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let mut build = Project::try_from_yul_sources(
         sources
@@ -313,9 +302,6 @@ pub fn build_yul_standard_json(
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
     initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
-
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
 
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
@@ -460,6 +446,8 @@ pub fn sources<T: ToString>(sources: &[(T, T)]) -> BTreeMap<String, SolcStandard
 }
 
 /// Checks if the required executables are present in `${PATH}`.
+/// Also initializes the resolc executable path for subprocess spawning,
+/// since `std::env::current_exe()` returns the test runner binary in tests.
 fn check_dependencies() {
     for executable in [
         crate::r#const::DEFAULT_EXECUTABLE_NAME,
@@ -472,6 +460,10 @@ fn check_dependencies() {
             "The `{executable}` executable not found in ${{PATH}}"
         );
     }
+
+    let _ = crate::process::native_process::EXECUTABLE.set(
+        which::which(crate::r#const::DEFAULT_EXECUTABLE_NAME).expect("resolc should be in ${PATH}"),
+    );
 }
 
 /// The internal EVM bytecode compile helper.

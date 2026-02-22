@@ -544,7 +544,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
     fn constant_effective_width(int_val: IntValue<'ctx>) -> Option<u32> {
         // For types <= 64 bits, use the direct API
         if let Some(val) = int_val.get_zero_extended_constant() {
-            return Some(if val == 0 { 1 } else { 64 - val.leading_zeros() });
+            return Some(if val == 0 {
+                1
+            } else {
+                64 - val.leading_zeros()
+            });
         }
 
         // For wider types (e.g., i256), truncate to i64 and verify roundtrip
@@ -555,14 +559,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
             if let Some(val) = truncated.get_zero_extended_constant() {
                 let reconstructed = wide_type.const_int(val, false);
                 if reconstructed == int_val {
-                    return Some(if val == 0 { 1 } else { 64 - val.leading_zeros() });
+                    return Some(if val == 0 {
+                        1
+                    } else {
+                        64 - val.leading_zeros()
+                    });
                 }
             }
         }
 
         None
     }
-
 
     /// Converts a value to the inferred type for storage.
     /// If the inferred type is narrower, truncates; if wider, zero-extends.

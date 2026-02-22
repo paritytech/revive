@@ -273,6 +273,13 @@ impl TypeInference {
             self.collect_uses_function(function);
         }
 
+        // Phase 2.5: Propagate use demands through transparent operations.
+        // For add/or/xor/and, the operands only need to be as wide as the result's
+        // use sites require (modular arithmetic preserves lower bits). This enables
+        // parameter narrowing through add chains: `let pos := add(param, 32);
+        // mstore(pos, value)` → param only needs I64.
+        self.propagate_use_demands(object);
+
         // Phase 3: Apply backward constraints
         self.apply_backward_constraints();
     }
@@ -296,13 +303,14 @@ impl TypeInference {
 
     /// Forward pass for a function.
     fn infer_function_forward(&mut self, function: &Function) {
-        // Widen parameters to their declared type width.
-        // For I256 params (the common case), this ensures that expressions derived
-        // from parameters get correct widths. Without this, params start at I1
-        // (default) and only get widened by body usage patterns, which can be too
-        // narrow — e.g., a param only used in comparisons stays at I1, but the
-        // caller can pass any 256-bit value. Truncating based on body-usage width
-        // is unsound and causes incorrect results.
+        // Widen parameters to their declared type width in the forward pass.
+        // This ensures min_width (used by `inferred_width` in codegen) reflects
+        // the true runtime range — params can hold any value their type allows.
+        // Without this, `narrow_offset_for_pointer` may unsoundly truncate
+        // param-derived values that the forward analysis under-approximates.
+        //
+        // Note: param NARROWING is driven by the backward max_width (Phase 2.5),
+        // not the forward min_width. So this does not prevent narrowing.
         for (param_id, param_ty) in &function.params {
             if let Type::Int(width) = param_ty {
                 self.widen(*param_id, *width);
@@ -344,18 +352,144 @@ impl TypeInference {
         }
     }
 
-    /// Narrows function parameter types based on function-body analysis.
+    /// Propagates use demands backward through transparent operations.
     ///
-    /// Uses the forward-inferred min_width for each parameter, which reflects
-    /// how the parameter is used within the function body (via operand widening
-    /// in arithmetic ops, comparisons, memory ops, etc.). This is sound because
-    /// the function body determines the minimum width needed to compute correct
-    /// results, regardless of what callers pass.
+    /// For "transparent" operations (add, or, xor, and), the lower N bits of
+    /// the result depend only on the lower N bits of the operands. This means
+    /// if the result is only used in a context needing N bits (e.g., memory
+    /// offset → I64), the operands also only need N bits.
+    ///
+    /// This enables parameter narrowing through add chains:
+    /// `let pos := add(param, 32); mstore(pos, value)` → param only needs I64.
+    fn propagate_use_demands(&mut self, object: &Object) {
+        loop {
+            let mut changed = false;
+            changed |= self.propagate_demands_block(&object.code);
+            for function in object.functions.values() {
+                changed |= self.propagate_demands_block(&function.body);
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
+    fn propagate_demands_block(&mut self, block: &Block) -> bool {
+        let mut changed = false;
+        for stmt in &block.statements {
+            changed |= self.propagate_demands_statement(stmt);
+        }
+        changed
+    }
+
+    fn propagate_demands_region(&mut self, region: &Region) -> bool {
+        let mut changed = false;
+        for stmt in &region.statements {
+            changed |= self.propagate_demands_statement(stmt);
+        }
+        changed
+    }
+
+    fn propagate_demands_statement(&mut self, stmt: &Statement) -> bool {
+        let mut changed = false;
+        match stmt {
+            Statement::Let { bindings, value } if bindings.len() == 1 => {
+                let result_id = bindings[0];
+                if let Some(result_uses) = self.uses.get(&result_id.0).cloned() {
+                    changed |= self.propagate_demand_to_expr(value, &result_uses);
+                }
+            }
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                changed |= self.propagate_demands_region(then_region);
+                if let Some(else_region) = else_region {
+                    changed |= self.propagate_demands_region(else_region);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    changed |= self.propagate_demands_region(&case.body);
+                }
+                if let Some(default) = default {
+                    changed |= self.propagate_demands_region(default);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for stmt in condition_stmts {
+                    changed |= self.propagate_demands_statement(stmt);
+                }
+                changed |= self.propagate_demands_region(body);
+                changed |= self.propagate_demands_region(post);
+            }
+            Statement::Block(region) => {
+                changed |= self.propagate_demands_region(region);
+            }
+            _ => {}
+        }
+        changed
+    }
+
+    /// Propagates result uses to operands of transparent expressions.
+    fn propagate_demand_to_expr(
+        &mut self,
+        expr: &Expr,
+        result_uses: &BTreeSet<UseContext>,
+    ) -> bool {
+        match expr {
+            Expr::Binary {
+                lhs,
+                rhs,
+                op: BinOp::Add | BinOp::Or | BinOp::Xor | BinOp::And,
+            } => {
+                let mut changed = false;
+                for use_ctx in result_uses {
+                    changed |= self.record_use_if_new(lhs.id, *use_ctx);
+                    changed |= self.record_use_if_new(rhs.id, *use_ctx);
+                }
+                changed
+            }
+            Expr::Var(id) => {
+                let mut changed = false;
+                for use_ctx in result_uses {
+                    changed |= self.record_use_if_new(*id, *use_ctx);
+                }
+                changed
+            }
+            _ => false,
+        }
+    }
+
+    /// Records a use context for a value, returning true if it was new.
+    fn record_use_if_new(&mut self, id: ValueId, context: UseContext) -> bool {
+        let entry = self.uses.entry(id.0).or_default();
+        if entry.contains(&context) {
+            false
+        } else {
+            entry.insert(context);
+            true
+        }
+    }
+
+    /// Narrows function parameter types based on backward demand analysis.
+    ///
+    /// Uses the backward-inferred max_width for each parameter, which reflects
+    /// whether ALL use paths of the parameter are compatible with narrowing.
+    /// The backward pass + demand propagation through transparent ops ensures
+    /// that if ANY use path needs full width (comparisons, iszero, storage
+    /// values), max_width stays at I256 and prevents narrowing.
     ///
     /// Safety: The function body zero-extends narrowed parameters back to word type,
     /// creating an implicit LLVM range proof. This is sound because:
-    /// 1. The narrow width is sufficient for all internal uses
-    /// 2. The zero-extension preserves the value
+    /// 1. All use paths only observe the lower N bits (proven by backward analysis)
+    /// 2. Transparent ops (add/or/xor/and) preserve lower-bit equivalence
     /// 3. LLVM uses the range proof to eliminate downstream overflow checks
     pub fn narrow_function_params(&self, object: &mut Object) {
         for function in object.functions.values_mut() {
@@ -372,15 +506,18 @@ impl TypeInference {
                     continue;
                 }
 
-                // Use the forward-inferred min_width from the function body.
-                // Only narrow if it's strictly smaller than I256.
-                let inferred = constraint.min_width;
-                if inferred < BitWidth::I256 {
-                    // Clamp to at least I32 for safety (XLEN is 32-bit on PolkaVM).
-                    // Narrower types (I1, I8) can cause issues with LLVM calling conventions.
-                    let clamped = inferred.max(BitWidth::I32);
-                    *param_ty = Type::Int(clamped);
+                // Use backward max_width: only narrow if ALL use paths allow it.
+                // If any use path needs full width (comparisons, storage, etc.),
+                // max_width stays at I256 and we don't narrow.
+                let demand = constraint.max_width;
+                if demand >= BitWidth::I256 {
+                    continue;
                 }
+
+                // Clamp to at least I32 for safety (XLEN is 32-bit on PolkaVM).
+                // Narrower types (I1, I8) can cause issues with LLVM calling conventions.
+                let clamped = demand.max(BitWidth::I32);
+                *param_ty = Type::Int(clamped);
             }
         }
 
@@ -594,6 +731,13 @@ impl TypeInference {
                     self.record_use(lhs.id, UseContext::Comparison);
                     self.record_use(rhs.id, UseContext::Comparison);
                 }
+                // Transparent ops: don't record Arithmetic for operands.
+                // Their demand will be propagated from the Let binding result's
+                // uses in propagate_use_demands. This enables parameter narrowing
+                // through add/or chains that flow to memory offsets.
+                // Property: for these ops, trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))
+                // when only the lower N bits of the result are observed.
+                BinOp::Add | BinOp::Or | BinOp::Xor | BinOp::And => {}
                 _ => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
                     self.record_use(rhs.id, UseContext::Arithmetic);

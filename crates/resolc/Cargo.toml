@@ -23,7 +23,6 @@ clap = { workspace = true }
 hex = { workspace = true }
 inkwell = { workspace = true }
 log = { workspace = true }
-once_cell = { workspace = true }
 path-slash = { workspace = true }
 rayon = { workspace = true, optional = true }
 semver = { workspace = true }

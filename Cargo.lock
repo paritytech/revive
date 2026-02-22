@@ -9076,7 +9076,6 @@ dependencies = [
  "log",
  "mimalloc",
  "normpath",
- "once_cell",
  "path-slash",
  "rayon",
  "revive-common",

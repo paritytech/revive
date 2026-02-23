@@ -262,7 +262,10 @@ fn find_recursive_functions(
 }
 
 /// Estimated IR node overhead per Leave statement during inline expansion.
-/// Each Leave adds: accum assignment(s) + done flag + IsZero + If guard.
+/// Each Leave adds: accum assignment(s) + done flag + IsZero + If guard (~6 nodes).
+/// Additionally, each Leave wraps all subsequent statements in a nested guard,
+/// so the overhead grows quadratically with the number of Leaves (N Leaves
+/// produce O(N^2) nesting as each guard re-wraps the remaining guarded code).
 const LEAVE_OVERHEAD_PER_SITE: usize = 6;
 
 /// Counts the number of Leave statements in a block (non-recursive into functions).
@@ -346,8 +349,10 @@ pub fn make_inline_decisions(
             // Called from too many sites: never inline
             InlineDecision::NeverInline
         } else {
-            // Cost-benefit analysis accounting for Leave elimination overhead
-            let leave_overhead = leave_count * LEAVE_OVERHEAD_PER_SITE * call_count;
+            // Cost-benefit analysis accounting for Leave elimination overhead.
+            // Use quadratic penalty: N Leaves create N levels of nested guards,
+            // each wrapping all subsequent code, so overhead scales as N^2.
+            let leave_overhead = leave_count * leave_count * LEAVE_OVERHEAD_PER_SITE * call_count;
             let cost = (call_count - 1) * size * CODE_SIZE_COST_MULTIPLIER + leave_overhead;
             let mut benefit = 0;
 

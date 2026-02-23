@@ -125,13 +125,10 @@ pub fn translate_yul_object(
     // overflow checks when parameters are used only as memory offsets.
     type_info.narrow_function_params(&mut ir_object);
 
-    // Validate IR correctness in debug builds
-    #[cfg(debug_assertions)]
-    {
-        if let Err(errors) = validate::validate_object(&ir_object) {
-            for error in &errors {
-                log::warn!("IR validation error in {}: {}", ir_object.name, error);
-            }
+    // Validate IR correctness
+    if let Err(errors) = validate::validate_object(&ir_object) {
+        for error in &errors {
+            log::warn!("IR validation error in {}: {}", ir_object.name, error);
         }
     }
 

@@ -4,6 +4,9 @@
 
 This is a development pre-release.
 
+### Added
+- Support for solc v0.8.34.
+
 ### Fixed
 
 - npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.

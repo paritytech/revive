@@ -120,10 +120,18 @@ pub fn translate_yul_object(
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
-    // Narrow function parameter types based on usage within function bodies.
-    // This enables LLVM function signatures with smaller types, eliminating
-    // overflow checks when parameters are used only as memory offsets.
-    type_info.narrow_function_params(&mut ir_object);
+    // Iterative parameter narrowing with cascading demand refinement.
+    // Each iteration: narrow params → update call-site demands → re-apply
+    // backward constraints → narrow more params. This cascades: when function
+    // B's param is narrowed, function A (which only passes to B) can also
+    // narrow its param in the next iteration.
+    for _ in 0..4 {
+        let changed = type_info.narrow_function_params(&mut ir_object);
+        if !changed {
+            break;
+        }
+        type_info.refine_demands_from_params(&ir_object);
+    }
 
     // Validate IR correctness
     if let Err(errors) = validate::validate_object(&ir_object) {

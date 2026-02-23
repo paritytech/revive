@@ -151,6 +151,11 @@ pub struct TypeInference {
     /// Function return value IDs, keyed by FunctionId.
     /// Used during the forward pass to propagate return value widths to call sites.
     function_returns: BTreeMap<u32, Vec<ValueId>>,
+    /// Per-value refined function-arg demand: the widest narrowed parameter width
+    /// across all call sites where this value is passed as an argument.
+    /// Set by `refine_demands_from_params` after parameter narrowing.
+    /// When present, overrides UseContext::FunctionArg (I256) in `use_demand_width`.
+    fn_arg_demand: BTreeMap<u32, BitWidth>,
     /// Type inference results for subobjects (each subobject has its own namespace).
     pub sub_inferences: Vec<TypeInference>,
 }
@@ -163,6 +168,7 @@ impl TypeInference {
             uses: BTreeMap::new(),
             changed: false,
             function_returns: BTreeMap::new(),
+            fn_arg_demand: BTreeMap::new(),
             sub_inferences: Vec::new(),
         }
     }
@@ -179,6 +185,45 @@ impl TypeInference {
         constraint
             .min_width
             .max(constraint.max_width.min(constraint.min_width))
+    }
+
+    /// Computes the widest width needed by any use site of this value.
+    ///
+    /// Unlike `max_width` on the constraint (which can be eagerly narrowed by
+    /// `narrow_from_use` before all uses are collected), this method correctly
+    /// examines ALL recorded use contexts and returns the WIDEST needed width.
+    ///
+    /// Returns I256 (conservative) if:
+    /// - No uses are recorded (dead code or untracked pattern)
+    /// - Any use requires full width (comparisons, storage, external calls, etc.)
+    ///
+    /// Only returns < I256 when ALL recorded uses allow narrowing (e.g., all are
+    /// MemoryOffset which needs only I64).
+    pub fn use_demand_width(&self, id: ValueId) -> BitWidth {
+        if let Some(uses) = self.uses.get(&id.0) {
+            if uses.is_empty() {
+                return BitWidth::I256;
+            }
+            let mut widest_needed = BitWidth::I1;
+            for use_ctx in uses {
+                let needed = match use_ctx {
+                    // If we have a refined function-arg demand for this value,
+                    // use that instead of the blanket I256.
+                    UseContext::FunctionArg => self
+                        .fn_arg_demand
+                        .get(&id.0)
+                        .copied()
+                        .unwrap_or(BitWidth::I256),
+                    _ => use_ctx.max_width_needed(),
+                };
+                if needed > widest_needed {
+                    widest_needed = needed;
+                }
+            }
+            widest_needed
+        } else {
+            BitWidth::I256
+        }
     }
 
     /// Sets the constraint for a value, returning true if changed.
@@ -333,20 +378,27 @@ impl TypeInference {
     /// Apply backward constraints based on collected uses.
     fn apply_backward_constraints(&mut self) {
         for (id, uses) in &self.uses {
-            // Find the minimum max_width across all uses
-            let mut narrowest_max = BitWidth::I256;
+            // Find the widest width needed across all uses.
+            // For FunctionArg, use fn_arg_demand if available (from
+            // refine_demands_from_params) instead of the conservative I256.
+            let mut widest_needed = BitWidth::I1;
             for use_ctx in uses {
-                let needed = use_ctx.max_width_needed();
-                if needed < narrowest_max {
-                    narrowest_max = needed;
+                let needed = match use_ctx {
+                    UseContext::FunctionArg => self
+                        .fn_arg_demand
+                        .get(id)
+                        .copied()
+                        .unwrap_or(BitWidth::I256),
+                    _ => use_ctx.max_width_needed(),
+                };
+                if needed > widest_needed {
+                    widest_needed = needed;
                 }
             }
 
-            // Only narrow if ALL uses allow it
-            let can_narrow = uses.iter().all(|u| u.max_width_needed() <= narrowest_max);
-            if can_narrow && narrowest_max < BitWidth::I256 {
+            if widest_needed < BitWidth::I256 {
                 let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
-                constraint.narrow_max_to(narrowest_max);
+                constraint.narrow_max_to(widest_needed);
                 self.constraints.insert(*id, constraint);
             }
         }
@@ -491,7 +543,10 @@ impl TypeInference {
     /// 1. All use paths only observe the lower N bits (proven by backward analysis)
     /// 2. Transparent ops (add/or/xor/and) preserve lower-bit equivalence
     /// 3. LLVM uses the range proof to eliminate downstream overflow checks
-    pub fn narrow_function_params(&self, object: &mut Object) {
+    ///
+    /// Returns true if any parameter was narrowed.
+    pub fn narrow_function_params(&self, object: &mut Object) -> bool {
+        let mut changed = false;
         for function in object.functions.values_mut() {
             for (param_id, param_ty) in &mut function.params {
                 let constraint = self.get(*param_id);
@@ -518,12 +573,164 @@ impl TypeInference {
                 // Narrower types (I1, I8) can cause issues with LLVM calling conventions.
                 let clamped = demand.max(BitWidth::I32);
                 *param_ty = Type::Int(clamped);
+                changed = true;
             }
         }
 
         // Recurse into subobjects using their scoped type inference contexts
         for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
-            sub_inf.narrow_function_params(subobject);
+            changed |= sub_inf.narrow_function_params(subobject);
+        }
+        changed
+    }
+
+    /// Refines demand widths based on narrowed function parameter types.
+    ///
+    /// After `narrow_function_params` has narrowed function parameter types,
+    /// this method re-examines all call sites and updates use demands for
+    /// arguments. If a parameter was narrowed from I256 to I64, the argument
+    /// only needs I64, not I256.
+    ///
+    /// This enables cascading demand narrowing: if a value is only passed to
+    /// narrowed-parameter functions and used as memory offsets, it can be
+    /// fully narrowed to I64 even though it was originally classified as
+    /// FunctionArg (which defaults to I256).
+    pub fn refine_demands_from_params(&mut self, object: &Object) {
+        // Build a map from FunctionId -> parameter widths (after narrowing)
+        let param_widths: BTreeMap<u32, Vec<BitWidth>> = object
+            .functions
+            .iter()
+            .map(|(func_id, function)| {
+                let widths: Vec<BitWidth> = function
+                    .params
+                    .iter()
+                    .map(|(_, ty)| match ty {
+                        Type::Int(bw) => *bw,
+                        _ => BitWidth::I256,
+                    })
+                    .collect();
+                (func_id.0, widths)
+            })
+            .collect();
+
+        // Walk all code and find Expr::Call sites, updating argument demands
+        self.refine_demands_in_block(&object.code, &param_widths);
+        for function in object.functions.values() {
+            self.refine_demands_in_block(&function.body, &param_widths);
+        }
+
+        // Re-run demand propagation through transparent ops with updated demands
+        self.propagate_use_demands(object);
+
+        // Re-apply backward constraints with updated use info
+        self.apply_backward_constraints();
+
+        // Recurse into subobjects
+        for (subobject, sub_inf) in object.subobjects.iter().zip(self.sub_inferences.iter_mut()) {
+            sub_inf.refine_demands_from_params(subobject);
+        }
+    }
+
+    /// Walks a block looking for Call expressions and updates argument demands.
+    fn refine_demands_in_block(
+        &mut self,
+        block: &Block,
+        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        for stmt in &block.statements {
+            self.refine_demands_in_statement(stmt, param_widths);
+        }
+    }
+
+    /// Walks a region looking for Call expressions and updates argument demands.
+    fn refine_demands_in_region(
+        &mut self,
+        region: &Region,
+        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        for stmt in &region.statements {
+            self.refine_demands_in_statement(stmt, param_widths);
+        }
+    }
+
+    /// Walks a statement looking for Call expressions and updates argument demands.
+    fn refine_demands_in_statement(
+        &mut self,
+        stmt: &Statement,
+        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        match stmt {
+            Statement::Let { value, .. } => {
+                self.refine_demands_in_expr(value, param_widths);
+            }
+            Statement::Expr(expr) => {
+                self.refine_demands_in_expr(expr, param_widths);
+            }
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                self.refine_demands_in_region(then_region, param_widths);
+                if let Some(r) = else_region {
+                    self.refine_demands_in_region(r, param_widths);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for c in cases {
+                    self.refine_demands_in_region(&c.body, param_widths);
+                }
+                if let Some(d) = default {
+                    self.refine_demands_in_region(d, param_widths);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for s in condition_stmts {
+                    self.refine_demands_in_statement(s, param_widths);
+                }
+                self.refine_demands_in_region(body, param_widths);
+                self.refine_demands_in_region(post, param_widths);
+            }
+            Statement::Block(region) => {
+                self.refine_demands_in_region(region, param_widths);
+            }
+            _ => {}
+        }
+    }
+
+    /// Checks an expression for Call and updates argument demands.
+    fn refine_demands_in_expr(&mut self, expr: &Expr, param_widths: &BTreeMap<u32, Vec<BitWidth>>) {
+        if let Expr::Call { function, args } = expr {
+            if let Some(widths) = param_widths.get(&function.0) {
+                // Check if ALL parameters are narrowed (< I256)
+                let all_narrow = args
+                    .iter()
+                    .zip(widths.iter())
+                    .all(|(_, w)| *w < BitWidth::I256);
+                if !all_narrow {
+                    // If any parameter is still I256, we can't narrow the FunctionArg demand
+                    // for this specific call. But we still refine individual args below.
+                }
+
+                for (arg, param_width) in args.iter().zip(widths.iter()) {
+                    // Track the widest narrowed parameter demand for this argument value.
+                    // A value may be passed as arg to multiple functions - we take the widest.
+                    let entry = self.fn_arg_demand.entry(arg.id.0).or_insert(BitWidth::I1);
+                    *entry = (*entry).max(*param_width);
+                }
+            } else {
+                // Unknown function (possibly a call to a function not in our object)
+                // Mark args as needing full width
+                for arg in args {
+                    let entry = self.fn_arg_demand.entry(arg.id.0).or_insert(BitWidth::I1);
+                    *entry = BitWidth::I256;
+                }
+            }
         }
     }
 
@@ -680,11 +887,6 @@ impl TypeInference {
                 offset,
                 length,
             }
-            | Statement::DataCopy {
-                dest,
-                offset,
-                length,
-            }
             | Statement::CallDataCopy {
                 dest,
                 offset,
@@ -694,6 +896,21 @@ impl TypeInference {
                 self.narrow_from_use(dest.id, BitWidth::I64);
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+            }
+
+            // DataCopy is special: the offset field carries the contract code hash
+            // (256-bit), not a memory offset. Only dest is a memory pointer.
+            Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                self.record_use(dest.id, UseContext::MemoryOffset);
+                self.narrow_from_use(dest.id, BitWidth::I64);
+                // Offset is the contract code hash — needs full 256-bit width
+                self.record_use(offset.id, UseContext::MemoryValue);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
@@ -719,7 +936,51 @@ impl TypeInference {
                 self.collect_uses_expr(expr);
             }
 
-            _ => {}
+            // Create operations: value is ETH sent, offset/length are memory pointers
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                ..
+            } => {
+                self.record_use(value.id, UseContext::ExternalCall);
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+                if let Some(salt) = salt {
+                    self.record_use(salt.id, UseContext::ExternalCall);
+                }
+            }
+
+            // SetImmutable: value needs full width (stored as contract data)
+            Statement::SetImmutable { value, .. } => {
+                self.record_use(value.id, UseContext::General);
+            }
+
+            // SelfDestruct: address needs full width
+            Statement::SelfDestruct { address } => {
+                self.record_use(address.id, UseContext::ExternalCall);
+            }
+
+            // Leave: return values escape to caller, need full width
+            Statement::Leave { return_values } => {
+                for val in return_values {
+                    self.record_use(val.id, UseContext::FunctionReturn);
+                }
+            }
+
+            // Break/Continue: carry loop variables, need full width
+            Statement::Break { values } | Statement::Continue { values } => {
+                for val in values {
+                    self.record_use(val.id, UseContext::General);
+                }
+            }
+
+            // PanicRevert: no variable values (code is u8 constant)
+            // Stop/Invalid: no values
+            Statement::PanicRevert { .. } | Statement::Stop | Statement::Invalid => {}
         }
     }
 

@@ -453,16 +453,156 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok((a_ext, b_ext))
     }
 
-    /// Narrows a Let-bound value when the LLVM IR itself proves it fits.
+    /// Adjusts a single value to an exact target width: truncates if wider,
+    /// zero-extends if narrower, returns unchanged if already the target width.
+    fn ensure_exact_width(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        value: IntValue<'ctx>,
+        target_bits: u32,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let w = value.get_type().get_bit_width();
+        if w == target_bits {
+            Ok(value)
+        } else if w < target_bits {
+            let target_type = context.integer_type(target_bits as usize);
+            context
+                .builder()
+                .build_int_z_extend(value, target_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        } else {
+            let target_type = context.integer_type(target_bits as usize);
+            context
+                .builder()
+                .build_int_truncate(value, target_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        }
+    }
+
+    /// Tries to narrow comparison operands to a smaller type when both are
+    /// provably narrow. For unsigned comparisons and equality, truncating both
+    /// operands to their proven width is correct and avoids expensive i256
+    /// comparison sequences (16-20 RISC-V instructions vs 1-2 for i64).
     ///
-    /// Only narrows based on structural LLVM proofs (zext source, AND mask),
-    /// NOT based on type inference min_width which can be unsound for values
-    /// derived from function parameters.
+    /// Uses three complementary width sources:
+    /// 1. LLVM structural analysis (zext, and-mask, lshr, etc.)
+    /// 2. Constant width analysis
+    /// 3. Forward-propagated type inference min_width
+    fn try_narrow_comparison(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        a: IntValue<'ctx>,
+        b: IntValue<'ctx>,
+        a_id: ValueId,
+        b_id: ValueId,
+    ) -> Result<(IntValue<'ctx>, IntValue<'ctx>)> {
+        let a_width = a.get_type().get_bit_width();
+        let b_width = b.get_type().get_bit_width();
+
+        // Only try to narrow if at least one operand is wider than 64 bits
+        if a_width <= 64 && b_width <= 64 {
+            return self.ensure_same_type(context, a, b, "cmp");
+        }
+
+        // Check provable narrow widths from LLVM IR structure
+        let a_proven = Self::provable_narrow_width(a).unwrap_or(a_width);
+        let b_proven = Self::provable_narrow_width(b).unwrap_or(b_width);
+
+        // Also check constant widths
+        let a_effective = if a.is_const() {
+            Self::constant_effective_width(a)
+                .unwrap_or(a_proven)
+                .min(a_proven)
+        } else {
+            a_proven
+        };
+        let b_effective = if b.is_const() {
+            Self::constant_effective_width(b)
+                .unwrap_or(b_proven)
+                .min(b_proven)
+        } else {
+            b_proven
+        };
+
+        // Also check forward-propagated type inference min_width.
+        // This catches cases where the LLVM IR structure doesn't reveal narrowness
+        // but the newyork IR analysis does (e.g., calldatasize, shift results).
+        let a_inferred = self.inferred_width(a_id).bits();
+        let b_inferred = self.inferred_width(b_id).bits();
+        let a_effective = a_effective.min(a_inferred);
+        let b_effective = b_effective.min(b_inferred);
+
+        // Both operands must be provably narrow for truncation to be correct
+        let max_needed = a_effective.max(b_effective);
+
+        // Map to standard width (8, 32, 64) for LLVM optimization
+        let target_bits = if max_needed <= 8 {
+            8
+        } else if max_needed <= 32 {
+            32
+        } else if max_needed <= 64 {
+            64
+        } else {
+            // One or both operands need >64 bits; fall back to widening
+            return self.ensure_same_type(context, a, b, "cmp");
+        };
+
+        let target_type = context.integer_type(target_bits as usize);
+
+        // Truncate both operands to the target width
+        let a_narrow = if a_width > target_bits {
+            context
+                .builder()
+                .build_int_truncate(a, target_type, "cmp_narrow_a")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else if a_width < target_bits {
+            context
+                .builder()
+                .build_int_z_extend(a, target_type, "cmp_ext_a")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else {
+            a
+        };
+
+        let b_narrow = if b_width > target_bits {
+            context
+                .builder()
+                .build_int_truncate(b, target_type, "cmp_narrow_b")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else if b_width < target_bits {
+            context
+                .builder()
+                .build_int_z_extend(b, target_type, "cmp_ext_b")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        } else {
+            b
+        };
+
+        Ok((a_narrow, b_narrow))
+    }
+
+    /// Narrows a Let-bound value using two complementary strategies:
+    ///
+    /// 1. **Structural LLVM proofs** (zext source, AND mask, lshr by constant):
+    ///    Sound because the proof is based on the instruction producing the value.
+    ///
+    /// 2. **Backward demand narrowing** from type inference:
+    ///    If ALL use sites only need narrow bits (e.g., memory offsets → I64),
+    ///    truncate here. LLVM will fold the truncation back into the producing
+    ///    operation, converting entire computation chains to narrow types.
+    ///    This is sound because modular arithmetic on the lower N bits produces
+    ///    the same lower N bits regardless of input width.
+    ///
+    /// Narrowing to standard widths (i8, i32, i64) reduces:
+    /// - Register spill overhead (i64 is 1/4 the spill code of i256)
+    /// - Comparison instruction count (i64 is 1 compare vs 4 for i256)
+    /// - Overall code size through compound effects on register pressure
     fn try_narrow_let_binding(
         &self,
         context: &PolkaVMContext<'ctx>,
         value: BasicValueEnum<'ctx>,
-        _binding_id: ValueId,
+        binding_id: ValueId,
     ) -> Result<BasicValueEnum<'ctx>> {
         let int_val = match value {
             BasicValueEnum::IntValue(v) => v,
@@ -476,17 +616,55 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(value);
         }
 
-        // Check if the value has a structural proof from the LLVM IR itself.
-        // This is sound because the proof is based on the instruction producing
-        // the value, not on type inference heuristics.
+        // Strategy 1: Check structural proof from the LLVM IR itself.
         if let Some(proven_width) = Self::provable_narrow_width(int_val) {
-            if proven_width <= 64 {
-                // Clamp to at least 8 bits for LLVM type compatibility
-                let clamped = proven_width.max(8);
-                let narrow_type = context.integer_type(clamped as usize);
+            let target_bits = if proven_width <= 8 {
+                8 // Clamp i1..i8 to i8 for LLVM type compatibility
+            } else if proven_width <= 32 {
+                32
+            } else if proven_width <= 64 {
+                64
+            } else {
+                // > 64 bits — not worth narrowing to non-standard widths
+                0 // Fall through to strategy 2
+            };
+
+            if target_bits > 0 && target_bits < value_width {
+                let narrow_type = context.integer_type(target_bits as usize);
                 let truncated = context
                     .builder()
                     .build_int_truncate(int_val, narrow_type, "narrow_let")
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                return Ok(truncated.as_basic_value_enum());
+            }
+        }
+
+        // Strategy 2: Backward demand narrowing from type inference.
+        // Uses `use_demand_width` which correctly examines ALL recorded use contexts.
+        //
+        // If every use site only needs ≤I64 bits (e.g., all are memory offsets),
+        // truncate here. LLVM will fold the truncation back into the producing
+        // operation, converting entire computation chains to narrow types.
+        //
+        // Safety: For modular-arithmetic operations (add/sub/mul), truncating the
+        // result preserves the lower N bits. Since all use sites only observe the
+        // lower N bits (proven by backward analysis), the truncation is sound.
+        // For memory offsets, any value > 2^32 is invalid on PolkaVM regardless.
+        //
+        let constraint = self.type_info.get(binding_id);
+        if !constraint.is_signed {
+            let demand = self.type_info.use_demand_width(binding_id);
+            let target_bits = match demand {
+                BitWidth::I1 | BitWidth::I8 => 8,
+                BitWidth::I32 => 32,
+                BitWidth::I64 => 64,
+                _ => return Ok(value), // I160 or I256: not worth narrowing
+            };
+            if target_bits < value_width {
+                let narrow_type = context.integer_type(target_bits as usize);
+                let truncated = context
+                    .builder()
+                    .build_int_truncate(int_val, narrow_type, "demand_narrow")
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                 return Ok(truncated.as_basic_value_enum());
             }
@@ -502,6 +680,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// - `zext from narrow_type`: value fits in narrow_type's width
     /// - `and %val, constant_mask`: value fits in mask's bit width
     /// - `trunc to narrow_type`: value fits in narrow_type's width
+    /// - `lshr %val, constant_amount`: result fits in (input_width - amount) bits
     fn provable_narrow_width(value: IntValue<'ctx>) -> Option<u32> {
         use inkwell::values::InstructionOpcode;
 
@@ -521,18 +700,78 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 } else if op0.is_const() {
                     Self::constant_effective_width(op0)
                 } else {
-                    None
+                    // If either operand has a provable narrow width, the AND
+                    // result is bounded by the narrower operand.
+                    let w0 = Self::provable_narrow_width(op0);
+                    let w1 = Self::provable_narrow_width(op1);
+                    match (w0, w1) {
+                        (Some(a), Some(b)) => Some(a.min(b)),
+                        (Some(a), None) => Some(a),
+                        (None, Some(b)) => Some(b),
+                        (None, None) => None,
+                    }
                 }
             }
             InstructionOpcode::Trunc => {
                 Some(instruction.get_type().into_int_type().get_bit_width())
             }
+            InstructionOpcode::LShr => {
+                // lshr %val, constant_amount → result has at most (width - amount) bits
+                let shift_amount = instruction.get_operand(1)?.value()?.into_int_value();
+                if let Some(shift) = Self::try_get_small_constant(shift_amount) {
+                    let input_width = instruction
+                        .get_operand(0)?
+                        .value()?
+                        .into_int_value()
+                        .get_type()
+                        .get_bit_width();
+                    if shift < input_width as u64 {
+                        Some((input_width as u64 - shift) as u32)
+                    } else {
+                        Some(1) // shift >= width → result is 0
+                    }
+                } else {
+                    None
+                }
+            }
+            InstructionOpcode::Or => {
+                // or %a, %b → result fits in max(width(a), width(b)) bits
+                let op0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let op1 = instruction.get_operand(1)?.value()?.into_int_value();
+                let w0 = Self::provable_narrow_width(op0);
+                let w1 = Self::provable_narrow_width(op1);
+                match (w0, w1) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }
 
+    /// Extracts a small constant value from an IntValue, handling wide types (i256).
+    /// Returns None if the value is not a constant or doesn't fit in u64.
+    fn try_get_small_constant(int_val: IntValue<'ctx>) -> Option<u64> {
+        if let Some(val) = int_val.get_zero_extended_constant() {
+            return Some(val);
+        }
+        // For wider types, try truncate + roundtrip verification
+        let wide_type = int_val.get_type();
+        if wide_type.get_bit_width() > 64 && int_val.is_const() {
+            let i64_type = wide_type.get_context().i64_type();
+            let truncated = int_val.const_truncate(i64_type);
+            if let Some(val) = truncated.get_zero_extended_constant() {
+                let reconstructed = wide_type.const_int(val, false);
+                if reconstructed == int_val {
+                    return Some(val);
+                }
+            }
+        }
+        None
+    }
+
     /// Returns the effective bit width needed to represent a constant integer value.
-    /// For wide types (> 64 bits), truncates to i64 and verifies roundtrip.
+    /// For wide types (> 64 bits), checks progressively wider truncation targets.
     fn constant_effective_width(int_val: IntValue<'ctx>) -> Option<u32> {
         // For types <= 64 bits, use the direct API
         if let Some(val) = int_val.get_zero_extended_constant() {
@@ -543,12 +782,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
             });
         }
 
-        // For wider types (e.g., i256), truncate to i64 and verify roundtrip
+        // For wider types (e.g., i256), check if the value fits in standard widths.
+        // Test from narrow to wide: first 64, then 160. This enables narrowing
+        // for common patterns like address masks (160-bit) and small constants.
         let wide_type = int_val.get_type();
-        if wide_type.get_bit_width() > 64 {
+        if wide_type.get_bit_width() > 64 && int_val.is_const() {
+            // Check if it fits in 64 bits
             let i64_type = wide_type.get_context().i64_type();
-            let truncated = int_val.const_truncate(i64_type);
-            if let Some(val) = truncated.get_zero_extended_constant() {
+            let truncated_64 = int_val.const_truncate(i64_type);
+            if let Some(val) = truncated_64.get_zero_extended_constant() {
                 let reconstructed = wide_type.const_int(val, false);
                 if reconstructed == int_val {
                     return Some(if val == 0 {
@@ -558,6 +800,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     });
                 }
             }
+
+            // 160-bit constants (e.g., address masks) are generated as i160 at
+            // the literal level, so they will be caught by type width checks
+            // rather than needing LLVM const-expr analysis here.
         }
 
         None
@@ -612,30 +858,36 @@ impl<'ctx> LlvmCodegen<'ctx> {
         name: &str,
     ) -> Result<IntValue<'ctx>> {
         let value_width = value.get_type().get_bit_width();
-        let word_width = context.word_type().get_bit_width();
 
-        // Only narrow word-sized (i256) values — these are the ones that
-        // trigger the expensive overflow check in safe_truncate_int_to_xlen.
-        if value_width != word_width {
+        // Already at or below xlen (32 bits) — no narrowing needed.
+        if value_width <= 32 {
             return Ok(value);
         }
 
         let inferred = self.inferred_width(source_id);
-        if !matches!(
-            inferred,
-            BitWidth::I1 | BitWidth::I8 | BitWidth::I32 | BitWidth::I64
-        ) {
-            return Ok(value);
+
+        // If forward inference proves value fits in 32 bits (xlen), truncate
+        // directly to i32. This eliminates the overflow check entirely in
+        // safe_truncate_int_to_xlen (which returns immediately for xlen values).
+        if matches!(inferred, BitWidth::I1 | BitWidth::I8 | BitWidth::I32) {
+            let i32_type = context.llvm().i32_type();
+            return context
+                .builder()
+                .build_int_truncate(value, i32_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()));
         }
 
-        // Truncate to i64 — safe because type inference proves the value fits.
-        // safe_truncate_int_to_xlen will then do a cheap i64→i32 truncation
-        // instead of the expensive i256→i32 overflow check.
-        let i64_type = context.llvm().i64_type();
-        context
-            .builder()
-            .build_int_truncate(value, i64_type, name)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))
+        // If value fits in 64 bits but not 32, truncate to i64.
+        // safe_truncate_int_to_xlen will do a cheap i64→i32 check.
+        if matches!(inferred, BitWidth::I64) && value_width > 64 {
+            let i64_type = context.llvm().i64_type();
+            return context
+                .builder()
+                .build_int_truncate(value, i64_type, name)
+                .map_err(|e| CodegenError::Llvm(e.to_string()));
+        }
+
+        Ok(value)
     }
 
     /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
@@ -1259,7 +1511,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if bindings.len() == 1 && matches!(value, Expr::CallValue) {
                     self.callvalue_value_ids.insert(bindings[0].0);
                 }
-                let llvm_value = self.generate_expr(value, context)?;
+
+                // Compute demand hint for single-binding Lets: if every use site
+                // only needs ≤64 bits, tell generate_expr so modular BinOps can
+                // operate at i64 directly instead of i256+trunc.
+                let demand = if bindings.len() == 1 {
+                    let binding_id = bindings[0];
+                    let constraint = self.type_info.get(binding_id);
+                    if !constraint.is_signed {
+                        let dw = self.type_info.use_demand_width(binding_id);
+                        match dw {
+                            BitWidth::I1 | BitWidth::I8 | BitWidth::I32 | BitWidth::I64 => {
+                                Some(dw.bits())
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let llvm_value = self.generate_expr(value, context, demand)?;
                 if bindings.len() == 1 {
                     let binding_id = bindings[0];
                     let llvm_value =
@@ -1795,7 +2069,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
 
                 // Evaluate condition
-                let cond_val = self.generate_expr(condition, context)?.into_int_value();
+                let cond_val = self
+                    .generate_expr(condition, context, None)?
+                    .into_int_value();
                 // Compare at native width - no need to extend to word type
                 let cond_zero = cond_val.get_type().const_zero();
                 let cond_bool = context
@@ -2491,7 +2767,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Expr(expr) => {
                 // Evaluate for side effects, discard result
-                let _ = self.generate_expr(expr, context)?;
+                let _ = self.generate_expr(expr, context, None)?;
             }
 
             Statement::SetImmutable { key, value } => {
@@ -2507,10 +2783,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Generates LLVM IR for an expression.
+    /// Generates LLVM IR for an expression.
+    ///
+    /// `demand_bits` is an optional hint: when set, the caller only needs
+    /// the low `demand_bits` bits of the result. For modular/bitwise BinOps
+    /// (Add, Sub, Mul, And, Or, Xor) this allows generating narrow operations
+    /// directly instead of computing at i256 and truncating afterward.
     fn generate_expr(
         &mut self,
         expr: &Expr,
         context: &mut PolkaVMContext<'ctx>,
+        demand_bits: Option<u32>,
     ) -> Result<BasicValueEnum<'ctx>> {
         match expr {
             Expr::Literal { value, .. } => {
@@ -2542,13 +2825,34 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // bits that weren't in the inputs.
                 // All other ops use word type for correct EVM wrapping semantics.
                 match op {
-                    BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt | BinOp::Eq => {
+                    BinOp::Lt | BinOp::Gt | BinOp::Eq => {
+                        // For unsigned comparisons and equality, try to narrow both
+                        // operands to a smaller type if provably safe. This reduces
+                        // i256 comparisons (16-20 RISC-V instructions) to i64 (1-2).
+                        let (lhs_cmp, rhs_cmp) =
+                            self.try_narrow_comparison(context, lhs_val, rhs_val, lhs.id, rhs.id)?;
+                        self.generate_binop(*op, lhs_cmp, rhs_cmp, context)
+                    }
+                    BinOp::Slt | BinOp::Sgt => {
+                        // Signed comparisons need sign-extension, not truncation.
+                        // Keep the standard widening behavior.
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
 
                     BinOp::And | BinOp::Or | BinOp::Xor => {
+                        // Demand-based narrowing: bitwise ops on truncated
+                        // inputs produce the same low bits as on full inputs.
+                        if let Some(db) = demand_bits {
+                            if db <= 64 {
+                                let lhs_val =
+                                    self.ensure_exact_width(context, lhs_val, 64, "dnbit_l")?;
+                                let rhs_val =
+                                    self.ensure_exact_width(context, rhs_val, 64, "dnbit_r")?;
+                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                            }
+                        }
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "bitwise")?;
                         self.generate_binop(*op, lhs_val, rhs_val, context)
@@ -2558,6 +2862,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // i64, do the arithmetic at i64 width (native RISC-V ops).
                     // Otherwise extend to i256 for correct modular semantics.
                     BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                        // Demand-based narrowing: for modular arithmetic, the low N
+                        // bits of (a op b) depend only on the low N bits of a and b.
+                        // When all consumers only need ≤64 bits, operate at i64.
+                        if let Some(db) = demand_bits {
+                            if db <= 64 {
+                                let lhs_val =
+                                    self.ensure_exact_width(context, lhs_val, 64, "dnarith_l")?;
+                                let rhs_val =
+                                    self.ensure_exact_width(context, rhs_val, 64, "dnarith_r")?;
+                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                            }
+                        }
+
                         let lhs_inferred = self.inferred_width(lhs.id);
                         let rhs_inferred = self.inferred_width(rhs.id);
                         let result_width = match op {
@@ -2599,6 +2916,60 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
                             self.generate_binop(*op, lhs_val, rhs_val, context)
                         }
+                    }
+
+                    // Shift left: for constant shift amounts where demand ≤ 64,
+                    // operate at i64 width. For non-constant or large shifts, use i256.
+                    BinOp::Shl => {
+                        if let Some(db) = demand_bits {
+                            if db <= 64 {
+                                if let Some(shift) = Self::try_get_small_constant(lhs_val) {
+                                    if shift >= 64 {
+                                        // Shift ≥ 64 at i64 width → all low bits are 0
+                                        let i64_type = context.llvm().i64_type();
+                                        return Ok(i64_type.const_zero().as_basic_value_enum());
+                                    }
+                                    let rhs_narrow =
+                                        self.ensure_exact_width(context, rhs_val, 64, "dnshl_val")?;
+                                    let lhs_narrow =
+                                        self.ensure_exact_width(context, lhs_val, 64, "dnshl_amt")?;
+                                    let result = context
+                                        .builder()
+                                        .build_left_shift(rhs_narrow, lhs_narrow, "shl_dn")
+                                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                                    return Ok(result.as_basic_value_enum());
+                                }
+                            }
+                        }
+                        let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
+                        let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                    }
+
+                    // Shift right: if the value is provably narrow (≤ 64 bits) AND
+                    // the shift amount is a known constant < 64, operate at i64 width.
+                    BinOp::Shr => {
+                        let rhs_inferred = self.inferred_width(rhs.id);
+                        if rhs_inferred.bits() <= 64 {
+                            if let Some(shift) = Self::try_get_small_constant(lhs_val) {
+                                if shift >= 64 {
+                                    let i64_type = context.llvm().i64_type();
+                                    return Ok(i64_type.const_zero().as_basic_value_enum());
+                                }
+                                let rhs_narrow =
+                                    self.ensure_exact_width(context, rhs_val, 64, "dnshr_val")?;
+                                let lhs_narrow =
+                                    self.ensure_exact_width(context, lhs_val, 64, "dnshr_amt")?;
+                                let result = context
+                                    .builder()
+                                    .build_right_shift(rhs_narrow, lhs_narrow, false, "shr_dn")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                                return Ok(result.as_basic_value_enum());
+                            }
+                        }
+                        let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
+                        let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
+                        self.generate_binop(*op, lhs_val, rhs_val, context)
                     }
 
                     _ => {
@@ -2651,9 +3022,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         Ok(is_zero.as_basic_value_enum())
                     }
                     UnaryOp::Not => {
-                        // Bitwise NOT: XOR with all-ones mask at word (256-bit) width.
-                        // This matches the YUL backend behavior and ensures the NOT
-                        // operates at full EVM word width regardless of operand type.
+                        // Demand-based narrowing: the low N bits of NOT(x) depend only
+                        // on the low N bits of x. When demand ≤ 64, operate at i64.
+                        if let Some(db) = demand_bits {
+                            if db <= 64 {
+                                let narrow_val =
+                                    self.ensure_exact_width(context, operand_val, 64, "dnnot_op")?;
+                                let all_ones = narrow_val.get_type().const_all_ones();
+                                let xor_result = context
+                                    .builder()
+                                    .build_xor(narrow_val, all_ones, "not_narrow")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                                return Ok(xor_result.as_basic_value_enum());
+                            }
+                        }
+                        // Full 256-bit NOT for cases without narrow demand.
                         let operand_val = self.ensure_word_type(context, operand_val, "not_op")?;
                         let all_ones = context.word_type().const_all_ones();
                         let xor_result = context
@@ -3181,12 +3564,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
             BinOp::Xor => Ok(revive_llvm_context::polkavm_evm_bitwise::xor(
                 context, lhs, rhs,
             )?),
-            BinOp::Shl => Ok(revive_llvm_context::polkavm_evm_bitwise::shift_left(
-                context, lhs, rhs,
-            )?),
-            BinOp::Shr => Ok(revive_llvm_context::polkavm_evm_bitwise::shift_right(
-                context, lhs, rhs,
-            )?),
+            BinOp::Shl => {
+                // For constant shift amounts, skip the overflow check and generate
+                // direct shl. This eliminates branch + phi overhead for known shifts.
+                if let Some(shift) = Self::try_get_small_constant(lhs) {
+                    if shift >= 256 {
+                        return Ok(rhs.get_type().const_zero().as_basic_value_enum());
+                    }
+                    let result = context
+                        .builder()
+                        .build_left_shift(rhs, lhs, "shl_const")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    return Ok(result.as_basic_value_enum());
+                }
+                Ok(revive_llvm_context::polkavm_evm_bitwise::shift_left(
+                    context, lhs, rhs,
+                )?)
+            }
+            BinOp::Shr => {
+                // For constant shift amounts, skip the overflow check and generate
+                // direct lshr. This produces a clean instruction that
+                // provable_narrow_width can detect, enabling downstream narrowing
+                // (e.g., shr(224, calldataload(0)) → i32 selector).
+                if let Some(shift) = Self::try_get_small_constant(lhs) {
+                    if shift >= 256 {
+                        return Ok(rhs.get_type().const_zero().as_basic_value_enum());
+                    }
+                    let result = context
+                        .builder()
+                        .build_right_shift(rhs, lhs, false, "shr_const")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    return Ok(result.as_basic_value_enum());
+                }
+                Ok(revive_llvm_context::polkavm_evm_bitwise::shift_right(
+                    context, lhs, rhs,
+                )?)
+            }
             BinOp::Sar => Ok(
                 revive_llvm_context::polkavm_evm_bitwise::shift_right_arithmetic(
                     context, lhs, rhs,

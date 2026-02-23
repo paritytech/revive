@@ -1088,11 +1088,25 @@ impl<'ctx> Context<'ctx> {
                 .into_int_value());
         }
 
-        // Intermediate width (e.g., i64) - truncate directly to xlen
-        // This is safe because we know the value came from a narrow literal
+        // Intermediate width (e.g., i64) - extend to word for safe overflow check.
+        // With demand narrowing, intermediate values may exceed xlen range,
+        // so we cannot assume they fit. Reuse WordToPointer for the check.
+        let word_value =
+            self.builder()
+                .build_int_z_extend(value, self.word_type(), "intermediate_to_word")?;
         Ok(self
-            .builder()
-            .build_int_truncate(value, self.xlen_type(), "intermediate_to_xlen")?)
+            .build_call(
+                <WordToPointer as RuntimeFunction>::declaration(self),
+                &[word_value.into()],
+                "word_to_pointer",
+            )
+            .unwrap_or_else(|| {
+                panic!(
+                    "revive runtime function {} should return a value",
+                    <WordToPointer as RuntimeFunction>::NAME,
+                )
+            })
+            .into_int_value())
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.

@@ -316,15 +316,27 @@ impl HeapAnalysis {
                 self.analyze_expr_side_effects(expr);
             }
 
-            // Data copy operations
-            Statement::CodeCopy { dest, .. }
-            | Statement::ExtCodeCopy { dest, .. }
-            | Statement::ReturnDataCopy { dest, .. }
-            | Statement::DataCopy { dest, .. }
-            | Statement::CallDataCopy { dest, .. } => {
-                // External data copies write big-endian data
+            // ReturnDataCopy writes ABI-encoded big-endian data that needs byte-swapping.
+            Statement::ReturnDataCopy { dest, .. } => {
                 if let Some(addr) = self.extract_static_offset(dest) {
                     self.tainted_regions.insert(addr / 32 * 32);
+                } else {
+                    self.has_dynamic_accesses = true;
+                }
+            }
+
+            // CodeCopy, DataCopy, and CallDataCopy copy raw bytes without endianness
+            // concerns. They don't need to taint regions for big-endian emulation.
+            // ExtCodeCopy copies external contract code (also raw bytes).
+            Statement::CodeCopy { dest, .. }
+            | Statement::ExtCodeCopy { dest, .. }
+            | Statement::DataCopy { dest, .. }
+            | Statement::CallDataCopy { dest, .. } => {
+                // Track as memory writes for analysis purposes, but don't taint
+                if let Some(addr) = self.extract_static_offset(dest) {
+                    self.memory_accesses
+                        .entry(addr)
+                        .or_insert(AccessPattern::AlignedStatic(addr));
                 } else {
                     self.has_dynamic_accesses = true;
                 }

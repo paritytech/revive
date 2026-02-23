@@ -3308,7 +3308,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         let unique_param_count = value_sig_to_group.len();
         if unique_param_count > MAX_FUZZY_LITERAL_DIFFS {
-            continue; // Too many unique differences to parameterize
+            continue;
         }
 
         // Build mapping: for each differing position, which unique parameter index?

@@ -110,7 +110,7 @@ pub fn translate_yul_object(
     // Run optimization passes on the entire object tree (including subobjects).
     // Subobjects contain the deployed (runtime) contract code, which is where
     // most functions live and where optimizations have the biggest impact.
-    let inline_results = optimize_object_tree(&mut ir_object);
+    let (inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object);
 
     // Run analysis passes on the full object tree
     let mut heap_analysis = HeapAnalysis::new();
@@ -119,11 +119,6 @@ pub fn translate_yul_object(
 
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
-
-    // Also analyze subobjects
-    for subobject in &ir_object.subobjects {
-        heap_analysis.analyze_object(subobject);
-    }
 
     // Narrow function parameter types based on usage within function bodies.
     // This enables LLVM function signatures with smaller types, eliminating
@@ -144,14 +139,14 @@ pub fn translate_yul_object(
         object: ir_object,
         heap_opt,
         type_info,
-        mem_opt: MemOptResults::default(),
+        mem_opt: mem_opt_results,
         inline_results,
     })
 }
 
 /// Runs optimization passes on an object and all its subobjects recursively.
-/// Returns the combined inline results from all objects.
-fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
+/// Returns the combined inline and memory optimization results from all objects.
+fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResults) {
     // Run inlining pass first - this exposes more optimization opportunities
     let mut inline_results = inline_functions(object);
 
@@ -169,7 +164,7 @@ fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
 
     // Run memory optimization pass (load-after-store elimination)
     let mut mem_optimizer = MemoryOptimizer::new();
-    mem_optimizer.optimize_object(object);
+    let mut mem_opt_results = mem_optimizer.optimize_object(object);
 
     // Run FMP propagation pass (replace mload(0x40) with known constant)
     let mut fmp_prop = mem_opt::FmpPropagation::new(0);
@@ -188,14 +183,19 @@ fn optimize_object_tree(object: &mut ir::Object) -> InlineResults {
 
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {
-        let sub_results = optimize_object_tree(subobject);
+        let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);
         // Merge sub-results into main results
-        inline_results.inlined_call_sites += sub_results.inlined_call_sites;
+        inline_results.inlined_call_sites += sub_inline.inlined_call_sites;
         inline_results
             .removed_functions
-            .extend(sub_results.removed_functions);
-        inline_results.decisions.extend(sub_results.decisions);
+            .extend(sub_inline.removed_functions);
+        inline_results.decisions.extend(sub_inline.decisions);
+        mem_opt_results.loads_eliminated += sub_mem_opt.loads_eliminated;
+        mem_opt_results.stores_eliminated += sub_mem_opt.stores_eliminated;
+        mem_opt_results.values_tracked += sub_mem_opt.values_tracked;
+        mem_opt_results.keccak_pairs_fused += sub_mem_opt.keccak_pairs_fused;
+        mem_opt_results.keccak_singles_fused += sub_mem_opt.keccak_singles_fused;
     }
 
-    inline_results
+    (inline_results, mem_opt_results)
 }

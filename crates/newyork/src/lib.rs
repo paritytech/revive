@@ -175,11 +175,12 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     // patterns. When the argument is a constant, we can precompute the hash.
     simplify::fold_constant_keccak(object);
 
-    // Second DCE pass: the mem_opt + keccak fold passes leave dead variables behind.
-    // When inline mstore+keccak256 patterns are replaced by Keccak256Pair/Single nodes,
-    // the surrounding Let bindings (0x0, 0x20, 0x40 constants that were memory offsets)
-    // become dead. This DCE-only pass removes them without affecting live code structure.
-    simplify::Simplifier::dce_object(object);
+    // Second full simplify pass: mem_opt, FMP propagation, and keccak fold create new
+    // constant expressions and dead code. A full simplify pass (constant folding, copy
+    // propagation, algebraic simplification, DCE) propagates these opportunities through
+    // downstream arithmetic, which DCE alone would miss.
+    let mut simplifier2 = Simplifier::new();
+    simplifier2.simplify_object(object);
 
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {

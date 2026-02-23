@@ -2742,7 +2742,7 @@ impl Canonicalizer {
                 self.encode_value(number, buf);
             }
             Expr::BlobHash { index } => {
-                buf.push(0x24);
+                buf.push(0x26);
                 self.encode_value(index, buf);
             }
             Expr::DataOffset { id } => {

@@ -2040,6 +2040,13 @@ fn inline_call_with_results(
     let mut stmts = Vec::new();
 
     // Bind parameters
+    debug_assert_eq!(
+        function.params.len(),
+        args.len(),
+        "inliner: argument count mismatch for function (expected {}, got {})",
+        function.params.len(),
+        args.len()
+    );
     for ((param_id, _param_ty), arg) in function.params.iter().zip(args.iter()) {
         let new_param_id = remapper.remap_value_id(*param_id);
         stmts.push(Statement::Let {

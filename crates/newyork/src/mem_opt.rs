@@ -539,9 +539,13 @@ impl MemoryOptimizer {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = static_offset / 32 * 32;
                         self.memory_state.remove(&word_offset);
-                        // Don't mark previous store as dead - mstore8 only writes one byte
-                        // The previous 32-byte store might still be needed
-                        self.pending_stores.remove(&word_offset);
+                        // Don't mark previous store as dead - mstore8 only writes one byte.
+                        // The previous 32-byte store might still be needed.
+                        // Remove any pending store whose 32-byte range covers this byte.
+                        // pending_stores is keyed by exact byte offset, so we must check
+                        // the range [word_offset, word_offset+32) for matching entries.
+                        self.pending_stores
+                            .retain(|&k, _| k < word_offset || k >= word_offset + 32);
                     } else {
                         // Unknown offset - invalidate all
                         self.memory_state.clear();

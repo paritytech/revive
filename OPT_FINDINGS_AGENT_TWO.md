@@ -111,6 +111,204 @@ for _ in 0..4 {
 
 **Potential Impact**: Dynamic memory offsets don't benefit from heap optimization. More sophisticated alias analysis could improve this.
 
+### 6. Unused Phase 2 Type Conversion Infrastructure
+
+**Location**: `crates/newyork/src/to_llvm.rs:815-846`
+
+**Current Status**: `convert_to_inferred_type` function exists but is marked `#[allow(dead_code)]`. This function is designed to convert values to inferred types for storage, but is not being used.
+
+**Evidence**:
+```rust
+#[allow(dead_code)]
+fn convert_to_inferred_type(
+    &self,
+    context: &PolkaVMContext<'ctx>,
+    value: IntValue<'ctx>,
+    target_id: ValueId,
+    name: &str,
+) -> Result<IntValue<'ctx>> {
+```
+
+**Potential Impact**: This infrastructure could be used to generate narrower store operations when the stored value is known to be narrower than 256 bits.
+
+### 7. Memory State Merge Functions Not Used
+
+**Location**: `crates/newyork/src/mem_opt.rs:1108-1140`
+
+**Current Status**: `merge_states` and related functions for merging memory states at control flow joins are implemented but not called. Currently the pass clears all state at control flow boundaries.
+
+**Evidence**: The comments say "not yet used - we currently clear state at control flow boundaries for safety"
+
+**Potential Impact**: Enabling these would allow load-after-store optimization to work across branches, significantly improving optimization in typical Solidity code with require checks.
+
+### 8. No Unary Expression Algebraic Simplifications
+
+**Location**: `crates/newyork/src/simplify.rs:777-791`
+
+**Current Status**: The `simplify_expr` for Unary only does constant folding, not algebraic identities. There are no simplifications like:
+- `not(not(x)) = x` (double negation)
+- `iszero(iszero(x)) = x`
+- `clz(0) = 256` (already handled)
+
+**Potential Impact**: Could eliminate redundant unary operations in generated code.
+
+### 9. No Ternary Expression Simplifications Beyond Constant Folding
+
+**Location**: `crates/newyork/src/simplify.rs:794-812`
+
+**Current Status**: Only constant folding is done for ternary expressions. Missing optimizations:
+- `c ? x : x = x` (both branches same)
+- `c ? true : false = c`
+- `c ? false : true = not(c)`
+
+**Potential Impact**: Could eliminate redundant select operations.
+
+### 10. No Short-Circuit Evaluation Optimization
+
+**Location**: `crates/newyork/src/simplify.rs`
+
+**Current Status**: Logical And/Or operations (`and(x, y)` and `or(x, y)`) don't use short-circuit evaluation. Both operands are always evaluated.
+
+**Potential Impact**: For expressions like `and(lt(x, 10), gt(x, 0))`, if first condition is false, second doesn't need to be evaluated. This could save gas in some cases.
+
+### 11. Division by Constant Not Optimized to Multiplication
+
+**Location**: `crates/newyork/src/simplify.rs:1384-1583`
+
+**Current Status**: Division by constant literals could be optimized to reciprocal multiplication for better performance, though this is more of a perf optimization than codesize.
+
+**Potential Impact**: Limited codesize impact but could improve runtime.
+
+### 12. No Loop Unrolling
+
+**Location**: `crates/newyork/src/` - not implemented
+
+**Current Status**: The optimizer doesn't unroll loops. Many Solidity contracts have small fixed-iteration loops that could be unrolled.
+
+**Evidence**: Looking at the LLVM IR shows many loop structures preserved from Yul.
+
+**Potential Impact**: Could eliminate branch overhead for small loops.
+
+### 13. No Common Subexpression Elimination Across Basic Blocks
+
+**Location**: `crates/newyork/src/simplify.rs`
+
+**Current Status**: CSE is limited to the current statement scope. Cross-basic-block CSE is not implemented.
+
+**Potential Impact**: Could eliminate redundant computations in control flow heavy code.
+
+### 14. Switch Lowering Not Optimized to Jumptables
+
+**Location**: `crates/newyork/src/to_llvm.rs` or `crates/newyork/src/inline.rs`
+
+**Current Status**: The switch statement in Yul might not be lowered to efficient jumptables in LLVM.
+
+**Evidence**: Only 1 switch statement in ERC20 optimized LLVM, suggesting they're being lowered to if-else chains.
+
+**Potential Impact**: Jumptables are more efficient for large dispatch tables.
+
+### 15. No Deduplication of External Call Wrappers
+
+**Location**: `crates/newyork/src/simplify.rs` - function deduplication
+
+**Current Status**: Function deduplication works for internal functions but external call wrappers (which often differ only in parameters) may not be merged.
+
+**Evidence**: Multiple `call_evm` wrapper patterns in the LLVM output.
+
+**Potential Impact**: Could reduce code duplication in contracts with many external calls.
+
+### 16. Stack Variable Coalescing Not Performed
+
+**Location**: `crates/newyork/src/ssa.rs` or later stages
+
+**Current Status**: SSA form doesn't optimize away unused intermediate values that remain on stack.
+
+**Potential Impact**: Minor - LLVM generally handles this.
+
+### 17. No Zero-Initialization Optimization
+
+**Location**: `crates/newyork/src/simplify.rs`
+
+**Current Status**: When memory is zeroed and then written, the zeroing could be eliminated if the write covers the same region.
+
+**Evidence**: In the IR, explicit zeroing followed by stores to same region.
+
+**Potential Impact**: Could reduce initialization overhead in ABI encoding functions.
+
+### 18. Copy Propagation Not Using Type Information
+
+**Location**: `crates/newyork/src/simplify.rs`
+
+**Current Status**: Copy propagation happens on the raw IR, not using type constraints to know that a value is only used in narrow context.
+
+**Evidence**: Values that flow to memory offsets could be narrowed earlier if copy propagation used type info.
+
+**Potential Impact**: Could work with type inference to narrow values earlier.
+
+### 19. No Peephole Optimizations
+
+**Location**: Not implemented in newyork
+
+**Current Status**: There are no explicit peephole optimizations (local pattern rewrites) in newyork - relies entirely on algebraic simplifications.
+
+**Potential Impact**: Could add patterns like `add(mul(x, 2), y) -> mul(x, 2)` (though this is already handled by algebraic simplifications).
+
+### 20. String Literal Deduplication Not Aggressive
+
+**Location**: `crates/newyork/src/from_yul.rs`
+
+**Current Status**: String constants (for error messages, event signatures) may not be fully deduplicated across the entire object tree.
+
+**Evidence**: Multiple instances of same string constants in LLVM data section.
+
+**Potential Impact**: Could reduce data section size.
+
+### 21. No Return Data Size Optimization
+
+**Location**: Various
+
+**Current Status**: `returndatasize()` calls might not be eliminated when the return buffer size is known.
+
+**Evidence**: `returndatasize` appears in LLVM output even when return sizes are static.
+
+**Potential Impact**: Could eliminate redundant size checks.
+
+### 22. Gas Stipend Optimization Not Applied
+
+**Location**: `to_llvm.rs`
+
+**Current Status**: External calls with known gas requirements could have stipend optimized.
+
+**Potential Impact**: Minor codesize impact but could improve call efficiency.
+
+### 23. Event Topic Hashing Not Precomputed
+
+**Location**: `from_yul.rs` or `simplify.rs`
+
+**Current Status**: Event topic hashes (keccak256 of event signatures) are computed at runtime.
+
+**Evidence**: `keccak256` calls for event signatures visible in Yul.
+
+**Potential Impact**: Computing these at compile time would save runtime gas and potentially code size.
+
+### 24. Immutable Variable Loading Not Optimized
+
+**Location**: Various
+
+**Current Status**: Immutable variables are loaded from storage on every access. Could be cached in memory for the duration of a transaction.
+
+**Evidence**: Multiple sload operations for same immutable in LLVM output.
+
+**Potential Impact**: Significant gas savings for contracts with many immutable reads.
+
+### 25. Storage Reading Could Use Calldata When Available
+
+**Location**: `to_llvm.rs`
+
+**Current Status**: For view functions that only read storage, the runtime could potentially use a more efficient path.
+
+**Potential Impact**: Minor.
+
 ## Recommendations
 
 1. **Priority 1**: Add bitwise algebraic simplifications in `simplify_binary`. This is low-hanging fruit with clear algebraic identities.

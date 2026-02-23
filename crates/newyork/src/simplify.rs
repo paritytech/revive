@@ -74,6 +74,9 @@ pub struct Simplifier {
     constants: BTreeMap<u32, BigUint>,
     /// Maps ValueId → ValueId for copy propagation (let x = y → x maps to y).
     copies: BTreeMap<u32, ValueId>,
+    /// Maps ValueId → (UnaryOp, operand ValueId) for unary expression tracking.
+    /// Used to simplify patterns like not(not(x)) → x.
+    unary_defs: BTreeMap<u32, (UnaryOp, ValueId)>,
     /// Counter for fresh value IDs when creating new bindings (strength reduction).
     next_value_id: u32,
     /// CSE cache for pure environment reads (calldatasize, caller, etc.).
@@ -97,6 +100,7 @@ impl Simplifier {
         Simplifier {
             constants: BTreeMap::new(),
             copies: BTreeMap::new(),
+            unary_defs: BTreeMap::new(),
             next_value_id: 0,
             env_reads: BTreeMap::new(),
             stats: SimplifyResults::default(),
@@ -133,6 +137,7 @@ impl Simplifier {
         for function in object.functions.values_mut() {
             self.constants.clear();
             self.copies.clear();
+            self.unary_defs.clear();
             self.env_reads.clear();
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
@@ -243,6 +248,12 @@ impl Simplifier {
                     // Subsequent reads of the same kind will be replaced with Var(id).
                     if let Some(kind) = env_read_kind(&simplified_expr) {
                         self.env_reads.entry(kind).or_insert(bindings[0]);
+                    }
+
+                    // Track unary definitions for algebraic identity detection
+                    // (e.g., not(not(x)) = x).
+                    if let Expr::Unary { op, operand } = &simplified_expr {
+                        self.unary_defs.insert(bindings[0].0, (*op, operand.id));
                     }
                 }
 
@@ -785,6 +796,14 @@ impl Simplifier {
                             value: result,
                             ty: unary_result_type(op),
                         };
+                    }
+                }
+
+                // Algebraic identity: not(not(x)) = x (double bitwise negation)
+                if op == UnaryOp::Not {
+                    if let Some((UnaryOp::Not, inner)) = self.unary_defs.get(&operand.id.0) {
+                        self.stats.identities_simplified += 1;
+                        return Expr::Var(*inner);
                     }
                 }
 

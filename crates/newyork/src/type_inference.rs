@@ -1020,8 +1020,13 @@ impl TypeInference {
                 self.record_use(key.id, UseContext::StorageAccess);
             }
             Expr::CallDataLoad { offset } => {
-                self.record_use(offset.id, UseContext::MemoryOffset);
-                self.narrow_from_use(offset.id, BitWidth::I64);
+                // Do NOT narrow the offset: calldataload's offset is a full 256-bit
+                // EVM value. The clip_to_xlen overflow check must see all 256 bits
+                // to correctly clamp out-of-range offsets to 0xFFFFFFFF. Truncating
+                // to i64 first would lose upper bits and produce wrong clamp results
+                // (e.g., 0xa3<<248 truncated to i64 becomes 0, but should clamp to
+                // 0xFFFFFFFF because the original value > 0xFFFFFFFF).
+                self.record_use(offset.id, UseContext::Arithmetic);
             }
             Expr::Keccak256 { offset, length } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
@@ -1405,7 +1410,9 @@ impl TypeInference {
 
             // EVM builtins that return specific sizes
             Expr::CallDataLoad { offset } => {
-                self.widen(offset.id, BitWidth::I64);
+                // The offset must stay at full 256-bit width so that clip_to_xlen
+                // can correctly clamp out-of-range offsets to 0xFFFFFFFF.
+                self.widen(offset.id, BitWidth::I256);
                 BitWidth::I256
             }
             Expr::CallValue => BitWidth::I256,

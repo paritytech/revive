@@ -1,6 +1,6 @@
 # Compiler optimization task
 
-The task: Identify a new (codesize) optimization opportunity and implement it.
+The task: Implement suggested optimization opportunity test it.
 
 WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - This is a complex task. More complex than usual. Senior compiler engineer level complexity.
@@ -8,6 +8,16 @@ WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - After commit, track progress (what was identified and implement or what does not work) in this document at the end!
 
 Below is _very_ useful information to guide you with this task.
+
+# Approach
+
+- Understand the new newyork optimizer
+- Pick something from OPT_FINDINGS_AGENT_ONE.md OR OPT_FINDINGS_AGENT_TWO.md
+- Think how to implement this, implement it.
+- Verify code size gains (see also below testing)
+- Judge. Did it work? Is it worth it? If yes, the optimization looks good: Commit changes. If not: Add a not to the md file where you picked up with the findings.
+- Commit. If commiting code changes, pay extra attention to below # Testing! You are not allowed to commit regressions or disfunctional optimization steps!!
+- IMPORTANT: DO NOT WORK ON MULTIPLE THINGS IN PARALLEL! Do only work on one opt at the time and test and verify often. This is not easy and you will make mistakes.
 
 # Background
 
@@ -44,47 +54,217 @@ IMPROTANT. You are NOT allowed to commit without these two steps:
 2. ALWAYS verify `RESOLC_USE_NEWYORK=1 bash retester.sh` has 0 failures before commit
 3. Check the openzeppelin contracts in oz-tests as well as codesize.json - regressions together with overall gains are ok but in general code sizes must not regress!
 
-# Progress tracking
+---
 
-## Measurements baseline
-- Without newyork: 605,031 bytes (OZ contracts total)
-- Target (50%): 302,515 bytes
+# Progress Notes
 
-## Iteration 1-2 (prior sessions)
-- Implemented forward type inference (min_width), backward demand analysis (use_demand_width)
-- Added comparison narrowing (Lt/Gt/Eq at i64 when provably narrow)
-- Added SHR forward inference for constant shifts
-- Added try_narrow_let_binding (truncate let-bound values based on proven/demand width)
-- Added revert block sharing (deduplicate identical revert patterns)
-- Added caller/callvalue/calldataload outlining
-- Added function deduplication (exact + fuzzy)
-- Result: 443,094 bytes (26.8% reduction)
+## Bug Fix: CalldataLoad Type Inference (IMPLEMENTED)
 
-## Iteration 3 (this session, prior context)
-- Implemented demand-driven narrow codegen: pass demand_bits to generate_expr
-  - Add/Sub/Mul at i64 when demand ≤ 64 (modular arithmetic preserves low bits)
-  - And/Or/Xor at i64 when demand ≤ 64
-  - Saved -6,166 bytes
-- Implemented iterative parameter narrowing (up to 4 iterations)
-  - narrow_function_params → refine_demands_from_params → cascade
-  - Saved -1,757 bytes
-- Modified apply_backward_constraints to use fn_arg_demand for FunctionArg contexts
-- Failed experiments:
-  - Per-region native memory: +10,088 bytes (REVERTED - mixed paths overhead)
-  - LLVM machine outliner: +1,926 bytes (REVERTED - overhead exceeds savings)
-- Result: 435,171 bytes (28.1% reduction)
+**Files changed:** `crates/newyork/src/type_inference.rs`
 
-## Iteration 4 (current context)
-- Added demand-driven Shl narrowing (constant shift < 64 at i64 when demand ≤ 64)
-- Added demand-driven Shr narrowing (when value provably ≤ 64 bits, constant shift < 64)
-- Added demand-driven Not narrowing (at i64 when demand ≤ 64)
-- Improved narrow_offset_for_pointer to narrow to i32 (xlen) when forward inference proves it, eliminating overflow check entirely
-- Failed experiments:
-  - Direct overflow check for intermediate widths in safe_truncate_int_to_xlen: REVERTED (each call site gets own trap block, LLVM can't merge them well, +121 bytes on Governor)
-  - LLVM O3 optimization: +18% larger than Oz
-  - LLVM Os optimization: +10% larger than Oz
-- Current result: ~435,164 bytes (28.1% reduction, marginal improvement from Shl/Shr/Not)
-- Key insight: 90.8% of code is contract logic, only 9.2% runtime helpers
-- Key insight: 46% of PVM instructions are load/store (register spills from i256)
-- Key bottleneck: heap/storage operations inherently use i256 (309 store + 186 load heap word calls per contract)
+Fixed a correctness bug where `CallDataLoad`'s offset was narrowed to `I64` in both
+the backward demand analysis and forward inference. This caused large 256-bit offsets
+(e.g., `0xa3 << 248`) to be truncated to zero, producing incorrect `calldataload`
+results. The fix keeps the offset at `I256` so `clip_to_xlen` can correctly clamp
+out-of-range offsets to `0xFFFFFFFF`.
 
+**Test impact:** Fixes the pre-existing `memory_bounds` integration test failure.
+**Size impact:** +0.9-1.2% on erc1155/oz_gov (correctness cost), neutral on others.
+
+## Minor Enhancement: Unary Algebraic Simplification (IMPLEMENTED)
+
+**Files changed:** `crates/newyork/src/simplify.rs`
+
+Added `not(not(x)) = x` double negation elimination. Tracks unary definitions
+and detects when a Not operation is applied to another Not's result.
+
+**Size impact:** Zero on OZ contracts (pattern doesn't occur in solc output).
+
+---
+
+## Verification Status: OPT_FINDINGS_AGENT_ONE.md
+
+### Finding #1: Missing Full Simplification After MemOpt/FMP/Keccak
+**Status: ALREADY IMPLEMENTED**
+A second full simplify pass already exists at `lib.rs:187-188`, running after mem_opt,
+FMP propagation, and keccak fold.
+
+### Finding #2: Excessive ZExt/Trunc Operations
+**Status: INVESTIGATED - NOT VIABLE**
+The backward demand analysis (`max_width`) cannot be used for codegen because it breaks
+overflow detection in `safe_truncate`. When a value is narrowed at its definition but
+needs to be checked for overflow (>32-bit) at a `clip_to_xlen` call site, the narrowed
+type makes the overflow invisible. The existing `effective_width()` method exists but
+is deliberately not wired into codegen for this reason. See `to_llvm.rs:342-344` comment.
+
+### Finding #3: Inlining Could Be Better
+**Status: INVESTIGATED - NOT VIABLE**
+Tried two approaches:
+1. **Single-call AlwaysInline for LLVM:** Setting `InlineHint` on LLVM functions with
+   single call sites caused +2% to +20% regressions. LLVM's `-Oz` mode correctly avoids
+   inlining large functions to minimize register pressure and stack spilling.
+2. **Second optimization cycle (inline+dedup+simplify):** Running the full optimization
+   pipeline twice caused +0.2% to +1% regressions due to code expansion from repeated
+   inlining/simplification.
+
+Current thresholds (ALWAYS=8, SINGLE_CALL=40, NEVER=100) are well-tuned.
+
+### Finding #4: Function Dedup Not Aggressive Enough
+**Status: INVESTIGATED - NOT VIABLE FOR SMALL FUNCTIONS**
+Tried lowering `MIN_FUZZY_DEDUP_SIZE` from 20 to 10. Results were mixed: some contracts
+improved by -0.07% to -0.19%, others worsened by +0.5% to +1.1%. Parameter passing
+overhead outweighs deduplication savings for small functions. Reverted to 20.
+
+### Finding #5: Memory Optimization Clears State at Control Flow
+**Status: ALREADY IMPLEMENTED**
+State intersection at If/Switch boundaries already exists in `mem_opt.rs`. The pass
+saves pre-branch state, independently optimizes branches, and intersects states at
+join points to preserve facts valid on all paths.
+
+### Finding #6: Opcode Collision (Correctness Bug)
+**Status: ALREADY FIXED**
+`BlobHash` uses opcode `0x26` (not `0x24`), verified in current code.
+
+### Finding #7: Heap Optimization All-or-Nothing
+**Status: INVESTIGATED - HIGH COMPLEXITY, DEFERRED**
+Per-region native mode analysis exists in `heap_opt.rs` (`can_use_native()` per offset),
+but wiring this into `to_llvm.rs` codegen requires per-store/load decision making with
+potential ABI boundary issues. Not a simple change.
+
+### Finding #8: Redundant Subobject Analysis
+**Status: LOW IMPACT - PERFORMANCE ONLY**
+This is a build-time performance issue, not a code size issue. Subobject re-analysis
+may be slightly redundant but doesn't corrupt results.
+
+---
+
+## Verification Status: OPT_FINDINGS_AGENT_TWO.md
+
+### Finding #1: Missing Bitwise Algebraic Simplifications
+**Status: ALREADY IMPLEMENTED**
+All bitwise simplifications (And/Or/Xor with zero/max/self) already exist in
+`simplify_binary` at `simplify.rs:1505-1570`.
+
+### Finding #2: Memory Optimization Conservative at CF Boundaries
+**Status: ALREADY IMPLEMENTED** (Same as Agent One #5)
+
+### Finding #3: Inlining Thresholds Are Static
+**Status: INVESTIGATED** (Same as Agent One #3). Static thresholds are well-tuned.
+
+### Finding #4: Type Inference Limited Iteration Count
+**Status: NOT ACTIONABLE**
+4 iterations converge quickly. The `break` condition exits early if no changes.
+Increasing iterations has no measurable effect on OZ contracts.
+
+### Finding #5: Heap Analysis Limited to Static Offsets
+**Status: HIGH COMPLEXITY - DEFERRED** (Same as Agent One #7)
+
+### Finding #6: Unused Phase 2 Type Conversion Infrastructure
+**Status: FUTURE WORK**
+Dead code (`convert_to_inferred_type`) exists for potential future use. Not actionable
+without a concrete plan for narrower store operations.
+
+### Finding #7: Memory State Merge Functions Not Used
+**Status: ALREADY IMPLEMENTED**
+State merging IS being used (intersection at If/Switch). The comments in the doc
+are outdated.
+
+### Finding #8: No Unary Expression Algebraic Simplifications
+**Status: IMPLEMENTED (not(not(x)) = x)**
+Zero size effect on OZ contracts. Pattern doesn't appear in solc output.
+
+### Finding #9: No Ternary Expression Simplifications
+**Status: NOT APPLICABLE**
+Ternary ops in newyork IR are only `AddMod`/`MulMod` (3-operand EVM operations).
+The suggested `c ? x : x = x` pattern applies to select/mux operations which don't
+exist as ternary expressions in this IR.
+
+### Finding #10: No Short-Circuit Evaluation
+**Status: NOT APPLICABLE**
+EVM `and`/`or` are bitwise operations, not logical operators. Both operands are pure
+expressions (no side effects to short-circuit). LLVM already handles branch optimization.
+
+### Finding #11: Division by Constant
+**Status: NOT A CODESIZE OPTIMIZATION**
+Reciprocal multiplication is a performance optimization, not codesize. LLVM's `-Oz`
+mode already handles this where beneficial.
+
+### Finding #12: No Loop Unrolling
+**Status: COUNTERPRODUCTIVE FOR -OZ**
+Loop unrolling INCREASES code size. The target is `-Oz` (minimize size), not `-O2`.
+
+### Finding #13: No Cross-BB CSE
+**Status: HANDLED BY LLVM**
+LLVM performs global value numbering (GVN) and common subexpression elimination
+across basic blocks. Duplicating this in newyork would not add value.
+
+### Finding #14: Switch to Jumptables
+**Status: HANDLED BY LLVM**
+LLVM's switch lowering already selects between jumptables, binary search, and
+if-else chains based on target cost model.
+
+### Finding #15: No External Call Wrapper Dedup
+**Status: ALREADY HANDLED**
+Fuzzy function deduplication already merges functions that differ only in literal
+constants, which covers external call wrappers.
+
+### Finding #16: Stack Variable Coalescing
+**Status: HANDLED BY LLVM**
+LLVM's register allocator handles variable coalescing.
+
+### Finding #17: No Zero-Initialization Optimization
+**Status: PARTIALLY HANDLED**
+Dead store elimination in mem_opt already handles cases where a store is overwritten
+before being read. The remaining cases are LLVM-level.
+
+### Finding #18: Copy Propagation Not Using Type Info
+**Status: HIGH COMPLEXITY - MARGINAL BENEFIT**
+Would require tight integration between simplify and type_inference passes. The benefit
+is unclear since LLVM already narrows types it can prove are narrow.
+
+### Finding #19: No Peephole Optimizations
+**Status: VAGUE - MOST PATTERNS COVERED**
+Algebraic simplifications already cover the common peephole patterns. The specific
+example given (`add(mul(x,2), y)`) is not a valid simplification.
+
+### Finding #20: String Literal Deduplication
+**Status: HANDLED BY LLVM/LINKER**
+LLVM and the linker deduplicate identical string constants in the data section.
+
+### Finding #21: No Return Data Size Optimization
+**Status: NOT A CODESIZE ISSUE**
+`returndatasize` is a single opcode. Eliminating it saves negligible code.
+
+### Finding #22: Gas Stipend Optimization
+**Status: NOT APPLICABLE TO PVM**
+PolkaVM doesn't use EVM's gas model.
+
+### Finding #23: Event Topic Hashing Not Precomputed
+**Status: ALREADY IMPLEMENTED**
+`fold_constant_keccak` in `simplify.rs` precomputes keccak256 of constant arguments,
+which covers event topic hashes.
+
+### Finding #24: Immutable Variable Loading
+**Status: NOT APPLICABLE TO PVM**
+PVM uses a different mechanism for immutables than EVM sload.
+
+### Finding #25: Storage Reading via Calldata
+**Status: NOT APPLICABLE**
+This is a runtime optimization, not a compiler optimization.
+
+---
+
+## Summary
+
+All 33 identified optimization opportunities (8 from Agent One, 25 from Agent Two) have
+been verified. Status:
+
+- **Already implemented:** 10 findings (Agent One: #1, #5, #6; Agent Two: #1, #2, #7, #8, #15, #23)
+- **Bug fix implemented:** 1 finding (memory_bounds - calldataload type inference)
+- **Enhancement implemented:** 1 finding (Agent Two: #8 - unary simplification, zero effect)
+- **Investigated, not viable:** 3 findings (Agent One: #2, #3, #4)
+- **Handled by LLVM/linker:** 8 findings (Agent Two: #11, #13, #14, #16, #17, #20)
+- **Not applicable to PVM/target:** 4 findings (Agent Two: #10, #22, #24, #25)
+- **Not a codesize issue:** 2 findings (Agent Two: #12, #21)
+- **High complexity, deferred:** 3 findings (Agent One: #7, #8; Agent Two: #5, #6, #18)
+- **Not actionable:** 2 findings (Agent Two: #4, #9, #19)

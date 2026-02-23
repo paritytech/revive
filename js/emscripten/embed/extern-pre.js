@@ -1,2 +1,2 @@
-var createRevive = function(moduleArg) {
+function createRevive(moduleArg) {
 var Module = moduleArg || {};

@@ -334,21 +334,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets the inferred bit-width for a value from type inference.
+    ///
+    /// Uses the forward-propagated min_width (what the definition produces).
+    /// For backward demand-driven narrowing, see `effective_width()` on TypeConstraint.
     fn inferred_width(&self, id: ValueId) -> BitWidth {
         self.type_info.get(id).min_width
-    }
-
-    /// Returns true if a value can use a narrow type (64-bit or less).
-    /// This is safe when the inferred width fits and the value is only used
-    /// in contexts that support narrow types (comparisons, memory offsets).
-    /// Phase 2 infrastructure: available for future optimizations.
-    #[allow(dead_code)]
-    fn can_use_narrow_type(&self, id: ValueId) -> bool {
-        let width = self.inferred_width(id);
-        matches!(
-            width,
-            BitWidth::I1 | BitWidth::I8 | BitWidth::I32 | BitWidth::I64
-        )
     }
 
     /// Gets the LLVM int type for a given bit-width.

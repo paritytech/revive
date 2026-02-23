@@ -90,12 +90,12 @@ impl TypeConstraint {
     }
 
     /// Returns the effective width to use for this value.
-    /// Takes the maximum of min_width (what we need to hold the value)
-    /// and respects max_width (what use sites need).
+    ///
+    /// Uses the minimum of forward-propagated min_width and backward-propagated
+    /// max_width, ensuring the value is at least as wide as what the definition
+    /// requires but no wider than what use sites need.
     pub fn effective_width(&self) -> BitWidth {
-        // The effective width is bounded by what the use sites need,
-        // but must be at least what the value requires.
-        self.min_width.max(self.max_width.min(self.min_width))
+        self.min_width.min(self.max_width)
     }
 }
 

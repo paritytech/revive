@@ -591,7 +591,7 @@ impl MemoryOptimizer {
                     });
                 }
 
-                // Control flow - clear pending stores (conservative: they might be read in branches)
+                // Control flow - preserve state through branches where possible
                 Statement::If {
                     condition,
                     inputs,
@@ -599,27 +599,39 @@ impl MemoryOptimizer {
                     else_region,
                     outputs,
                 } => {
-                    // Clear state and pending stores - we don't track across branches
-                    self.memory_state.clear();
-                    self.constant_values.clear();
+                    // Pending stores might be read in branches
                     self.pending_stores.clear();
 
-                    // Recurse into then_region
-                    self.optimize_region(&mut then_region);
+                    // Save pre-branch state to pass into each branch
+                    let pre_branch_memory = self.memory_state.clone();
+                    let pre_branch_constants = self.constant_values.clone();
 
-                    // Recurse into else_region if present
+                    // Recurse into then_region with pre-branch state
+                    self.optimize_region(&mut then_region);
+                    let then_memory = self.memory_state.clone();
+                    let then_constants = self.constant_values.clone();
+
+                    // Recurse into else_region with pre-branch state
                     let else_region = if let Some(mut er) = else_region {
-                        self.memory_state.clear();
-                        self.constant_values.clear();
+                        self.memory_state = pre_branch_memory;
+                        self.constant_values = pre_branch_constants;
                         self.optimize_region(&mut er);
+
+                        // After both branches: intersect states (keep only what both agree on)
+                        self.memory_state =
+                            Self::intersect_memory_state(&then_memory, &self.memory_state);
+                        self.constant_values =
+                            Self::intersect_constants(&then_constants, &self.constant_values);
                         Some(er)
                     } else {
+                        // No else branch: intersect then-state with pre-branch state
+                        // (if the condition is false, state is unchanged)
+                        self.memory_state =
+                            Self::intersect_memory_state(&then_memory, &pre_branch_memory);
+                        self.constant_values =
+                            Self::intersect_constants(&then_constants, &pre_branch_constants);
                         None
                     };
-
-                    // Clear after branches
-                    self.memory_state.clear();
-                    self.constant_values.clear();
 
                     processed.push(Statement::If {
                         condition,
@@ -637,31 +649,41 @@ impl MemoryOptimizer {
                     default,
                     outputs,
                 } => {
-                    // Clear state and pending stores - we don't track across branches
-                    self.memory_state.clear();
-                    self.constant_values.clear();
                     self.pending_stores.clear();
 
-                    // Recurse into each case
+                    // Save pre-branch state
+                    let pre_branch_memory = self.memory_state.clone();
+                    let pre_branch_constants = self.constant_values.clone();
+
+                    // Recurse into each case, collecting exit states
+                    let mut exit_memories = Vec::new();
+                    let mut exit_constants = Vec::new();
                     for case in &mut cases {
-                        self.memory_state.clear();
-                        self.constant_values.clear();
+                        self.memory_state = pre_branch_memory.clone();
+                        self.constant_values = pre_branch_constants.clone();
                         self.optimize_region(&mut case.body);
+                        exit_memories.push(self.memory_state.clone());
+                        exit_constants.push(self.constant_values.clone());
                     }
 
                     // Recurse into default
                     let default = if let Some(mut d) = default {
-                        self.memory_state.clear();
-                        self.constant_values.clear();
+                        self.memory_state = pre_branch_memory;
+                        self.constant_values = pre_branch_constants;
                         self.optimize_region(&mut d);
+                        exit_memories.push(self.memory_state.clone());
+                        exit_constants.push(self.constant_values.clone());
                         Some(d)
                     } else {
+                        // No default: pre-branch state is a possible exit state
+                        exit_memories.push(pre_branch_memory);
+                        exit_constants.push(pre_branch_constants);
                         None
                     };
 
-                    // Clear after branches
-                    self.memory_state.clear();
-                    self.constant_values.clear();
+                    // Intersect all exit states
+                    self.memory_state = Self::intersect_memory_states(&exit_memories);
+                    self.constant_values = Self::intersect_all_constants(&exit_constants);
 
                     processed.push(Statement::Switch {
                         scrutinee,
@@ -943,6 +965,65 @@ impl MemoryOptimizer {
             // All other expressions pass through unchanged
             other => other,
         }
+    }
+
+    /// Intersects two memory states: keeps entries present in both with the same stored value ID.
+    fn intersect_memory_state(
+        a: &BTreeMap<u64, TrackedValue>,
+        b: &BTreeMap<u64, TrackedValue>,
+    ) -> BTreeMap<u64, TrackedValue> {
+        let mut result = BTreeMap::new();
+        for (offset, val_a) in a {
+            if let Some(val_b) = b.get(offset) {
+                // Keep only if both branches stored the same value at the same offset
+                if val_a.stored_value.id == val_b.stored_value.id && val_a.offset == val_b.offset {
+                    result.insert(*offset, val_a.clone());
+                }
+            }
+        }
+        result
+    }
+
+    /// Intersects two constant value maps: keeps entries present in both with the same value.
+    fn intersect_constants(
+        a: &BTreeMap<u32, BigUint>,
+        b: &BTreeMap<u32, BigUint>,
+    ) -> BTreeMap<u32, BigUint> {
+        let mut result = BTreeMap::new();
+        for (id, val_a) in a {
+            if let Some(val_b) = b.get(id) {
+                if val_a == val_b {
+                    result.insert(*id, val_a.clone());
+                }
+            }
+        }
+        result
+    }
+
+    /// Intersects multiple memory states (for switch with many cases).
+    fn intersect_memory_states(
+        states: &[BTreeMap<u64, TrackedValue>],
+    ) -> BTreeMap<u64, TrackedValue> {
+        if states.is_empty() {
+            return BTreeMap::new();
+        }
+        let mut result = states[0].clone();
+        for state in &states[1..] {
+            result = Self::intersect_memory_state(&result, state);
+        }
+        result
+    }
+
+    /// Intersects multiple constant maps (for switch with many cases).
+    fn intersect_all_constants(constants: &[BTreeMap<u32, BigUint>]) -> BTreeMap<u32, BigUint> {
+        if constants.is_empty() {
+            return BTreeMap::new();
+        }
+        let mut result = constants[0].clone();
+        for c in &constants[1..] {
+            result = Self::intersect_constants(&result, c);
+        }
+        result
     }
 
     /// Tries to extract a static offset from a Value.

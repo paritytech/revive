@@ -52,4 +52,4 @@ We also maintain the [lld-sys crate](https://crates.io/crates/lld-sys) for inter
 
 ## Custom optimizations
 
-At the moment, no significant custom optimizations are implemented. Thus, we are missing some optimization opportunities that neither `solc` nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Furthermore, `solc` optimizes for EVM gas and a target machine orthogonal to our target (BE 256-bit stack machine EVM vs. 64-bit LE RISC architecture PVM). We have started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities, though.
+An experimental [`newyork` optimizer](./newyork_optimizer.md) introduces a custom IR layer between Yul and LLVM IR to capture optimization opportunities that neither `solc` nor LLVM can realize on their own. `solc` optimizes for EVM gas on a 256-bit big-endian stack machine, while LLVM lacks the domain knowledge to understand EVM memory semantics or Solidity patterns. The newyork IR bridges this gap with passes for type narrowing, memory optimization, function deduplication, and more.

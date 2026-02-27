@@ -5,7 +5,6 @@ use inkwell::values::BasicValue;
 
 use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::Context;
-use crate::PolkaVMDependency;
 
 /// The LLVM global value.
 #[derive(Debug, Clone, Copy)]
@@ -18,15 +17,14 @@ pub struct Global<'ctx> {
 
 impl<'ctx> Global<'ctx> {
     /// A shortcut constructor.
-    pub fn new<D, T, V>(
-        context: &mut Context<'ctx, D>,
+    pub fn new<T, V>(
+        context: &mut Context<'ctx>,
         r#type: T,
         address_space: AddressSpace,
         initializer: V,
         name: &str,
     ) -> Self
     where
-        D: PolkaVMDependency + Clone,
         T: BasicType<'ctx>,
         V: BasicValue<'ctx>,
     {
@@ -37,7 +35,7 @@ impl<'ctx> Global<'ctx> {
             .add_global(r#type, Some(address_space.into()), name);
         let global = Self { r#type, value };
 
-        global.value.set_linkage(inkwell::module::Linkage::External);
+        global.value.set_linkage(inkwell::module::Linkage::Internal);
         global
             .value
             .set_visibility(inkwell::GlobalVisibility::Default);
@@ -53,14 +51,13 @@ impl<'ctx> Global<'ctx> {
     }
 
     /// Construct an external global.
-    pub fn declare<D, T>(
-        context: &mut Context<'ctx, D>,
+    pub fn declare<T>(
+        context: &mut Context<'ctx>,
         r#type: T,
         address_space: AddressSpace,
         name: &str,
     ) -> Self
     where
-        D: PolkaVMDependency + Clone,
         T: BasicType<'ctx>,
     {
         let r#type = r#type.as_basic_type_enum();

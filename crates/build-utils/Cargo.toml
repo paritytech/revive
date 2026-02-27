@@ -1,6 +1,6 @@
 [package]
 name = "revive-build-utils"
-version.workspace = true
+version = "1.0.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

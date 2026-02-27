@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// The `solc --standard-json` input settings optimizer YUL details.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct YulDetails {
     /// Whether the stack allocation pass is enabled.

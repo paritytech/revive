@@ -1,13 +1,13 @@
 [package]
 name = "revive-stdlib"
-version = "0.1.1"
+version = "1.0.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "revive compiler stdlib components"
 
 [dependencies]
-inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-1"] }
+inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm21-1"] }
 
 [build-dependencies]
 revive-build-utils = { workspace = true }

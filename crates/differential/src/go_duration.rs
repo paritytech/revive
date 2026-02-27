@@ -3,8 +3,8 @@ use std::time::Duration;
 /// Parse a go formatted duration.
 ///
 /// Sources:
-/// - https://crates.io/crates/go-parse-duration (fixed an utf8 bug)
-/// - https://github.com/golang/go/blob/master/src/time/format.go
+/// - <https://crates.io/crates/go-parse-duration> (fixed an utf8 bug)
+/// - <https://github.com/golang/go/blob/master/src/time/format.go>
 pub fn parse_go_duration(value: &str) -> Result<Duration, String> {
     parse_duration(value).map(|ns| Duration::from_nanos(ns.unsigned_abs()))
 }

@@ -3,12 +3,15 @@
 target-llvm
 *.dot
 .vscode/
+.zed/
 .DS_Store
 /*.sol
 /*.yul
 /*.ll
 /*.s
-/llvm*
+/llvm-*
+# Allow llvm submodule directory
+!/llvm
 node_modules
 artifacts
 tmp
@@ -19,3 +22,4 @@ test-results
 playwright-report
 .cache
 emsdk
+docs-tmp

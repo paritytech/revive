@@ -1,0 +1,37 @@
+{
+    "language": "Solidity",
+    "sources": {
+        "/Users/omarabdulla/parity/revive-dt/resolc-compiler-tests/fixtures/solidity/translated_semantic_tests/array/copying/array_of_struct_memory_to_storage/array_of_struct_memory_to_storage.sol": {
+            "content": "contract C {\n    struct S {\n        uint128 a;\n        uint64 b;\n        uint128 c;\n    }\n    uint128[137] unused;\n    S[] s;\n    function f() public returns (uint128, uint64, uint128) {\n        S[] memory m = new S[](3);\n        m[2].a = 10;\n        m[1].b = 11;\n        m[0].c = 12;\n        s = m;\n        return (s[2].a, s[1].b, s[0].c);\n    }\n}"
+        }
+    },
+    "settings": {
+        "libraries": {},
+        "outputSelection": {
+            "*": {
+                "": [
+                    "ast"
+                ],
+                "*": [
+                    "metadata",
+                    "evm.methodIdentifiers",
+                    "irOptimized",
+                    "evm.bytecode",
+                    "evm.deployedBytecode"
+                ]
+            }
+        },
+        "viaIR": true,
+        "optimizer": {
+            "enabled": false,
+            "details": {
+                "peephole": false,
+                "jumpdestRemover": false,
+                "orderLiterals": false,
+                "deduplicate": false,
+                "cse": false,
+                "constantOptimizer": false
+            }
+        }
+    }
+}

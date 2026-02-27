@@ -2,7 +2,7 @@ use frame_support::{runtime, traits::FindAuthor, weights::constants::WEIGHT_REF_
 use pallet_revive::AccountId32Mapper;
 use polkadot_sdk::*;
 use polkadot_sdk::{
-    polkadot_sdk_frame::{log, runtime::prelude::*},
+    polkadot_sdk_frame::runtime::prelude::*,
     sp_runtime::{AccountId32, Perbill},
 };
 
@@ -61,6 +61,7 @@ impl pallet_timestamp::Config for Runtime {}
 
 parameter_types! {
     pub const UnstableInterface: bool = true;
+    pub const DebugFlag: bool = true;
     pub const DepositPerByte: Balance = 1;
     pub const DepositPerItem: Balance = 2;
     pub const CodeHashLockupDepositPercent: Perbill = Perbill::from_percent(0);
@@ -72,21 +73,22 @@ parameter_types! {
 
 #[derive_impl(pallet_revive::config_preludes::TestDefaultConfig)]
 impl pallet_revive::Config for Runtime {
+    type Balance = Balance;
     type Time = Timestamp;
     type Currency = Balances;
-    type CallFilter = ();
-    type ChainExtension = ();
     type DepositPerByte = DepositPerByte;
     type DepositPerItem = DepositPerItem;
     type AddressMapper = AccountId32Mapper<Self>;
     type RuntimeMemory = ConstU32<{ 512 * 1024 * 1024 }>;
     type PVFMemory = ConstU32<{ 1024 * 1024 * 1024 }>;
     type UnsafeUnstableInterface = UnstableInterface;
-    type UploadOrigin = EnsureSigned<AccountId32>;
-    type InstantiateOrigin = EnsureSigned<AccountId32>;
+    type UploadOrigin = EnsureSigned<Self::AccountId>;
+    type InstantiateOrigin = EnsureSigned<Self::AccountId>;
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;
     type ChainId = ConstU64<420_420_420>;
     type FindAuthor = Self;
+    type NativeToEthRatio = ConstU32<{ crate::ETH_RATIO as u32 }>;
+    type DebugEnabled = DebugFlag;
 }
 
 impl FindAuthor<<Runtime as frame_system::Config>::AccountId> for Runtime {

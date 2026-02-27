@@ -24,11 +24,6 @@ pragma solidity ^0.8;
             }
         },
         {
-            "VerifyCall": {
-                "success": true
-            }
-        },
-        {
             "Call": {
                 "dest": {
                     "Instantiated": 0
@@ -37,21 +32,11 @@ pragma solidity ^0.8;
             }
         },
         {
-            "VerifyCall": {
-                "success": false
-            }
-        },
-        {
             "Call": {
                 "dest": {
                     "Instantiated": 0
                 },
                 "data": "fb9e8d050000000000000000000000000000000000000000000000000000000000000000"
-            }
-        },
-        {
-            "VerifyCall": {
-                "success": false
             }
         }
     ]

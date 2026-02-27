@@ -1,0 +1,100 @@
+//! The Solidity compiler unit tests for unsupported opcodes.
+
+use crate::test_utils::{build_solidity, build_yul, sources};
+
+#[test]
+#[should_panic(expected = "The `CODECOPY` instruction is not supported")]
+fn codecopy_yul_runtime() {
+    let code = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract FixedCodeCopy {
+    function copyCode() public view returns (bytes memory) {
+        uint256 fixedCodeSize = 64;
+        bytes memory code = new bytes(fixedCodeSize);
+
+        assembly {
+            codecopy(add(code, 0x20), 0, fixedCodeSize)
+        }
+
+        return code;
+    }
+}"#;
+
+    build_solidity(sources(&[("test.sol", code)])).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "The `CALLCODE` instruction is not supported")]
+fn callcode_yul() {
+    let solidity = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract CallcodeTest {
+    function testCallcode(address target, bytes4 signature, uint256 inputValue) public returns (bool) {
+        bool success;
+
+        assembly {
+            let input := mload(0x40)
+            mstore(input, signature)
+            mstore(add(input, 0x04), inputValue)
+
+            let callResult := callcode(gas(), target, 0, input, 0x24, 0, 0)
+
+            success := and(callResult, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+        }
+
+        return success;
+    }
+}"#;
+
+    build_solidity(sources(&[("test.sol", solidity)])).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "The `PC` instruction is not supported")]
+fn pc_yul() {
+    let code = r#"
+object "ProgramCounter" {
+    code {
+        datacopy(0, dataoffset("ProgramCounter_deployed"), datasize("ProgramCounter_deployed"))
+        return(0, datasize("ProgramCounter_deployed"))
+    }
+    object "ProgramCounter_deployed" {
+        code {
+            function getPC() -> programCounter {
+                programCounter := pc()
+            }
+
+            let pcValue := getPC()
+            sstore(0, pcValue)
+        }
+    }
+}"#;
+
+    build_yul(&[("test.sol", code)]).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "The `EXTCODECOPY` instruction is not supported")]
+fn extcodecopy_yul() {
+    let code = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract ExternalCodeCopy {
+    function copyExternalCode(address target, uint256 codeSize) public view returns (bytes memory) {
+        bytes memory code = new bytes(codeSize);
+
+        assembly {
+            extcodecopy(target, add(code, 0x20), 0, codeSize)
+        }
+
+        return code;
+    }
+}"#;
+
+    build_solidity(sources(&[("test.sol", code)])).unwrap();
+}

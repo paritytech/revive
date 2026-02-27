@@ -4,11 +4,8 @@ on:
     branches: ["main"]
     types: [opened, synchronize]
     paths:
-      - 'LLVM.lock'
       - 'crates/llvm-builder/**'
       - '.github/workflows/test-llvm-builder.yml'
-    paths-ignore:
-      - "**.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -21,10 +18,12 @@ jobs:
   test:
     strategy:
       matrix:
-        runner: [parity-large, macos-14, windows-2022]
+        runner: [parity-large, macos-15, windows-2022]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # without this it will override our rust flags
@@ -34,10 +33,10 @@ jobs:
       - name: Install Dependencies
         if: matrix.runner == 'parity-large'
         run: |
-          sudo apt update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
+          sudo apt update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils build-essential
 
       - name: Install Dependencies
-        if: matrix.runner == 'macos-14'
+        if: matrix.runner == 'macos-15'
         run: |
           brew install ninja
 

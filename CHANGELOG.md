@@ -4,7 +4,111 @@
 
 This is a development pre-release.
 
+### Added
+- Support for solc v0.8.34.
+
+### Fixed
+
+- npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
+- Yul mode now properly exits when solc reports validation errors (e.g., invalid hex literals), matching `--standard-json` behavior. [#477](https://github.com/paritytech/revive/issues/477)
+
+### Changed
+
+- Updated `LLVM` from `18.1.8` to LLVM `21.1.8`
+- Updated `musl` to `1.2.5`
+- Updated `inkwell` to `0.8.0`
+- Updated `polkavm-*` to `0.31.0`
+- Updated `EMSDK` to `5.0.0`
+
+## v1.0.0
+
+Supported `polkadot-sdk` rev: `unstable2507`
+
+### Changed
+- Removed the `revive-explorer` utility.
+
+### Fixed
+- OOB access in `calldataload` and `calldatacopy` should always produce zero values instead of consuming all gas.
+- The superfluous byte swap in `linkersymbol`.
+- Compiling with `--standard-json` now compiles to PolkaVM bytecode _only_ for the contracts explicitly requested in the `outputSelection`, significantly improving compilation time when none or a subset of files requests bytecode. [PR#461](https://github.com/paritytech/revive/pull/461)
+- Compiling with `--standard-json` now outputs _only_ the explicitly requested output (e.g. `evm.assembly`, `evm.bytecode`, `ast`, etc.). [PR#461](https://github.com/paritytech/revive/pull/461)
+```jsonc
+// Example:
+{
+  "settings": {
+    // ...
+    "outputSelection": {
+      "path/to/my/file1.sol": {
+        // Contracts in this file will generate bytecode.
+        // Only these fields of the JSON output selection will be in the `contracts` output.
+        "*": ["abi", "evm.methodIdentifiers", "metadata", "evm.bytecode"],
+        // Only this field of the JSON output selection will be in the `sources` output.
+        "": ["ast"]
+      },
+      "path/to/my/file2.sol": {
+        // No contracts in this file will generate bytecode.
+        "*": ["abi", "evm.methodIdentifiers", "metadata"],
+        // No `ast` will be in the `sources` output (only the automatically added `id`,
+        // similar to solc as this is not a configurable output selection).
+        "": []
+      },
+    }
+  }
+}
+```
+
+## v0.6.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `unstable2507`
+
+### Added
+- The comprehensive revive compiler book documentation page: https://paritytech.github.io/revive/
+- Support for solc v0.8.33.
+- Support for the `clz` Yul builtin.
+
+### Changed
+- Instruct the LLVM backend and linker to `--relax` (may lead to smaller contract code size).
+- Standard JSON mode: Don't forward EVM bytecode related output selections to solc.
+- The supported `polkadot-sdk` release is `unstable2507`.
+- The `INVALID` opcode and OOB memory accesses now consume all remaining gas.
+- Emit the `call_evm` and `delegate_call_evm` syscalls for contract calls.
+- The `revive-runner` can execute arbitrarily large contract blobs.
+- Set the default PolkaVM stack and heap size values to 128KB.
+
+### Fixed:
+- The missing `STOP` instruction at the end of `code` blocks.
+- The missing bounds check in the internal sbrk implementation.
+- The call gas is no longer ignored.
+- The `settings.polkavm.memoryConfig` object and its fields are now in camelCase.
+
+## v0.5.0
+
+This is a development pre-release.
+
+Supported `polkadot-sdk` rev: `2509.0.0`
+
+### Added
+- Support for `SELFDESTRUCT`.
+
+### Changed
+- Emulated EVM heap memory accesses of zero length are never out of bounds.
+- Switched to newer and cheaper storage syscalls (omits reads and writes of `0` values).
+
+### Fixed
+- Introduced a workaround avoiding compiler crashes caused by a bug in LLVM affecting `SDIV`.
+- An off-by-one bug affecting `SDIV` overflow semantics.
+
+## v0.4.1
+
+This is a development pre-release.
+
 Supported `polkadot-sdk` rev: `2503.0.1`
+
+### Changed
+- The `ast` output is no longer pruned in standard JSON mode (required for foundry).
+- Support `standard_json.output_selection` to also look at per file settings.
 
 ## v0.4.0
 
@@ -12,15 +116,24 @@ This is a development pre-release.
 
 Supported `polkadot-sdk` rev: `2503.0.1`
 
+### Changed
+- Remove the broken `--llvm-ir` mode.
+- Remove the unused fallback for size optimization setting.
+- Unlinked contract binaries are emitted as raw ELF objects.
+
 ### Added
 - Line debug information per YUL builtin and for `if` statements.
 - Column numbers in debug information.
 - Support for the YUL optimizer details in the standard json input definition.
 - The `revive-explorer` compiler utility.
 - `revive-yul`: The AST visitor interface.
+- The `--link` deploy time linking mode.
 
 ### Fixed
 - The debug info source file matches the YUL path in `--debug-output-dir`, allowing tools to display the source line. 
+- Incosistent type forwarding in JSON output (empty string vs. null object).
+- The solc automatic import resolution.
+- Compiler panic on missing libraries definition.
 
 ## v0.3.0
 

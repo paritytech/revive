@@ -2,21 +2,20 @@
 
 use inkwell::values::BasicValueEnum;
 
+use revive_common::BYTE_LENGTH_BYTE;
+use revive_common::BYTE_LENGTH_WORD;
+
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 use crate::polkavm::WriteLLVM;
 
 /// Load a word size value from a heap pointer.
 pub struct LoadWord;
 
-impl<D> RuntimeFunction<D> for LoadWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for LoadWord {
     const NAME: &'static str = "__revive_load_heap_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
             .fn_type(&[context.xlen_type().into()], false)
@@ -24,12 +23,12 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let offset = Self::paramater(context, 0).into_int_value();
         let length = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+            .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
         let value = context
             .builder()
@@ -38,7 +37,7 @@ where
             .basic_block()
             .get_last_instruction()
             .expect("Always exists")
-            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("Alignment is valid");
 
         let swapped_value = context.build_byte_swap(value)?;
@@ -46,29 +45,23 @@ where
     }
 }
 
-impl<D> WriteLLVM<D> for LoadWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for LoadWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }
 
 /// Store a word size value through a heap pointer.
 pub struct StoreWord;
 
-impl<D> RuntimeFunction<D> for StoreWord
-where
-    D: Dependency + Clone,
-{
+impl RuntimeFunction for StoreWord {
     const NAME: &'static str = "__revive_store_heap_word";
 
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx> {
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.void_type().fn_type(
             &[context.xlen_type().into(), context.word_type().into()],
             false,
@@ -77,12 +70,12 @@ where
 
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let offset = Self::paramater(context, 0).into_int_value();
         let length = context
             .xlen_type()
-            .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+            .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
 
         let value = context.build_byte_swap(Self::paramater(context, 1))?;
@@ -90,21 +83,18 @@ where
         context
             .builder()
             .build_store(pointer.value, value)?
-            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("Alignment is valid");
         Ok(None)
     }
 }
 
-impl<D> WriteLLVM<D> for StoreWord
-where
-    D: Dependency + Clone,
-{
-    fn declare(&mut self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::declare(self, context)
+impl WriteLLVM for StoreWord {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
     }
 
-    fn into_llvm(self, context: &mut Context<D>) -> anyhow::Result<()> {
-        <Self as RuntimeFunction<_>>::emit(&self, context)
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "revive-runner"
-version.workspace = true
+version = "1.0.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -17,7 +17,7 @@ path = "src/main.rs"
 [features]
 std = ["polkadot-sdk/std"]
 default = ["solidity"]
-solidity = ["resolc", "revive-differential", "revive-llvm-context"]
+solidity = ["resolc", "revive-differential", "revive-llvm-context", "revive-solc-json-interface"]
 
 [dependencies]
 env_logger = { workspace = true }
@@ -42,3 +42,4 @@ polkadot-sdk.features = [
 resolc = { workspace = true, optional = true }
 revive-differential = { workspace = true, optional = true }
 revive-llvm-context = { workspace = true, optional = true }
+revive-solc-json-interface = { workspace = true, optional = true }

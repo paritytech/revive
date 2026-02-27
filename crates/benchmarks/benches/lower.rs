@@ -1,0 +1,102 @@
+use std::time::Duration;
+
+use alloy_primitives::U256;
+use criterion::{
+    criterion_group, criterion_main,
+    measurement::{Measurement, WallTime},
+    BatchSize, BenchmarkGroup, Criterion,
+};
+use inkwell::context::Context as InkwellContext;
+use revive_integration::cases::Contract;
+use revive_llvm_context::{
+    initialize_llvm, OptimizerSettings, PolkaVMContext, PolkaVMTarget, PolkaVMWriteLLVM,
+};
+use revive_yul::{lexer::Lexer, parser::statement::object::Object};
+
+/// The function under test lowers the Yul `Object` into unoptimized LLVM IR.
+fn lower(mut ast: Object, mut llvm_context: PolkaVMContext) {
+    ast.declare(&mut llvm_context)
+        .expect("the AST should be valid");
+    ast.into_llvm(&mut llvm_context)
+        .expect("the AST should lower to LLVM IR");
+}
+
+fn parse(source_code: &str) -> Object {
+    let mut lexer = Lexer::new(source_code.to_owned());
+    Object::parse(&mut lexer, None).expect("the Yul source should parse")
+}
+
+fn group<'error, M>(c: &'error mut Criterion<M>, group_name: &str) -> BenchmarkGroup<'error, M>
+where
+    M: Measurement,
+{
+    c.benchmark_group(group_name)
+}
+
+fn bench<F>(mut group: BenchmarkGroup<'_, WallTime>, contract: F)
+where
+    F: Fn() -> Contract,
+{
+    let ast = parse(&contract().yul);
+    let llvm = InkwellContext::create();
+    // The optimizer settings will not affect the benchmarks since we're
+    // not running the optimization passes.
+    let optimizer_settings = OptimizerSettings::none();
+
+    initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
+
+    group
+        .sample_size(90)
+        .measurement_time(Duration::from_secs(6));
+
+    group.bench_function("lower", |b| {
+        b.iter_batched(
+            || {
+                (
+                    ast.clone(),
+                    PolkaVMContext::new_dummy(&llvm, optimizer_settings.to_owned()),
+                )
+            },
+            |(ast, llvm_context)| lower(ast, llvm_context),
+            BatchSize::SmallInput,
+        );
+    });
+
+    group.finish();
+}
+
+fn bench_baseline(c: &mut Criterion) {
+    bench(group(c, "Baseline"), Contract::baseline);
+}
+
+fn bench_erc20(c: &mut Criterion) {
+    bench(group(c, "ERC20"), Contract::erc20);
+}
+
+fn bench_sha1(c: &mut Criterion) {
+    bench(group(c, "SHA1"), || Contract::sha1(vec![0xff].into()));
+}
+
+fn bench_storage(c: &mut Criterion) {
+    bench(group(c, "Storage"), || {
+        Contract::storage_transient(U256::from(0))
+    });
+}
+
+fn bench_transfer(c: &mut Criterion) {
+    bench(group(c, "Transfer"), || {
+        Contract::transfer_self(U256::from(0))
+    });
+}
+
+criterion_group!(
+    name = benches_lower;
+    config = Criterion::default();
+    targets =
+        bench_baseline,
+        bench_erc20,
+        bench_sha1,
+        bench_storage,
+        bench_transfer,
+);
+criterion_main!(benches_lower);

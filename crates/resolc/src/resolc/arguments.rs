@@ -4,8 +4,12 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
+use revive_common::MetadataHash;
+use revive_solc_json_interface::{
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutputError,
+};
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
 /// are given or "-" is specified as a file name). Outputs the components based on the
@@ -55,12 +59,8 @@ pub struct Arguments {
 
     /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
-    #[arg(short = 'O', long = "optimization")]
-    pub optimization: Option<char>,
-
-    /// Try to recompile with -Oz if the bytecode is too large.
-    #[arg(long = "fallback-Oz")]
-    pub fallback_to_optimizing_for_size: bool,
+    #[arg(short = 'O', long = "optimization", default_value = "z")]
+    pub optimization: char,
 
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
@@ -92,7 +92,7 @@ pub struct Arguments {
     /// Switch to standard JSON input/output mode. Read from stdin, write the result to stdout.
     /// This is the default used by the Hardhat plugin.
     #[arg(long = "standard-json")]
-    pub standard_json: bool,
+    pub standard_json: Option<Option<String>>,
 
     /// Switch to missing deployable libraries detection mode.
     /// Only available for standard JSON input/output mode.
@@ -106,18 +106,20 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
-    /// Switch to LLVM IR mode.
-    /// Only one input LLVM IR file is allowed.
-    /// Cannot be used with combined and standard JSON modes.
-    /// Use this mode at your own risk, as LLVM IR input validation is not implemented.
-    #[arg(long = "llvm-ir")]
-    pub llvm_ir: bool,
+    /// Switch to linker mode, ignoring all options apart from `--libraries` and modify binaries in place.
+    ///
+    /// Unlinked contract binaries (caused by missing libraries or missing factory dependencies in turn)
+    /// are emitted as raw ELF objects. Use this mode to link them into PVM blobs.
+    ///
+    /// NOTE: Contracts must be present in the input files with the EXACT SAME directory structure as their source code,
+    /// otherwise this may fail to resolve factory dependencies.
+    #[arg(long)]
+    pub link: bool,
 
-    /// Set metadata hash mode.
-    /// The only supported value is `none` that disables appending the metadata hash.
-    /// Is enabled by default.
-    #[arg(long = "metadata-hash")]
-    pub metadata_hash: Option<String>,
+    /// Set the metadata hash type.
+    /// Available types: `none`, `ipfs`, `keccak256`.
+    #[arg(long, default_value_t = MetadataHash::Keccak256)]
+    pub metadata_hash: MetadataHash,
 
     /// Output PolkaVM assembly of the contracts.
     #[arg(long = "asm")]
@@ -126,6 +128,10 @@ pub struct Arguments {
     /// Output PolkaVM bytecode of the contracts.
     #[arg(long = "bin")]
     pub output_binary: bool,
+
+    /// Output metadata of the compiled project.
+    #[arg(long = "metadata")]
+    pub output_metadata: bool,
 
     /// Suppress specified warnings.
     /// Available arguments: `ecrecover`, `sendtransfer`, `extcodesize`, `txorigin`, `blocktimestamp`, `blocknumber`, `blockhash`.
@@ -180,9 +186,9 @@ pub struct Arguments {
     /// You are incentiviced to keep this value as small as possible:
     /// 1.Increasing the heap size will increase startup costs.
     /// 2.The heap size contributes to the total memory size a contract can use,
-    ///   which includes the contracts code size
-    #[arg(long = "heap-size")]
-    pub heap_size: Option<u32>,
+    ///   which includes the contracts code size.
+    #[arg(long = "heap-size", default_value_t = PolkaVMDefaultHeapMemorySize)]
+    pub heap_size: u32,
 
     /// The contracts total stack size in bytes.
     ///
@@ -193,164 +199,233 @@ pub struct Arguments {
     /// eventually revert execution at runtime!
     ///
     /// You are incentiviced to keep this value as small as possible:
-    /// 1.Increasing the heap size will increase startup costs.
+    /// 1.Increasing the stack size will increase startup costs.
     /// 2.The stack size contributes to the total memory size a contract can use,
-    ///   which includes the contracts code size
-    #[arg(long = "stack-size")]
-    pub stack_size: Option<u32>,
+    ///   which includes the contracts code size.
+    #[arg(long = "stack-size", default_value_t = PolkaVMDefaultStackMemorySize)]
+    pub stack_size: u32,
 }
 
 impl Arguments {
     /// Validates the arguments.
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Vec<SolcStandardJsonOutputError> {
+        let argument_matches = Self::command().get_matches();
+        let mut messages = Vec::new();
+
         if self.version && std::env::args().count() > 2 {
-            anyhow::bail!("No other options are allowed while getting the compiler version.");
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "No other options are allowed while getting the compiler version.",
+                None,
+                None,
+            ));
         }
 
         if self.supported_solc_versions && std::env::args().count() > 2 {
-            anyhow::bail!(
-                "No other options are allowed while getting the supported `solc` versions."
-            );
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "No other options are allowed while getting the supported `solc` version.",
+                None,
+                None,
+            ));
         }
 
-        #[cfg(debug_assertions)]
-        if self.recursive_process_input.is_some() && !self.recursive_process {
-            anyhow::bail!("--process-input can be only used when --recursive-process is given");
+        if self.metadata_hash == MetadataHash::IPFS {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                format!(
+                    "`{}` metadata hash type is not supported. Please use `{}` instead.",
+                    MetadataHash::IPFS,
+                    MetadataHash::Keccak256,
+                ),
+                None,
+                None,
+            ));
         }
 
-        #[cfg(debug_assertions)]
-        if self.recursive_process
-            && ((self.recursive_process_input.is_none() && std::env::args().count() > 2)
-                || (self.recursive_process_input.is_some() && std::env::args().count() > 4))
-        {
-            anyhow::bail!("No other options are allowed in recursive mode.");
-        }
-
-        #[cfg(not(debug_assertions))]
-        if self.recursive_process && std::env::args().count() > 2 {
-            anyhow::bail!("No other options are allowed in recursive mode.");
-        }
-
-        let modes_count = [
+        let modes = [
             self.yul,
-            self.llvm_ir,
             self.combined_json.is_some(),
-            self.standard_json,
+            self.standard_json.is_some(),
+            self.link,
         ]
         .iter()
         .filter(|&&x| x)
         .count();
-        if modes_count > 1 {
-            anyhow::bail!("Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.");
+        let acceptable_count = 1 + self.standard_json.is_some() as usize;
+        if modes > acceptable_count {
+            messages.push(SolcStandardJsonOutputError::new_error(
+            "Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.",None,None));
         }
 
-        if self.yul || self.llvm_ir {
+        if self.yul && !self.libraries.is_empty() {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "Libraries are not supported in Yul and linker modes.",
+                None,
+                None,
+            ));
+        }
+
+        if self.yul || self.link {
             if self.base_path.is_some() {
-                anyhow::bail!(
-                    "`base-path` is not used in Yul, LLVM IR and PolkaVM assembly modes."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`base-path` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
             if !self.include_paths.is_empty() {
-                anyhow::bail!(
-                    "`include-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`include-paths` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
             if self.allow_paths.is_some() {
-                anyhow::bail!(
-                    "`allow-paths` is not used in Yul, LLVM IR and PolkaVM assembly modes."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`allow-paths` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
-            if !self.libraries.is_empty() {
-                anyhow::bail!(
-                    "Libraries are not supported in Yul, LLVM IR and PolkaVM assembly modes."
-                );
-            }
-
             if self.evm_version.is_some() {
-                anyhow::bail!(
-                    "`evm-version` is not used in Yul, LLVM IR and PolkaVM assembly modes."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`evm-version` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
-
             if self.disable_solc_optimizer {
-                anyhow::bail!("Disabling the solc optimizer is not supported in Yul, LLVM IR and PolkaVM assembly modes.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Disabling the solc optimizer is not supported in Yul and linker modes.",
+                    None,
+                    None,
+                ));
             }
-        }
-
-        if self.llvm_ir && self.solc.is_some() {
-            anyhow::bail!("`solc` is not used in LLVM IR and PolkaVM assembly modes.");
         }
 
         if self.combined_json.is_some() && (self.output_assembly || self.output_binary) {
-            anyhow::bail!(
-                "Cannot output assembly or binary outside of JSON in combined JSON mode."
-            );
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "Cannot output assembly or binary outside of JSON in combined JSON mode.",
+                None,
+                None,
+            ));
         }
 
-        if self.standard_json {
+        if self.standard_json.is_some() {
             if self.output_assembly || self.output_binary {
-                anyhow::bail!(
-                    "Cannot output assembly or binary outside of JSON in standard JSON mode."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Cannot output assembly or binary outside of JSON in standard JSON mode.",
+                    None,
+                    None,
+                ));
             }
 
             if !self.inputs.is_empty() {
-                anyhow::bail!("Input files must be passed via standard JSON input.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Input files must be passed via standard JSON input.",
+                    None,
+                    None,
+                ));
             }
             if !self.libraries.is_empty() {
-                anyhow::bail!("Libraries must be passed via standard JSON input.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Libraries must be passed via standard JSON input.",
+                    None,
+                    None,
+                ));
             }
             if self.evm_version.is_some() {
-                anyhow::bail!("EVM version must be passed via standard JSON input.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "EVM version must be passed via standard JSON input.",
+                    None,
+                    None,
+                ));
             }
 
             if self.output_directory.is_some() {
-                anyhow::bail!("Output directory cannot be used in standard JSON mode.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Output directory cannot be used in standard JSON mode.",
+                    None,
+                    None,
+                ));
             }
             if self.overwrite {
-                anyhow::bail!("Overwriting flag cannot be used in standard JSON mode.");
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Overwriting flag cannot be used in standard JSON mode.",
+                    None,
+                    None,
+                ));
             }
             if self.disable_solc_optimizer {
-                anyhow::bail!(
-                    "Disabling the solc optimizer must specified in standard JSON input settings."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Disabling the solc optimizer must be specified in standard JSON input settings.",
+                    None,
+                    None,
+                ));
             }
-            if self.optimization.is_some() {
-                anyhow::bail!("LLVM optimizations must specified in standard JSON input settings.");
+            if Self::is_argument("optimization", &argument_matches) {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "LLVM optimizations must be specified in standard JSON input settings.",
+                    None,
+                    None,
+                ));
             }
-            if self.fallback_to_optimizing_for_size {
-                anyhow::bail!(
-                    "Falling back to -Oz must specified in standard JSON input settings."
-                );
-            }
-            if self.metadata_hash.is_some() {
-                anyhow::bail!("Metadata hash mode must specified in standard JSON input settings.");
+            if Self::is_argument("metadata_hash", &argument_matches) {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Metadata hash mode must be specified in standard JSON input settings.",
+                    None,
+                    None,
+                ));
             }
 
-            if self.heap_size.is_some() {
-                anyhow::bail!(
-                    "Heap size must be specified in standard JSON input polkavm memory settings."
-                );
+            if Self::is_argument("heap_size", &argument_matches) {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Heap size must be specified in standard JSON input polkavm memory settings.",
+                    None,
+                    None,
+                ));
             }
-            if self.stack_size.is_some() {
-                anyhow::bail!(
-                    "Stack size must be specified in standard JSON input polkavm memory settings."
-                );
+            if Self::is_argument("stack_size", &argument_matches) {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Stack size must be specified in standard JSON input polkavm memory settings.",
+                    None,
+                    None,
+                ));
             }
             if self.emit_source_debug_info {
-                anyhow::bail!(
-                    "Debug info must be requested in standard JSON input polkavm settings."
-                );
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Debug info must be requested in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
+            }
+            if !self.llvm_arguments.is_empty() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "LLVM arguments must be configured in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
             }
         }
 
-        Ok(())
+        messages
+    }
+
+    /// Checks whether the value from the argument with the given `argument_id`
+    /// came from the command line.
+    ///
+    /// This can be used for determining if a user has explicitly provided an
+    /// argument, even if it is the same value as the default one.
+    ///
+    /// Panics if the `id` is not a valid argument id.
+    fn is_argument(argument_id: &str, argument_matches: &ArgMatches) -> bool {
+        argument_matches
+            .value_source(argument_id)
+            .is_some_and(|source| source == ValueSource::CommandLine)
     }
 
     /// Returns remappings from input paths.
     pub fn split_input_files_and_remappings(
         &self,
-    ) -> anyhow::Result<(Vec<PathBuf>, Option<BTreeSet<String>>)> {
+    ) -> anyhow::Result<(Vec<PathBuf>, BTreeSet<String>)> {
         let mut input_files = Vec::with_capacity(self.inputs.len());
         let mut remappings = BTreeSet::new();
 
@@ -367,7 +442,7 @@ impl Arguments {
                 }
                 if parts.len() != 2 {
                     anyhow::bail!(
-                        "Invalid remapping `{}`: expected two parts separated by '='",
+                        "Invalid remapping `{}`: expected two parts separated by '='.",
                         input
                     );
                 }
@@ -378,12 +453,6 @@ impl Arguments {
                 input_files.push(path);
             }
         }
-
-        let remappings = if remappings.is_empty() {
-            None
-        } else {
-            Some(remappings)
-        };
 
         Ok((input_files, remappings))
     }

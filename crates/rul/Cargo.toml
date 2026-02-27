@@ -8,7 +8,7 @@ authors.workspace = true
 description = "revive compiler rust backend"
 
 [dependencies]
-anyhow = { workspace = true }
-pallet-revive-uapi = { workspace = true }
-polkavm-linker = { workspace = true }
+# anyhow = { workspace = true }
+# pallet-revive-uapi = { workspace = true }
+# polkavm-linker = { workspace = true }
 

@@ -1,6 +1,6 @@
 //! The revive rust backend builder module.
 
-const CARGO_TOML: &str = r#"
+pub const CARGO_TOML: &str = r#"
 [package]
 name = "contracts"
 publish = false
@@ -25,7 +25,7 @@ lto = true
 codegen-units = 1
 "#;
 
-const HEADER: &str = r#"
+pub const HEADER: &str = r#"
 #![no_std]
 #![no_main]
 include!("../panic_handler.rs");
@@ -48,7 +48,7 @@ pub const MEMORY_SIZE: usize = 1024 * 64;
 pub const MEMORY: [u8; MEMORY_SIZE] = [0; MEMORY_SIZE];
 "#;
 
-const EXPORT_FUNCTION: &str = r#"
+pub const EXPORT_FUNCTION: &str = r#"
 #[no_mangle]
 #[polkavm_derive::polkavm_export]
 pub extern "C" fn "#;
@@ -74,6 +74,6 @@ fn emit(constructor_code: &str, runtime_code: &str) -> String {
 
 /// Build a PVM blob.
 pub fn build(constructor_code: &str, runtime_code: &str) -> Vec<u8> {
-    let code = emit(constructor_code, runtime_code);
+    let _code = emit(constructor_code, runtime_code);
     todo!();
 }

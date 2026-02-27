@@ -30,6 +30,9 @@ pub enum Flag {
     /// The Yul IR.
     #[serde(rename = "irOptimized")]
     Yul,
+    /// The EVM bytecode.
+    #[serde(rename = "evm")]
+    EVM,
     /// The EVM legacy assembly JSON.
     #[serde(rename = "evm.legacyAssembly")]
     EVMLA,
@@ -45,22 +48,56 @@ pub enum Flag {
     Ir,
 }
 
-impl std::fmt::Display for Flag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ABI => write!(f, "abi"),
-            Self::Metadata => write!(f, "metadata"),
-            Self::Devdoc => write!(f, "devdoc"),
-            Self::Userdoc => write!(f, "userdoc"),
-            Self::MethodIdentifiers => write!(f, "evm.methodIdentifiers"),
-            Self::StorageLayout => write!(f, "storageLayout"),
-            Self::AST => write!(f, "ast"),
-            Self::Yul => write!(f, "irOptimized"),
-            Self::EVMLA => write!(f, "evm.legacyAssembly"),
-            Self::EVMBC => write!(f, "evm.bytecode"),
-            Self::EVMDBC => write!(f, "evm.deployedBytecode"),
-            Self::Assembly => write!(f, "evm.assembly"),
-            Self::Ir => write!(f, "ir"),
-        }
+impl Flag {
+    /// Returns all flags.
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::ABI,
+            Self::Metadata,
+            Self::Devdoc,
+            Self::Userdoc,
+            Self::MethodIdentifiers,
+            Self::StorageLayout,
+            Self::AST,
+            Self::Yul,
+            Self::EVM,
+            Self::EVMLA,
+            Self::EVMBC,
+            Self::EVMDBC,
+            Self::Assembly,
+            Self::Ir,
+        ]
+    }
+
+    /// Returns the EVM child flags.
+    /// Excludes the EVM legacy assembly as it does not have a PVM equivalent.
+    pub fn evm_children() -> &'static [Self] {
+        &[
+            Self::MethodIdentifiers,
+            Self::EVMBC,
+            Self::EVMDBC,
+            Self::Assembly,
+        ]
+    }
+
+    /// Returns the flags required by our compilation process.
+    pub fn codegen_requirements() -> &'static [Self] {
+        &[
+            Self::AST,
+            Self::MethodIdentifiers,
+            Self::Metadata,
+            Self::Yul,
+        ]
+    }
+
+    /// Whether this selection flag is specific for the solc backend only.
+    ///
+    /// Specifically, EVM bytecode and related flags should never be requested.
+    /// It will be replaced by PVM code anyways.
+    pub fn is_evm_codegen(&self) -> bool {
+        matches!(
+            self,
+            Flag::EVMBC | Flag::EVMDBC | Flag::EVMLA | Flag::EVM | Flag::Assembly
+        )
     }
 }

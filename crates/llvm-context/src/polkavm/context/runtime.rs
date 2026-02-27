@@ -8,14 +8,10 @@ use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;
 use crate::polkavm::context::Attribute;
 use crate::polkavm::context::Context;
-use crate::polkavm::Dependency;
 
 /// The revive runtime function interface simplifies declaring runtime functions
 /// and code emitting by providing helpful default implementations.
-pub trait RuntimeFunction<D>
-where
-    D: Dependency + Clone,
-{
+pub trait RuntimeFunction {
     /// The function name.
     const NAME: &'static str;
 
@@ -26,16 +22,17 @@ where
     ];
 
     /// The function type.
-    fn r#type<'ctx>(context: &Context<'ctx, D>) -> inkwell::types::FunctionType<'ctx>;
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx>;
 
     /// Declare the function.
-    fn declare(&self, context: &mut Context<D>) -> anyhow::Result<()> {
+    fn declare(&self, context: &mut Context) -> anyhow::Result<()> {
         let function = context.add_function(
             Self::NAME,
             Self::r#type(context),
             0,
-            Some(inkwell::module::Linkage::External),
+            Some(inkwell::module::Linkage::LinkOnceODR),
             None,
+            false,
         )?;
 
         let mut attributes = Self::ATTRIBUTES.to_vec();
@@ -49,22 +46,28 @@ where
             &attributes,
             true,
         );
+        let function = function.borrow().declaration().function_value();
+        let comdat = context
+            .module()
+            .get_or_insert_comdat(&format!("{}_comdat", Self::NAME));
+        comdat.set_selection_kind(inkwell::comdat::ComdatSelectionKind::NoDuplicates);
+        function.as_global_value().set_comdat(comdat);
 
         Ok(())
     }
 
     /// Get the function declaration.
-    fn declaration<'ctx>(context: &Context<'ctx, D>) -> Declaration<'ctx> {
+    fn declaration<'ctx>(context: &Context<'ctx>) -> Declaration<'ctx> {
         context
-            .get_function(Self::NAME)
+            .get_function(Self::NAME, false)
             .unwrap_or_else(|| panic!("runtime function {} should be declared", Self::NAME))
             .borrow()
             .declaration()
     }
 
     /// Emit the function.
-    fn emit(&self, context: &mut Context<D>) -> anyhow::Result<()> {
-        context.set_current_function(Self::NAME, None)?;
+    fn emit(&self, context: &mut Context) -> anyhow::Result<()> {
+        context.set_current_function(Self::NAME, None, false)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         let return_value = self.emit_body(context)?;
@@ -78,13 +81,13 @@ where
     /// Emit the function body.
     fn emit_body<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>>;
 
     /// Emit the function return instructions.
     fn emit_epilogue<'ctx>(
         &self,
-        context: &mut Context<'ctx, D>,
+        context: &mut Context<'ctx>,
         return_value: Option<inkwell::values::BasicValueEnum<'ctx>>,
     ) {
         let return_block = context.current_function().borrow().return_block();
@@ -98,12 +101,12 @@ where
 
     /// Get the nth function paramater.
     fn paramater<'ctx>(
-        context: &Context<'ctx, D>,
+        context: &Context<'ctx>,
         index: usize,
     ) -> inkwell::values::BasicValueEnum<'ctx> {
         let name = Self::NAME;
         context
-            .get_function(name)
+            .get_function(name, false)
             .unwrap_or_else(|| panic!("runtime function {name} should be declared"))
             .borrow()
             .declaration()

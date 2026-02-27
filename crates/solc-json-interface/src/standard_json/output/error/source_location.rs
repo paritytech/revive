@@ -1,6 +1,6 @@
 //! The `solc --standard-json` output error source location.
 
-use std::str::FromStr;
+use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,11 +17,27 @@ pub struct SourceLocation {
     pub end: isize,
 }
 
-impl FromStr for SourceLocation {
-    type Err = anyhow::Error;
+impl SourceLocation {
+    /// A shortcut constructor.
+    pub fn new(file: String) -> Self {
+        Self {
+            file,
+            start: -1,
+            end: -1,
+        }
+    }
 
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let mut parts = string.split(':');
+    /// A shortcut constructor.
+    ///
+    /// Please note that `start` and `end` are not line and column,
+    /// but absolute char offsets in the source code file.
+    pub fn new_with_offsets(file: String, start: isize, end: isize) -> Self {
+        Self { file, start, end }
+    }
+
+    /// A shortcut constructor from a `solc` AST node.
+    pub fn try_from_ast(source: &str, id_paths: &BTreeMap<usize, &String>) -> Option<Self> {
+        let mut parts = source.split(':');
         let start = parts
             .next()
             .map(|string| string.parse::<isize>())
@@ -32,12 +48,15 @@ impl FromStr for SourceLocation {
             .map(|string| string.parse::<isize>())
             .and_then(Result::ok)
             .unwrap_or_default();
-        let file = parts.next().unwrap_or_default().to_owned();
+        let path = parts
+            .next()
+            .and_then(|string| string.parse::<usize>().ok())
+            .and_then(|file_id| id_paths.get(&file_id))?;
 
-        Ok(Self {
-            file,
+        Some(Self::new_with_offsets(
+            (*path).to_owned(),
             start,
-            end: start + length,
-        })
+            start + length,
+        ))
     }
 }

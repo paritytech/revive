@@ -1,41 +1,420 @@
-//! Common utility used for in frontend and integration tests.
+//! Common helper utilities used in tests and benchmarks.
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fmt::Display;
 use std::sync::Mutex;
 
-use once_cell::sync::Lazy;
+use revive_common::MetadataHash;
+use revive_llvm_context::initialize_llvm;
+use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
+use revive_llvm_context::PolkaVMTarget;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::Bytecode;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
-use revive_solc_json_interface::warning::Warning;
+use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsMetadata;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
+use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
+use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
+use std::sync::LazyLock;
 
 use crate::project::Project;
 use crate::solc::solc_compiler::SolcCompiler;
 use crate::solc::Compiler;
 
-static PVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> = Lazy::new(Default::default);
-static EVM_RUNTIME_BLOB_CACHE: Lazy<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
-    Lazy::new(Default::default);
+static PVM_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static EVM_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static EVM_RUNTIME_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
+    LazyLock::new(Default::default);
+static YUL_IR_CACHE: LazyLock<Mutex<HashMap<CachedBlob, String>>> = LazyLock::new(Default::default);
 
-const DEBUG_CONFIG: revive_llvm_context::DebugConfig =
-    revive_llvm_context::DebugConfig::new(None, true);
+const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
 
+/// Tests may share and re-use contract code.
+/// The compiled blob cache helps avoiding duplicate compilation.
 #[derive(Hash, PartialEq, Eq)]
 struct CachedBlob {
+    /// The contract name.
     contract_name: String,
-    solidity: String,
+    /// Whether the solc optimizer is enabled.
     solc_optimizer_enabled: bool,
+    /// The contract code.
+    solidity: String,
+    /// The optimization level.
     opt: String,
 }
 
+/// Builds the Solidity project and returns the standard JSON output.
+pub fn build_solidity(
+    sources: BTreeMap<String, SolcStandardJsonInputSource>,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    build_solidity_with_options(
+        sources,
+        Default::default(),
+        Default::default(),
+        OptimizerSettings::cycles(),
+        true,
+        Default::default(),
+    )
+}
+
+/// Builds the Solidity project and returns the standard JSON output.
+pub fn build_solidity_with_options(
+    sources: BTreeMap<String, SolcStandardJsonInputSource>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+    remappings: BTreeSet<String>,
+    optimizer_settings: OptimizerSettings,
+    solc_optimizer_enabled: bool,
+    suppressed_warnings: Vec<ResolcWarning>,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let solc_version = solc.version()?;
+
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        libraries.clone(),
+        remappings,
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            optimizer_settings
+                .middle_end_as_string()
+                .chars()
+                .last()
+                .unwrap(),
+            Default::default(),
+        ),
+        SolcStandardJsonInputSettingsMetadata::default(),
+        suppressed_warnings,
+        Default::default(),
+        Default::default(),
+        false,
+    )?;
+
+    let mut output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
+    if output.has_errors() {
+        return Ok(output);
+    }
+    let debug_config = DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z");
+    let linker_symbols = libraries.as_linker_symbols()?;
+    let build = Project::try_from_standard_json_output(
+        &mut output,
+        libraries,
+        &solc_version,
+        &debug_config,
+    )?
+    .compile(
+        &mut vec![],
+        optimizer_settings,
+        MetadataHash::Keccak256,
+        &debug_config,
+        Default::default(),
+        Default::default(),
+    )?;
+    build.check_errors()?;
+
+    let build = build.link(linker_symbols, &debug_config);
+    build.check_errors()?;
+    build.write_to_standard_json(&mut output, &solc_version)?;
+    output.check_errors()?;
+
+    Ok(output)
+}
+
+/// Build a Solidity contract and get the EVM code
+pub fn build_solidity_with_options_evm(
+    sources: BTreeMap<String, SolcStandardJsonInputSource>,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+    remappings: BTreeSet<String>,
+    solc_optimizer_enabled: bool,
+) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        libraries.clone(),
+        remappings,
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            Default::default(),
+            Default::default(),
+        ),
+        SolcStandardJsonInputSettingsMetadata::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        false,
+    )?;
+
+    let mut contracts = BTreeMap::new();
+    for files in solc
+        .standard_json(&mut input, &mut vec![], None, vec![], None)?
+        .contracts
+    {
+        for (name, contract) in files.1 {
+            if let Some(evm) = contract.evm {
+                let (Some(bytecode), Some(deployed_bytecode)) =
+                    (evm.bytecode.as_ref(), evm.deployed_bytecode.as_ref())
+                else {
+                    continue;
+                };
+                contracts.insert(name.clone(), (bytecode.clone(), deployed_bytecode.clone()));
+            }
+        }
+    }
+
+    Ok(contracts)
+}
+
+/// Builds the Solidity project and returns the standard JSON output.
+pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
+    sources: &[(T, T)],
+    libraries: SolcStandardJsonInputSettingsLibraries,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    check_dependencies();
+
+    let deployed_libraries = libraries.as_paths();
+    let sources = BTreeMap::from_iter(
+        sources
+            .iter()
+            .map(|(path, code)| (path.to_string(), code.to_string().into())),
+    );
+
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let solc_version = solc.version()?;
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
+        None,
+        sources.clone(),
+        libraries.clone(),
+        Default::default(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        SolcStandardJsonInputSettingsOptimizer::default(),
+        SolcStandardJsonInputSettingsMetadata::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        true,
+    )?;
+
+    let mut output = solc.standard_json(&mut input, &mut vec![], None, vec![], None)?;
+    if output.has_errors() {
+        return Ok(output);
+    }
+
+    let project = Project::try_from_standard_json_output(
+        &mut output,
+        libraries,
+        &solc_version,
+        &DEBUG_CONFIG,
+    )?;
+
+    let missing_libraries = project.get_missing_libraries(&deployed_libraries);
+    missing_libraries.write_to_standard_json(&mut output, &solc.version()?);
+
+    Ok(output)
+}
+
+/// Checks if the Yul project can be built without errors.
+pub fn build_yul<T: ToString + Display>(
+    sources: &[(T, T)],
+) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+
+    let mut build = Project::try_from_yul_sources(
+        sources
+            .iter()
+            .map(|(path, source)| {
+                (
+                    path.to_string(),
+                    SolcStandardJsonInputSource::from(source.to_string()),
+                )
+            })
+            .collect(),
+        Default::default(),
+        None,
+        &DEBUG_CONFIG,
+    )?
+    .compile(
+        &mut vec![],
+        OptimizerSettings::size(),
+        MetadataHash::Keccak256,
+        &DEBUG_CONFIG,
+        Default::default(),
+        Default::default(),
+    )?;
+    build.take_and_write_warnings();
+    build.check_errors()?;
+
+    let mut build = build.link(Default::default(), &DEBUG_CONFIG);
+    build.take_and_write_warnings();
+    build.check_errors()?;
+
+    Ok(build
+        .results
+        .into_iter()
+        .fold(BTreeMap::new(), |mut init, (path, result)| {
+            init.insert(path.to_string(), result.unwrap().build.bytecode);
+            init
+        }))
+}
+
+/// Builds the Yul standard JSON and returns the standard JSON output.
+pub fn build_yul_standard_json(
+    mut solc_input: SolcStandardJsonInput,
+) -> anyhow::Result<SolcStandardJsonOutput> {
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
+    let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
+    if output.has_errors() {
+        return Ok(output);
+    }
+    let build = Project::try_from_yul_sources(
+        solc_input.sources,
+        Default::default(),
+        Some(&mut output),
+        &DEBUG_CONFIG,
+    )?
+    .compile(
+        &mut vec![],
+        OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?,
+        MetadataHash::Keccak256,
+        &DEBUG_CONFIG,
+        Default::default(),
+        Default::default(),
+    )?;
+    build.check_errors()?;
+
+    let build = build.link(Default::default(), &Default::default());
+    build.check_errors()?;
+    build.write_to_standard_json(&mut output, &solc.version()?)?;
+
+    Ok(output)
+}
+
+/// Compile the blob of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
+    compile_blob_with_options(
+        contract_name,
+        source_code,
+        true,
+        OptimizerSettings::cycles(),
+        Default::default(),
+    )
+}
+
+/// Compile the blob of `contract_name` found in given `source_code`.
+pub fn compile_blob_with_options(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    optimizer_settings: OptimizerSettings,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+) -> Vec<u8> {
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        opt: optimizer_settings.middle_end_as_string(),
+        solc_optimizer_enabled,
+        solidity: source_code.to_owned(),
+    };
+
+    if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
+        return blob.clone();
+    }
+
+    let file_name = "contract.sol";
+    let contracts = build_solidity_with_options(
+        BTreeMap::from([(
+            file_name.to_owned(),
+            SolcStandardJsonInputSource::from(source_code.to_owned()),
+        )]),
+        libraries,
+        Default::default(),
+        optimizer_settings,
+        solc_optimizer_enabled,
+        Default::default(),
+    )
+    .expect("source should compile")
+    .contracts;
+    let bytecode = contracts[file_name][contract_name]
+        .evm
+        .as_ref()
+        .expect("source should produce EVM output")
+        .bytecode
+        .as_ref()
+        .expect("source should produce assembly text")
+        .object
+        .as_str();
+    let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
+    assert_eq!(&blob[..3], b"PVM");
+
+    PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+
+    blob
+}
+
+/// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
+/// The `solc` optimizer will be enabled
+pub fn compile_evm_bin_runtime(
+    contract_name: &str,
+    source_code: &str,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+) -> Vec<u8> {
+    compile_evm(contract_name, source_code, true, true, libraries)
+}
+
+/// Compile the EVM bin of `contract_name` found in given `source_code`.
+pub fn compile_evm_deploy_code(
+    contract_name: &str,
+    source_code: &str,
+    solc_optimizer_enabled: bool,
+    libraries: SolcStandardJsonInputSettingsLibraries,
+) -> Vec<u8> {
+    compile_evm(
+        contract_name,
+        source_code,
+        solc_optimizer_enabled,
+        false,
+        libraries,
+    )
+}
+
+/// Convert `(path, solidity)` tuples to a standard JSON input source.
+pub fn sources<T: ToString>(sources: &[(T, T)]) -> BTreeMap<String, SolcStandardJsonInputSource> {
+    BTreeMap::from_iter(
+        sources
+            .iter()
+            .map(|(path, code)| (path.to_string(), code.to_string().into())),
+    )
+}
+
 /// Checks if the required executables are present in `${PATH}`.
+/// Also initializes the resolc executable path for subprocess spawning,
+/// since `std::env::current_exe()` returns the test runner binary in tests.
 fn check_dependencies() {
     for executable in [
         crate::r#const::DEFAULT_EXECUTABLE_NAME,
@@ -48,292 +427,19 @@ fn check_dependencies() {
             "The `{executable}` executable not found in ${{PATH}}"
         );
     }
-}
 
-/// Builds the Solidity project and returns the standard JSON output.
-pub fn build_solidity(
-    sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
-    remappings: Option<BTreeSet<String>>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
-) -> anyhow::Result<SolcStandardJsonOutput> {
-    build_solidity_with_options(sources, libraries, remappings, optimizer_settings, true)
-}
-
-/// Builds the Solidity project and returns the standard JSON output.
-/// Gives control over additional options:
-/// - `solc_optimizer_enabled`: Whether to use the `solc` optimizer
-pub fn build_solidity_with_options(
-    sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
-    remappings: Option<BTreeSet<String>>,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
-    solc_optimizer_enabled: bool,
-) -> anyhow::Result<SolcStandardJsonOutput> {
-    check_dependencies();
-
-    inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
+    let _ = crate::process::native_process::EXECUTABLE.set(
+        which::which(crate::r#const::DEFAULT_EXECUTABLE_NAME).expect("resolc should be in ${PATH}"),
     );
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
-
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let solc_version = solc.version()?;
-
-    let input = SolcStandardJsonInput::try_from_sources(
-        None,
-        sources.clone(),
-        libraries.clone(),
-        remappings,
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            solc_optimizer_enabled,
-            optimizer_settings.middle_end_as_string().chars().last(),
-            &solc_version.default,
-            false,
-        ),
-        None,
-        None,
-        None,
-    )?;
-
-    let mut output = solc.standard_json(input, None, vec![], None)?;
-
-    let debug_config = revive_llvm_context::DebugConfig::new(
-        None,
-        optimizer_settings.middle_end_as_string() != "z",
-    );
-
-    let project = Project::try_from_standard_json_output(
-        &output,
-        sources,
-        libraries,
-        &solc_version,
-        &debug_config,
-    )?;
-
-    let build: crate::Build = project.compile(
-        optimizer_settings,
-        false,
-        debug_config,
-        Default::default(),
-        Default::default(),
-    )?;
-    build.write_to_standard_json(&mut output, &solc_version)?;
-
-    Ok(output)
 }
 
-/// Build a Solidity contract and get the EVM code
-pub fn build_solidity_with_options_evm(
-    sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
-    remappings: Option<BTreeSet<String>>,
-    solc_optimizer_enabled: bool,
-) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
-    check_dependencies();
-
-    inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
-
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let solc_version = solc.version()?;
-
-    let input = SolcStandardJsonInput::try_from_sources(
-        None,
-        sources.clone(),
-        libraries.clone(),
-        remappings,
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(
-            solc_optimizer_enabled,
-            None,
-            &solc_version.default,
-            false,
-        ),
-        None,
-        None,
-        None,
-    )?;
-
-    let mut output = solc.standard_json(input, None, vec![], None)?;
-
-    let mut contracts = BTreeMap::new();
-    if let Some(files) = output.contracts.as_mut() {
-        for (_, file) in files.iter_mut() {
-            for (name, contract) in file.iter_mut() {
-                if let Some(evm) = contract.evm.as_mut() {
-                    let (Some(bytecode), Some(deployed_bytecode)) =
-                        (evm.bytecode.as_ref(), evm.deployed_bytecode.as_ref())
-                    else {
-                        continue;
-                    };
-                    contracts.insert(name.clone(), (bytecode.clone(), deployed_bytecode.clone()));
-                }
-            }
-        }
-    }
-
-    Ok(contracts)
-}
-
-/// Builds the Solidity project and returns the standard JSON output.
-pub fn build_solidity_and_detect_missing_libraries(
-    sources: BTreeMap<String, String>,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
-) -> anyhow::Result<SolcStandardJsonOutput> {
-    check_dependencies();
-
-    inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
-    let _ = crate::process::native_process::EXECUTABLE
-        .set(PathBuf::from(crate::r#const::DEFAULT_EXECUTABLE_NAME));
-
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let solc_version = solc.version()?;
-
-    let input = SolcStandardJsonInput::try_from_sources(
-        None,
-        sources.clone(),
-        libraries.clone(),
-        None,
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
-        None,
-        None,
-        None,
-    )?;
-
-    let mut output = solc.standard_json(input, None, vec![], None)?;
-
-    let project = Project::try_from_standard_json_output(
-        &output,
-        sources,
-        libraries,
-        &solc_version,
-        &DEBUG_CONFIG,
-    )?;
-
-    let missing_libraries = project.get_missing_libraries();
-    missing_libraries.write_to_standard_json(&mut output, &solc.version()?)?;
-
-    Ok(output)
-}
-
-/// Checks if the Yul project can be built without errors.
-pub fn build_yul(source_code: &str) -> anyhow::Result<()> {
-    check_dependencies();
-
-    inkwell::support::enable_llvm_pretty_stack_trace();
-    revive_llvm_context::initialize_llvm(
-        revive_llvm_context::Target::PVM,
-        crate::DEFAULT_EXECUTABLE_NAME,
-        &[],
-    );
-    let optimizer_settings = revive_llvm_context::OptimizerSettings::none();
-
-    let project = Project::try_from_yul_string::<SolcCompiler>(
-        PathBuf::from("test.yul").as_path(),
-        source_code,
-        None,
-    )?;
-    let _build = project.compile(
-        optimizer_settings,
-        false,
-        DEBUG_CONFIG,
-        Default::default(),
-        Default::default(),
-    )?;
-
-    Ok(())
-}
-
-/// Checks if the built Solidity project contains the given warning.
-pub fn check_solidity_warning(
-    source_code: &str,
-    warning_substring: &str,
-    libraries: BTreeMap<String, BTreeMap<String, String>>,
-    skip_for_revive_edition: bool,
-    suppressed_warnings: Option<Vec<Warning>>,
-) -> anyhow::Result<bool> {
-    check_dependencies();
-
-    let mut solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
-    let solc_version = solc.version()?;
-    if skip_for_revive_edition && solc_version.l2_revision.is_some() {
-        return Ok(true);
-    }
-
-    let mut sources = BTreeMap::new();
-    sources.insert("test.sol".to_string(), source_code.to_string());
-    let input = SolcStandardJsonInput::try_from_sources(
-        None,
-        sources.clone(),
-        libraries,
-        None,
-        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
-        SolcStandardJsonInputSettingsOptimizer::new(true, None, &solc_version.default, false),
-        None,
-        suppressed_warnings,
-        None,
-    )?;
-
-    let output = solc.standard_json(input, None, vec![], None)?;
-    let contains_warning = output
-        .errors
-        .ok_or_else(|| anyhow::anyhow!("Solidity compiler messages not found"))?
-        .iter()
-        .any(|error| error.formatted_message.contains(warning_substring));
-
-    Ok(contains_warning)
-}
-
-/// Compile the blob of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
-pub fn compile_blob(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_blob_with_options(
-        contract_name,
-        source_code,
-        true,
-        OptimizerSettings::cycles(),
-    )
-}
-
-/// Compile the EVM bin-runtime of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
-pub fn compile_evm_bin_runtime(contract_name: &str, source_code: &str) -> Vec<u8> {
-    compile_evm(contract_name, source_code, true, true)
-}
-
-/// Compile the EVM bin of `contract_name` found in given `source_code`.
-/// The `solc` optimizer will be enabled
-pub fn compile_evm_deploy_code(
-    contract_name: &str,
-    source_code: &str,
-    solc_optimizer_enabled: bool,
-) -> Vec<u8> {
-    compile_evm(contract_name, source_code, solc_optimizer_enabled, false)
-}
-
+/// The internal EVM bytecode compile helper.
 fn compile_evm(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
     runtime: bool,
+    libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
@@ -353,9 +459,12 @@ fn compile_evm(
 
     let file_name = "contract.sol";
     let contracts = build_solidity_with_options_evm(
-        [(file_name.into(), source_code.into())].into(),
+        BTreeMap::from([(
+            file_name.into(),
+            SolcStandardJsonInputSource::from(source_code.to_owned()),
+        )]),
+        libraries,
         Default::default(),
-        None,
         solc_optimizer_enabled,
     )
     .expect("source should compile");
@@ -374,48 +483,94 @@ fn compile_evm(
     blob
 }
 
-/// Compile the blob of `contract_name` found in given `source_code`.
-pub fn compile_blob_with_options(
+/// Compiles the Solidity source code into Yul IR and returns
+/// the Yul IR code of the contract named `contract_name`.
+pub fn compile_to_yul(
     contract_name: &str,
     source_code: &str,
     solc_optimizer_enabled: bool,
-    optimizer_settings: revive_llvm_context::OptimizerSettings,
-) -> Vec<u8> {
+) -> String {
+    check_dependencies();
+
+    let optimizer = SolcStandardJsonInputSettingsOptimizer::new(
+        solc_optimizer_enabled,
+        Default::default(),
+        Default::default(),
+    );
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
-        solidity: source_code.to_owned(),
         solc_optimizer_enabled,
-        opt: optimizer_settings.middle_end_as_string(),
+        solidity: source_code.to_owned(),
+        opt: optimizer.mode.into(),
     };
 
-    if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
-        return blob.clone();
+    if let Some(yul) = YUL_IR_CACHE.lock().unwrap().get(&id) {
+        return yul.clone();
     }
 
     let file_name = "contract.sol";
-    let contracts = build_solidity_with_options(
-        [(file_name.into(), source_code.into())].into(),
-        Default::default(),
+    let sources = BTreeMap::from([(
+        file_name.to_owned(),
+        SolcStandardJsonInputSource::from(source_code.to_owned()),
+    )]);
+    let mut input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
-        optimizer_settings,
-        solc_optimizer_enabled,
+        sources.clone(),
+        Default::default(),
+        Default::default(),
+        SolcStandardJsonInputSettingsSelection::new_required_for_tests(),
+        optimizer,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        false,
     )
-    .expect("source should compile")
-    .contracts
-    .expect("source should contain at least one contract");
+    .unwrap();
 
-    let bytecode = contracts[file_name][contract_name]
-        .evm
-        .as_ref()
-        .expect("source should produce EVM output")
-        .bytecode
-        .as_ref()
-        .expect("source should produce assembly text")
-        .object
-        .as_str();
-    let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
+    let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned()).unwrap();
+    let output = solc
+        .standard_json(&mut input, &mut vec![], None, vec![], None)
+        .unwrap();
+    output.check_errors().unwrap();
 
-    PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+    let yul = output
+        .contracts
+        .get(file_name)
+        .unwrap_or_else(|| panic!("file `{file_name}` not found in solc output"))
+        .get(contract_name)
+        .unwrap_or_else(|| panic!("contract `{contract_name}` not found in solc output"))
+        .ir_optimized
+        .to_owned();
 
-    blob
+    YUL_IR_CACHE.lock().unwrap().insert(id, yul.clone());
+
+    yul
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::read_to_string;
+
+    use super::compile_to_yul;
+    use crate::cli_utils::SOLIDITY_DEPENDENCY_CONTRACT_PATH;
+
+    #[test]
+    fn compiles_to_yul() {
+        let contract_name = "Dependency";
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        let yul = compile_to_yul(contract_name, &source_code, true);
+        assert!(
+            yul.contains(&format!("object \"{contract_name}")),
+            "the `{contract_name}` contract IR code should contain a Yul object"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "contract `Nonexistent` not found in solc output")]
+    fn error_nonexistent_contract_in_yul() {
+        let contract_name = "Nonexistent";
+        let source_code = read_to_string(SOLIDITY_DEPENDENCY_CONTRACT_PATH).unwrap();
+        compile_to_yul(contract_name, &source_code, true);
+    }
 }

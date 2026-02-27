@@ -1,7 +1,5 @@
 //! The `solc --standard-json` output contract EVM data.
 
-pub mod bytecode;
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
@@ -10,9 +8,11 @@ use serde::Serialize;
 use self::bytecode::Bytecode;
 use self::bytecode::DeployedBytecode;
 
+pub mod bytecode;
+
 /// The `solc --standard-json` output contract EVM data.
 /// It is replaced by PolkaVM data after compiling.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EVM {
     /// The contract PolkaVM assembly code.
@@ -28,8 +28,8 @@ pub struct EVM {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deployed_bytecode: Option<DeployedBytecode>,
     /// The contract function signatures.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub method_identifiers: Option<BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub method_identifiers: BTreeMap<String, String>,
 }
 
 impl EVM {

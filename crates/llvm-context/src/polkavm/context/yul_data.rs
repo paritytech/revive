@@ -2,60 +2,25 @@
 
 use std::collections::BTreeMap;
 
-use num::Zero;
-
 /// The LLVM IR generator Yul data.
-/// Describes some data that is only relevant to Yul.
+///
+/// Contains data that is only relevant to Yul.
 #[derive(Debug, Default)]
 pub struct YulData {
-    /// The list of constant arrays in the code section.
-    /// It is a temporary storage used until the finalization method is called.
-    const_arrays: BTreeMap<u8, Vec<num::BigUint>>,
+    /// Mapping from Yul object identifiers to full contract paths.
+    identifier_paths: BTreeMap<String, String>,
 }
 
 impl YulData {
-    /// Declares a temporary constant array representation.
-    pub fn const_array_declare(&mut self, index: u8, size: u16) -> anyhow::Result<()> {
-        if self.const_arrays.contains_key(&index) {
-            anyhow::bail!(
-                "The constant array with index {} is already declared",
-                index
-            );
-        }
-
-        self.const_arrays
-            .insert(index, vec![num::BigUint::zero(); size as usize]);
-
-        Ok(())
+    /// A shorthand constructor.
+    pub fn new(identifier_paths: BTreeMap<String, String>) -> Self {
+        Self { identifier_paths }
     }
 
-    /// Sets a value in the constant array representation.
-    pub fn const_array_set(
-        &mut self,
-        index: u8,
-        offset: u16,
-        value: num::BigUint,
-    ) -> anyhow::Result<()> {
-        let array = self.const_arrays.get_mut(&index).ok_or_else(|| {
-            anyhow::anyhow!("The constant array with index {} is not declared", index)
-        })?;
-        if offset >= array.len() as u16 {
-            anyhow::bail!(
-                "The constant array with index {} has size {} but the offset is {}",
-                index,
-                array.len(),
-                offset,
-            );
-        }
-        array[offset as usize] = value;
-
-        Ok(())
-    }
-
-    /// Finalizes the constant array declaration.
-    pub fn const_array_take(&mut self, index: u8) -> anyhow::Result<Vec<num::BigUint>> {
-        self.const_arrays.remove(&index).ok_or_else(|| {
-            anyhow::anyhow!("The constant array with index {} is not declared", index)
-        })
+    /// Resolves the full contract path by the Yul object identifier.
+    pub fn resolve_path(&self, identifier: &str) -> Option<&str> {
+        self.identifier_paths
+            .get(identifier)
+            .map(|path| path.as_str())
     }
 }

@@ -18,13 +18,6 @@ pub struct Arguments {
 /// The revive LLVM builder arguments.
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
-    /// Clone the branch specified in `LLVM.lock`.
-    Clone {
-        /// Clone with full commits history.
-        #[arg(long)]
-        deep: bool,
-    },
-
     /// Build the LLVM framework.
     Build {
         /// LLVM build type (`Debug`, `Release`, `RelWithDebInfo`, or `MinSizeRel`).
@@ -77,12 +70,8 @@ pub enum Subcommand {
         enable_valgrind: bool,
     },
 
-    /// Checkout the branch specified in `LLVM.lock`.
-    Checkout {
-        /// Remove all artifacts preventing the checkout (removes all local changes!).
-        #[arg(long)]
-        force: bool,
-    },
+    /// Install emsdk
+    Emsdk,
 
     /// Clean the build artifacts.
     Clean,

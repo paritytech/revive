@@ -67,12 +67,6 @@ Obtain a compatible build for your host platform from the release section of thi
 </details>
 
 <details>
-<summary>4. (Optional) Create the `LLVM.lock` file.</summary>
-
-   * The `LLVM.lock` dictates the LLVM source tree being used.
-     A default `./LLVM.lock` pointing to the release used for development is already provided.
-
-</details>
 
 <details>
 <summary>5. Build LLVM.</summary>
@@ -88,10 +82,10 @@ Obtain a compatible build for your host platform from the release section of thi
 
       Build artifacts end up in the `./target-llvm/gnu/target-final/` directory by default.
       The `gnu` directory depends on the supported archticture and will either be `gnu`, `musl` or `emscripten`.
-      You now need to export the final target directory `$LLVM_SYS_181_PREFIX`:
+      You now need to export the final target directory `$LLVM_SYS_211_PREFIX`:
 
       ```shell
-      export LLVM_SYS_181_PREFIX=${PWD}/target-llvm/gnu/target-final
+      export LLVM_SYS_211_PREFIX=${PWD}/target-llvm/gnu/target-final
       ```
 
       If built with the `--enable-tests` option, test tools will be in the `./target-llvm/gnu/build-final/` directory, along with copies of the build artifacts. For all supported build options, run `revive-llvm build --help`.

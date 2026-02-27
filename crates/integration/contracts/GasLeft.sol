@@ -26,7 +26,6 @@ pragma solidity ^0.8;
 
 contract GasLeft {
     constructor() payable {
-        assert(gasleft() > gasleft());
         assert(gasleft() > 0 && gasleft() < 0xffffffffffffffff);
     }
 }

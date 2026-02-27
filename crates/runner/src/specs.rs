@@ -1,5 +1,6 @@
 use std::{str::FromStr, time::Instant};
 
+use polkadot_sdk::pallet_revive::{ExecConfig, Pallet, TransactionLimits};
 use serde::{Deserialize, Serialize};
 
 use crate::*;
@@ -209,9 +210,9 @@ impl Default for Specs {
         Self {
             differential: false,
             balances: vec![
-                (ALICE, 1_000_000_000),
-                (BOB, 1_000_000_000),
-                (CHARLIE, 1_000_000_000),
+                (ALICE, 1_000_000_000_000),
+                (BOB, 1_000_000_000_000),
+                (CHARLIE, 1_000_000_000_000),
             ],
             actions: Default::default(),
         }
@@ -220,7 +221,7 @@ impl Default for Specs {
 
 impl Specs {
     /// Get the list of actions to perform
-    /// A default [`SpecAction::VerifyCall`] is injected after each Instantiate or Call action when
+    /// A default [`SpecsAction::VerifyCall`] is injected after each Instantiate or Call action when
     /// missing and not in differential mode
     pub fn actions(&self) -> Vec<SpecsAction> {
         self.actions
@@ -315,6 +316,7 @@ impl Specs {
                         path: Some(path),
                         solc_optimizer,
                         contract,
+                        libraries,
                     } = code
                     else {
                         panic!("the differential runner requires Code::Solidity source");
@@ -334,6 +336,7 @@ impl Specs {
                             &contract,
                             &solidity_source,
                             solc_optimizer.unwrap_or(true),
+                            libraries,
                         )),
                         Err(err) => panic!(
                             "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",
@@ -445,12 +448,15 @@ impl Specs {
                             let time_start = Instant::now();
                             let result = Contracts::bare_instantiate(
                                 origin,
-                                value,
-                                gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                value.into(),
+                                TransactionLimits::WeightAndDeposit {
+                                    weight_limit: gas_limit.unwrap_or(GAS_LIMIT),
+                                    deposit_limit: storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                },
                                 code,
                                 data,
                                 salt.0,
+                                ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -483,10 +489,13 @@ impl Specs {
                             let result = Contracts::bare_call(
                                 RuntimeOrigin::signed(origin.to_account_id(&results)),
                                 dest.to_eth_addr(&results),
-                                value,
-                                gas_limit.unwrap_or(GAS_LIMIT),
-                                storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT).into(),
+                                value.into(),
+                                TransactionLimits::WeightAndDeposit {
+                                    weight_limit: gas_limit.unwrap_or(GAS_LIMIT),
+                                    deposit_limit: storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
+                                },
                                 data,
+                                ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Exec {
                                 result,
@@ -497,8 +506,10 @@ impl Specs {
                             expectation.verify(results.last().expect("No call to verify"));
                         }
                         VerifyBalance { origin, expected } => {
-                            let balance = Balances::usable_balance(origin.to_account_id(&results));
-                            assert_eq!(balance, expected);
+                            assert_eq!(
+                                Pallet::<Runtime>::evm_balance(&origin.to_eth_addr(&results)),
+                                expected.into()
+                            );
                         }
                         VerifyStorage {
                             contract,
@@ -506,13 +517,10 @@ impl Specs {
                             expected,
                         } => {
                             let address = contract.to_eth_addr(&results);
-                            let Ok(value) = Contracts::get_storage(address, key) else {
-                                panic!("error reading storage for address {address}");
-                            };
-                            let Some(value) = value else {
-                                panic!("no value at {address} key 0x{}", hex::encode(key));
-                            };
-                            assert_eq!(value, expected, "at key 0x{}", hex::encode(key));
+                            let value = Contracts::get_storage(address, key)
+                                .unwrap_or_else(|error| panic!("at {address}: {error:?}"))
+                                .unwrap_or_else(|| vec![0; 32]);
+                            assert_eq!(value, expected, "at {address} key 0x{}", hex::encode(key));
                         }
                     }
                 }

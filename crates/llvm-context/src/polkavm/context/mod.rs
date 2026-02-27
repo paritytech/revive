@@ -1,22 +1,5 @@
 //! The LLVM IR generator context.
 
-pub mod address_space;
-pub mod argument;
-pub mod attribute;
-pub mod build;
-pub mod code_type;
-pub mod debug_info;
-pub mod function;
-pub mod global;
-pub mod r#loop;
-pub mod pointer;
-pub mod runtime;
-pub mod solidity_data;
-pub mod yul_data;
-
-#[cfg(test)]
-mod tests;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -25,6 +8,7 @@ use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -32,7 +16,6 @@ use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use crate::optimizer::settings::Settings as OptimizerSettings;
 use crate::optimizer::Optimizer;
 use crate::polkavm::DebugConfig;
-use crate::polkavm::Dependency;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 use crate::PolkaVMLoadHeapWordFunction;
@@ -58,13 +41,27 @@ use self::runtime::RuntimeFunction;
 use self::solidity_data::SolidityData;
 use self::yul_data::YulData;
 
+pub mod address_space;
+pub mod argument;
+pub mod attribute;
+pub mod build;
+pub mod code_type;
+pub mod debug_info;
+pub mod function;
+pub mod global;
+pub mod r#loop;
+pub mod pointer;
+pub mod runtime;
+pub mod solidity_data;
+pub mod yul_data;
+
+#[cfg(test)]
+mod tests;
+
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
 /// and a superstructure over the inner `inkwell` LLVM context.
-pub struct Context<'ctx, D>
-where
-    D: Dependency + Clone,
-{
+pub struct Context<'ctx> {
     /// The inner LLVM context.
     llvm: &'ctx inkwell::context::Context,
     /// The inner LLVM context builder.
@@ -87,17 +84,9 @@ where
     current_function: Option<Rc<RefCell<Function<'ctx>>>>,
     /// The loop context stack.
     loop_stack: Vec<Loop<'ctx>>,
-    /// The extra LLVM arguments that were used during target initialization.
-    llvm_arguments: &'ctx [String],
     /// The PVM memory configuration.
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
-    /// The project dependency manager. It can be any entity implementing the trait.
-    /// The manager is used to get information about contracts and their dependencies during
-    /// the multi-threaded compilation process.
-    dependency_manager: Option<D>,
-    /// Whether to append the metadata hash at the end of bytecode.
-    include_metadata_hash: bool,
     /// The debug info of the current module.
     debug_info: Option<DebugInfo<'ctx>>,
     /// The debug configuration telling whether to dump the needed IRs.
@@ -109,10 +98,7 @@ where
     yul_data: Option<YulData>,
 }
 
-impl<'ctx, D> Context<'ctx, D>
-where
-    D: Dependency + Clone,
-{
+impl<'ctx> Context<'ctx> {
     /// The functions hashmap default capacity.
     const FUNCTIONS_HASHMAP_INITIAL_CAPACITY: usize = 64;
 
@@ -148,7 +134,7 @@ where
             module
                 .get_function(import)
                 .unwrap_or_else(|| panic!("{import} import should be declared"))
-                .set_linkage(inkwell::module::Linkage::External);
+                .set_linkage(inkwell::module::Linkage::Internal);
         }
     }
 
@@ -221,15 +207,11 @@ where
     }
 
     /// Initializes a new LLVM context.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         llvm: &'ctx inkwell::context::Context,
         module: inkwell::module::Module<'ctx>,
         optimizer: Optimizer,
-        dependency_manager: Option<D>,
-        include_metadata_hash: bool,
         debug_config: DebugConfig,
-        llvm_arguments: &'ctx [String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> Self {
         Self::set_data_layout(llvm, &module);
@@ -264,11 +246,7 @@ where
             functions: HashMap::with_capacity(Self::FUNCTIONS_HASHMAP_INITIAL_CAPACITY),
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
-            llvm_arguments,
             memory_config,
-
-            dependency_manager,
-            include_metadata_hash,
 
             debug_info,
             debug_config,
@@ -278,14 +256,28 @@ where
         }
     }
 
+    /// Initializes a new dummy LLVM context.
+    ///
+    /// Omits the LLVM module initialization; use this only in tests and benchmarks.
+    pub fn new_dummy(
+        llvm: &'ctx inkwell::context::Context,
+        optimizer_settings: OptimizerSettings,
+    ) -> Self {
+        Self::new(
+            llvm,
+            llvm.create_module("dummy"),
+            Optimizer::new(optimizer_settings),
+            Default::default(),
+            Default::default(),
+        )
+    }
+
     /// Builds the LLVM IR module, returning the build artifacts.
     pub fn build(
-        mut self,
+        self,
         contract_path: &str,
-        metadata_hash: Option<[u8; revive_common::BYTE_LENGTH_WORD]>,
+        metadata_hash: Option<revive_common::Keccak256>,
     ) -> anyhow::Result<Build> {
-        let module_clone = self.module.clone();
-
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
 
@@ -313,6 +305,17 @@ where
                 )
             })?;
 
+        // Remove MinSize on functions that perform large integer div/rem to
+        // avoid compiler crash that happens when large integer div/rem by
+        // power-of-2 are not being expanded by ExpandLargeIntDivRem pass as
+        // it expects peephole from DAGCombine, which doesn't happen due to the
+        // MinSize attribute being set on the function.
+        // NOTE: As soon as it strips attribute from a function where large
+        // integer div/rem is used, it's crucial to call it after inlining.
+        // TODO: Remove this once LLVM fix is backported to LLVM 21 and we
+        // switch to corresponding inkwell version.
+        self.strip_minsize_for_divrem();
+
         self.debug_config
             .dump_llvm_ir_optimized(contract_path, self.module())?;
 
@@ -334,33 +337,16 @@ where
                 )
             })?;
 
-        let shared_object = revive_linker::link(buffer.as_slice())?;
+        let object = buffer.as_slice().to_vec();
 
-        self.debug_config
-            .dump_object(contract_path, &shared_object)?;
+        self.debug_config.dump_object(contract_path, &object)?;
 
-        let polkavm_bytecode =
-            revive_linker::polkavm_linker(shared_object, !self.debug_config().emit_debug_info)?;
-
-        let build = match crate::polkavm::build_assembly_text(
-            contract_path,
-            &polkavm_bytecode,
-            metadata_hash,
-            self.debug_config(),
-        ) {
-            Ok(build) => build,
-            Err(_error)
-                if self.optimizer.settings() != &OptimizerSettings::size()
-                    && self.optimizer.settings().is_fallback_to_size_enabled() =>
-            {
-                self.optimizer = Optimizer::new(OptimizerSettings::size());
-                self.module = module_clone;
-                self.build(contract_path, metadata_hash)?
-            }
-            Err(error) => Err(error)?,
-        };
-
-        Ok(build)
+        crate::polkavm::build(
+            &object,
+            metadata_hash
+                .as_ref()
+                .map(|hash| hash.as_bytes().try_into().unwrap()),
+        )
     }
 
     /// Verifies the current LLVM IR module.
@@ -437,11 +423,15 @@ where
         }
     }
 
-    /// Declare an external global.
+    /// Declare an external global. This is an idempotent method.
     pub fn declare_global<T>(&mut self, name: &str, r#type: T, address_space: AddressSpace)
     where
         T: BasicType<'ctx> + Clone + Copy,
     {
+        if self.globals.contains_key(name) {
+            return;
+        }
+
         let global = Global::declare(self, r#type, address_space, name);
         self.globals.insert(name.to_owned(), global);
     }
@@ -464,8 +454,15 @@ where
         return_values_length: usize,
         linkage: Option<inkwell::module::Linkage>,
         location: Option<(u32, u32)>,
+        is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        let value = self.module().add_function(name, r#type, linkage);
+        assert!(
+            self.get_function(name, is_frontend).is_none(),
+            "ICE: function '{name}' declared subsequentally"
+        );
+
+        let name = self.internal_function_name(name, is_frontend);
+        let value = self.module().add_function(&name, r#type, linkage);
 
         if self.debug_info().is_some() {
             self.builder().unset_current_debug_location();
@@ -506,7 +503,7 @@ where
         };
 
         let function = Function::new(
-            name.to_owned(),
+            name.clone(),
             FunctionDeclaration::new(r#type, value),
             r#return,
             entry_block,
@@ -514,7 +511,7 @@ where
         );
         Function::set_default_attributes(self.llvm, function.declaration(), &self.optimizer);
         let function = Rc::new(RefCell::new(function));
-        self.functions.insert(name.to_string(), function.clone());
+        self.functions.insert(name, function.clone());
 
         self.pop_debug_scope();
 
@@ -522,8 +519,14 @@ where
     }
 
     /// Returns a shared reference to the specified function.
-    pub fn get_function(&self, name: &str) -> Option<Rc<RefCell<Function<'ctx>>>> {
-        self.functions.get(name).cloned()
+    pub fn get_function(
+        &self,
+        name: &str,
+        is_frontend: bool,
+    ) -> Option<Rc<RefCell<Function<'ctx>>>> {
+        self.functions
+            .get(&self.internal_function_name(name, is_frontend))
+            .cloned()
     }
 
     /// Returns a shared reference to the current active function.
@@ -539,8 +542,9 @@ where
         &mut self,
         name: &str,
         location: Option<(u32, u32)>,
+        frontend: bool,
     ) -> anyhow::Result<()> {
-        let function = self.functions.get(name).cloned().ok_or_else(|| {
+        let function = self.get_function(name, frontend).ok_or_else(|| {
             anyhow::anyhow!("Failed to activate an undeclared function `{}`", name)
         })?;
         self.current_function = Some(function);
@@ -650,54 +654,6 @@ where
             .expect("The current context is not in a loop")
     }
 
-    /// Compiles a contract dependency, if the dependency manager is set.
-    pub fn compile_dependency(&mut self, name: &str) -> anyhow::Result<String> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                Dependency::compile(
-                    manager,
-                    name,
-                    self.optimizer.settings().to_owned(),
-                    self.include_metadata_hash,
-                    self.debug_config.clone(),
-                    self.llvm_arguments,
-                    self.memory_config,
-                )
-            })
-    }
-
-    /// Gets a full contract_path from the dependency manager.
-    pub fn resolve_path(&self, identifier: &str) -> anyhow::Result<String> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                let full_path = manager.resolve_path(identifier)?;
-                Ok(full_path)
-            })
-    }
-
-    /// Gets a deployed library address from the dependency manager.
-    pub fn resolve_library(&self, path: &str) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        self.dependency_manager
-            .to_owned()
-            .ok_or_else(|| anyhow::anyhow!("The dependency manager is unset"))
-            .and_then(|manager| {
-                let address = manager.resolve_library(path)?;
-                let address = self.word_const_str_hex(address.as_str());
-                Ok(address)
-            })
-    }
-
-    /// Extracts the dependency manager.
-    pub fn take_dependency_manager(&mut self) -> D {
-        self.dependency_manager
-            .take()
-            .expect("The dependency manager is unset")
-    }
-
     /// Returns the debug info.
     pub fn debug_info(&self) -> Option<&DebugInfo<'ctx>> {
         self.debug_info.as_ref()
@@ -750,7 +706,7 @@ where
     }
 
     /// Builds an aligned stack allocation at the current position.
-    /// Use this if [`build_alloca_at_entry`] might change program semantics.
+    /// Use this if [`Self::build_alloca_at_entry`] might change program semantics.
     /// Otherwise, alloca should always be built at the function prelude!
     pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
         &self,
@@ -792,7 +748,7 @@ where
         &self,
         pointer: Pointer<'ctx>,
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-        let address = self.build_byte_swap(self.build_load(pointer, "address_pointer")?)?;
+        let address = self.build_byte_swap(self.build_load(pointer, "address_value")?)?;
         Ok(self
             .builder()
             .build_int_z_extend(address.into_int_value(), self.word_type(), "address_zext")?
@@ -808,9 +764,9 @@ where
     ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         match pointer.address_space {
             AddressSpace::Heap => {
-                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::NAME;
+                let name = <PolkaVMLoadHeapWordFunction as RuntimeFunction>::NAME;
                 let declaration =
-                    <PolkaVMLoadHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                    <PolkaVMLoadHeapWordFunction as RuntimeFunction>::declaration(self);
                 let arguments = [self
                     .builder()
                     .build_ptr_to_int(pointer.value, self.xlen_type(), "offset_ptrtoint")?
@@ -846,7 +802,7 @@ where
         match pointer.address_space {
             AddressSpace::Heap => {
                 let declaration =
-                    <PolkaVMStoreHeapWordFunction as RuntimeFunction<D>>::declaration(self);
+                    <PolkaVMStoreHeapWordFunction as RuntimeFunction>::declaration(self);
                 let arguments = [
                     pointer.to_int(self).as_basic_value_enum(),
                     value.as_basic_value_enum(),
@@ -882,8 +838,7 @@ where
             .builder()
             .build_call(intrinsic, &[value.into()], "call_byte_swap")?
             .try_as_basic_value()
-            .left()
-            .unwrap())
+            .unwrap_basic())
     }
 
     /// Builds a GEP instruction.
@@ -956,7 +911,7 @@ where
             )
             .unwrap()
             .try_as_basic_value()
-            .left()
+            .basic()
     }
 
     /// Builds a call to the runtime API `import`, where `import` is a "getter" API.
@@ -966,10 +921,7 @@ where
     pub fn build_runtime_call_to_getter(
         &self,
         import: &'static str,
-    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>>
-    where
-        D: Dependency + Clone,
-    {
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
         let pointer = self.build_alloca_at_entry(self.word_type(), &format!("{import}_output"));
         self.build_runtime_call(import, &[pointer.to_int(self).into()]);
         self.build_load(pointer, import)
@@ -997,7 +949,7 @@ where
             )
             .unwrap();
         self.modify_call_site_value(arguments, call_site_value, function);
-        call_site_value.try_as_basic_value().left()
+        call_site_value.try_as_basic_value().basic()
     }
 
     /// Sets the alignment to `1`, since all non-stack memory pages have such alignment.
@@ -1064,7 +1016,7 @@ where
         length: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<()> {
         self.build_call(
-            <Exit as RuntimeFunction<D>>::declaration(self),
+            <Exit as RuntimeFunction>::declaration(self),
             &[flags.into(), offset.into(), length.into()],
             "exit",
         );
@@ -1088,16 +1040,38 @@ where
 
         Ok(self
             .build_call(
-                <WordToPointer as RuntimeFunction<D>>::declaration(self),
+                <WordToPointer as RuntimeFunction>::declaration(self),
                 &[value.into()],
                 "word_to_pointer",
             )
             .unwrap_or_else(|| {
                 panic!(
                     "revive runtime function {} should return a value",
-                    <WordToPointer as RuntimeFunction<D>>::NAME,
+                    <WordToPointer as RuntimeFunction>::NAME,
                 )
             })
+            .into_int_value())
+    }
+
+    /// Clip a memory offset to the maximum value that fits into a register.
+    pub fn clip_to_xlen(
+        &self,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let clipped = self.xlen_type().const_all_ones();
+        let is_overflow = self.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            value,
+            self.builder()
+                .build_int_z_extend(clipped, self.word_type(), "value_clipped")?,
+            "is_value_overflow",
+        )?;
+        let truncated =
+            self.builder()
+                .build_int_truncate(value, self.xlen_type(), "value_truncated")?;
+        Ok(self
+            .builder()
+            .build_select(is_overflow, clipped, truncated, "value")?
             .into_int_value())
     }
 
@@ -1111,7 +1085,7 @@ where
         size: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::PointerValue<'ctx>> {
         let call_site_value = self.builder().build_call(
-            <PolkaVMSbrkFunction as RuntimeFunction<D>>::declaration(self).function_value(),
+            <PolkaVMSbrkFunction as RuntimeFunction>::declaration(self).function_value(),
             &[offset.into(), size.into()],
             "alloc_start",
         )?;
@@ -1129,13 +1103,7 @@ where
 
         Ok(call_site_value
             .try_as_basic_value()
-            .left()
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <PolkaVMSbrkFunction as RuntimeFunction<D>>::NAME,
-                )
-            })
+            .unwrap_basic()
             .into_pointer_value())
     }
 
@@ -1324,7 +1292,7 @@ where
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
                     self.llvm
-                        .create_enum_attribute(Attribute::NoCapture as u32, 0),
+                        .create_enum_attribute(Attribute::Captures as u32, 0), // captures(none)
                 );
                 call_site_value.add_attribute(
                     inkwell::attributes::AttributeLoc::Param(index as u32),
@@ -1433,19 +1401,8 @@ where
     /// Returns the Yul data reference.
     /// # Panics
     /// If the Yul data has not been initialized.
-    pub fn yul(&self) -> &YulData {
-        self.yul_data
-            .as_ref()
-            .expect("The Yul data must have been initialized")
-    }
-
-    /// Returns the Yul data mutable reference.
-    /// # Panics
-    /// If the Yul data has not been initialized.
-    pub fn yul_mut(&mut self) -> &mut YulData {
-        self.yul_data
-            .as_mut()
-            .expect("The Yul data must have been initialized")
+    pub fn yul(&self) -> Option<&YulData> {
+        self.yul_data.as_ref()
     }
 
     /// Returns the current number of immutables values in the contract.
@@ -1470,5 +1427,48 @@ where
                 .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
             false,
         )
+    }
+
+    /// Returns the internal function name.
+    fn internal_function_name(&self, name: &str, is_frontend: bool) -> String {
+        if is_frontend {
+            format!("{name}_{}", self.code_type().unwrap())
+        } else {
+            name.to_string()
+        }
+    }
+
+    /// Scans all functions in the module and removes the `MinSize` attribute
+    /// if the function contains any large sdiv, udiv, srem, urem instructions with either unknown
+    /// NOTE: The check here could be relaxed by checking denominator: if the denominator is
+    /// unknown or is a power-of-2 constant, then need to strip the `minsize` attribute; otherwise
+    /// instruction can be ignored as backend will expand it correctly.
+    fn strip_minsize_for_divrem(&self) {
+        self.module().get_functions().for_each(|func| {
+            let has_divrem = func.get_basic_block_iter().any(|b| {
+                b.get_instructions().any(|inst| match inst.get_opcode() {
+                    InstructionOpcode::SDiv
+                    | InstructionOpcode::UDiv
+                    | InstructionOpcode::SRem
+                    | InstructionOpcode::URem => {
+                        inst.get_type().into_int_type().get_bit_width() >= 256
+                    }
+                    _ => false,
+                })
+            });
+            if has_divrem
+                && func
+                    .get_enum_attribute(
+                        inkwell::attributes::AttributeLoc::Function,
+                        Attribute::MinSize as u32,
+                    )
+                    .is_some()
+            {
+                func.remove_enum_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    Attribute::MinSize as u32,
+                );
+            }
+        });
     }
 }

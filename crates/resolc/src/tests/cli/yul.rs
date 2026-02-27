@@ -1,44 +1,37 @@
 //! The tests for running resolc with yul option.
 
-#![cfg(test)]
-
-use crate::tests::cli::utils;
-
-pub const YUL_OPTION: &str = "--yul";
-/// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
-/// See section `--strict-assembly vs. --yul` in https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/
-const SOLC_YUL_OPTION: &str = "--strict-assembly";
+use crate::cli_utils::{
+    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
+    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH, YUL_INVALID_HEX_NIBBLES_PATH,
+};
 
 #[test]
 fn runs_with_valid_input_file() {
-    let arguments = &[utils::YUL_CONTRACT_PATH, YUL_OPTION];
-    let resolc_result = utils::execute_resolc(arguments);
-    utils::assert_command_success(&resolc_result, "Providing a valid input file");
+    let resolc_result = execute_resolc(&[YUL_CONTRACT_PATH, RESOLC_YUL_FLAG]);
+    assert_command_success(&resolc_result, "Providing a valid input file");
 
-    assert!(
-        resolc_result
-            .stderr
-            .contains("Compiler run successful. No output requested"),
-        "Expected the output to contain a success message."
-    );
+    assert!(resolc_result
+        .stderr
+        .contains("Compiler run successful. No output requested"));
 
-    let solc_arguments = &[utils::YUL_CONTRACT_PATH, SOLC_YUL_OPTION];
-    let solc_result = utils::execute_solc(solc_arguments);
-    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+    let solc_result = execute_solc(&[YUL_CONTRACT_PATH, SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
 }
 
 #[test]
 fn fails_without_input_file() {
-    let arguments = &[YUL_OPTION];
-    let resolc_result = utils::execute_resolc(arguments);
-    utils::assert_command_failure(&resolc_result, "Omitting an input file");
+    let resolc_result = execute_resolc(&[RESOLC_YUL_FLAG]);
+    assert_command_failure(&resolc_result, "Omitting an input file");
 
-    assert!(
-        resolc_result.stderr.contains("The input file is missing"),
-        "Expected the output to contain a specific error message."
-    );
+    let solc_result = execute_solc(&[SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
+}
 
-    let solc_arguments = &[SOLC_YUL_OPTION];
-    let solc_result = utils::execute_solc(solc_arguments);
-    utils::assert_equal_exit_codes(&solc_result, &resolc_result);
+#[test]
+fn bails_with_invalid_input_file() {
+    let resolc_result = execute_resolc(&[YUL_INVALID_HEX_NIBBLES_PATH, RESOLC_YUL_FLAG]);
+    assert_command_failure(&resolc_result, "Providing an invalid input file");
+
+    let solc_result = execute_solc(&[YUL_INVALID_HEX_NIBBLES_PATH, SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
 }

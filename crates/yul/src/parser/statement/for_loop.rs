@@ -1,9 +1,12 @@
 //! The for-loop statement.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::location::Location;
@@ -53,7 +56,7 @@ impl ForLoop {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         let mut libraries = self.initializer.get_missing_libraries();
         libraries.extend(self.condition.get_missing_libraries());
         libraries.extend(self.finalizer.get_missing_libraries());
@@ -62,11 +65,8 @@ impl ForLoop {
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for ForLoop
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext<D>) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for ForLoop {
+    fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
         self.initializer.into_llvm(context)?;
 
         let condition_block = context.append_basic_block("for_condition");

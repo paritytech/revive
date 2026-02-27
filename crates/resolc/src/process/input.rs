@@ -1,51 +1,69 @@
 //! Process for compiling a single compilation unit.
 //! The input data.
 
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
+use revive_common::MetadataHash;
+use revive_llvm_context::DebugConfig;
+use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::project::contract::Contract;
-use crate::project::Project;
+use crate::SolcVersion;
 
 /// The input data.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Input {
     /// The contract representation.
     pub contract: Contract,
-    /// The project representation.
-    pub project: Project,
+    /// The `solc` compiler version.
+    pub solc_version: Option<SolcVersion>,
     /// Whether to append the metadata hash.
-    pub include_metadata_hash: bool,
+    pub metadata_hash: MetadataHash,
     /// The optimizer settings.
-    pub optimizer_settings: revive_llvm_context::OptimizerSettings,
+    pub optimizer_settings: OptimizerSettings,
     /// The debug output config.
-    pub debug_config: revive_llvm_context::DebugConfig,
+    pub debug_config: DebugConfig,
     /// The extra LLVM arguments give used for manual control.
     pub llvm_arguments: Vec<String>,
     /// The PVM memory configuration.
     pub memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    /// Missing unlinked libraries.
+    pub missing_libraries: BTreeSet<String>,
+    /// Factory dependencies.
+    pub factory_dependencies: BTreeSet<String>,
+    /// The mapping of auxiliary identifiers, e.g. Yul object names, to full contract paths.
+    pub identifier_paths: BTreeMap<String, String>,
 }
 
 impl Input {
     /// A shortcut constructor.
     pub fn new(
         contract: Contract,
-        project: Project,
-        include_metadata_hash: bool,
-        optimizer_settings: revive_llvm_context::OptimizerSettings,
-        debug_config: revive_llvm_context::DebugConfig,
+        solc_version: Option<SolcVersion>,
+        metadata_hash: MetadataHash,
+        optimizer_settings: OptimizerSettings,
+        debug_config: DebugConfig,
         llvm_arguments: Vec<String>,
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+        missing_libraries: BTreeSet<String>,
+        factory_dependencies: BTreeSet<String>,
+        identifier_paths: BTreeMap<String, String>,
     ) -> Self {
         Self {
             contract,
-            project,
-            include_metadata_hash,
+            solc_version,
+            metadata_hash,
             optimizer_settings,
             debug_config,
             llvm_arguments,
             memory_config,
+            missing_libraries,
+            factory_dependencies,
+            identifier_paths,
         }
     }
 }

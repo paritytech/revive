@@ -3,6 +3,10 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_common::BIT_LENGTH_BOOLEAN;
+use revive_common::BIT_LENGTH_WORD;
+use revive_llvm_context::PolkaVMContext;
+
 use crate::error::Error;
 use crate::lexer::token::lexeme::keyword::Keyword;
 use crate::lexer::token::lexeme::Lexeme;
@@ -26,7 +30,7 @@ pub enum Type {
 
 impl Default for Type {
     fn default() -> Self {
-        Self::UInt(revive_common::BIT_LENGTH_WORD)
+        Self::UInt(BIT_LENGTH_WORD)
     }
 }
 
@@ -62,15 +66,9 @@ impl Type {
     }
 
     /// Converts the type into its LLVM.
-    pub fn into_llvm<'ctx, D>(
-        self,
-        context: &revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> inkwell::types::IntType<'ctx>
-    where
-        D: revive_llvm_context::PolkaVMDependency + Clone,
-    {
+    pub fn into_llvm<'ctx>(self, context: &PolkaVMContext<'ctx>) -> inkwell::types::IntType<'ctx> {
         match self {
-            Self::Bool => context.integer_type(revive_common::BIT_LENGTH_BOOLEAN),
+            Self::Bool => context.integer_type(BIT_LENGTH_BOOLEAN),
             Self::Int(bitlength) => context.integer_type(bitlength),
             Self::UInt(bitlength) => context.integer_type(bitlength),
             Self::Custom(_) => context.word_type(),

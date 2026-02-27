@@ -26,6 +26,6 @@ pragma solidity ^0.8;
 
 contract BaseFee {
     constructor() payable {
-        assert(block.basefee == 0);
+        assert(block.basefee > 0);
     }
 }

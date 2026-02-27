@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use alloy_primitives::*;
+use resolc::test_utils::build_yul;
 use revive_runner::*;
 use SpecsAction::*;
 
@@ -43,6 +44,7 @@ test_spec!(create, "CreateB", "Create.sol");
 test_spec!(call, "Caller", "Call.sol");
 test_spec!(balance, "Balance", "Balance.sol");
 test_spec!(return_data_oob, "ReturnDataOob", "ReturnDataOob.sol");
+test_spec!(revert_data_oob, "RevertDataOob", "RevertDataOob.sol");
 test_spec!(immutables, "Immutables", "Immutables.sol");
 test_spec!(transaction, "Transaction", "Transaction.sol");
 test_spec!(block_hash, "BlockHash", "BlockHash.sol");
@@ -61,6 +63,17 @@ test_spec!(delegate_no_contract, "DelegateCaller", "DelegateCaller.sol");
 test_spec!(function_type, "FunctionType", "FunctionType.sol");
 test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
 test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
+test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
+test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
+test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
+test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
+test_spec!(call_gas, "CallGas", "CallGas.sol");
+test_spec!(linker_symbol, "Linked", "Linked.sol");
+test_spec!(
+    struct_delete_storage,
+    "StructDeleteStorage",
+    "StructDeleteStorage.sol"
+);
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -72,6 +85,7 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
             path: Some(path.into()),
             contract: contract.to_string(),
             solc_optimizer: None,
+            libraries: Default::default(),
         },
         data: vec![],
         salt: OptionalHex::default(),
@@ -167,6 +181,8 @@ fn signed_division() {
         (minus_five, two),
         (I256::MINUS_ONE, I256::MIN),
         (one, I256::ZERO),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::MIN + I256::ONE, I256::MINUS_ONE),
     ] {
         actions.push(Call {
             origin: TestAddress::Alice,
@@ -364,6 +380,7 @@ fn ext_code_size() {
                     path: Some("contracts/Baseline.sol".into()),
                     contract: "Baseline".to_string(),
                     solc_optimizer: None,
+                    libraries: Default::default(),
                 },
                 data: vec![],
                 salt: OptionalHex::from([0; 32]),
@@ -445,50 +462,6 @@ fn ext_code_size() {
 }
 
 #[test]
-#[should_panic(expected = "ReentranceDenied")]
-fn send_denies_reentrancy() {
-    let value = 1000;
-    Specs {
-        actions: vec![
-            instantiate("contracts/Send.sol", "Send").remove(0),
-            Call {
-                origin: TestAddress::Alice,
-                dest: TestAddress::Instantiated(0),
-                value,
-                gas_limit: None,
-                storage_deposit_limit: None,
-                data: Contract::send_self(U256::from(value)).calldata,
-            },
-        ],
-        differential: false,
-        ..Default::default()
-    }
-    .run();
-}
-
-#[test]
-#[should_panic(expected = "ReentranceDenied")]
-fn transfer_denies_reentrancy() {
-    let value = 1000;
-    Specs {
-        actions: vec![
-            instantiate("contracts/Transfer.sol", "Transfer").remove(0),
-            Call {
-                origin: TestAddress::Alice,
-                dest: TestAddress::Instantiated(0),
-                value,
-                gas_limit: None,
-                storage_deposit_limit: None,
-                data: Contract::transfer_self(U256::from(value)).calldata,
-            },
-        ],
-        differential: false,
-        ..Default::default()
-    }
-    .run();
-}
-
-#[test]
 fn create2_salt() {
     let salt = U256::from(777);
     let predicted = Contract::predicted_constructor(salt).pvm_runtime;
@@ -514,4 +487,234 @@ fn create2_salt() {
         ..Default::default()
     }
     .run();
+}
+
+#[test]
+fn code_block_stops() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test"{
+  code {
+    tstore(0x7fd9d641,0x7b1e022)
+    returndatacopy(0x0,0x0,returndatasize())
+  }
+  object "Test_deployed" { code{} }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(Default::default()),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn code_block_with_nested_object_stops() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test" {
+    code {
+        function allocate(size) -> ptr {
+            ptr := mload(0x40)
+            if iszero(ptr) { ptr := 0x60 }
+            mstore(0x40, add(ptr, size))
+        }
+        let size := datasize("Test_deployed")
+        let offset := allocate(size)
+        datacopy(offset, dataoffset("Test_deployed"), size)
+        return(offset, size)
+    }
+    object "Test_deployed" {
+        code {
+            sstore(0, 100)
+	 }
+        object "Test" {
+            code {
+	    revert(0,0)
+            }
+        }
+    }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(Default::default()),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn sbrk_bounds_checks() {
+    let code = &build_yul(&[(
+        "poc.yul",
+        r#"object "Test" {
+    code {
+        return(0x4, 0xffffffff)
+        stop()
+    }
+    object "Test_deployed" {
+        code {
+            stop()
+        }
+    }
+}"#,
+    )])
+    .unwrap()["poc.yul:Test"];
+
+    let results = Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Instantiate { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert!(
+        format!("{result:?}").contains("ContractTrapped"),
+        "not seeing a trap means the contract did not catch the OOB"
+    );
+}
+
+#[test]
+fn invalid_opcode_works() {
+    let code = &build_yul(&[(
+        "invalid.yul",
+        r#"object "Test" {
+    code {
+        invalid()
+    }
+    object "Test_deployed" {
+        code {
+            invalid()
+        }
+    }
+}"#,
+    )])
+    .unwrap()["invalid.yul:Test"];
+
+    let results = Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code.to_vec()),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Instantiate { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
+}
+
+/// Load from heap memory using an out of bounds offset and expect the
+/// contract to hit the `invalid` syscall to use all gas (like on EVM).
+///
+/// The offset is picked such that a regular truncate would be in bounds.
+#[test]
+fn safe_truncate_int_to_xlen_works() {
+    let offset = 0x10000000_00000000u64;
+    let data = Contract::load_at(Uint::from(offset)).calldata;
+    let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+
+    let results = Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+
+    let CallResult::Exec { result, .. } = results.last().unwrap() else {
+        unreachable!()
+    };
+
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
 }

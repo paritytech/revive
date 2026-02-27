@@ -2,12 +2,17 @@
 
 use std::ffi::{c_char, c_void, CStr, CString};
 
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
+use serde::Serialize;
+
+use revive_common::deserialize_from_slice;
+use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
+use revive_solc_json_interface::SolcStandardJsonOutputError;
+
 use super::Input;
 use super::Output;
 use super::Process;
-
-use anyhow::Context;
-use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Error {
@@ -29,10 +34,40 @@ enum Response {
 pub struct WorkerProcess;
 
 impl Process for WorkerProcess {
-    fn call(input: Input) -> anyhow::Result<Output> {
+    fn run(input: Input) -> anyhow::Result<()> {
+        let source_location = SourceLocation::new(input.contract.identifier.path.to_owned());
+
+        let result = input
+            .contract
+            .compile(
+                None,
+                input.optimizer_settings,
+                input.metadata_hash,
+                input.debug_config,
+                &input.llvm_arguments,
+                input.memory_config,
+                input.missing_libraries,
+                input.factory_dependencies,
+                input.identifier_paths,
+            )
+            .map(Output::new)
+            .map_err(|error| {
+                SolcStandardJsonOutputError::new_error(error, Some(source_location), None)
+            });
+
+        serde_json::to_writer(std::io::stdout(), &result)
+            .map_err(|error| anyhow::anyhow!("Stdout writing error: {error}"))?;
+
+        Ok(())
+    }
+
+    fn call<I, O>(_path: &str, input: I) -> Result<O, SolcStandardJsonOutputError>
+    where
+        I: Serialize,
+        O: DeserializeOwned,
+    {
         let input_json = serde_json::to_vec(&input).expect("Always valid");
         let input_str = String::from_utf8(input_json).expect("Input shall be valid");
-        // Prepare the input string for the Emscripten function
         let input_cstring = CString::new(input_str).expect("CString allocation failed");
 
         // Call the Emscripten function
@@ -40,26 +75,20 @@ impl Process for WorkerProcess {
             unsafe { resolc_compile(input_cstring.as_ptr(), input_cstring.as_bytes().len()) };
 
         // Convert the output pointer back to a Rust string
-        let output_str = unsafe {
-            CStr::from_ptr(output_ptr)
-                .to_str()
-                .with_context(|| "Failed to convert C string to Rust string")
-                .map(str::to_owned)
-        };
+        let output_str = unsafe { CStr::from_ptr(output_ptr).to_str().map(str::to_owned) };
         unsafe { libc::free(output_ptr as *mut c_void) };
-        let output_str = output_str?;
-        let response: Response = serde_json::from_str(&output_str)
-            .map_err(|error| anyhow::anyhow!("Worker output parsing error: {}", error,))?;
-        match response {
-            Response::Success(out) => {
-                let output: Output = revive_common::deserialize_from_slice(out.data.as_bytes())
-                    .map_err(|error| {
-                        anyhow::anyhow!("resolc.js subprocess output parsing error: {}", error,)
-                    })?;
 
-                Ok(output)
-            }
-            Response::Error(err) => anyhow::bail!("Worker error: {}", err.message,),
+        let output_str = output_str.unwrap_or_else(|error| panic!("resolc.js output: {error:?}"));
+        let response = serde_json::from_str(&output_str)
+            .unwrap_or_else(|error| panic!("Worker output parsing error: {error}"));
+        match response {
+            Response::Success(out) => match deserialize_from_slice(out.data.as_bytes()) {
+                Ok(output) => output,
+                Err(error) => {
+                    panic!("resolc.js subprocess output parsing error: {error}")
+                }
+            },
+            Response::Error(err) => panic!("Worker error: {}", err.message),
         }
     }
 }

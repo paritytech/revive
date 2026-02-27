@@ -1,7 +1,7 @@
 importScripts("./resolc_web.js");
 
 // Handle messages from the main thread
-onmessage = async function (e) {
+onmessage = function (e) {
   const m = createRevive();
 
   // Set input data for stdin

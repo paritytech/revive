@@ -1,11 +1,15 @@
 //! The variable declaration statement.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
 use serde::Deserialize;
 use serde::Serialize;
+
+use revive_common::BIT_LENGTH_X32;
+use revive_llvm_context::PolkaVMContext;
+use revive_llvm_context::PolkaVMWriteLLVM;
 
 use crate::error::Error;
 use crate::lexer::token::lexeme::symbol::Symbol;
@@ -84,23 +88,17 @@ impl VariableDeclaration {
     }
 
     /// Get the list of missing deployable libraries.
-    pub fn get_missing_libraries(&self) -> HashSet<String> {
+    pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.expression
             .as_ref()
-            .map_or_else(HashSet::new, |expression| {
+            .map_or_else(BTreeSet::new, |expression| {
                 expression.get_missing_libraries()
             })
     }
 }
 
-impl<D> revive_llvm_context::PolkaVMWriteLLVM<D> for VariableDeclaration
-where
-    D: revive_llvm_context::PolkaVMDependency + Clone,
-{
-    fn into_llvm<'ctx>(
-        mut self,
-        context: &mut revive_llvm_context::PolkaVMContext<'ctx, D>,
-    ) -> anyhow::Result<()> {
+impl PolkaVMWriteLLVM for VariableDeclaration {
+    fn into_llvm<'ctx>(mut self, context: &mut PolkaVMContext<'ctx>) -> anyhow::Result<()> {
         if self.bindings.len() == 1 {
             let identifier = self.bindings.remove(0);
             context.set_debug_location(self.location.line, self.location.column, None)?;
@@ -194,7 +192,7 @@ where
                 &[
                     context.word_const(0),
                     context
-                        .integer_type(revive_common::BIT_LENGTH_X32)
+                        .integer_type(BIT_LENGTH_X32)
                         .const_int(index as u64, false),
                 ],
                 binding.r#type.unwrap_or_default().into_llvm(context),

@@ -9,6 +9,7 @@ pub mod memory;
 
 /// PVM specific compiler settings.
 #[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PolkaVM {
     /// The PolkaVM target machine memory configuration settings.
     #[serde(skip_serializing_if = "Option::is_none")]

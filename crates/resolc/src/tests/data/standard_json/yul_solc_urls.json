@@ -1,0 +1,29 @@
+{
+  "language": "Yul",
+  "sources": {
+    "Test": {
+      "urls": ["src/tests/data/yul/return.yul"]
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true
+    },
+    "metadata": {
+      "useLiteralContent": true
+    },
+    "outputSelection": {
+      "*": {
+        "": [
+          "ast"
+        ],
+        "*": [
+          "abi",
+          "evm.methodIdentifiers",
+          "evm.bytecode"
+        ]
+      }
+    },
+    "libraries": {}
+  }
+}

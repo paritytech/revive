@@ -37,4 +37,4 @@ pub static EXTENSION_POLKAVM_ASSEMBLY: &str = "pvmasm";
 pub static EXTENSION_POLKAVM_BINARY: &str = "pvm";
 
 /// The ELF shared object file extension.
-pub static EXTENSION_SHARED_OBJECT: &str = "so";
+pub static EXTENSION_OBJECT: &str = "o";

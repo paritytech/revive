@@ -64,24 +64,13 @@ impl<'ctx> LLVMRuntime<'ctx> {
         }
     }
 
-    /// Declares an LLVM runtime function in the `module`,
-    pub fn declare(
-        module: &inkwell::module::Module<'ctx>,
-        name: &str,
-        r#type: inkwell::types::FunctionType<'ctx>,
-        linkage: Option<inkwell::module::Linkage>,
-    ) -> FunctionDeclaration<'ctx> {
-        let value = module.add_function(name, r#type, linkage);
-        FunctionDeclaration::new(r#type, value)
-    }
-
     /// Create the function definition from an existing symbol.
     pub fn define(
         module: &inkwell::module::Module<'ctx>,
         name: &str,
     ) -> Option<FunctionDeclaration<'ctx>> {
         let value = module.get_function(name)?;
-        value.set_linkage(inkwell::module::Linkage::External);
+        value.set_linkage(inkwell::module::Linkage::Private);
         FunctionDeclaration::new(value.get_type(), value).into()
     }
 }

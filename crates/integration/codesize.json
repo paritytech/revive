@@ -1,10 +1,10 @@
 {
-  "Baseline": 960,
-  "Computation": 2367,
-  "DivisionArithmetics": 9108,
-  "ERC20": 17655,
-  "Events": 1680,
-  "FibonacciIterative": 1536,
-  "Flipper": 2137,
-  "SHA1": 8299
+  "Baseline": 870,
+  "Computation": 2418,
+  "DivisionArithmetics": 9327,
+  "ERC20": 17160,
+  "Events": 1662,
+  "FibonacciIterative": 1427,
+  "Flipper": 2240,
+  "SHA1": 8009
 }

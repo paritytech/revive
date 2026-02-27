@@ -1,12 +1,5 @@
 //! The LLVM IR generator function.
 
-pub mod declaration;
-pub mod intrinsics;
-pub mod llvm_runtime;
-pub mod r#return;
-pub mod runtime;
-pub mod yul_data;
-
 use std::collections::HashMap;
 
 use inkwell::debug_info::AsDIScope;
@@ -19,6 +12,13 @@ use crate::polkavm::context::pointer::Pointer;
 use self::declaration::Declaration;
 use self::r#return::Return;
 use self::yul_data::YulData;
+
+pub mod declaration;
+pub mod intrinsics;
+pub mod llvm_runtime;
+pub mod r#return;
+pub mod runtime;
+pub mod yul_data;
 
 /// The LLVM IR generator function.
 #[derive(Debug)]
@@ -73,15 +73,6 @@ impl<'ctx> Function<'ctx> {
     /// Returns the function name reference.
     pub fn name(&self) -> &str {
         self.name.as_str()
-    }
-
-    /// Checks whether the function is defined outside of the front-end.
-    pub fn is_name_external(name: &str) -> bool {
-        name.starts_with("llvm.")
-            || (name.starts_with("__")
-                && name != self::runtime::FUNCTION_ENTRY
-                && name != self::runtime::FUNCTION_DEPLOY_CODE
-                && name != self::runtime::FUNCTION_RUNTIME_CODE)
     }
 
     /// Returns the LLVM function declaration.
@@ -223,28 +214,9 @@ impl<'ctx> Function<'ctx> {
         self.stack.get(name).copied()
     }
 
-    /// Removes the pointer to a stack variable.
-    pub fn remove_stack_pointer(&mut self, name: &str) {
-        self.stack.remove(name);
-    }
-
     /// Returns the return entity representation.
     pub fn r#return(&self) -> Return<'ctx> {
         self.r#return
-    }
-
-    /// Returns the pointer to the function return value.
-    /// # Panics
-    /// If the pointer has not been set yet.
-    pub fn return_pointer(&self) -> Option<Pointer<'ctx>> {
-        self.r#return.return_pointer()
-    }
-
-    /// Returns the return data size in bytes, based on the default stack alignment.
-    /// # Panics
-    /// If the pointer has not been set yet.
-    pub fn return_data_size(&self) -> usize {
-        self.r#return.return_data_size()
     }
 
     /// Returns the function entry block.

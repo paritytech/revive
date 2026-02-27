@@ -10,6 +10,35 @@ pub struct Contract {
     pub evm_runtime: Vec<u8>,
     pub pvm_runtime: Vec<u8>,
     pub calldata: Vec<u8>,
+    pub yul: String,
+}
+
+impl Contract {
+    pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+        Self {
+            name,
+            evm_runtime: compile_evm_bin_runtime(name, code, Default::default()),
+            pvm_runtime: compile_blob(name, code),
+            calldata,
+            yul: compile_to_yul(name, code, true),
+        }
+    }
+
+    pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
+        Self {
+            name,
+            evm_runtime: compile_evm_bin_runtime(name, code, Default::default()),
+            pvm_runtime: compile_blob_with_options(
+                name,
+                code,
+                true,
+                OptimizerSettings::size(),
+                Default::default(),
+            ),
+            calldata,
+            yul: compile_to_yul(name, code, true),
+        }
+    }
 }
 
 macro_rules! case {
@@ -212,6 +241,15 @@ sol!(
 case!("MCopy.sol", MCopy, memcpyCall, memcpy, payload: Bytes);
 
 sol!(
+    contract MLoad {
+        constructor() payable;
+
+        function loadAt(uint _offset) public payable returns (uint m);
+    }
+);
+case!("MLoad.sol", MLoad, loadAtCall, load_at, _offset: U256);
+
+sol!(
     contract Call {
         function value_transfer(address payable destination) public payable;
 
@@ -260,26 +298,6 @@ sol!(
 );
 case!("AddressPredictor.sol", Predicted, constructorCall, predicted_constructor, salt: U256);
 case!("AddressPredictor.sol", AddressPredictor, constructorCall, address_predictor_constructor, salt: U256, bytecode: Bytes);
-
-impl Contract {
-    pub fn build(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob(name, code),
-            calldata,
-        }
-    }
-
-    pub fn build_size_opt(calldata: Vec<u8>, name: &'static str, code: &str) -> Self {
-        Self {
-            name,
-            evm_runtime: compile_evm_bin_runtime(name, code),
-            pvm_runtime: compile_blob_with_options(name, code, true, OptimizerSettings::size()),
-            calldata,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

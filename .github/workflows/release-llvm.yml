@@ -54,11 +54,13 @@ jobs:
           - target: aarch64-apple-darwin
             builder-arg: gnu
             host: macos
-            runner: macos-14
+            runner: macos-15
           - target: x86_64-apple-darwin
             builder-arg: gnu
             host: macos
-            runner: macos-13
+            # `macos-15-intel` will be the last x86_64 `macos` image supported by GHA.
+            # It will be available until Aug. 2027 (see https://github.com/actions/runner-images/issues/13045).
+            runner: macos-15-intel
           - target: x86_64-pc-windows-msvc
             builder-arg: gnu
             host: windows
@@ -77,10 +79,17 @@ jobs:
           rustflags: ""
           cache-key: ${{ matrix.target }}
 
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
       - name: Install Dependencies
         if: ${{ matrix.host == 'linux' }}
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl
+          cat /etc/apt/sources.list
+          sudo sed -i 's/jammy/noble/g' /etc/apt/sources.list
+          cat /etc/apt/sources.list
+          sudo apt-get update && sudo apt-get install -y cmake ninja-build curl git libssl-dev pkg-config clang lld musl xz-utils libc6-dev gcc-multilib g++ build-essential linux-libc-dev
 
       - name: Install Dependencies
         if: ${{ matrix.host == 'macos' }}
@@ -96,10 +105,6 @@ jobs:
         run: |
           cargo install --locked --force --path crates/llvm-builder
 
-      - name: Clone LLVM
-        run: |
-          revive-llvm --target-env ${{ matrix.builder-arg }} clone
-
       - name: Build LLVM
         if: ${{ matrix.target != 'wasm32-unknown-emscripten' }}
         run: |
@@ -108,6 +113,7 @@ jobs:
       - name: Build LLVM
         if: ${{ matrix.target == 'wasm32-unknown-emscripten' }}
         run: |
+          revive-llvm emsdk
           source emsdk/emsdk_env.sh
           revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld
 
@@ -125,7 +131,7 @@ jobs:
       - name: Package Artifact
         shell: bash
         run: |
-          mv target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}
+          cp -r target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}
           tar -czf "${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}.tar.gz" llvm-${{ matrix.target }}
 
       - name: Add Artifact to Release

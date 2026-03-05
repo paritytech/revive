@@ -70,7 +70,7 @@ impl Process for NativeProcess {
         let mut command = Command::new(executable.as_path());
         command.stdin(std::process::Stdio::piped());
         command.stdout(std::process::Stdio::piped());
-        command.stderr(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::inherit());
         command.arg("--recursive-process");
         command.arg(path);
 
@@ -92,10 +92,9 @@ impl Process for NativeProcess {
 
         if result.status.code() != Some(EXIT_CODE_SUCCESS) {
             let message = format!(
-                "{executable:?} subprocess failed with exit code {:?}:\n{}\n{}",
+                "{executable:?} subprocess failed with exit code {:?}:\n{}",
                 result.status.code(),
                 String::from_utf8_lossy(result.stdout.as_slice()),
-                String::from_utf8_lossy(result.stderr.as_slice()),
             );
             return Err(SolcStandardJsonOutputError::new_error(
                 message,
@@ -108,9 +107,8 @@ impl Process for NativeProcess {
             Ok(output) => output,
             Err(error) => {
                 panic!(
-                    "{executable:?} subprocess stdout parsing error: {error:?}\n{}\n{}",
+                    "{executable:?} subprocess stdout parsing error: {error:?}\n{}",
                     String::from_utf8_lossy(result.stdout.as_slice()),
-                    String::from_utf8_lossy(result.stderr.as_slice()),
                 );
             }
         }

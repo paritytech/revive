@@ -155,6 +155,9 @@ pub struct LlvmCodegen<'ctx> {
     /// Maps the constant slot hash string to the wrapper `FunctionValue`.
     /// Each wrapper is `noinline (i256) -> i256` calling `__revive_keccak256_two_words(word0, CONST)`.
     keccak256_slot_wrappers: BTreeMap<String, inkwell::values::FunctionValue<'ctx>>,
+    /// Whether the contract uses `msize()`. When false, InlineNative stores
+    /// can skip the `ensure_heap_size` watermark update.
+    has_msize: bool,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -183,6 +186,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_value_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
+            has_msize: false,
         }
     }
 
@@ -213,6 +217,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_value_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
+            has_msize: false,
         }
     }
 
@@ -1110,6 +1115,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // jump) outweighs the alloca+load savings. Measured as net-negative on OZ ERC20 (+717 bytes).
         self.use_outlined_calldataload = false;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
+        self.has_msize = object.has_msize();
 
         // Determine if this is deploy or runtime code and set the code type
         let is_runtime = object.name.ends_with("_deployed");
@@ -1644,8 +1650,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .expect("Alignment is valid");
                         // Update msize watermark for reserved region stores:
                         // they bypass sbrk which normally tracks the heap size.
-                        // Dynamic region stores already go through build_heap_gep/sbrk.
-                        if static_off < 0x80 {
+                        // Skip when the contract doesn't use msize() to save code.
+                        if static_off < 0x80 && self.has_msize {
                             let min_size = context.xlen_type().const_int(
                                 static_off + revive_common::BYTE_LENGTH_WORD as u64,
                                 false,

@@ -710,6 +710,15 @@ impl Object {
         }
         count
     }
+
+    /// Returns true if any code in this object uses the `msize()` expression.
+    /// When false, the msize watermark (`GLOBAL_HEAP_SIZE`) doesn't need updating,
+    /// allowing InlineNative stores to skip the `ensure_heap_size` call.
+    pub fn has_msize(&self) -> bool {
+        has_msize_in_block(&self.code)
+            || self.functions.values().any(|f| has_msize_in_block(&f.body))
+            || self.subobjects.iter().any(|s| s.has_msize())
+    }
 }
 
 /// Counts the occurrences of callvalue and calldataload expressions.
@@ -1052,4 +1061,50 @@ fn count_keccak_single_in_region(region: &Region) -> usize {
         .iter()
         .map(count_keccak_single_in_statement)
         .sum()
+}
+
+/// Returns true if any expression in the block uses `msize()`.
+fn has_msize_in_block(block: &Block) -> bool {
+    block.statements.iter().any(has_msize_in_statement)
+}
+
+/// Returns true if a statement or its sub-expressions contain `msize()`.
+fn has_msize_in_statement(stmt: &Statement) -> bool {
+    match stmt {
+        Statement::Let { value, .. } | Statement::Expr(value) => has_msize_in_expr(value),
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            has_msize_in_region(then_region)
+                || else_region.as_ref().is_some_and(has_msize_in_region)
+        }
+        Statement::Switch { cases, default, .. } => {
+            cases.iter().any(|c| has_msize_in_region(&c.body))
+                || default.as_ref().is_some_and(has_msize_in_region)
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            condition_stmts.iter().any(has_msize_in_statement)
+                || has_msize_in_region(body)
+                || has_msize_in_region(post)
+        }
+        Statement::Block(region) => has_msize_in_region(region),
+        _ => false,
+    }
+}
+
+/// Returns true if an expression is or contains `msize()`.
+fn has_msize_in_expr(expr: &Expr) -> bool {
+    matches!(expr, Expr::MSize)
+}
+
+/// Returns true if a region contains `msize()`.
+fn has_msize_in_region(region: &Region) -> bool {
+    region.statements.iter().any(has_msize_in_statement)
 }

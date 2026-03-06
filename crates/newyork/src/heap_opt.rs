@@ -201,33 +201,48 @@ impl HeapAnalysis {
             }
 
             Statement::MCopy { dest, src, length } => {
-                // Memory copies can create complex access patterns
-                let dest_pattern = self.classify_access(dest);
-                let src_pattern = self.classify_access(src);
-
-                if self.extract_static_offset(dest).is_none()
-                    || self.extract_static_offset(src).is_none()
-                {
-                    self.has_dynamic_accesses = true;
-                }
-
-                // If source is tainted, destination becomes tainted
-                if let Some(src_addr) = self.extract_static_offset(src) {
-                    if self.tainted_regions.contains(&(src_addr / 32 * 32)) {
-                        if let Some(dest_addr) = self.extract_static_offset(dest) {
-                            self.tainted_regions.insert(dest_addr / 32 * 32);
+                // MCopy transfers raw bytes without byte-swapping.
+                // Both source and destination ranges must use big-endian byte order
+                // to maintain consistency with surrounding mstore/mload operations.
+                let dest_start = self.extract_static_offset(dest);
+                let src_start = self.extract_static_offset(src);
+                let len = self.extract_static_offset(length);
+                // Taint the full destination range
+                match (dest_start, len) {
+                    (Some(addr), Some(size)) if size > 0 => {
+                        let end = addr + size;
+                        let mut word = addr / 32 * 32;
+                        while word < end {
+                            self.tainted_regions.insert(word);
+                            word += 32;
                         }
                     }
-                }
-
-                // Unknown length or unaligned access taints everything
-                if !dest_pattern.is_aligned() || !src_pattern.is_aligned() {
-                    if let Some(dest_addr) = self.extract_static_offset(dest) {
-                        self.tainted_regions.insert(dest_addr / 32 * 32);
+                    (Some(addr), _) => {
+                        self.tainted_regions.insert(addr / 32 * 32);
+                        self.has_dynamic_accesses = true;
+                    }
+                    (None, _) => {
+                        self.has_dynamic_accesses = true;
                     }
                 }
-
-                let _ = length; // Length analysis could be more sophisticated
+                // Taint the full source range
+                match (src_start, len) {
+                    (Some(addr), Some(size)) if size > 0 => {
+                        let end = addr + size;
+                        let mut word = addr / 32 * 32;
+                        while word < end {
+                            self.tainted_regions.insert(word);
+                            word += 32;
+                        }
+                    }
+                    (Some(addr), _) => {
+                        self.tainted_regions.insert(addr / 32 * 32);
+                        self.has_dynamic_accesses = true;
+                    }
+                    (None, _) => {
+                        self.has_dynamic_accesses = true;
+                    }
+                }
             }
 
             // Memory escaping to external calls
@@ -323,18 +338,19 @@ impl HeapAnalysis {
                 }
             }
 
-            // CodeCopy, DataCopy, and CallDataCopy copy raw bytes without endianness
-            // concerns. They don't need to taint regions for big-endian emulation.
-            // ExtCodeCopy copies external contract code (also raw bytes).
+            // CodeCopy, DataCopy, CallDataCopy, and ExtCodeCopy write external data
+            // into memory. When this data is subsequently read via mload, it must be
+            // byte-swapped since the source data is in big-endian ABI encoding.
+            // Taint the destination to prevent native mode for these regions.
             Statement::CodeCopy { dest, .. }
             | Statement::ExtCodeCopy { dest, .. }
             | Statement::DataCopy { dest, .. }
             | Statement::CallDataCopy { dest, .. } => {
-                // Track as memory writes for analysis purposes, but don't taint
                 if let Some(addr) = self.extract_static_offset(dest) {
                     self.memory_accesses
                         .entry(addr)
                         .or_insert(AccessPattern::AlignedStatic(addr));
+                    self.tainted_regions.insert(addr / 32 * 32);
                 } else {
                     self.has_dynamic_accesses = true;
                 }

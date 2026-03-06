@@ -336,14 +336,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if self.heap_opt.all_native() {
             return NativeMemoryMode::AllNative;
         }
-        // The free memory pointer at offset 0x40 is a Solidity-internal convention:
-        // it's only read by mload(0x40) and written by mstore(0x40, new_fmp).
-        // Even when the 0x40 region "escapes" via revert/return data, the FMP value
-        // is always overwritten by ABI-encoded error data before the escape.
-        // We use the MemoryRegion annotation (set during Yul→IR translation) to
-        // distinguish FMP writes from data writes that happen to use offset 0x40.
-        if region == MemoryRegion::FreePointerSlot {
-            if let Some(0x40) = Self::try_extract_const_u64(offset_llvm) {
+        if let Some(static_val) = Self::try_extract_const_u64(offset_llvm) {
+            // The free memory pointer at offset 0x40 is a Solidity-internal convention:
+            // it's only read by mload(0x40) and written by mstore(0x40, new_fmp).
+            // Even when the 0x40 region "escapes" via revert/return data, the FMP value
+            // is always overwritten by ABI-encoded error data before the escape.
+            // We use the MemoryRegion annotation (set during Yul→IR translation) to
+            // distinguish FMP writes from data writes that happen to use offset 0x40.
+            if static_val == 0x40 && region == MemoryRegion::FreePointerSlot {
+                return NativeMemoryMode::InlineNative;
+            }
+            // For reserved-region offsets (< 0x80), use the heap analysis to check
+            // if this specific offset is safe for native access. Only reserved offsets
+            // benefit from InlineNative since they use unchecked GEP (no sbrk overhead).
+            // Dynamic offsets (>= 0x80) would need build_heap_gep with sbrk, which adds
+            // more code than the byte-swapping function call saves.
+            if static_val < 0x80 && self.heap_opt.can_use_native(static_val) {
                 return NativeMemoryMode::InlineNative;
             }
         }
@@ -1612,28 +1620,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         )?;
                     }
                     NativeMemoryMode::InlineNative => {
-                        // Use unchecked GEP for reserved region (< 0x80):
-                        // no sbrk needed since reserved memory is pre-allocated.
                         let offset_xlen = self.truncate_offset_to_xlen(
                             context,
                             offset_val,
                             "mstore_offset_xlen",
                         )?;
-                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
+                        let static_off = Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
+                        // Reserved memory (< 0x80) is pre-allocated; use unchecked GEP.
+                        // Dynamic offsets need sbrk via build_heap_gep.
+                        let pointer = if static_off < 0x80 {
+                            context.build_heap_gep_unchecked(offset_xlen)?
+                        } else {
+                            let word_len = context
+                                .xlen_type()
+                                .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+                            context.build_heap_gep(offset_xlen, word_len)?
+                        };
                         context
                             .builder()
                             .build_store(pointer.value, value_val)
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                             .expect("Alignment is valid");
-                        // Update msize watermark: native stores bypass sbrk which
-                        // normally tracks the heap size for msize().
-                        let min_size = context
-                            .xlen_type()
-                            .const_int(0x40 + revive_common::BYTE_LENGTH_WORD as u64, false);
-                        context
-                            .ensure_heap_size(min_size)
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        // Update msize watermark for reserved region stores:
+                        // they bypass sbrk which normally tracks the heap size.
+                        // Dynamic region stores already go through build_heap_gep/sbrk.
+                        if static_off < 0x80 {
+                            let min_size = context.xlen_type().const_int(
+                                static_off + revive_common::BYTE_LENGTH_WORD as u64,
+                                false,
+                            );
+                            context
+                                .ensure_heap_size(min_size)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        }
                     }
                     NativeMemoryMode::ByteSwap => {
                         let offset_val = self.narrow_offset_for_pointer(
@@ -3300,11 +3320,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         revive_llvm_context::polkavm_evm_memory::load_native(context, offset_xlen)?
                     }
                     NativeMemoryMode::InlineNative => {
-                        // Use unchecked GEP for reserved region (< 0x80):
-                        // no sbrk needed since reserved memory is pre-allocated.
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
+                        let static_off = Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
+                        let pointer = if static_off < 0x80 {
+                            context.build_heap_gep_unchecked(offset_xlen)?
+                        } else {
+                            let word_len = context
+                                .xlen_type()
+                                .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+                            context.build_heap_gep(offset_xlen, word_len)?
+                        };
                         context
                             .builder()
                             .build_load(context.word_type(), pointer.value, "native_load")

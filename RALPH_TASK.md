@@ -325,3 +325,86 @@ needed" path, leaving LE data unswapped. This was confirmed by mcopy test failur
 - Codesize test: PASS (no change)
 - OZ contracts: All compile, 3 improved, 0 regressed
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 4 - InlineByteSwap for constant-offset escaping stores
+
+### Approach: Eliminate sbrk overhead and expose LLVM optimization opportunities
+
+The previous iterations only optimized native-safe offsets (no byte-swap needed).
+But the vast majority of constant-offset MStore/MLoad operations need big-endian
+format (data escapes to return/revert/call/log). These went through the shared
+`__revive_store_heap_word` function, which includes sbrk bounds checking.
+
+The key insight: for constant offsets, sbrk is unnecessary (the 131072-byte static
+heap fits any constant offset). More importantly, inlining the byte-swap code lets
+LLVM optimize across it:
+- **Constant folding**: `bswap(constant)` is folded at compile time, eliminating
+  the bswap entirely for error selectors and other constant stores
+- **Store-to-load forwarding**: LLVM can see through the inline bswap code and
+  forward values from stores to loads
+- **Dead store elimination**: Stores whose values are never read become visible
+  to LLVM's DSE pass
+- **Common subexpression elimination**: Adjacent bswaps on related values can
+  share intermediate computations
+
+### Changes
+
+1. **to_llvm.rs** - Added `InlineByteSwap` mode to `NativeMemoryMode` enum.
+   `native_memory_mode()` returns `InlineByteSwap` for ALL constant offsets
+   that aren't native-safe (i.e., escaping/tainted offsets with known values).
+
+2. **to_llvm.rs** - MStore/MLoad handlers: Added `InlineByteSwap` case that
+   uses `store_bswap_unchecked` / `load_bswap_unchecked` (unchecked GEP +
+   efficient 4x bswap64).
+
+3. **heap.rs (llvm-context)** - Added `store_bswap_unchecked()` and
+   `load_bswap_unchecked()` public functions combining unchecked GEP with
+   the efficient 4x bswap64 implementation.
+
+4. **memory.rs (llvm-context)** - Re-exported the new bswap functions.
+
+### Code Size Results (OZ Contracts - cumulative from baseline)
+
+| Contract   | Baseline | Optimized | Savings | %     |
+|------------|----------|-----------|---------|-------|
+| erc1155    | 43,880   | 41,967    | -1,913  | -4.4% |
+| erc20      | 59,724   | 56,999    | -2,725  | -4.6% |
+| erc721     | 64,946   | 62,493    | -2,453  | -3.8% |
+| oz_gov     | 106,417  | 102,680   | -3,737  | -3.5% |
+| oz_rwa     | 56,936   | 54,046    | -2,890  | -5.1% |
+| oz_simple  | 20,109   | 19,212    | -897    | -4.5% |
+| oz_stable  | 61,801   | 58,613    | -3,188  | -5.2% |
+| proxy      | 4,424    | 4,133     | -291    | -6.6% |
+
+### Code Size Results (Benchmark Contracts)
+
+| Contract           | Before | After | Savings | %     |
+|--------------------|--------|-------|---------|-------|
+| ERC20              | 11,756 | 11,399| -357    | -3.0% |
+| DivisionArithmetics| 7,637  | 7,527 | -110    | -1.4% |
+| Events             | 1,420  | 1,333 | -87     | -6.1% |
+| FibonacciIterative | 1,176  | 1,077 | -99     | -8.4% |
+| Flipper            | 1,437  | 1,321 | -116    | -8.1% |
+| SHA1               | 5,874  | 5,852 | -22     | -0.4% |
+
+### Why InlineByteSwap works better than function calls
+
+The shared `__revive_store_heap_word` function is opaque to LLVM's optimizer.
+When a constant like `shl(224, 0xf92ee8a9)` is passed to it, LLVM can't fold
+the bswap inside the function body (it's a separate compilation unit with
+`linkonce_odr` linkage). By inlining the bswap, LLVM sees:
+```
+ptr = &heap[0]
+store bswap(shl(224, 0xf92ee8a9)) at ptr  -> store constant at ptr
+```
+The bswap of a constant is a constant. This eliminates ~20 instructions
+(4x shift + 4x trunc + 4x bswap64 + 4x GEP + 4x store) per constant-value
+store, replacing them with a single constant store.
+
+### Test Results
+- `make test`: PASS
+- Integration tests: 62 passed, 0 failed
+- Retester: 5629 passed, 222 failed (all pre-existing)
+- Codesize test: PASS (all benchmarks improved, json updated)
+- OZ contracts: All compile, all improved, 0 regressed
+- deploy_erc20.sh: All assertions pass

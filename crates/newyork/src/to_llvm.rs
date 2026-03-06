@@ -56,14 +56,19 @@ pub type Result<T> = std::result::Result<T, CodegenError>;
 /// - `AllNative`: All memory accesses are native-safe; use native runtime functions
 /// - `InlineNative`: This specific access is native-safe; use inline native code
 ///   (avoids needing native runtime function declarations in subobjects)
-/// - `ByteSwap`: Must use byte-swapping for EVM big-endian compatibility
+/// - `InlineByteSwap`: Constant offset needing BE; inline byte-swap without sbrk.
+///   This lets LLVM fold constant-value byte-swaps at compile time and exposes
+///   store-to-load forwarding opportunities that function calls hide.
+/// - `ByteSwap`: Must use byte-swapping via shared runtime function (includes sbrk).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum NativeMemoryMode {
     /// All accesses safe. Use native runtime function calls.
     AllNative,
     /// This access is safe but others need byte-swapping. Use inline native code.
     InlineNative,
-    /// Must byte-swap for EVM compatibility.
+    /// Constant offset; inline byte-swap with unchecked GEP (no sbrk).
+    InlineByteSwap,
+    /// Must byte-swap for EVM compatibility (dynamic offsets needing sbrk).
     ByteSwap,
 }
 
@@ -325,11 +330,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Determines native memory mode for a specific memory access.
     ///
-    /// Returns one of three modes:
+    /// Returns one of four modes:
     /// - `AllNative`: all accesses are safe, use native runtime function calls
-    /// - `InlineNative`: this specific access is safe, use inline native code
-    ///   (no runtime function declaration needed, bypasses subobject visibility)
-    /// - `ByteSwap`: must use byte-swapping for EVM compatibility
+    /// - `InlineNative`: this specific access is native-safe; inline store/load (no bswap)
+    /// - `InlineByteSwap`: constant offset needing BE; inline bswap without sbrk
+    /// - `ByteSwap`: dynamic offset; call shared runtime function (includes sbrk)
     ///
     /// Uses the LLVM constant value directly (not the IR ValueId) to avoid
     /// ValueId namespace collisions between outer objects and subobjects.
@@ -360,6 +365,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             if self.heap_opt.can_use_native(static_val) {
                 return NativeMemoryMode::InlineNative;
             }
+            // For constant offsets that need byte-swapping (escaping/tainted), use
+            // InlineByteSwap: unchecked GEP + inline bswap. This avoids sbrk overhead
+            // and lets LLVM fold constant-value byte-swaps at compile time, merge
+            // adjacent stores, and do store-to-load forwarding across the bswap.
+            return NativeMemoryMode::InlineByteSwap;
         }
         NativeMemoryMode::ByteSwap
     }
@@ -1645,6 +1655,30 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // Update msize watermark: InlineNative stores bypass sbrk
                         // which normally tracks the heap size.
                         // Skip when the contract doesn't use msize() to save code.
+                        if self.has_msize {
+                            let static_off =
+                                Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
+                            let min_size = context.xlen_type().const_int(
+                                static_off + revive_common::BYTE_LENGTH_WORD as u64,
+                                false,
+                            );
+                            context
+                                .ensure_heap_size(min_size)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        }
+                    }
+                    NativeMemoryMode::InlineByteSwap => {
+                        let offset_xlen = self.truncate_offset_to_xlen(
+                            context,
+                            offset_val,
+                            "mstore_offset_xlen",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+                            context,
+                            offset_xlen,
+                            value_val,
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         if self.has_msize {
                             let static_off =
                                 Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
@@ -3332,6 +3366,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .build_load(context.word_type(), pointer.value, "native_load")
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .as_basic_value_enum()
+                    }
+                    NativeMemoryMode::InlineByteSwap => {
+                        let offset_xlen =
+                            self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
+                        revive_llvm_context::polkavm_evm_memory::load_bswap_unchecked(
+                            context,
+                            offset_xlen,
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
                     }
                     NativeMemoryMode::ByteSwap => {
                         let offset_val = self.narrow_offset_for_pointer(

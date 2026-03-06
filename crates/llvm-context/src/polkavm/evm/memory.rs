@@ -7,6 +7,8 @@ use crate::polkavm::context::address_space::AddressSpace;
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 
+pub use crate::polkavm::context::pointer::heap::{load_bswap_unchecked, store_bswap_unchecked};
+
 /// Translates the `msize` instruction.
 pub fn msize<'ctx>(
     context: &mut Context<'ctx>,

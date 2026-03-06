@@ -82,6 +82,29 @@ impl RuntimeFunction for StoreWord {
     }
 }
 
+/// Builds an efficient 256-bit store with byte-swap at a pointer obtained via
+/// unchecked GEP (no sbrk bounds check). For use by the newyork InlineByteSwap
+/// mode on constant offsets within the static heap.
+pub fn store_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_store_swap(context, pointer.value, value)
+}
+
+/// Builds an efficient 256-bit load with byte-swap at a pointer obtained via
+/// unchecked GEP (no sbrk bounds check). For use by the newyork InlineByteSwap
+/// mode on constant offsets within the static heap.
+pub fn load_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_load_swap(context, pointer.value)
+}
+
 /// Builds an efficient 256-bit load with byte-swap using 4x 64-bit operations.
 ///
 /// This is much more efficient than LLVM's default lowering of llvm.bswap.i256

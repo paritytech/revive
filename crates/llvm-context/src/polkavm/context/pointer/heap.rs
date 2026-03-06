@@ -393,22 +393,15 @@ impl RuntimeFunction for Keccak256OneWord {
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let word0 = Self::paramater(context, 0).into_int_value();
 
-        // Store word0 at heap offset 0
+        // Store word0 at heap offset 0 using inline bswap (no sbrk needed)
         let offset0 = context.xlen_type().const_int(0, false);
-        let store_fn = context
-            .get_function(StoreWord::NAME, false)
-            .expect("__revive_store_heap_word should be declared");
-        context.build_call(
-            store_fn.borrow().declaration(),
-            &[offset0.into(), word0.into()],
-            "store_word0",
-        );
+        store_bswap_unchecked(context, offset0, word0)?;
 
-        // sbrk(0, 32) to get the heap pointer
+        // Get heap pointer directly (offset 0 is always within static heap)
+        let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
-        let input_pointer = context.build_heap_gep(offset0, length)?;
 
         // Allocate output on stack
         let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
@@ -473,32 +466,21 @@ impl RuntimeFunction for Keccak256TwoWords {
         let word0 = Self::paramater(context, 0).into_int_value();
         let word1 = Self::paramater(context, 1).into_int_value();
 
-        // Store word0 at heap offset 0
+        // Store word0 at heap offset 0 using inline bswap (no sbrk needed)
         let offset0 = context.xlen_type().const_int(0, false);
-        let store_fn = context
-            .get_function(StoreWord::NAME, false)
-            .expect("__revive_store_heap_word should be declared");
-        context.build_call(
-            store_fn.borrow().declaration(),
-            &[offset0.into(), word0.into()],
-            "store_word0",
-        );
+        store_bswap_unchecked(context, offset0, word0)?;
 
-        // Store word1 at heap offset 32
+        // Store word1 at heap offset 32 using inline bswap (no sbrk needed)
         let offset32 = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
-        context.build_call(
-            store_fn.borrow().declaration(),
-            &[offset32.into(), word1.into()],
-            "store_word1",
-        );
+        store_bswap_unchecked(context, offset32, word1)?;
 
-        // sbrk(0, 64) to get the heap pointer
+        // Get heap pointer directly (offset 0 is always within static heap)
+        let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(2 * BYTE_LENGTH_WORD as u64, false);
-        let input_pointer = context.build_heap_gep(offset0, length)?;
 
         // Allocate output on stack
         let output_pointer = context.build_alloca(context.word_type(), "output_pointer");

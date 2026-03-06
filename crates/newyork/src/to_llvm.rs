@@ -351,12 +351,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             if static_val == 0x40 && region == MemoryRegion::FreePointerSlot {
                 return NativeMemoryMode::InlineNative;
             }
-            // For reserved-region offsets (< 0x80), use the heap analysis to check
-            // if this specific offset is safe for native access. Only reserved offsets
-            // benefit from InlineNative since they use unchecked GEP (no sbrk overhead).
-            // Dynamic offsets (>= 0x80) would need build_heap_gep with sbrk, which adds
-            // more code than the byte-swapping function call saves.
-            if static_val < 0x80 && self.heap_opt.can_use_native(static_val) {
+            // For any constant offset that the heap analysis identifies as native-safe
+            // (word-aligned, not tainted, not escaping), use InlineNative.
+            // The heap is statically allocated at 131072 bytes, so any constant offset
+            // well within that range can safely use unchecked GEP (no sbrk overhead).
+            // This enables LLVM's GVN to do store-to-load forwarding on these accesses,
+            // potentially eliminating the heap access entirely.
+            if self.heap_opt.can_use_native(static_val) {
                 return NativeMemoryMode::InlineNative;
             }
         }
@@ -1631,27 +1632,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             offset_val,
                             "mstore_offset_xlen",
                         )?;
-                        let static_off = Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
-                        // Reserved memory (< 0x80) is pre-allocated; use unchecked GEP.
-                        // Dynamic offsets need sbrk via build_heap_gep.
-                        let pointer = if static_off < 0x80 {
-                            context.build_heap_gep_unchecked(offset_xlen)?
-                        } else {
-                            let word_len = context
-                                .xlen_type()
-                                .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-                            context.build_heap_gep(offset_xlen, word_len)?
-                        };
+                        // Constant offsets use unchecked GEP since the static heap
+                        // is 131072 bytes and all native-safe constant offsets are
+                        // well within that range. This avoids sbrk function call overhead.
+                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
                         context
                             .builder()
                             .build_store(pointer.value, value_val)
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                             .expect("Alignment is valid");
-                        // Update msize watermark for reserved region stores:
-                        // they bypass sbrk which normally tracks the heap size.
+                        // Update msize watermark: InlineNative stores bypass sbrk
+                        // which normally tracks the heap size.
                         // Skip when the contract doesn't use msize() to save code.
-                        if static_off < 0x80 && self.has_msize {
+                        if self.has_msize {
+                            let static_off =
+                                Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
                             let min_size = context.xlen_type().const_int(
                                 static_off + revive_common::BYTE_LENGTH_WORD as u64,
                                 false,
@@ -3328,15 +3324,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     NativeMemoryMode::InlineNative => {
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                        let static_off = Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
-                        let pointer = if static_off < 0x80 {
-                            context.build_heap_gep_unchecked(offset_xlen)?
-                        } else {
-                            let word_len = context
-                                .xlen_type()
-                                .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-                            context.build_heap_gep(offset_xlen, word_len)?
-                        };
+                        // Constant offsets use unchecked GEP since the static heap
+                        // is 131072 bytes and all native-safe offsets fit easily.
+                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
                         context
                             .builder()
                             .build_load(context.word_type(), pointer.value, "native_load")

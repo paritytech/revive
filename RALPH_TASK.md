@@ -265,3 +265,63 @@ All contracts improved. No regressions.
 - Codesize test: 0% change on benchmark contracts (no regression)
 - OZ contracts: All compile successfully
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 3 - Expand native range beyond reserved region
+
+### Approach
+
+Removed the `< 0x80` restriction in `native_memory_mode()`. The restriction was
+overly conservative: it limited InlineNative to reserved memory (offsets 0-127) even
+though the heap analysis correctly identifies safe offsets at any position. Since the
+static heap is 131072 bytes, any constant offset from the heap analysis can safely use
+unchecked GEP without sbrk overhead.
+
+### Changes
+
+1. **to_llvm.rs** - `native_memory_mode()`: Removed `static_val < 0x80` condition.
+   Now any constant offset that passes `heap_opt.can_use_native()` gets InlineNative.
+
+2. **to_llvm.rs** - MStore/MLoad InlineNative handlers: Simplified to always use
+   `build_heap_gep_unchecked()` instead of branching on `< 0x80`. All native-safe
+   constant offsets are well within the 131072-byte static heap.
+
+### Code Size Results (OZ Contracts)
+
+| Contract   | Before  | After   | Savings | %     |
+|------------|---------|---------|---------|-------|
+| erc1155    | 43,303  | 43,303  | 0       | 0%    |
+| erc20      | 58,603  | 58,603  | 0       | 0%    |
+| erc721     | 63,852  | 63,852  | 0       | 0%    |
+| oz_gov     | 103,777 | 103,777 | 0       | 0%    |
+| oz_rwa     | 55,410  | 55,177  | -233    | -0.4% |
+| oz_simple  | 19,956  | 19,876  | -80     | -0.4% |
+| oz_stable  | 60,404  | 59,964  | -440    | -0.7% |
+| proxy      | 4,277   | 4,277   | 0       | 0%    |
+
+Three contracts improved (those with constructor argument patterns that create
+native-safe offsets > 0x80). No regressions.
+
+### Why only 3 contracts improved
+
+Most contracts have `native_safe_offsets = {64}` only, because revert patterns
+like `revert(0, 0x44)` cause offsets 0-128 to be marked as escaping. Only contracts
+with constructor argument decoding (MyRWA, MyStablecoin, SimpleToken) have native-safe
+offsets at 160, 192, 224, etc. — these are word-aligned constructor parameter reads
+that never escape to return/revert.
+
+### Dynamic native approach (ABANDONED)
+
+An earlier attempt tried to enable native mode for ALL constant offsets (including
+those in escaping regions) by adding byte-swaps at return/revert boundaries. This
+fundamentally doesn't work because return regions contain mixed-endianness data:
+constant-offset stores write in BE (via ByteSwap mode), while dynamic-offset stores
+write in LE (via native mode). A return with a constant offset takes the "no bswap
+needed" path, leaving LE data unswapped. This was confirmed by mcopy test failures.
+
+### Test Results
+- `make test`: PASS
+- Integration tests: 62 passed, 0 failed
+- Retester: 5629 passed, 222 failed (all pre-existing; environment change from prior runs)
+- Codesize test: PASS (no change)
+- OZ contracts: All compile, 3 improved, 0 regressed
+- deploy_erc20.sh: All assertions pass

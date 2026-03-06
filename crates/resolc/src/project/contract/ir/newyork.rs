@@ -143,14 +143,17 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             {
                 let _ = writeln!(
                     file,
-                    "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={}",
+                    "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={:?}, native_offsets={:?}, dynamic_escapes={}, dynamic_accesses={}",
                     ir_object.name,
                     use_native_heap,
                     heap_opt.total_accesses,
                     heap_opt.unknown_accesses,
                     heap_opt.tainted_count,
                     heap_opt.escaping_count,
-                    heap_opt.native_safe_regions.len(),
+                    heap_opt.native_safe_regions,
+                    heap_opt.native_safe_offsets,
+                    heap_opt.has_dynamic_escapes,
+                    heap_opt.has_dynamic_accesses,
                 );
             }
         }

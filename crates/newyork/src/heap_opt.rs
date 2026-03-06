@@ -238,47 +238,45 @@ impl HeapAnalysis {
                 ret_length,
                 ..
             } => {
-                // Mark input region as escaping
-                if let Some(addr) = self.extract_static_offset(args_offset) {
-                    self.escaping_regions.insert(addr / 32 * 32);
-                } else {
-                    self.has_dynamic_escapes = true;
-                }
-                // Mark return region as escaping (will be written by external code)
-                if let Some(addr) = self.extract_static_offset(ret_offset) {
-                    self.escaping_regions.insert(addr / 32 * 32);
-                    self.tainted_regions.insert(addr / 32 * 32);
-                } else {
-                    self.has_dynamic_escapes = true;
-                }
-                let _ = (args_length, ret_length);
-            }
-
-            Statement::Revert { offset, .. } | Statement::Return { offset, .. } => {
-                // Return/revert data escapes to the caller
-                if let Some(addr) = self.extract_static_offset(offset) {
-                    self.escaping_regions.insert(addr / 32 * 32);
-                } else {
-                    self.has_dynamic_escapes = true;
-                }
-            }
-
-            Statement::Log { offset, .. } => {
-                // Log data escapes
-                if let Some(addr) = self.extract_static_offset(offset) {
-                    self.escaping_regions.insert(addr / 32 * 32);
-                } else {
-                    self.has_dynamic_escapes = true;
+                // Mark input region as escaping (full range)
+                self.mark_escaping_range(args_offset, args_length);
+                // Mark return region as escaping and tainted (written by external code)
+                let ret_start = self.extract_static_offset(ret_offset);
+                let ret_len = self.extract_static_offset(ret_length);
+                match (ret_start, ret_len) {
+                    (Some(addr), Some(size)) if size > 0 => {
+                        let end = addr + size;
+                        let mut word = addr / 32 * 32;
+                        while word < end {
+                            self.escaping_regions.insert(word);
+                            self.tainted_regions.insert(word);
+                            word += 32;
+                        }
+                    }
+                    (Some(addr), None) => {
+                        self.escaping_regions.insert(addr / 32 * 32);
+                        self.tainted_regions.insert(addr / 32 * 32);
+                        self.has_dynamic_escapes = true;
+                    }
+                    _ => {
+                        self.has_dynamic_escapes = true;
+                    }
                 }
             }
 
-            Statement::Create { offset, .. } => {
-                // Create data escapes
-                if let Some(addr) = self.extract_static_offset(offset) {
-                    self.escaping_regions.insert(addr / 32 * 32);
-                } else {
-                    self.has_dynamic_escapes = true;
-                }
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                // Return/revert data escapes to the caller — mark all covered regions
+                self.mark_escaping_range(offset, length);
+            }
+
+            Statement::Log { offset, length, .. } => {
+                // Log data escapes — mark all covered regions
+                self.mark_escaping_range(offset, length);
+            }
+
+            Statement::Create { offset, length, .. } => {
+                // Create data escapes — mark all covered regions
+                self.mark_escaping_range(offset, length);
             }
 
             // Recurse into control flow
@@ -379,6 +377,32 @@ impl HeapAnalysis {
         self.offset_values
             .get(&offset.id.0)
             .and_then(|info| info.static_value)
+    }
+
+    /// Marks all word-aligned memory regions in [offset, offset+length) as escaping.
+    fn mark_escaping_range(&mut self, offset: &Value, length: &Value) {
+        let start = self.extract_static_offset(offset);
+        let len = self.extract_static_offset(length);
+        match (start, len) {
+            (Some(_), Some(0)) => {
+                // Zero-length range: nothing escapes
+            }
+            (Some(addr), Some(size)) => {
+                let end = addr + size;
+                let mut word = addr / 32 * 32;
+                while word < end {
+                    self.escaping_regions.insert(word);
+                    word += 32;
+                }
+            }
+            (Some(addr), None) => {
+                self.escaping_regions.insert(addr / 32 * 32);
+                self.has_dynamic_escapes = true;
+            }
+            (None, _) => {
+                self.has_dynamic_escapes = true;
+            }
+        }
     }
 
     /// Analyzes an expression to extract offset information.
@@ -621,6 +645,10 @@ pub struct HeapOptResults {
     pub native_safe_regions: BTreeSet<u64>,
     /// Static offsets that are known to be safe for native access.
     pub native_safe_offsets: BTreeSet<u64>,
+    /// Mapping from Value ID to offset info (static value and alignment).
+    /// Used to look up offset information during code generation for
+    /// per-access native mode decisions.
+    offset_info: BTreeMap<u32, OffsetInfo>,
     /// Total number of memory accesses analyzed.
     pub total_accesses: usize,
     /// Number of accesses that have unknown/dynamic offsets.
@@ -658,6 +686,7 @@ impl HeapOptResults {
         HeapOptResults {
             native_safe_regions,
             native_safe_offsets,
+            offset_info: analysis.offset_values.clone(),
             total_accesses: analysis.memory_accesses.len(),
             unknown_accesses,
             tainted_count: analysis.tainted_regions().len(),
@@ -716,6 +745,11 @@ impl HeapOptResults {
     /// accesses can use native byte order, but we may need mixed mode.
     pub fn has_any_native(&self) -> bool {
         !self.native_safe_regions.is_empty()
+    }
+
+    /// Returns offset info for a value ID, if available.
+    pub fn get_offset_info(&self, value_id: u32) -> Option<&OffsetInfo> {
+        self.offset_info.get(&value_id)
     }
 }
 

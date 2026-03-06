@@ -50,6 +50,23 @@ impl From<anyhow::Error> for CodegenError {
 /// Result type for codegen operations.
 pub type Result<T> = std::result::Result<T, CodegenError>;
 
+/// Mode for native memory operations.
+///
+/// Controls how MLoad/MStore are lowered to LLVM IR:
+/// - `AllNative`: All memory accesses are native-safe; use native runtime functions
+/// - `InlineNative`: This specific access is native-safe; use inline native code
+///   (avoids needing native runtime function declarations in subobjects)
+/// - `ByteSwap`: Must use byte-swapping for EVM big-endian compatibility
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeMemoryMode {
+    /// All accesses safe. Use native runtime function calls.
+    AllNative,
+    /// This access is safe but others need byte-swapping. Use inline native code.
+    InlineNative,
+    /// Must byte-swap for EVM compatibility.
+    ByteSwap,
+}
+
 /// Functions with size_estimate at or above this threshold get NoInline when appropriate.
 /// This prevents code bloat from inlining large function bodies at multiple call sites.
 const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
@@ -301,17 +318,36 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(extended.as_basic_value_enum())
     }
 
-    /// Checks if a memory operation at the given offset can use native byte order.
+    /// Determines native memory mode for a specific memory access.
     ///
-    /// Only enables native memory when ALL accesses are safe (all_native mode).
-    /// This avoids defining both native and byte-swapping functions.
+    /// Returns one of three modes:
+    /// - `AllNative`: all accesses are safe, use native runtime function calls
+    /// - `InlineNative`: this specific access is safe, use inline native code
+    ///   (no runtime function declaration needed, bypasses subobject visibility)
+    /// - `ByteSwap`: must use byte-swapping for EVM compatibility
     ///
-    /// Per-access native mode is disabled: mixing native and byte-swapped
-    /// operations at different offsets is fragile and hard to verify correct
-    /// in all cases (aliasing, control flow, subobjects).
-    #[allow(unused_variables)]
-    fn can_use_native_memory(&self, offset: IntValue<'ctx>) -> bool {
-        self.heap_opt.all_native()
+    /// Uses the LLVM constant value directly (not the IR ValueId) to avoid
+    /// ValueId namespace collisions between outer objects and subobjects.
+    fn native_memory_mode(
+        &self,
+        offset_llvm: IntValue<'ctx>,
+        region: MemoryRegion,
+    ) -> NativeMemoryMode {
+        if self.heap_opt.all_native() {
+            return NativeMemoryMode::AllNative;
+        }
+        // The free memory pointer at offset 0x40 is a Solidity-internal convention:
+        // it's only read by mload(0x40) and written by mstore(0x40, new_fmp).
+        // Even when the 0x40 region "escapes" via revert/return data, the FMP value
+        // is always overwritten by ABI-encoded error data before the escape.
+        // We use the MemoryRegion annotation (set during Yul→IR translation) to
+        // distinguish FMP writes from data writes that happen to use offset 0x40.
+        if region == MemoryRegion::FreePointerSlot {
+            if let Some(0x40) = Self::try_extract_const_u64(offset_llvm) {
+                return NativeMemoryMode::InlineNative;
+            }
+        }
+        NativeMemoryMode::ByteSwap
     }
 
     /// Truncates a 256-bit offset to 32-bit for use with native memory operations.
@@ -1555,29 +1591,61 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::MStore {
                 offset,
                 value,
-                region: _,
+                region,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
 
-                if self.can_use_native_memory(offset_val) {
-                    let offset_xlen =
-                        self.truncate_offset_to_xlen(context, offset_val, "mstore_offset_xlen")?;
-                    revive_llvm_context::polkavm_evm_memory::store_native(
-                        context,
-                        offset_xlen,
-                        value_val,
-                    )?;
-                } else {
-                    let offset_val = self.narrow_offset_for_pointer(
-                        context,
-                        offset_val,
-                        offset.id,
-                        "mstore_offset_narrow",
-                    )?;
-                    revive_llvm_context::polkavm_evm_memory::store(context, offset_val, value_val)?;
+                match self.native_memory_mode(offset_val, *region) {
+                    NativeMemoryMode::AllNative => {
+                        let offset_xlen = self.truncate_offset_to_xlen(
+                            context,
+                            offset_val,
+                            "mstore_offset_xlen",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::store_native(
+                            context,
+                            offset_xlen,
+                            value_val,
+                        )?;
+                    }
+                    NativeMemoryMode::InlineNative => {
+                        // Use unchecked GEP for reserved region (< 0x80):
+                        // no sbrk needed since reserved memory is pre-allocated.
+                        let offset_xlen = self.truncate_offset_to_xlen(
+                            context,
+                            offset_val,
+                            "mstore_offset_xlen",
+                        )?;
+                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
+                        context
+                            .builder()
+                            .build_store(pointer.value, value_val)
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+                            .expect("Alignment is valid");
+                        // Update msize watermark: native stores bypass sbrk which
+                        // normally tracks the heap size for msize().
+                        let min_size = context
+                            .xlen_type()
+                            .const_int(0x40 + revive_common::BYTE_LENGTH_WORD as u64, false);
+                        context
+                            .ensure_heap_size(min_size)
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
+                    NativeMemoryMode::ByteSwap => {
+                        let offset_val = self.narrow_offset_for_pointer(
+                            context,
+                            offset_val,
+                            offset.id,
+                            "mstore_offset_narrow",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::store(
+                            context, offset_val, value_val,
+                        )?;
+                    }
                 }
             }
 
@@ -3225,18 +3293,33 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 
-                let loaded = if self.can_use_native_memory(offset_val) {
-                    let offset_xlen =
-                        self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                    revive_llvm_context::polkavm_evm_memory::load_native(context, offset_xlen)?
-                } else {
-                    let offset_val = self.narrow_offset_for_pointer(
-                        context,
-                        offset_val,
-                        offset.id,
-                        "mload_offset_narrow",
-                    )?;
-                    revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                let loaded = match self.native_memory_mode(offset_val, *region) {
+                    NativeMemoryMode::AllNative => {
+                        let offset_xlen =
+                            self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
+                        revive_llvm_context::polkavm_evm_memory::load_native(context, offset_xlen)?
+                    }
+                    NativeMemoryMode::InlineNative => {
+                        // Use unchecked GEP for reserved region (< 0x80):
+                        // no sbrk needed since reserved memory is pre-allocated.
+                        let offset_xlen =
+                            self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
+                        let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
+                        context
+                            .builder()
+                            .build_load(context.word_type(), pointer.value, "native_load")
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                            .as_basic_value_enum()
+                    }
+                    NativeMemoryMode::ByteSwap => {
+                        let offset_val = self.narrow_offset_for_pointer(
+                            context,
+                            offset_val,
+                            offset.id,
+                            "mload_offset_narrow",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                    }
                 };
                 // The free memory pointer (mload(64)) is bounded by the heap size
                 // (enforced by sbrk). Use a tight range proof: compute the minimum

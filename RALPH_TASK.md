@@ -218,9 +218,29 @@ function call overhead.
 
 All contracts improved. No regressions.
 
+### Heap Analysis Correctness Fixes
+
+During testing, three additional heap analysis bugs were found and fixed:
+
+1. **CodeCopy/DataCopy/CallDataCopy/ExtCodeCopy destinations must be tainted**: These
+   operations write big-endian ABI-encoded data into memory. If a subsequent mload at
+   the same offset uses native mode, it reads LE data but expects BE. Fixed by tainting
+   the destination region in the heap analysis.
+
+2. **MCopy must taint full source and destination ranges**: MCopy copies raw bytes without
+   byte-swapping across multiple words. The original analysis only tainted the start word
+   of the destination. Fixed by tainting all word-aligned regions in both src and dest
+   ranges based on the copy length.
+
+3. **InlineNative restricted to reserved region (< 0x80)**: Dynamic offsets (>= 0x80) need
+   `build_heap_gep` which calls sbrk (5 basic blocks of bounds checking). This adds MORE
+   code than byte-swapping saves, causing regressions on oz_rwa (+0.03%) and oz_simple
+   (+1.6%). Restricting to reserved offsets (which use unchecked GEP) eliminates regressions.
+
 ### Test Results
 - `make test`: PASS (format, clippy, all workspace tests)
 - Integration tests: 62 passed, 0 failed
-- Retester: 5652 passed, 199 failed (2 unique: pre-existing unbalanced_gas_limit.sol crash; rest are pre-existing revert.sol OutOfGas)
+- Retester: 5652 passed, 199 failed (1 unique: pre-existing unbalanced_gas_limit.sol crash; rest are pre-existing revert.sol OutOfGas)
 - Codesize test: 0% change on benchmark contracts (no regression)
 - OZ contracts: All compile successfully
+- deploy_erc20.sh: All assertions pass

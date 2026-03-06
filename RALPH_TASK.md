@@ -237,6 +237,27 @@ During testing, three additional heap analysis bugs were found and fixed:
    code than byte-swapping saves, causing regressions on oz_rwa (+0.03%) and oz_simple
    (+1.6%). Restricting to reserved offsets (which use unchecked GEP) eliminates regressions.
 
+### Msize Watermark Skip
+
+Added `has_msize()` check to skip the `ensure_heap_size` call when the contract doesn't
+use `msize()` (which is most contracts). This eliminates a compare + select + store per
+FMP write, giving an additional 0.1-0.5% improvement.
+
+### Final Code Size Results (OZ Contracts)
+
+| Contract   | Baseline | Optimized | Savings | %    |
+|------------|----------|-----------|---------|------|
+| erc1155    | 43,880   | 43,303    | -577    | -1.3% |
+| erc20      | 59,724   | 58,603    | -1,121  | -1.9% |
+| erc721     | 64,946   | 63,852    | -1,094  | -1.7% |
+| oz_gov     | 106,417  | 103,777   | -2,640  | -2.5% |
+| oz_rwa     | 56,936   | 55,410    | -1,526  | -2.7% |
+| oz_simple  | 20,109   | 19,956    | -153    | -0.8% |
+| oz_stable  | 61,801   | 60,404    | -1,397  | -2.3% |
+| proxy      | 4,424    | 4,277     | -147    | -3.3% |
+
+All contracts improved. No regressions.
+
 ### Test Results
 - `make test`: PASS (format, clippy, all workspace tests)
 - Integration tests: 62 passed, 0 failed

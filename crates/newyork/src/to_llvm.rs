@@ -183,10 +183,6 @@ pub struct LlvmCodegen<'ctx> {
     /// Uses unchecked GEP + 4× bswap.i64 + store. Avoids inlining the bswap
     /// sequence at every call site for variable values.
     store_bswap_fn: Option<inkwell::values::FunctionValue<'ctx>>,
-    /// Cached outlined load_bswap function: i256(i32 offset).
-    /// Uses unchecked GEP + 4× load + bswap.i64 + combine.
-    #[allow(dead_code)]
-    load_bswap_fn: Option<inkwell::values::FunctionValue<'ctx>>,
     /// Cached outlined callvalue check + revert function.
     /// Checks if callvalue is nonzero and reverts with empty data if so.
     callvalue_check_fn: Option<inkwell::values::FunctionValue<'ctx>>,
@@ -225,7 +221,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             custom_error_revert_fns: BTreeMap::new(),
             custom_error_revert_counts: BTreeMap::new(),
             store_bswap_fn: None,
-            load_bswap_fn: None,
+
             callvalue_check_fn: None,
         }
     }
@@ -264,7 +260,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             custom_error_revert_fns: BTreeMap::new(),
             custom_error_revert_counts: BTreeMap::new(),
             store_bswap_fn: None,
-            load_bswap_fn: None,
+
             callvalue_check_fn: None,
         }
     }
@@ -1369,54 +1365,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(func)
     }
 
-    /// Gets or creates an outlined load_bswap function: i256(i32 offset).
-    /// Uses unchecked heap GEP + 4× load + bswap.i64 + combine.
-    fn get_or_create_load_bswap_fn(
-        &mut self,
-        context: &mut PolkaVMContext<'ctx>,
-    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
-        if let Some(func) = self.load_bswap_fn {
-            return Ok(func);
-        }
-
-        let xlen_type = context.xlen_type();
-        let word_type = context.word_type();
-        let fn_type = word_type.fn_type(&[xlen_type.into()], false);
-        let func = context.module().add_function(
-            "__revive_load_bswap",
-            fn_type,
-            Some(inkwell::module::Linkage::Internal),
-        );
-
-        let noinline_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
-        let minsize_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
-        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
-
-        let saved_block = context.basic_block();
-        let entry_block = context.llvm().append_basic_block(func, "entry");
-        context.set_basic_block(entry_block);
-
-        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
-
-        let result =
-            revive_llvm_context::polkavm_evm_memory::load_bswap_unchecked(context, offset_param)
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
-        context
-            .builder()
-            .build_return(Some(&result))
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
-        context.set_basic_block(saved_block);
-        self.load_bswap_fn = Some(func);
-        Ok(func)
-    }
-
     /// Checks if a region is a simple `revert(0, 0)` with no other side effects.
     /// The region may contain Let bindings (for intermediate zero literals)
     /// followed by a Revert statement.
@@ -1536,84 +1484,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Emit a deposit_event call with unchecked heap GEP, bypassing sbrk.
-    /// The offset/length should already be xlen-typed (from narrow_offset_for_pointer).
-    fn emit_log_unchecked(
-        &self,
-        context: &mut PolkaVMContext<'ctx>,
-        offset_xlen: IntValue<'ctx>,
-        length_xlen: IntValue<'ctx>,
-        topic_vals: &[BasicValueEnum<'ctx>],
-    ) -> Result<()> {
-        let offset_xlen = context
-            .safe_truncate_int_to_xlen(offset_xlen)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        let length_xlen = context
-            .safe_truncate_int_to_xlen(length_xlen)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
-        // Compute data pointer via unchecked GEP
-        let heap_pointer = context
-            .build_heap_gep_unchecked(offset_xlen)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        let data_ptr = context
-            .builder()
-            .build_ptr_to_int(heap_pointer.value, context.xlen_type(), "log_data_ptr")
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
-        let num_topics = topic_vals.len();
-        if num_topics == 0 {
-            context.build_runtime_call(
-                "deposit_event",
-                &[
-                    context.xlen_type().const_zero().into(),
-                    context.xlen_type().const_zero().into(),
-                    data_ptr.into(),
-                    length_xlen.into(),
-                ],
-            );
-        } else {
-            // Create topics buffer and bswap each topic into it
-            let topics_buffer_size = (num_topics * 32) as u32;
-            let topics_buffer = context.build_alloca_at_entry(
-                context.byte_type().array_type(topics_buffer_size),
-                "topics_buf",
-            );
-            for (i, topic) in topic_vals.iter().enumerate() {
-                let topic_offset = context.xlen_type().const_int((i * 32) as u64, false);
-                let topic_ptr = context.build_gep(
-                    topics_buffer,
-                    &[context.xlen_type().const_zero(), topic_offset],
-                    context.byte_type(),
-                    &format!("topic_{i}_gep"),
-                );
-                let bswapped = context
-                    .build_byte_swap(*topic)
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                context
-                    .build_store(topic_ptr, bswapped)
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-            }
-            let topics_ptr = context
-                .builder()
-                .build_ptr_to_int(topics_buffer.value, context.xlen_type(), "log_topics_ptr")
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-            context.build_runtime_call(
-                "deposit_event",
-                &[
-                    topics_ptr.into(),
-                    context
-                        .xlen_type()
-                        .const_int(num_topics as u64, false)
-                        .into(),
-                    data_ptr.into(),
-                    length_xlen.into(),
-                ],
-            );
-        }
-        Ok(())
-    }
-
     /// Gets or creates a shared basic block for a `return(offset, length)` pattern
     /// where both offset and length are constants. This deduplicates identical return
     /// sequences (e.g., `return(0x80, 0x20)` appearing 7 times in ERC20 runtime).
@@ -1638,14 +1508,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let return_block = context.append_basic_block(&block_name);
         context.set_basic_block(return_block);
 
-        // Emit the return(offset, length) exit sequence
-        let offset_val = context.word_const(const_offset);
-        let length_val = context.word_const(const_length);
-        revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let is_deploy = matches!(
+            context.code_type(),
+            Some(revive_llvm_context::PolkaVMCodeType::Deploy)
+        );
 
-        // Ensure the block has a terminator. The seal_return call is noreturn
-        // but LLVM needs an explicit unreachable terminator in the basic block.
+        if !self.has_msize && !is_deploy {
+            // Bypass sbrk: use unchecked heap GEP for the return data pointer.
+            // Constant offsets are within the 131072-byte static heap, so sbrk
+            // bounds checking is unnecessary. This eliminates ~5 basic blocks
+            // of sbrk overhead per shared return block.
+            let offset_xlen = context.xlen_type().const_int(const_offset, false);
+            let length_xlen = context.xlen_type().const_int(const_length, false);
+            self.emit_exit_unchecked(context, offset_xlen, length_xlen, false)?;
+        } else {
+            let offset_val = context.word_const(const_offset);
+            let length_val = context.word_const(const_length);
+            revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        }
+
+        // Ensure the block has a terminator.
         context.build_unreachable();
 
         // Restore insertion point
@@ -2545,41 +2428,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                     NativeMemoryMode::ByteSwap => {
-                        if !self.has_msize {
-                            // No msize: use outlined store_bswap with unchecked GEP.
-                            // This avoids __sbrk_internal overhead (heap_size watermark
-                            // update). Use safe_truncate for the overflow check.
-                            let offset_narrow = self.narrow_offset_for_pointer(
-                                context,
-                                offset_val,
-                                offset.id,
-                                "mstore_offset_narrow",
-                            )?;
-                            let offset_xlen = context
-                                .safe_truncate_int_to_xlen(offset_narrow)
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                            let func = self.get_or_create_store_bswap_fn(context)?;
-                            let value_word =
-                                self.ensure_word_type(context, value_val, "store_bswap_val")?;
-                            context
-                                .builder()
-                                .build_call(
-                                    func,
-                                    &[offset_xlen.into(), value_word.into()],
-                                    "store_bswap",
-                                )
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        } else {
-                            let offset_val = self.narrow_offset_for_pointer(
-                                context,
-                                offset_val,
-                                offset.id,
-                                "mstore_offset_narrow",
-                            )?;
-                            revive_llvm_context::polkavm_evm_memory::store(
-                                context, offset_val, value_val,
-                            )?;
-                        }
+                        // Dynamic offsets need sbrk bounds checking since the offset
+                        // could exceed the heap (e.g. mstore(0xFFFFFFFF, v)).
+                        let offset_val = self.narrow_offset_for_pointer(
+                            context,
+                            offset_val,
+                            offset.id,
+                            "mstore_offset_narrow",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::store(
+                            context, offset_val, value_val,
+                        )?;
                     }
                 }
             }
@@ -3390,28 +3249,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         return Ok(());
                     }
                 }
-                if !self.has_msize {
-                    // No msize: bypass sbrk overhead by using unchecked heap GEP.
-                    let offset_narrow = self.narrow_offset_for_pointer(
-                        context,
-                        offset_val,
-                        offset.id,
-                        "revert_offset_narrow",
-                    )?;
-                    let length_narrow = self.narrow_offset_for_pointer(
-                        context,
-                        length_val,
-                        length.id,
-                        "revert_length_narrow",
-                    )?;
-                    let offset_xlen = context
-                        .safe_truncate_int_to_xlen(offset_narrow)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    let length_xlen = context
-                        .safe_truncate_int_to_xlen(length_narrow)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    self.emit_exit_unchecked(context, offset_xlen, length_xlen, true)?;
-                } else {
+                // Dynamic offsets need sbrk bounds checking since the offset
+                // could be huge (e.g. revert(0xFFFFFFFF, 1)). Only constant-offset
+                // patterns are handled by the unchecked dedup path above.
+                {
                     let offset_val = self.ensure_word_type(context, offset_val, "revert_offset")?;
                     let length_val = self.ensure_word_type(context, length_val, "revert_length")?;
                     revive_llvm_context::polkavm_evm_return::revert(
@@ -3438,32 +3279,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     return Ok(());
                 }
 
-                let is_deploy = matches!(
-                    context.code_type(),
-                    Some(revive_llvm_context::PolkaVMCodeType::Deploy)
-                );
-                if !self.has_msize && !is_deploy {
-                    // No msize in runtime code: bypass sbrk overhead.
-                    let offset_narrow = self.narrow_offset_for_pointer(
-                        context,
-                        offset_val,
-                        offset.id,
-                        "return_offset_narrow",
-                    )?;
-                    let length_narrow = self.narrow_offset_for_pointer(
-                        context,
-                        length_val,
-                        length.id,
-                        "return_length_narrow",
-                    )?;
-                    let offset_xlen = context
-                        .safe_truncate_int_to_xlen(offset_narrow)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    let length_xlen = context
-                        .safe_truncate_int_to_xlen(length_narrow)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    self.emit_exit_unchecked(context, offset_xlen, length_xlen, false)?;
-                } else {
+                // Dynamic offsets need sbrk bounds checking since the offset
+                // could be huge. Only constant-offset patterns are handled by
+                // the unchecked dedup path above.
+                {
                     let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
                     let length_val = self.ensure_word_type(context, length_val, "return_length")?;
                     revive_llvm_context::polkavm_evm_return::r#return(
@@ -3817,11 +3636,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     })
                     .collect::<Result<_>>()?;
 
-                if !self.has_msize {
-                    // No msize: emit deposit_event directly with unchecked GEP,
-                    // bypassing the __revive_log_N runtime functions and sbrk.
-                    self.emit_log_unchecked(context, offset_val, length_val, &topic_vals)?;
-                } else {
+                {
+                    // Use sbrk-based log functions for bounds checking (dynamic
+                    // offsets could exceed the heap).
                     match topic_vals.len() {
                         0 => revive_llvm_context::polkavm_evm_event::log::<0>(
                             context,
@@ -4483,35 +4300,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?
                     }
                     NativeMemoryMode::ByteSwap => {
-                        if !self.has_msize {
-                            // No msize: use outlined load_bswap with unchecked GEP.
-                            // Use safe_truncate for the overflow check.
-                            let offset_narrow = self.narrow_offset_for_pointer(
-                                context,
-                                offset_val,
-                                offset.id,
-                                "mload_offset_narrow",
-                            )?;
-                            let offset_xlen = context
-                                .safe_truncate_int_to_xlen(offset_narrow)
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                            let func = self.get_or_create_load_bswap_fn(context)?;
-                            context
-                                .builder()
-                                .build_call(func, &[offset_xlen.into()], "load_bswap")
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-                                .try_as_basic_value()
-                                .basic()
-                                .expect("load_bswap should return a value")
-                        } else {
-                            let offset_val = self.narrow_offset_for_pointer(
-                                context,
-                                offset_val,
-                                offset.id,
-                                "mload_offset_narrow",
-                            )?;
-                            revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
-                        }
+                        // Dynamic offsets need sbrk bounds checking since the offset
+                        // could exceed the heap (e.g. mload(0xFFFFFFFF)).
+                        let offset_val = self.narrow_offset_for_pointer(
+                            context,
+                            offset_val,
+                            offset.id,
+                            "mload_offset_narrow",
+                        )?;
+                        revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
                     }
                 };
                 // The free memory pointer (mload(64)) is bounded by the heap size

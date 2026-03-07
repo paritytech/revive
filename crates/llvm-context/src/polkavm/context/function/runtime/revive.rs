@@ -352,7 +352,10 @@ impl RuntimeFunction for RevertEmpty {
         context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
         let zero = context.xlen_type().const_zero();
-        let heap_pointer = context.build_heap_gep(zero, zero)?;
+        // Use unchecked GEP: revert data at offset 0 is always within the
+        // static heap. The sbrk overhead is unnecessary since the data was
+        // already written to memory before this function is called.
+        let heap_pointer = context.build_heap_gep_unchecked(zero)?;
         let offset_pointer = context.builder().build_ptr_to_int(
             heap_pointer.value,
             context.xlen_type(),

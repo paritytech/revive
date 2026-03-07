@@ -890,3 +890,66 @@ for the governor's specific pattern mix.
 - Codesize test: PASS
 - OZ contracts: All compile, 7/8 improved, 1 minor regression (+0.1%)
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 12: Fix unsound dynamic sbrk elimination + constant-offset sbrk bypass
+
+### Problem
+
+Iterations 10-11 introduced dynamic-offset sbrk elimination for non-msize contracts.
+This was unsound: offsets like `mstore(0xFFFFFFAA, v)` would bypass sbrk bounds
+checking and access memory past the 131072-byte heap via unchecked GEP. This caused
+9 retester failures in mstore.sol, mload.sol, and revert.sol tests that use huge
+offsets/lengths to verify OOM behavior.
+
+### Fixes
+
+1. **Reverted dynamic ByteSwap mstore/mload** to use sbrk (bounds checking needed
+   for arbitrary dynamic offsets that could exceed heap).
+
+2. **Reverted dynamic return/revert** to use sbrk (same reason - `revert(0xFFFFFFFF, 1)`
+   needs to trap, not read past the heap).
+
+3. **Reverted dynamic log** to use sbrk-based `__revive_log_N` functions.
+
+4. **Removed dead code**: `get_or_create_load_bswap_fn`, `emit_log_unchecked`,
+   `load_bswap_fn` field - all unused after reverting dynamic sbrk elimination.
+
+### New Safe Optimizations
+
+1. **`__revive_revert_0` unchecked GEP**: Changed `build_heap_gep(0, 0)` to
+   `build_heap_gep_unchecked(0)` in the `__revive_revert_0` runtime function.
+   Safe because offset=0 and length=0 are always within the heap.
+
+2. **Constant return blocks unchecked GEP**: For non-msize, non-deploy contracts,
+   shared return blocks (e.g., `return(0x80, 0x20)`) now use `emit_exit_unchecked`
+   instead of `revive_llvm_context::polkavm_evm_return::r#return`. Safe because
+   constant offsets/lengths are provably within the 131072-byte heap.
+
+### Pass Pipeline Iteration (NOT EFFECTIVE)
+
+Attempted Gap 1 from PASS_PIPELINE.md: outer iteration loop around simplify +
+guard_narrow. Result: zero change on all contracts. Guard narrowing patterns are
+already fully exploited by the subsequent type inference pass. The AND masks from
+guard narrowing don't create new constant folding or DCE opportunities for simplify.
+
+### Results (vs pre-optimization baseline)
+
+| Contract   | Baseline | Current | Savings  | %      |
+|------------|----------|---------|----------|--------|
+| erc1155    | 43,880   | 40,900  | -2,980   | -6.8%  |
+| erc20      | 59,724   | 54,669  | -5,055   | -8.5%  |
+| erc721     | 64,946   | 60,156  | -4,790   | -7.4%  |
+| oz_gov     | 106,417  | 101,121 | -5,296   | -5.0%  |
+| oz_rwa     | 56,936   | 52,283  | -4,653   | -8.2%  |
+| oz_simple  | 20,109   | 18,485  | -1,624   | -8.1%  |
+| oz_stable  | 61,801   | 55,927  | -5,874   | -9.5%  |
+| proxy      | 4,424    | 4,096   | -328     | -7.4%  |
+| **TOTAL**  | 418,237  | 387,637 | -30,600  | **-7.3%** |
+
+### Test Results
+- `make test`: PASS (format, clippy, doc, all workspace tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed (was 9 failures before fix)
+- Codesize test: PASS
+- OZ contracts: All compile, all improved
+- deploy_erc20.sh: All assertions pass

@@ -479,6 +479,54 @@ the pre-heap-optimization baseline.
 - Retester: 5691 passed, 160 failed
   - 150 revert.sol OutOfGas (matches baseline)
   - 2 unbalanced_gas_limit.sol (pre-existing crash)
-  - 8 non-revert M3-only failures (pre-existing newyork codegen issues)
+  - 8 non-revert M3-only failures (FMP store/load mode mismatch — fixed in Iteration 6)
 - Codesize test: PASS
 - OZ contracts: All compile, deploy_erc20.sh all assertions pass
+
+## Iteration 6: Fix FMP store/load mode mismatch for M3-optimized Yul
+
+### Root Cause
+
+When solc's M3 optimizer turns literal offsets into variables
+(e.g., `let size := 64; mload(size)`), the LLVM IR value for the offset
+is not a constant. `native_memory_mode()` in `to_llvm.rs` uses
+`try_extract_const_u64()` on the LLVM IntValue — which returns `None`
+for variables, causing `ByteSwap` mode. Meanwhile, literal `mstore(64, x)`
+gets `InlineNative` (little-endian). The mismatch: store writes LE,
+load byte-swaps → garbage FMP → panic 0x41 (memory allocation error).
+
+### Bugs Fixed
+
+1. **Variable-accessed offset mismatch**: Added `variable_accessed_offsets`
+   tracking to the heap analysis. When a static offset (e.g., 0x40) is accessed
+   through both literal and non-literal expressions, native mode is disabled
+   for that offset to ensure consistent byte order across all accesses.
+
+2. **`from_literal` tracking in OffsetInfo**: Added `from_literal: bool` to
+   `OffsetInfo` to distinguish literal origins from variable origins. `Expr::Literal`
+   sets `from_literal = true`; `Expr::Var` and `Expr::Binary` set `from_literal = false`.
+
+3. **Avoided ValueId namespace collision**: Initial approach tried to look up
+   newyork IR offset info via `ValueId` in `native_memory_mode()`. This caused
+   87 regressions due to ValueId namespace collisions between outer objects and
+   subobjects. Reverted to LLVM-only constant detection with analysis-side tracking.
+
+### Changes
+
+- **heap_opt.rs**: Added `variable_accessed_offsets` set, `from_literal` field
+  on `OffsetInfo`, `track_variable_access()` method called from MStore/MLoad handlers.
+  Updated `can_use_native()` and `fmp_native_safe()` to reject variable-accessed offsets.
+  Removed unused `offset_info` map and `get_offset_info()` method from `HeapOptResults`.
+- **to_llvm.rs**: Updated comment on `native_memory_mode()` explaining the
+  analysis-based approach.
+
+### Test Results
+- `make test`: PASS
+- Integration tests: 62 passed, 0 failed
+- Retester: 5692 passed, 159 failed
+  - 150 revert.sol OutOfGas (matches baseline)
+  - 2 unbalanced_gas_limit.sol (pre-existing crash)
+  - 7 flaky concurrency failures (all pass when run individually)
+  - **0 new failures**
+- Codesize test: PASS (ERC20 improved -84 bytes)
+- OZ contracts: All compile

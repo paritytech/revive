@@ -338,24 +338,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ///
     /// Uses the LLVM constant value directly (not the IR ValueId) to avoid
     /// ValueId namespace collisions between outer objects and subobjects.
-    fn native_memory_mode(
-        &self,
-        offset_llvm: IntValue<'ctx>,
-        region: MemoryRegion,
-    ) -> NativeMemoryMode {
+    fn native_memory_mode(&self, offset_llvm: IntValue<'ctx>) -> NativeMemoryMode {
         if self.heap_opt.all_native() {
             return NativeMemoryMode::AllNative;
         }
         if let Some(static_val) = Self::try_extract_const_u64(offset_llvm) {
-            // The free memory pointer at offset 0x40 is a Solidity-internal convention:
-            // it's only read by mload(0x40) and written by mstore(0x40, new_fmp).
-            // Even when the 0x40 region "escapes" via revert/return data, the FMP value
-            // is always overwritten by ABI-encoded error data before the escape.
-            // We use the MemoryRegion annotation (set during Yul→IR translation) to
-            // distinguish FMP writes from data writes that happen to use offset 0x40.
-            if static_val == 0x40 && region == MemoryRegion::FreePointerSlot {
-                return NativeMemoryMode::InlineNative;
-            }
             // For any constant offset that the heap analysis identifies as native-safe
             // (word-aligned, not tainted, not escaping), use InlineNative.
             // The heap is statically allocated at 131072 bytes, so any constant offset
@@ -363,6 +350,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
             // This enables LLVM's GVN to do store-to-load forwarding on these accesses,
             // potentially eliminating the heap access entirely.
             if self.heap_opt.can_use_native(static_val) {
+                return NativeMemoryMode::InlineNative;
+            }
+            // The free memory pointer at offset 0x40 is a Solidity-internal convention.
+            // Even when 0x40 appears in escaping regions (from revert(0, 0x44)), the FMP
+            // value gets overwritten by ABI-encoded error data before the escape.
+            // This optimization is ONLY safe when no `return` statement covers 0x40 —
+            // inline assembly like `return(0, 96)` would return the native FMP value.
+            if static_val == 0x40 && self.heap_opt.fmp_native_safe() {
                 return NativeMemoryMode::InlineNative;
             }
             // For constant offsets that need byte-swapping (escaping/tainted), use
@@ -1616,14 +1611,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::MStore {
                 offset,
                 value,
-                region,
+                region: _,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
                 // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
 
-                match self.native_memory_mode(offset_val, *region) {
+                match self.native_memory_mode(offset_val) {
                     NativeMemoryMode::AllNative => {
                         let offset_xlen = self.truncate_offset_to_xlen(
                             context,
@@ -3346,10 +3341,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
-                    || Self::is_free_pointer_load(offset_val);
+                // Only apply FMP range proof when the heap analysis confirms 0x40
+                // is native-safe (i.e., only used as FMP, not user data in inline asm).
+                let is_free_pointer = (matches!(region, MemoryRegion::FreePointerSlot)
+                    || Self::is_free_pointer_load(offset_val))
+                    && (self.heap_opt.can_use_native(0x40) || self.heap_opt.fmp_native_safe());
 
-                let loaded = match self.native_memory_mode(offset_val, *region) {
+                let loaded = match self.native_memory_mode(offset_val) {
                     NativeMemoryMode::AllNative => {
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;

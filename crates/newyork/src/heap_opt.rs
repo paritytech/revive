@@ -87,10 +87,20 @@ pub struct HeapAnalysis {
     /// has a dynamic (non-static) offset. When true, we cannot determine which regions
     /// escape and must conservatively disable native-only mode.
     has_dynamic_escapes: bool,
+    /// The minimum static start offset of any dynamic-length escape.
+    /// When a return/revert/call has a known start but unknown length, all memory
+    /// from this offset onwards could potentially escape.
+    /// `None` means no such escape exists, or the start offset is also dynamic.
+    min_dynamic_escape_start: Option<u64>,
     /// Whether any memory access (mstore, mstore8, mcopy, mload) has a dynamic
     /// (non-static) offset that we cannot track. When true, some accesses are invisible
     /// to the analysis.
     has_dynamic_accesses: bool,
+    /// Whether any `return` statement (not revert) covers the FMP slot at 0x40.
+    /// When true, user data stored at 0x40 could escape via return, making the
+    /// FMP native-mode optimization unsafe. Normal Solidity returns from free_ptr
+    /// (>= 0x80) so this is only set for inline assembly patterns like `return(0, 96)`.
+    has_return_covering_fmp: bool,
 }
 
 /// Information about a value used as a memory offset.
@@ -120,18 +130,21 @@ impl HeapAnalysis {
             tainted_regions: BTreeSet::new(),
             escaping_regions: BTreeSet::new(),
             has_dynamic_escapes: false,
+            min_dynamic_escape_start: None,
             has_dynamic_accesses: false,
+            has_return_covering_fmp: false,
         }
     }
 
     /// Runs heap analysis on an object.
     pub fn analyze_object(&mut self, object: &Object) {
-        // Analyze main code block
-        self.analyze_block(&object.code);
+        // Analyze main code block (constructor — its return(0, size) returns bytecode,
+        // not user data, so we don't track FMP return coverage here)
+        self.analyze_block(&object.code, false);
 
-        // Analyze all functions
+        // Analyze all functions (track FMP return coverage here)
         for function in object.functions.values() {
-            self.analyze_block(&function.body);
+            self.analyze_block(&function.body, true);
         }
 
         // Recursively handle subobjects
@@ -144,21 +157,21 @@ impl HeapAnalysis {
     }
 
     /// Analyzes a block for memory access patterns.
-    fn analyze_block(&mut self, block: &Block) {
+    fn analyze_block(&mut self, block: &Block, in_function: bool) {
         for stmt in &block.statements {
-            self.analyze_statement(stmt);
+            self.analyze_statement(stmt, in_function);
         }
     }
 
     /// Analyzes a region for memory access patterns.
-    fn analyze_region(&mut self, region: &Region) {
+    fn analyze_region(&mut self, region: &Region, in_function: bool) {
         for stmt in &region.statements {
-            self.analyze_statement(stmt);
+            self.analyze_statement(stmt, in_function);
         }
     }
 
     /// Analyzes a statement for memory access patterns.
-    fn analyze_statement(&mut self, stmt: &Statement) {
+    fn analyze_statement(&mut self, stmt: &Statement, in_function: bool) {
         match stmt {
             Statement::Let { bindings, value } => {
                 // Track offset information for bindings
@@ -279,9 +292,45 @@ impl HeapAnalysis {
                 }
             }
 
-            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                // Return/revert data escapes to the caller — mark all covered regions
+            Statement::Revert { offset, length } => {
+                // Revert data escapes to the caller — mark all covered regions
                 self.mark_escaping_range(offset, length);
+            }
+
+            Statement::Return { offset, length } => {
+                // Return data escapes to the caller — mark all covered regions
+                self.mark_escaping_range(offset, length);
+                // Check if this return covers the FMP slot at 0x40.
+                // Only check in function bodies — top-level constructor code always
+                // has return(0, bytecodeSize) which returns bytecode, not user data
+                // (codecopy overwrites 0x40 before the return).
+                if in_function {
+                    let start = self.extract_static_offset(offset);
+                    let len = self.extract_static_offset(length);
+                    match (start, len) {
+                        (Some(s), Some(l)) => {
+                            // Static return: check if it covers the FMP slot
+                            if s <= 0x40 && s + l >= 0x60 {
+                                self.has_return_covering_fmp = true;
+                            }
+                        }
+                        (Some(s), None) => {
+                            // Known start, dynamic length: the return could cover
+                            // any offset from s onwards. Track the minimum start
+                            // so we can block native mode for affected offsets.
+                            let word_start = s / 32 * 32;
+                            self.min_dynamic_escape_start = Some(
+                                self.min_dynamic_escape_start
+                                    .map_or(word_start, |prev| prev.min(word_start)),
+                            );
+                        }
+                        _ => {
+                            // Fully dynamic return (e.g., return(mload(0x40), size)):
+                            // Solidity convention means start >= 0x80, so scratch
+                            // memory and FMP slot are safe.
+                        }
+                    }
+                }
             }
 
             Statement::Log { offset, length, .. } => {
@@ -300,28 +349,28 @@ impl HeapAnalysis {
                 else_region,
                 ..
             } => {
-                self.analyze_region(then_region);
+                self.analyze_region(then_region, in_function);
                 if let Some(else_region) = else_region {
-                    self.analyze_region(else_region);
+                    self.analyze_region(else_region, in_function);
                 }
             }
 
             Statement::Switch { cases, default, .. } => {
                 for case in cases {
-                    self.analyze_region(&case.body);
+                    self.analyze_region(&case.body, in_function);
                 }
                 if let Some(default) = default {
-                    self.analyze_region(default);
+                    self.analyze_region(default, in_function);
                 }
             }
 
             Statement::For { body, post, .. } => {
-                self.analyze_region(body);
-                self.analyze_region(post);
+                self.analyze_region(body, in_function);
+                self.analyze_region(post, in_function);
             }
 
             Statement::Block(region) => {
-                self.analyze_region(region);
+                self.analyze_region(region, in_function);
             }
 
             Statement::Expr(expr) => {
@@ -549,11 +598,14 @@ impl HeapAnalysis {
                     self.has_dynamic_accesses = true;
                 }
             }
-            Expr::Keccak256 { offset, .. } => {
+            Expr::Keccak256 { offset, length } => {
                 let _ = self.classify_access(offset);
                 if self.extract_static_offset(offset).is_none() {
                     self.has_dynamic_accesses = true;
                 }
+                // Keccak256 reads raw bytes from memory, so the memory region
+                // must be in big-endian format. Mark it as escaping.
+                self.mark_escaping_range(offset, length);
             }
             Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => {
                 // Keccak256Pair/Single use scratch memory internally; nothing to classify
@@ -597,9 +649,19 @@ impl HeapAnalysis {
         self.has_dynamic_escapes
     }
 
+    /// Returns the minimum start offset of any dynamic-length escape.
+    pub fn min_dynamic_escape_start(&self) -> Option<u64> {
+        self.min_dynamic_escape_start
+    }
+
     /// Returns whether any memory access has a dynamic (non-static) offset.
     pub fn has_dynamic_accesses(&self) -> bool {
         self.has_dynamic_accesses
+    }
+
+    /// Returns whether any `return` statement covers the FMP slot at 0x40.
+    pub fn has_return_covering_fmp(&self) -> bool {
+        self.has_return_covering_fmp
     }
 
     /// Returns statistics about the analysis.
@@ -675,8 +737,13 @@ pub struct HeapOptResults {
     pub escaping_count: usize,
     /// Whether any escaping statement has a dynamic offset we cannot track.
     pub has_dynamic_escapes: bool,
+    /// The minimum start offset of any dynamic-length escape.
+    min_dynamic_escape_start: Option<u64>,
     /// Whether any memory access has a dynamic offset we cannot track.
     pub has_dynamic_accesses: bool,
+    /// Whether any `return` statement covers the FMP slot at 0x40.
+    /// When true, the FMP native-mode optimization is unsafe.
+    has_return_covering_fmp: bool,
 }
 
 impl HeapOptResults {
@@ -708,12 +775,30 @@ impl HeapOptResults {
             tainted_count: analysis.tainted_regions().len(),
             escaping_count: analysis.escaping_regions().len(),
             has_dynamic_escapes: analysis.has_dynamic_escapes(),
+            min_dynamic_escape_start: analysis.min_dynamic_escape_start(),
             has_dynamic_accesses: analysis.has_dynamic_accesses(),
+            has_return_covering_fmp: analysis.has_return_covering_fmp(),
         }
     }
 
     /// Checks if a static offset can use native byte order.
     pub fn can_use_native(&self, offset: u64) -> bool {
+        // When there are dynamic-length return statements with known start,
+        // any offset at or above that start could escape via the return.
+        if let Some(min_start) = self.min_dynamic_escape_start {
+            let word_offset = offset / 32 * 32;
+            if word_offset >= min_start {
+                return false;
+            }
+        }
+        // When there are fully dynamic escapes (e.g., return(mload(0x40), size)),
+        // any region beyond the Solidity reserved area could potentially escape.
+        // The Solidity free memory pointer starts at 0x80, so only offsets in the
+        // reserved area (0x00-0x5F) are provably safe. The FMP slot (0x40-0x5F)
+        // is handled separately by the fmp_native_safe() check in native_memory_mode().
+        if self.has_dynamic_escapes && offset >= 0x60 {
+            return false;
+        }
         // Check if this specific offset is safe
         if self.native_safe_offsets.contains(&offset) {
             return true;
@@ -726,6 +811,23 @@ impl HeapOptResults {
     /// Returns true if any optimization opportunities were found.
     pub fn has_optimizations(&self) -> bool {
         !self.native_safe_regions.is_empty()
+    }
+
+    /// Returns true if the FMP slot at 0x40 is safe for native-mode optimization.
+    /// This is false when:
+    /// - A static `return` covers offset 0x40 (e.g., `return(0, 96)`)
+    /// - A dynamic-length escape starts at or before 0x40 (e.g., `return(0, dynamic)`)
+    pub fn fmp_native_safe(&self) -> bool {
+        if self.has_return_covering_fmp {
+            return false;
+        }
+        // A dynamic-length escape starting at <= 0x40 could cover the FMP slot
+        if let Some(min_start) = self.min_dynamic_escape_start {
+            if min_start <= 0x40 {
+                return false;
+            }
+        }
+        true
     }
 
     /// Returns true if ALL memory accesses can use native byte order.

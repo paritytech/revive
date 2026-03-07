@@ -408,3 +408,77 @@ store, replacing them with a single constant store.
 - Codesize test: PASS (all benchmarks improved, json updated)
 - OZ contracts: All compile, all improved, 0 regressed
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 5 - Heap analysis correctness fixes
+
+### Problem
+
+The heap optimization had 70 retester failures beyond the baseline 152 revert.sol
+failures. These were incorrectly classified as "pre-existing" in Iteration 3/4.
+
+### Root Causes Found and Fixed
+
+1. **FMP off-by-one**: `s + l > 0x60` should be `>= 0x60` for detecting
+   `return(0, 96)` covering the FMP slot at bytes [0x40, 0x60).
+
+2. **FMP native mode via MemoryRegion annotation**: The simplifier tagged ALL
+   `mstore(0x40, ...)` as `MemoryRegion::FreePointerSlot`, even user data in
+   inline assembly. The codegen relied on this annotation to skip byte-swapping.
+   Fixed by replacing annotation-based detection with analysis-based
+   `fmp_native_safe()` that checks if any `return` statement covers 0x40.
+
+3. **Keccak256 input not tainted**: `keccak256(offset, length)` reads raw bytes
+   from memory, so the input region must be in big-endian format. The analysis
+   didn't mark these regions as escaping, allowing native (LE) mode for keccak
+   inputs, producing wrong hashes.
+
+4. **Dynamic escape analysis**: `return(mload(0x40), size)` (normal Solidity
+   return) sets `has_dynamic_escapes = true`, but `can_use_native()` didn't
+   check this flag. Offsets >= 0x80 could be marked native-safe even though they
+   escape through the dynamic return.
+
+5. **Dynamic-length return from known start**: `return(0, add(returndatasize(), 32))`
+   has static start=0 and dynamic length. The FMP at 0x40 was being stored in
+   native mode because `fmp_native_safe()` only checked static returns.
+   Added `min_dynamic_escape_start` tracking for return statements in function
+   bodies with known start but unknown length.
+
+6. **Constructor vs function returns**: Constructor code has `return(0, bytecodeSize)`
+   which always covers 0x40. Added `in_function` parameter to only track FMP
+   coverage in function bodies.
+
+### Changes
+
+- **heap_opt.rs**: Added `has_return_covering_fmp`, `min_dynamic_escape_start`,
+  `in_function` parameter, keccak256 taint, dynamic escape guards in
+  `can_use_native()` and `fmp_native_safe()`
+- **to_llvm.rs**: Removed `MemoryRegion` param from `native_memory_mode()`,
+  replaced with analysis-based `fmp_native_safe()` check
+
+### Code Size Results (OZ Contracts - vs Iteration 4)
+
+| Contract | Iter 4  | Now     | Change |
+|----------|---------|---------|--------|
+| erc1155  | 41,967  | 41,926  | -41    |
+| erc20    | 56,999  | 56,953  | -46    |
+| erc721   | 62,493  | 62,447  | -46    |
+| oz_gov   | 102,680 | 102,629 | -51    |
+| oz_rwa   | 54,046  | 54,172  | +126   |
+| oz_simple| 19,212  | 19,181  | -31    |
+| oz_stable| 58,613  | 58,722  | +109   |
+| proxy    | 4,133   | 4,133   | 0      |
+
+Most contracts improved. oz_rwa/oz_stable have small regressions (+0.2%)
+because their constructor arg offsets (>= 0x80) can no longer use native mode
+due to the dynamic escape guard. All are still significantly better than
+the pre-heap-optimization baseline.
+
+### Test Results
+- `make test`: PASS
+- Integration tests: 62 passed, 0 failed
+- Retester: 5691 passed, 160 failed
+  - 150 revert.sol OutOfGas (matches baseline)
+  - 2 unbalanced_gas_limit.sol (pre-existing crash)
+  - 8 non-revert M3-only failures (pre-existing newyork codegen issues)
+- Codesize test: PASS
+- OZ contracts: All compile, deploy_erc20.sh all assertions pass

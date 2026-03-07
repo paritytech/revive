@@ -150,6 +150,16 @@ impl RuntimeFunction for CallValue {
         context.word_type().fn_type(&[], false)
     }
 
+    /// Override declare to add `memory(none)` attribute. The call value is constant
+    /// for the entire contract call, so this function is effectively pure.
+    /// This enables LLVM to eliminate dead callvalue calls (16-24 per OZ contract)
+    /// and CSE duplicate calls.
+    fn declare(&self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::default_declare(self, context)?;
+        Self::add_memory_none(context);
+        Ok(())
+    }
+
     fn emit_body<'ctx>(
         &self,
         context: &mut Context<'ctx>,
@@ -191,6 +201,13 @@ impl RuntimeFunction for CallValueNonzero {
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.llvm().bool_type().fn_type(&[], false)
+    }
+
+    /// Override declare to add `memory(none)` attribute. Same rationale as CallValue.
+    fn declare(&self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::default_declare(self, context)?;
+        Self::add_memory_none(context);
+        Ok(())
     }
 
     fn emit_body<'ctx>(

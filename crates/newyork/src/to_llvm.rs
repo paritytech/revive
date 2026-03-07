@@ -152,6 +152,10 @@ pub struct LlvmCodegen<'ctx> {
     /// When these are used as If conditions, we emit `__revive_callvalue_nonzero()`
     /// returning i1 instead of the full i256 value + comparison.
     callvalue_value_ids: BTreeSet<u32>,
+    /// Set of callvalue ValueIds that are ONLY used in callvalue_check patterns.
+    /// These bindings can be skipped entirely during codegen because the outlined
+    /// __revive_callvalue_check() function handles reading callvalue internally.
+    dead_callvalue_ids: BTreeSet<u32>,
     /// Cache of global constants for i256 storage keys.
     /// Maps the string representation of the constant to the global's pointer value.
     /// This avoids materializing the same 256-bit constant at every storage access site.
@@ -212,6 +216,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_calldataload: false,
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
+            dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
@@ -250,6 +255,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_calldataload: false,
             use_outlined_caller: false,
             callvalue_value_ids: BTreeSet::new(),
+            dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
@@ -1365,7 +1371,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Gets or creates an outlined load_bswap function: i256(i32 offset).
     /// Uses unchecked heap GEP + 4× load + bswap.i64 + combine.
-    #[allow(dead_code)]
     fn get_or_create_load_bswap_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -1543,6 +1548,279 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(return_block)
     }
 
+    /// Find callvalue ValueIds that are ONLY used as conditions in
+    /// `if callvalue() { revert(0,0) }` or If condition patterns.
+    /// These can be skipped during codegen because __revive_callvalue_check()
+    /// and __revive_callvalue_nonzero() handle reading callvalue internally.
+    fn find_dead_callvalue_ids(object: &Object) -> BTreeSet<u32> {
+        let mut callvalue_ids = BTreeSet::new();
+        let mut used_ids = BTreeSet::new();
+
+        // Pass 1: find all callvalue let bindings
+        Self::find_callvalue_bindings(&object.code.statements, &mut callvalue_ids);
+        for function in object.functions.values() {
+            Self::find_callvalue_bindings(&function.body.statements, &mut callvalue_ids);
+        }
+
+        // Pass 2: find non-condition uses of callvalue IDs
+        Self::find_value_uses(&object.code.statements, &callvalue_ids, &mut used_ids);
+        for function in object.functions.values() {
+            Self::find_value_uses(&function.body.statements, &callvalue_ids, &mut used_ids);
+        }
+
+        // Dead = callvalue IDs with no non-condition uses
+        callvalue_ids.difference(&used_ids).copied().collect()
+    }
+
+    fn find_callvalue_bindings(stmts: &[Statement], ids: &mut BTreeSet<u32>) {
+        for stmt in stmts {
+            if let Statement::Let { bindings, value } = stmt {
+                if bindings.len() == 1 && matches!(value, Expr::CallValue) {
+                    ids.insert(bindings[0].0);
+                }
+            }
+            Self::for_each_nested_region(stmt, |region_stmts| {
+                Self::find_callvalue_bindings(region_stmts, ids);
+            });
+        }
+    }
+
+    /// Find uses of callvalue IDs in non-condition positions.
+    /// If conditions are OK (handled by callvalue_nonzero); everything else is "used".
+    fn find_value_uses(
+        stmts: &[Statement],
+        callvalue_ids: &BTreeSet<u32>,
+        used: &mut BTreeSet<u32>,
+    ) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Let { value, .. } | Statement::Expr(value) => {
+                    Self::collect_expr_value_refs(value, callvalue_ids, used);
+                }
+                Statement::MStore { offset, value, .. }
+                | Statement::MStore8 { offset, value, .. } => {
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
+                }
+                Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
+                }
+                Statement::If {
+                    // condition is NOT marked as used - handled by callvalue_nonzero
+                    inputs,
+                    ..
+                } => {
+                    for v in inputs {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::Switch {
+                    scrutinee, inputs, ..
+                } => {
+                    Self::mark_if_callvalue(scrutinee.id.0, callvalue_ids, used);
+                    for v in inputs {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                }
+                Statement::Log {
+                    offset,
+                    length,
+                    topics,
+                } => {
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                    for t in topics {
+                        Self::mark_if_callvalue(t.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::ExternalCall {
+                    gas,
+                    address,
+                    value,
+                    args_offset,
+                    args_length,
+                    ret_offset,
+                    ret_length,
+                    ..
+                } => {
+                    Self::mark_if_callvalue(gas.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
+                    if let Some(v) = value {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                    Self::mark_if_callvalue(args_offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(args_length.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(ret_offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(ret_length.id.0, callvalue_ids, used);
+                }
+                Statement::Create {
+                    value,
+                    offset,
+                    length,
+                    salt,
+                    ..
+                } => {
+                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                    if let Some(s) = salt {
+                        Self::mark_if_callvalue(s.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::CustomErrorRevert { args, .. } => {
+                    for a in args {
+                        Self::mark_if_callvalue(a.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::Leave { return_values } => {
+                    for v in return_values {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::Break { values } | Statement::Continue { values } => {
+                    for v in values {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                }
+                Statement::For {
+                    init_values,
+                    condition,
+                    ..
+                } => {
+                    for v in init_values {
+                        Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
+                    }
+                    Self::collect_expr_value_refs(condition, callvalue_ids, used);
+                }
+                Statement::MCopy { dest, src, length } => {
+                    Self::mark_if_callvalue(dest.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(src.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                }
+                Statement::SelfDestruct { address } => {
+                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
+                }
+                Statement::CodeCopy {
+                    dest,
+                    offset,
+                    length,
+                } => {
+                    Self::mark_if_callvalue(dest.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                }
+                Statement::ExtCodeCopy {
+                    address,
+                    dest,
+                    offset,
+                    length,
+                } => {
+                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(dest.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+                }
+                _ => {}
+            }
+            // Recurse into nested regions
+            Self::for_each_nested_region(stmt, |region_stmts| {
+                Self::find_value_uses(region_stmts, callvalue_ids, used);
+            });
+        }
+    }
+
+    fn mark_if_callvalue(id: u32, callvalue_ids: &BTreeSet<u32>, used: &mut BTreeSet<u32>) {
+        if callvalue_ids.contains(&id) {
+            used.insert(id);
+        }
+    }
+
+    fn collect_expr_value_refs(
+        expr: &Expr,
+        callvalue_ids: &BTreeSet<u32>,
+        used: &mut BTreeSet<u32>,
+    ) {
+        match expr {
+            Expr::Var(v) => Self::mark_if_callvalue(v.0, callvalue_ids, used),
+            Expr::Binary { lhs, rhs, .. } => {
+                Self::mark_if_callvalue(lhs.id.0, callvalue_ids, used);
+                Self::mark_if_callvalue(rhs.id.0, callvalue_ids, used);
+            }
+            Expr::Unary { operand, .. }
+            | Expr::Truncate { value: operand, .. }
+            | Expr::ZeroExtend { value: operand, .. }
+            | Expr::SignExtendTo { value: operand, .. } => {
+                Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
+            }
+            Expr::Call { args, .. } => {
+                for a in args {
+                    Self::mark_if_callvalue(a.id.0, callvalue_ids, used);
+                }
+            }
+            Expr::Keccak256 { offset, length }
+            | Expr::Keccak256Pair {
+                word0: offset,
+                word1: length,
+            } => {
+                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+                Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
+            }
+            Expr::Keccak256Single { word0 } => {
+                Self::mark_if_callvalue(word0.id.0, callvalue_ids, used);
+            }
+            Expr::CallDataLoad { offset } => {
+                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+            }
+            Expr::MLoad { offset, .. } => {
+                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
+            }
+            _ => {}
+        }
+    }
+
+    /// Call a closure for each nested region's statements in a statement.
+    fn for_each_nested_region<F: FnMut(&[Statement])>(stmt: &Statement, mut f: F) {
+        match stmt {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                f(&then_region.statements);
+                if let Some(r) = else_region {
+                    f(&r.statements);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    f(&case.body.statements);
+                }
+                if let Some(d) = default {
+                    f(&d.statements);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                f(condition_stmts);
+                f(&body.statements);
+                f(&post.statements);
+            }
+            Statement::Block(region) => {
+                f(&region.statements);
+            }
+            _ => {}
+        }
+    }
+
     /// Generates LLVM IR for a complete object.
     pub fn generate_object(
         &mut self,
@@ -1560,6 +1838,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
         const CALLVALUE_OUTLINE_THRESHOLD: usize = 3;
         const CALLER_OUTLINE_THRESHOLD: usize = 3;
         self.use_outlined_callvalue = syscall_counts.callvalue >= CALLVALUE_OUTLINE_THRESHOLD;
+        if self.use_outlined_callvalue {
+            self.dead_callvalue_ids = Self::find_dead_callvalue_ids(object);
+        }
         // Calldataload outlining is disabled: function call overhead (register saves, indirect
         // jump) outweighs the alloca+load savings. Measured as net-negative on OZ ERC20 (+717 bytes).
         self.use_outlined_calldataload = false;
@@ -2013,6 +2294,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // Track ValueIds bound to CallValue for boolean optimization
                 if bindings.len() == 1 && matches!(value, Expr::CallValue) {
                     self.callvalue_value_ids.insert(bindings[0].0);
+                    // Skip emitting callvalue syscalls that are only used in check
+                    // patterns. The outlined __revive_callvalue_check() and
+                    // __revive_callvalue_nonzero() handle reading callvalue internally.
+                    if self.dead_callvalue_ids.contains(&bindings[0].0) {
+                        return Ok(());
+                    }
                 }
 
                 // Compute demand hint for single-binding Lets: if every use site
@@ -2151,15 +2438,41 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                     NativeMemoryMode::ByteSwap => {
-                        let offset_val = self.narrow_offset_for_pointer(
-                            context,
-                            offset_val,
-                            offset.id,
-                            "mstore_offset_narrow",
-                        )?;
-                        revive_llvm_context::polkavm_evm_memory::store(
-                            context, offset_val, value_val,
-                        )?;
+                        if !self.has_msize {
+                            // No msize: use outlined store_bswap with unchecked GEP.
+                            // This avoids __sbrk_internal overhead (heap_size watermark
+                            // update). Use safe_truncate for the overflow check.
+                            let offset_narrow = self.narrow_offset_for_pointer(
+                                context,
+                                offset_val,
+                                offset.id,
+                                "mstore_offset_narrow",
+                            )?;
+                            let offset_xlen = context
+                                .safe_truncate_int_to_xlen(offset_narrow)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            let func = self.get_or_create_store_bswap_fn(context)?;
+                            let value_word =
+                                self.ensure_word_type(context, value_val, "store_bswap_val")?;
+                            context
+                                .builder()
+                                .build_call(
+                                    func,
+                                    &[offset_xlen.into(), value_word.into()],
+                                    "store_bswap",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        } else {
+                            let offset_val = self.narrow_offset_for_pointer(
+                                context,
+                                offset_val,
+                                offset.id,
+                                "mstore_offset_narrow",
+                            )?;
+                            revive_llvm_context::polkavm_evm_memory::store(
+                                context, offset_val, value_val,
+                            )?;
+                        }
                     }
                 }
             }
@@ -4003,13 +4316,35 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?
                     }
                     NativeMemoryMode::ByteSwap => {
-                        let offset_val = self.narrow_offset_for_pointer(
-                            context,
-                            offset_val,
-                            offset.id,
-                            "mload_offset_narrow",
-                        )?;
-                        revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                        if !self.has_msize {
+                            // No msize: use outlined load_bswap with unchecked GEP.
+                            // Use safe_truncate for the overflow check.
+                            let offset_narrow = self.narrow_offset_for_pointer(
+                                context,
+                                offset_val,
+                                offset.id,
+                                "mload_offset_narrow",
+                            )?;
+                            let offset_xlen = context
+                                .safe_truncate_int_to_xlen(offset_narrow)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            let func = self.get_or_create_load_bswap_fn(context)?;
+                            context
+                                .builder()
+                                .build_call(func, &[offset_xlen.into()], "load_bswap")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .try_as_basic_value()
+                                .basic()
+                                .expect("load_bswap should return a value")
+                        } else {
+                            let offset_val = self.narrow_offset_for_pointer(
+                                context,
+                                offset_val,
+                                offset.id,
+                                "mload_offset_narrow",
+                            )?;
+                            revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                        }
                     }
                 };
                 // The free memory pointer (mload(64)) is bounded by the heap size

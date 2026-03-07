@@ -736,3 +736,70 @@ Made additional operations transparent in backward demand propagation:
 - Retester: 5851 passed, 0 failed
 - Codesize test: PASS (SHA1 improved by 21 bytes)
 - OZ contracts: All compile, all improved or unchanged
+
+---
+
+## Iteration 10: Dynamic Bswap Optimization
+
+### Analysis
+
+Inspected LLVM IR for Governor contract and found 225 `__revive_store_heap_word` calls
+and 86 `__revive_load_heap_word` calls (311 total) for dynamic-offset memory accesses.
+These functions go through `__sbrk_internal` which:
+1. Updates the `__heap_size` watermark (for `msize()` tracking)
+2. Performs bounds checking via 5+ basic blocks
+3. Then does the actual byte-swap store/load
+
+Key insight: most contracts never use `msize()`. For these contracts, the sbrk
+overhead is pure waste. The `has_msize` flag already exists in the codegen but was
+only used for constant-offset `InlineByteSwap` mode, not for dynamic-offset `ByteSwap`
+mode.
+
+### Implementation (`to_llvm.rs`)
+
+Modified the `ByteSwap` codegen path for both MStore and MLoad to check `!self.has_msize`:
+
+- **Without msize**: Route through `__revive_store_bswap` / `__revive_load_bswap`
+  (unchecked GEP + 4x bswap64). Use `narrow_offset_for_pointer` + `safe_truncate_int_to_xlen`
+  for the overflow check (traps if i256 offset doesn't fit in i32).
+- **With msize**: Fall back to the original `revive_llvm_context::polkavm_evm_memory::store/load`
+  path which goes through sbrk to maintain the heap_size watermark.
+
+This eliminates `__sbrk_internal` and `__revive_store/load_heap_word` as dead code
+for contracts without msize, since all memory accesses (both constant-offset via
+InlineByteSwap and dynamic-offset via ByteSwap) now use the unchecked GEP path.
+
+### Results (vs Iteration 9 baseline)
+
+| Contract   | Before  | After   | Savings | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 41,257  | 39,621  | -1,636  | -3.97% |
+| erc20      | 55,101  | 52,371  | -2,730  | -4.95% |
+| erc721     | 60,632  | 58,351  | -2,281  | -3.76% |
+| oz_gov     | 101,527 | 95,851  | -5,676  | -5.59% |
+| oz_rwa     | 52,688  | 49,239  | -3,449  | -6.55% |
+| oz_simple  | 18,514  | 18,145  | -369    | -1.99% |
+| oz_stable  | 56,397  | 52,229  | -4,168  | -7.39% |
+| proxy      | 4,096   | 3,911   | -185    | -4.52% |
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings  | %      |
+|------------|----------|---------|----------|--------|
+| erc1155    | 43,880   | 39,621  | -4,259   | -9.7%  |
+| erc20      | 59,724   | 52,371  | -7,353   | -12.3% |
+| erc721     | 64,946   | 58,351  | -6,595   | -10.2% |
+| oz_gov     | 106,417  | 95,851  | -10,566  | -9.9%  |
+| oz_rwa     | 56,936   | 49,239  | -7,697   | -13.5% |
+| oz_simple  | 20,109   | 18,145  | -1,964   | -9.8%  |
+| oz_stable  | 61,801   | 52,229  | -9,572   | -15.5% |
+| proxy      | 4,424    | 3,911   | -513     | -11.6% |
+| **TOTAL**  | 418,237  | 369,718 | -48,519  | **-11.6%** |
+
+### Test Results
+- `make test`: PASS (format, clippy, doc, all workspace tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed
+- Codesize test: PASS (0% change on benchmarks)
+- OZ contracts: All compile, all improved
+- deploy_erc20.sh: All assertions pass

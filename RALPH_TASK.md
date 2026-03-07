@@ -673,3 +673,66 @@ Empirical analysis shows this was overly optimistic because:
 - Codesize test: PASS (all benchmarks unchanged)
 - OZ contracts: All compile, all improved or unchanged
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 9: Guard Narrowing and Type Demand Transparency
+
+### Guard Narrowing Pass (`guard_narrow.rs`)
+
+Detects boundary check patterns `if gt(val, MASK) { revert/panic }` and inserts
+`val_narrow = and(val, MASK)` after the guard, replacing subsequent uses with
+`val_narrow`. This proves to type inference that the value fits in fewer bits,
+enabling downstream narrowing of comparisons, arithmetic, and memory operations.
+
+Common in Solidity ABI decoding: `calldataload` returns i256, boundary-checked
+against UINT64_MAX, then used in offset arithmetic. Without guard narrowing,
+downstream operations remain at i256 width. With it, they can use native i64.
+
+Only masks ≤64 bits are useful (matching native register width). Larger masks
+(128, 160, 192 bits) don't benefit because there's no efficient narrowing target.
+
+The pass only matches then-regions that contain direct terminators (Revert,
+PanicRevert, etc.), not function calls to noreturn functions. The noreturn
+function analysis was attempted but caused regressions on ERC1155 (+183 bytes)
+because the extra AND masks interfered with LLVM's optimization decisions.
+
+### Type Demand Transparency Improvements (`type_inference.rs`)
+
+Made additional operations transparent in backward demand propagation:
+- **Sub, Mul**: Modular arithmetic - low N bits depend only on low N bits of inputs
+- **Shl**: Value operand (rhs) is transparent; shift amount needs full width.
+  Fixed operand swap bug where lhs was treated as transparent instead of rhs.
+- **Not (bitwise complement)**: ~trunc(x,N) == trunc(~x,N)
+
+### Guard Narrowing Results (vs committed without guards)
+
+| Contract   | Before  | After   | Savings | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 41,275  | 41,257  | -18     | -0.04% |
+| erc20      | 56,291  | 55,101  | -1,190  | -2.11% |
+| erc721     | 61,603  | 60,632  | -971    | -1.58% |
+| oz_gov     | 101,869 | 101,527 | -342    | -0.34% |
+| oz_rwa     | 53,281  | 52,688  | -593    | -1.11% |
+| oz_simple  | 18,840  | 18,514  | -326    | -1.73% |
+| oz_stable  | 57,616  | 56,397  | -1,219  | -2.12% |
+| proxy      | 4,096   | 4,096   | 0       | 0%     |
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings | %      |
+|------------|----------|---------|---------|--------|
+| erc1155    | 43,880   | 41,257  | -2,623  | -5.98% |
+| erc20      | 59,724   | 55,101  | -4,623  | -7.74% |
+| erc721     | 64,946   | 60,632  | -4,314  | -6.64% |
+| oz_gov     | 106,417  | 101,527 | -4,890  | -4.60% |
+| oz_rwa     | 56,936   | 52,688  | -4,248  | -7.46% |
+| oz_simple  | 20,109   | 18,514  | -1,595  | -7.93% |
+| oz_stable  | 61,801   | 56,397  | -5,404  | -8.74% |
+| proxy      | 4,424    | 4,096   | -328    | -7.41% |
+| **TOTAL**  | 418,237  | 390,212 | -28,025 | **-6.70%** |
+
+### Test Results
+- `make test`: PASS (format, clippy, doc, all workspace tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed
+- Codesize test: PASS (SHA1 improved by 21 bytes)
+- OZ contracts: All compile, all improved or unchanged

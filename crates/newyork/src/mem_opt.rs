@@ -431,7 +431,11 @@ impl MemoryOptimizer {
                         visit_value(v, max_id);
                     }
                 }
-                Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
+                Statement::Stop
+                | Statement::Invalid
+                | Statement::PanicRevert { .. }
+                | Statement::ErrorStringRevert { .. }
+                | Statement::CustomErrorRevert { .. } => {}
             }
         }
 
@@ -819,6 +823,8 @@ impl MemoryOptimizer {
                 | Statement::Stop
                 | Statement::Invalid
                 | Statement::PanicRevert { .. }
+                | Statement::ErrorStringRevert { .. }
+                | Statement::CustomErrorRevert { .. }
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::Leave { .. } => {

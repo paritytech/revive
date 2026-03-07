@@ -414,6 +414,8 @@ impl HeapAnalysis {
             | Statement::Stop
             | Statement::Invalid
             | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. }
             | Statement::SetImmutable { .. } => {}
         }
     }

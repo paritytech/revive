@@ -11,7 +11,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use num::{BigUint, One, Zero};
+use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
     BinOp, BitWidth, Block, CallKind, Expr, FunctionId, MemoryRegion, Object, Region, Statement,
@@ -207,6 +207,19 @@ impl Simplifier {
         // Replace with PanicRevert { code } which deduplicates to a shared block.
         // Use self.constants which still has all accumulated constants from this scope.
         result = outline_panic_patterns(result, &self.constants);
+
+        // Post-pass: outline Solidity Error(string) revert patterns.
+        // Pattern: mload(0x40) + mstore(fmp, 0x08c379a0...) + mstore(fmp+4, 0x20) +
+        //          mstore(fmp+0x24, length) + mstore(fmp+0x44, data) + revert(fmp, total)
+        // Replace with ErrorStringRevert { length, data } which calls a shared function.
+        // NOTE: ErrorStringRevert outlining disabled - causes regressions on OZ contracts
+        // (0-1 sites per contract, inline path generates worse code than original MStores)
+        // result = outline_error_string_patterns(result, &self.constants);
+
+        // Post-pass: outline custom error revert patterns.
+        // Pattern: mstore(0, selector) [+ mstore(4, arg0) + ...] + revert(0, 4+32*N)
+        // Replace with CustomErrorRevert { selector, args }.
+        result = outline_custom_error_patterns(result, &self.constants);
 
         self.constants = outer_constants;
         self.copies = outer_copies;
@@ -701,7 +714,11 @@ impl Simplifier {
             Statement::Expr(expr) => vec![Statement::Expr(self.simplify_expr(expr))],
 
             // Pass-through statements with no values to simplify
-            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => vec![stmt],
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. } => vec![stmt],
 
             Statement::Break { values } => vec![Statement::Break {
                 values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
@@ -732,6 +749,13 @@ impl Simplifier {
 
         // Outline panic revert patterns using the full accumulated constants for this scope
         statements = outline_panic_patterns(statements, &self.constants);
+
+        // Outline Error(string) revert patterns
+        // NOTE: ErrorStringRevert outlining disabled - see above
+        // statements = outline_error_string_patterns(statements, &self.constants);
+
+        // Outline custom error revert patterns
+        statements = outline_custom_error_patterns(statements, &self.constants);
 
         // Resolve yields BEFORE restoring outer scope, since yield values
         // reference definitions from inside the region.
@@ -1205,6 +1229,407 @@ fn is_const_value(id: ValueId, expected: u64, constants: &BTreeMap<u32, BigUint>
     constants
         .get(&id.0)
         .is_some_and(|v| *v == BigUint::from(expected))
+}
+
+/// The Error(string) ABI selector, left-padded to 256 bits.
+#[allow(dead_code)]
+const ERROR_STRING_SELECTOR_HEX: &str =
+    "08c379a000000000000000000000000000000000000000000000000000000000";
+
+/// Detects and replaces the Solidity Error(string) revert pattern in a statement list.
+///
+/// The pattern is:
+///   let fmp := mload(0x40)
+///   mstore(fmp, 0x08c379a0...) — Error(string) selector
+///   mstore(fmp+4, 0x20) — string data offset
+///   mstore(fmp+0x24, length) — string length
+///   mstore(fmp+0x44, word0) — string data word 0
+///   [mstore(fmp+0x64, word1)] — optional additional data words
+///   revert(fmp, total_length)
+///
+/// Each match is replaced with `ErrorStringRevert { length, data }`.
+#[allow(dead_code)]
+fn outline_error_string_patterns(
+    stmts: Vec<Statement>,
+    scope_constants: &BTreeMap<u32, BigUint>,
+) -> Vec<Statement> {
+    // Quick check: does this list contain a Revert statement?
+    let has_revert = stmts.iter().any(|s| matches!(s, Statement::Revert { .. }));
+    if !has_revert {
+        return stmts;
+    }
+
+    // Build merged constant map and track variable bindings
+    let mut constants: BTreeMap<u32, BigUint> = scope_constants.clone();
+    // Track which ValueId is the result of `add(base, offset)` where base and offset are known
+    let mut add_results: BTreeMap<u32, (u32, u64)> = BTreeMap::new();
+    // Track which ValueId comes from `mload(0x40)` (free memory pointer)
+    let mut fmp_values: BTreeSet<u32> = BTreeSet::new();
+
+    for stmt in &stmts {
+        match stmt {
+            Statement::Let {
+                bindings,
+                value: Expr::Literal { value, .. },
+            } if bindings.len() == 1 => {
+                constants.insert(bindings[0].0, value.clone());
+            }
+            Statement::Let {
+                bindings,
+                value:
+                    Expr::Binary {
+                        op: BinOp::Add,
+                        lhs,
+                        rhs,
+                    },
+            } if bindings.len() == 1 => {
+                // Track add(fmp, const) results
+                if let Some(rhs_val) = constants.get(&rhs.id.0).and_then(|v| v.to_u64()) {
+                    add_results.insert(bindings[0].0, (lhs.id.0, rhs_val));
+                }
+            }
+            Statement::Let {
+                bindings,
+                value:
+                    Expr::MLoad {
+                        offset,
+                        region: MemoryRegion::FreePointerSlot,
+                    },
+            } if bindings.len() == 1 => {
+                // Track mload(0x40) results — check if offset is constant 0x40
+                if constants
+                    .get(&offset.id.0)
+                    .is_some_and(|v| *v == BigUint::from(0x40u32))
+                {
+                    fmp_values.insert(bindings[0].0);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let error_selector = BigUint::parse_bytes(ERROR_STRING_SELECTOR_HEX.as_bytes(), 16).unwrap();
+
+    let mut result = Vec::with_capacity(stmts.len());
+
+    for stmt in stmts {
+        // Check if this is a revert(fmp, total_length) that could be an error string pattern
+        if let Statement::Revert {
+            ref offset,
+            ref length,
+        } = stmt
+        {
+            // The revert offset must be an FMP value
+            if fmp_values.contains(&offset.id.0) {
+                // The revert length must be a constant: 0x64 (1 word), 0x84 (2 words), etc.
+                if let Some(total_len) = constants.get(&length.id.0).and_then(|v| v.to_u64()) {
+                    if total_len >= 0x64 && (total_len - 0x44) % 0x20 == 0 {
+                        let num_words = ((total_len - 0x44) / 0x20) as usize;
+                        if let Some((start_idx, str_length, data_words)) =
+                            find_error_string_pattern_backwards(
+                                &result,
+                                &constants,
+                                &add_results,
+                                &fmp_values,
+                                &error_selector,
+                                offset.id.0,
+                                num_words,
+                            )
+                        {
+                            result.truncate(start_idx);
+                            result.push(Statement::ErrorStringRevert {
+                                length: str_length,
+                                data: data_words,
+                            });
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        result.push(stmt);
+    }
+
+    result
+}
+
+/// Looks backwards from the end of a statement list to find the Error(string) pattern.
+///
+/// Searches for:
+///   1. mstore(fmp, Error_selector) — where fmp_id matches
+///   2. mstore(fmp+4, 0x20) — string data offset
+///   3. mstore(fmp+0x24, string_length) — string length is a constant
+///   4. mstore(fmp+0x44, word0) — first data word
+///   5. Optionally more data word mstores
+///
+/// Returns `(start_index, string_length, data_words)` if found.
+#[allow(dead_code)]
+fn find_error_string_pattern_backwards(
+    stmts: &[Statement],
+    constants: &BTreeMap<u32, BigUint>,
+    add_results: &BTreeMap<u32, (u32, u64)>,
+    fmp_values: &BTreeSet<u32>,
+    error_selector: &BigUint,
+    fmp_id: u32,
+    num_words: usize,
+) -> Option<(usize, u8, Vec<BigUint>)> {
+    let len = stmts.len();
+    if len < 4 + num_words {
+        return None;
+    }
+
+    // We need to find these mstores in the preceding statements:
+    // - mstore(fmp, Error_selector)
+    // - mstore(fmp+4, 0x20)
+    // - mstore(fmp+0x24, string_length)
+    // - mstore(fmp+0x44, word0), mstore(fmp+0x64, word1), ...
+    //
+    // They should appear in order, with possible Let bindings interspersed.
+
+    let mut found_selector = false;
+    let mut found_offset = false;
+    let mut found_length = false;
+    let mut string_length: Option<u8> = None;
+    let mut data_words: Vec<Option<BigUint>> = vec![None; num_words];
+    let mut earliest_idx = len;
+
+    // Helper: check if an mstore offset is `fmp + expected_offset`
+    let is_fmp_plus = |offset_id: u32, expected: u64| -> bool {
+        if expected == 0 {
+            return offset_id == fmp_id || fmp_values.contains(&offset_id);
+        }
+        if let Some(&(base_id, off)) = add_results.get(&offset_id) {
+            return (base_id == fmp_id || fmp_values.contains(&base_id)) && off == expected;
+        }
+        false
+    };
+
+    let search_limit = len.saturating_sub(30);
+    for j in (search_limit..len).rev() {
+        match &stmts[j] {
+            Statement::MStore { offset, value, .. } => {
+                // mstore(fmp, Error_selector)
+                if is_fmp_plus(offset.id.0, 0) {
+                    if constants
+                        .get(&value.id.0)
+                        .is_some_and(|v| v == error_selector)
+                    {
+                        found_selector = true;
+                        earliest_idx = earliest_idx.min(j);
+                    }
+                }
+                // mstore(fmp+4, 0x20)
+                else if is_fmp_plus(offset.id.0, 4) {
+                    if is_const_value(value.id, 0x20, constants) {
+                        found_offset = true;
+                        earliest_idx = earliest_idx.min(j);
+                    }
+                }
+                // mstore(fmp+0x24, string_length)
+                else if is_fmp_plus(offset.id.0, 0x24) {
+                    if let Some(len_val) = constants.get(&value.id.0).and_then(|v| v.to_u64()) {
+                        if len_val <= 128 {
+                            string_length = Some(len_val as u8);
+                            found_length = true;
+                            earliest_idx = earliest_idx.min(j);
+                        }
+                    }
+                }
+                // mstore(fmp+0x44+i*0x20, word_i)
+                else {
+                    for (i, slot) in data_words.iter_mut().enumerate() {
+                        let expected_offset = 0x44 + (i as u64) * 0x20;
+                        if is_fmp_plus(offset.id.0, expected_offset) {
+                            if let Some(word_val) = constants.get(&value.id.0) {
+                                *slot = Some(word_val.clone());
+                                earliest_idx = earliest_idx.min(j);
+                            }
+                        }
+                    }
+                }
+            }
+            Statement::Let { .. } | Statement::Expr(..) => continue,
+            _ => break,
+        }
+    }
+
+    // Verify all parts were found
+    if !found_selector || !found_offset || !found_length {
+        return None;
+    }
+    let str_len = string_length?;
+    let words: Vec<BigUint> = data_words.into_iter().collect::<Option<Vec<_>>>()?;
+
+    // Verify that statements between earliest_idx and len are only Let/MStore/Expr
+    let all_safe = stmts[earliest_idx..].iter().all(|s| {
+        matches!(
+            s,
+            Statement::Let { .. } | Statement::MStore { .. } | Statement::Expr(..)
+        )
+    });
+    if !all_safe {
+        return None;
+    }
+
+    Some((earliest_idx, str_len, words))
+}
+
+/// Outlines custom error revert patterns in a statement list.
+///
+/// Detects the pattern: mstore(0, selector) [+ mstore(4, arg0) + mstore(0x24, arg1) + ...] + revert(0, 4+32*N)
+/// where the selector is a constant and the revert uses scratch space (offset 0).
+/// Replaces matched patterns with `CustomErrorRevert { selector, args }`.
+fn outline_custom_error_patterns(
+    stmts: Vec<Statement>,
+    scope_constants: &BTreeMap<u32, BigUint>,
+) -> Vec<Statement> {
+    // Quick check: does this list contain a Revert statement?
+    let has_revert = stmts.iter().any(|s| matches!(s, Statement::Revert { .. }));
+    if !has_revert {
+        return stmts;
+    }
+
+    // Build merged constant map
+    let mut constants: BTreeMap<u32, BigUint> = scope_constants.clone();
+    for stmt in &stmts {
+        if let Statement::Let {
+            bindings,
+            value: Expr::Literal { value, .. },
+        } = stmt
+        {
+            if bindings.len() == 1 {
+                constants.insert(bindings[0].0, value.clone());
+            }
+        }
+    }
+
+    let zero = BigUint::ZERO;
+    let mut result = Vec::with_capacity(stmts.len());
+
+    for stmt in stmts {
+        // Check if this is a revert(0, N) where N is 4, 0x24, 0x44, 0x64, 0x84
+        if let Statement::Revert {
+            ref offset,
+            ref length,
+        } = stmt
+        {
+            // The revert offset must be constant 0
+            if constants.get(&offset.id.0).is_some_and(|v| *v == zero) {
+                // The revert length must be a constant: 4 (0-arg), 0x24 (1-arg), 0x44 (2-arg), etc.
+                if let Some(total_len) = constants.get(&length.id.0).and_then(|v| v.to_u64()) {
+                    let num_args = if total_len == 4 {
+                        Some(0usize)
+                    } else if total_len >= 0x24 && (total_len - 4) % 0x20 == 0 {
+                        Some(((total_len - 4) / 0x20) as usize)
+                    } else {
+                        None
+                    };
+
+                    if let Some(num_args) = num_args {
+                        if let Some((start_idx, selector, args)) =
+                            find_custom_error_pattern_backwards(&result, &constants, num_args)
+                        {
+                            // Keep Let bindings, remove only MStore statements
+                            let mut kept = Vec::new();
+                            for s in result.drain(start_idx..) {
+                                match s {
+                                    Statement::MStore { .. } => {} // remove
+                                    _ => kept.push(s),             // keep lets/exprs
+                                }
+                            }
+                            result.extend(kept);
+                            result.push(Statement::CustomErrorRevert { selector, args });
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        result.push(stmt);
+    }
+
+    result
+}
+
+/// Looks backwards from the end of a statement list to find the custom error pattern.
+///
+/// Searches for:
+///   1. mstore(0, selector) at scratch space — selector is a constant
+///   2. mstore(4, arg0) — first argument (optional)
+///   3. mstore(0x24, arg1) — second argument (optional)
+///   4. mstore(0x44, arg2) — third argument (optional)
+///
+/// Returns `(start_index, selector, args)` if found.
+fn find_custom_error_pattern_backwards(
+    stmts: &[Statement],
+    constants: &BTreeMap<u32, BigUint>,
+    num_args: usize,
+) -> Option<(usize, BigUint, Vec<Value>)> {
+    let len = stmts.len();
+    if len < 1 + num_args {
+        return None;
+    }
+
+    let mut found_selector: Option<BigUint> = None;
+    let mut args: Vec<Option<Value>> = vec![None; num_args];
+    let mut earliest_idx = len;
+
+    let zero = BigUint::ZERO;
+    let four = BigUint::from(4u32);
+
+    let search_limit = len.saturating_sub(20);
+    for j in (search_limit..len).rev() {
+        match &stmts[j] {
+            Statement::MStore { offset, value, .. } => {
+                // Check the mstore offset
+                if let Some(off_val) = constants.get(&offset.id.0) {
+                    if *off_val == zero {
+                        // mstore(0, selector) — selector must be a constant
+                        if let Some(sel) = constants.get(&value.id.0) {
+                            found_selector = Some(sel.clone());
+                            earliest_idx = earliest_idx.min(j);
+                        }
+                    } else if *off_val == four && num_args >= 1 {
+                        // mstore(4, arg0)
+                        args[0] = Some(*value);
+                        earliest_idx = earliest_idx.min(j);
+                    } else {
+                        // mstore(0x24, arg1), mstore(0x44, arg2), ...
+                        if let Some(off_u64) = off_val.to_u64() {
+                            if off_u64 >= 0x24 && (off_u64 - 4) % 0x20 == 0 {
+                                let arg_idx = ((off_u64 - 4) / 0x20) as usize;
+                                if arg_idx < num_args {
+                                    args[arg_idx] = Some(*value);
+                                    earliest_idx = earliest_idx.min(j);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Statement::Let { .. } | Statement::Expr(..) => continue,
+            _ => break,
+        }
+    }
+
+    // Verify all parts were found
+    let selector = found_selector?;
+    let args: Vec<Value> = args.into_iter().collect::<Option<Vec<_>>>()?;
+
+    // Verify that statements between earliest_idx and len are only Let/MStore/Expr
+    let all_safe = stmts[earliest_idx..].iter().all(|s| {
+        matches!(
+            s,
+            Statement::Let { .. } | Statement::MStore { .. } | Statement::Expr(..)
+        )
+    });
+    if !all_safe {
+        return None;
+    }
+
+    Some((earliest_idx, selector, args))
 }
 
 /// Returns the result type for a binary operation.
@@ -1987,7 +2412,15 @@ fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
         }
         Statement::Expr(expr) => collect_used_in_expr(expr, used),
         Statement::SelfDestruct { address } => collect_used_in_value(address, used),
-        Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
+        Statement::Stop
+        | Statement::Invalid
+        | Statement::PanicRevert { .. }
+        | Statement::ErrorStringRevert { .. } => {}
+        Statement::CustomErrorRevert { args, .. } => {
+            for arg in args {
+                collect_used_in_value(arg, used);
+            }
+        }
         Statement::Break { values } | Statement::Continue { values } => {
             for v in values {
                 collect_used_in_value(v, used);
@@ -2108,6 +2541,8 @@ fn is_terminator(stmt: &Statement) -> bool {
             | Statement::Stop
             | Statement::Invalid
             | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. }
             | Statement::Leave { .. }
             | Statement::SelfDestruct { .. }
     )
@@ -2470,7 +2905,11 @@ fn find_max_value_id_in_object(object: &Object) -> u32 {
             }
             Statement::Expr(expr) => visit_expr(expr, max_id),
             Statement::SelfDestruct { address } => visit_value(address, max_id),
-            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. } => {}
             Statement::Break { values } | Statement::Continue { values } => {
                 for v in values {
                     visit_value(v, max_id);
@@ -2970,6 +3409,26 @@ impl Canonicalizer {
             Statement::PanicRevert { code } => {
                 buf.push(0xA2);
                 buf.push(*code);
+            }
+            Statement::ErrorStringRevert { length, data } => {
+                buf.push(0xA3);
+                buf.push(*length);
+                buf.push(data.len() as u8);
+                for word in data {
+                    for byte in word.to_bytes_be() {
+                        buf.push(byte);
+                    }
+                }
+            }
+            Statement::CustomErrorRevert { selector, args } => {
+                buf.push(0xA4);
+                buf.push(args.len() as u8);
+                for byte in selector.to_bytes_be() {
+                    buf.push(byte);
+                }
+                for arg in args {
+                    self.encode_value(arg, buf);
+                }
             }
             Statement::ExternalCall {
                 kind,

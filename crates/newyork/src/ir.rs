@@ -536,6 +536,27 @@ pub enum Statement {
         code: u8,
     },
 
+    /// Error string revert: emits `Error(string)` ABI encoding and reverts.
+    /// Equivalent to: mload(0x40) → mstore(fmp, selector) → mstore(fmp+4, 0x20) →
+    /// mstore(fmp+0x24, length) → mstore(fmp+0x44, word0) → [...] → revert(fmp, total).
+    /// Outlined to a shared helper function parameterized by string length and data words.
+    ErrorStringRevert {
+        /// The string length in bytes.
+        length: u8,
+        /// The string data words (1-4 words of 32 bytes each).
+        data: Vec<BigUint>,
+    },
+
+    /// Custom error revert: emits a custom error revert using scratch space.
+    /// Pattern: mstore(0, selector) + [mstore(4, arg0) + mstore(0x24, arg1) + ...] + revert(0, 4+32*N).
+    /// Uses scratch space (offset 0), so no FMP load needed.
+    CustomErrorRevert {
+        /// The 4-byte error selector, left-shifted by 224 bits (as stored in scratch).
+        selector: BigUint,
+        /// The arguments to the custom error (0-3 values).
+        args: Vec<Value>,
+    },
+
     // External calls
     ExternalCall {
         kind: CallKind,
@@ -709,6 +730,31 @@ impl Object {
             count += subobject.count_keccak256_single();
         }
         count
+    }
+
+    /// Counts the total number of `ErrorStringRevert` statements grouped by
+    /// number of data words. Returns a map from num_words → count.
+    /// Used to conditionally outline: only profitable with >= 2 call sites.
+    pub fn count_error_string_reverts(&self) -> BTreeMap<usize, usize> {
+        let mut counts = BTreeMap::new();
+        count_error_string_reverts_in_block(&self.code, &mut counts);
+        for function in self.functions.values() {
+            count_error_string_reverts_in_block(&function.body, &mut counts);
+        }
+        // Don't count subobjects - each subobject has its own outlined functions
+        counts
+    }
+
+    /// Counts the total number of `CustomErrorRevert` statements grouped by
+    /// num_args. Returns a map from num_args → count.
+    /// Used to conditionally outline: only profitable with >= 3 call sites.
+    pub fn count_custom_error_reverts(&self) -> BTreeMap<usize, usize> {
+        let mut counts = BTreeMap::new();
+        count_custom_error_reverts_in_block(&self.code, &mut counts);
+        for function in self.functions.values() {
+            count_custom_error_reverts_in_block(&function.body, &mut counts);
+        }
+        counts
     }
 
     /// Returns true if any code in this object uses the `msize()` expression.
@@ -1061,6 +1107,116 @@ fn count_keccak_single_in_region(region: &Region) -> usize {
         .iter()
         .map(count_keccak_single_in_statement)
         .sum()
+}
+
+/// Counts ErrorStringRevert statements in a block, grouped by num_words.
+fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
+    for stmt in &block.statements {
+        count_error_string_reverts_in_statement(stmt, counts);
+    }
+}
+
+/// Counts ErrorStringRevert statements in a statement recursively.
+fn count_error_string_reverts_in_statement(stmt: &Statement, counts: &mut BTreeMap<usize, usize>) {
+    match stmt {
+        Statement::ErrorStringRevert { data, .. } => {
+            *counts.entry(data.len()).or_insert(0) += 1;
+        }
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            count_error_string_reverts_in_region(then_region, counts);
+            if let Some(r) = else_region {
+                count_error_string_reverts_in_region(r, counts);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for case in cases {
+                count_error_string_reverts_in_region(&case.body, counts);
+            }
+            if let Some(r) = default {
+                count_error_string_reverts_in_region(r, counts);
+            }
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            for s in condition_stmts {
+                count_error_string_reverts_in_statement(s, counts);
+            }
+            count_error_string_reverts_in_region(body, counts);
+            count_error_string_reverts_in_region(post, counts);
+        }
+        Statement::Block(region) => count_error_string_reverts_in_region(region, counts),
+        _ => {}
+    }
+}
+
+/// Counts ErrorStringRevert statements in a region.
+fn count_error_string_reverts_in_region(region: &Region, counts: &mut BTreeMap<usize, usize>) {
+    for stmt in &region.statements {
+        count_error_string_reverts_in_statement(stmt, counts);
+    }
+}
+
+/// Counts CustomErrorRevert statements in a block, grouped by num_args.
+fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
+    for stmt in &block.statements {
+        count_custom_error_reverts_in_statement(stmt, counts);
+    }
+}
+
+/// Counts CustomErrorRevert statements in a statement recursively.
+fn count_custom_error_reverts_in_statement(stmt: &Statement, counts: &mut BTreeMap<usize, usize>) {
+    match stmt {
+        Statement::CustomErrorRevert { args, .. } => {
+            *counts.entry(args.len()).or_insert(0) += 1;
+        }
+        Statement::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            count_custom_error_reverts_in_region(then_region, counts);
+            if let Some(r) = else_region {
+                count_custom_error_reverts_in_region(r, counts);
+            }
+        }
+        Statement::Switch { cases, default, .. } => {
+            for case in cases {
+                count_custom_error_reverts_in_region(&case.body, counts);
+            }
+            if let Some(r) = default {
+                count_custom_error_reverts_in_region(r, counts);
+            }
+        }
+        Statement::For {
+            condition_stmts,
+            body,
+            post,
+            ..
+        } => {
+            for s in condition_stmts {
+                count_custom_error_reverts_in_statement(s, counts);
+            }
+            count_custom_error_reverts_in_region(body, counts);
+            count_custom_error_reverts_in_region(post, counts);
+        }
+        Statement::Block(region) => count_custom_error_reverts_in_region(region, counts),
+        _ => {}
+    }
+}
+
+/// Counts CustomErrorRevert statements in a region.
+fn count_custom_error_reverts_in_region(region: &Region, counts: &mut BTreeMap<usize, usize>) {
+    for stmt in &region.statements {
+        count_custom_error_reverts_in_statement(stmt, counts);
+    }
 }
 
 /// Returns true if any expression in the block uses `msize()`.

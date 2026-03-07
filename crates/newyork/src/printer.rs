@@ -633,6 +633,26 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
+            Statement::ErrorStringRevert { length, data } => {
+                self.write_indent();
+                self.output.push_str(&format!(
+                    "error_string_revert({length}, {}_words)",
+                    data.len()
+                ));
+                self.write_newline();
+            }
+
+            Statement::CustomErrorRevert { selector, args } => {
+                self.write_indent();
+                let arg_strs: Vec<String> = args.iter().map(|a| format!("v{}", a.id.0)).collect();
+                self.output.push_str(&format!(
+                    "custom_error_revert(0x{}, [{}])",
+                    selector.to_str_radix(16),
+                    arg_strs.join(", ")
+                ));
+                self.write_newline();
+            }
+
             Statement::SelfDestruct { address } => {
                 self.write_indent();
                 self.output.push_str("selfdestruct(");

@@ -641,6 +641,14 @@ impl InlineRemapper {
             Statement::Stop => Statement::Stop,
             Statement::Invalid => Statement::Invalid,
             Statement::PanicRevert { code } => Statement::PanicRevert { code: *code },
+            Statement::ErrorStringRevert { length, data } => Statement::ErrorStringRevert {
+                length: *length,
+                data: data.clone(),
+            },
+            Statement::CustomErrorRevert { selector, args } => Statement::CustomErrorRevert {
+                selector: selector.clone(),
+                args: args.iter().map(|v| self.remap_value(v)).collect(),
+            },
             Statement::SelfDestruct { address } => Statement::SelfDestruct {
                 address: self.remap_value(address),
             },
@@ -1007,7 +1015,11 @@ fn find_max_value_id(object: &Object) -> u32 {
                     update_max_from_value(v, max_id);
                 }
             }
-            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. } => {}
         }
     }
 

@@ -112,6 +112,20 @@ pub fn translate_yul_object(
     // most functions live and where optimizations have the biggest impact.
     let (inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object);
 
+    // Debug: print the IR before heap analysis
+    if std::env::var("NEWYORK_DUMP_IR").is_ok() {
+        use std::io::Write;
+        let dump_path = format!("/tmp/newyork_ir_{}.txt", ir_object.name.replace('/', "_"));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&dump_path)
+        {
+            let _ = write!(f, "{}", print_object(&ir_object));
+        }
+    }
+
     // Run analysis passes on the full object tree
     let mut heap_analysis = HeapAnalysis::new();
     heap_analysis.analyze_object(&ir_object);

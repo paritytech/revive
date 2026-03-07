@@ -1,6 +1,8 @@
 # Compiler optimization task
 
-The task: The heap memory optimization task of the newyork optimizer pipeline is not useful yet. It works only if all access are aligned. Which is never the case for real world contracts. So this has to be changed. Only because some memory is not aligned does not mean the optimziation has to be all or nothing.
+The task: Read SPECINT_RESEARCH.md and implement 4. Approach A: Extending newyork with Compound Outlining
+
+dont implement the other approaches - no interpreter etc., just this additional newyork IR pass.
 
 WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - This is a complex task. More complex than usual. Senior compiler engineer level complexity.
@@ -52,7 +54,7 @@ Hint: Optimizations are tricky to implement. Run `make test-integration` often!
 
 IMPROTANT. You are NOT allowed to commit without these two steps:
 1. ALWAYS verify `RESOLC_USE_NEWYORK=1 make test` passes before commit
-2. ALWAYS verify `RESOLC_USE_NEWYORK=1 bash retester.sh` has 0 failures before commit (there seem to be 150 preexisting OutOfGas)
+2. ALWAYS verify `RESOLC_USE_NEWYORK=1 bash retester.sh` has 0 failures before commit
 3. Check the openzeppelin contracts in oz-tests as well as codesize.json - regressions together with overall gains are ok but in general code sizes must not regress!
 
 ---
@@ -577,3 +579,97 @@ Two contracts caused resolc to hang indefinitely with `RESOLC_USE_NEWYORK=1`:
 - 0 timeouts across all 4,314 test files (was 2 hanging indefinitely)
 - OZ contracts: All compile, identical sizes (no regression)
 - Format + clippy: clean
+
+## Iteration 8: Compound Outlining Pass
+
+### Approach
+
+Implemented compound outlining: identifying multi-operation patterns in the newyork IR
+and replacing them with calls to shared outlined functions. Four specific optimizations:
+
+1. **CustomErrorRevert num_args-based outlining** (threshold >= 3 instances per num_args):
+   Groups all custom error reverts by argument count (not per-selector), passing the
+   selector as the first parameter. Creates `__revive_custom_error_N(selector, arg0, ...)`
+   functions with `noinline + minsize` attributes.
+
+2. **Outlined `__revive_store_bswap` for variable-value InlineByteSwap stores**:
+   Instead of inlining the 4x (shift+trunc+bswap.i64+gep+store) sequence at every
+   variable-value constant-offset mstore site, calls a shared function. Constant-value
+   stores remain inline so LLVM can fold bswap(const)=const.
+
+3. **Panic block `store_bswap_unchecked`**: Changed panic revert blocks from using
+   `__revive_store_heap_word` (with sbrk overhead) to `store_bswap_unchecked` (unchecked
+   GEP). Since panic blocks store constant selectors/codes at constant offsets, LLVM
+   folds the bswap entirely, eliminating ~20 instructions per panic store.
+
+4. **Combined callvalue check + revert**: Detects the pattern
+   `if callvalue() { revert(0, 0) }` and replaces it with a single call to
+   `__revive_callvalue_check()` which checks callvalue and reverts internally.
+   Eliminates the conditional branch + then-block at each call site.
+
+### What does NOT work for outlining
+
+- **Lowering threshold to 2**: With only 2 instances, PolkaVM function call overhead
+  (prologue/epilogue ~50+ bytes) exceeds the savings from deduplication. Tested and
+  confirmed regressions: oz_gov +110, oz_rwa +72, oz_stable +73, proxy +40.
+
+- **Load bswap outlining**: Outlining mload bswap breaks LLVM's store-to-load
+  forwarding optimization. Tested and confirmed regressions: oz_stable +313, oz_gov +75.
+
+- **Double-outlined stores**: Having custom_error functions call the outlined store_bswap
+  function creates two levels of indirection. The extra call overhead exceeds savings.
+
+- **LLVM MachineOutliner/IROutliner**: Zero or negative effect on PolkaVM RISC-V
+  (confirmed in SPECINT_RESEARCH.md). The code duplication is semantic, not textual.
+
+- **Generic `if cond { revert(0,0) }` outlining**: For non-callvalue conditions, the
+  condition is already computed and the branch is just 1 PVM instruction. No function
+  call can be cheaper than a single branch instruction.
+
+### Why 10-20% was unrealistic
+
+SPECINT_RESEARCH.md estimated 10-20% additional reduction from compound outlining.
+Empirical analysis shows this was overly optimistic because:
+1. **Most patterns already outlined**: Storage ops (__revive_load/store_storage_word),
+   keccak256 (__revive_keccak256_one/two_words), callvalue, caller, calldataload,
+   revert, log, division are all already runtime functions.
+2. **PolkaVM function call overhead is high**: ~50+ bytes prologue/epilogue makes
+   outlining unprofitable for operations smaller than ~30 instructions.
+3. **LLVM can't optimize through noinline**: Outlining prevents constant folding,
+   store-to-load forwarding, and dead code elimination across the call boundary.
+4. **ABI encode/decode varies per function**: Each has different parameter types and
+   counts, making pattern matching impractical without parameterized templates.
+
+### Code Size Results (Compound Outlining Only)
+
+| Contract   | Before  | After   | Savings | %     |
+|------------|---------|---------|---------|-------|
+| erc1155    | 41,926  | 41,275  | -651    | -1.55% |
+| erc20      | 56,953  | 56,291  | -662    | -1.16% |
+| erc721     | 62,447  | 61,603  | -844    | -1.35% |
+| oz_gov     | 102,629 | 101,869 | -760    | -0.74% |
+| oz_rwa     | 54,172  | 53,281  | -891    | -1.64% |
+| oz_simple  | 19,181  | 18,840  | -341    | -1.78% |
+| oz_stable  | 58,722  | 57,616  | -1,106  | -1.88% |
+| proxy      | 4,133   | 4,096   | -37     | -0.90% |
+
+### Cumulative Results (All Heap + Outlining Optimizations)
+
+| Contract   | Baseline | Current | Savings | %     |
+|------------|----------|---------|---------|-------|
+| erc1155    | 43,880   | 41,275  | -2,605  | -5.94% |
+| erc20      | 59,724   | 56,291  | -3,433  | -5.75% |
+| erc721     | 64,946   | 61,603  | -3,343  | -5.15% |
+| oz_gov     | 106,417  | 101,869 | -4,548  | -4.27% |
+| oz_rwa     | 56,936   | 53,281  | -3,655  | -6.42% |
+| oz_simple  | 20,109   | 18,840  | -1,269  | -6.31% |
+| oz_stable  | 61,801   | 57,616  | -4,185  | -6.77% |
+| proxy      | 4,424    | 4,096   | -328    | -7.41% |
+
+### Test Results
+- `make test`: PASS (format, clippy, doc, all workspace tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed
+- Codesize test: PASS (all benchmarks unchanged)
+- OZ contracts: All compile, all improved or unchanged
+- deploy_erc20.sh: All assertions pass

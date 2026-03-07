@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use inkwell::types::BasicType;
 use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue};
-use num::ToPrimitive;
+use num::{ToPrimitive, Zero};
 use revive_llvm_context::{
     PolkaVMArgument, PolkaVMContext, PolkaVMFunctionDeployCode, PolkaVMFunctionRuntimeCode,
 };
@@ -163,6 +163,29 @@ pub struct LlvmCodegen<'ctx> {
     /// Whether the contract uses `msize()`. When false, InlineNative stores
     /// can skip the `ensure_heap_size` watermark update.
     has_msize: bool,
+    /// Cache of outlined error string revert functions.
+    /// Keyed by number of data words (1, 2, 3, etc.).
+    /// Each function is `noreturn (i256 length, i256 word0, ...) -> void`.
+    error_string_revert_fns: BTreeMap<usize, inkwell::values::FunctionValue<'ctx>>,
+    /// Number of ErrorStringRevert sites per data-word count.
+    /// Used to decide: outline (>= 2 sites) vs inline (1 site).
+    error_string_revert_counts: BTreeMap<usize, usize>,
+    /// Cache of outlined custom error revert functions.
+    /// Keyed by num_args. The selector is passed as the first parameter.
+    custom_error_revert_fns: BTreeMap<usize, inkwell::values::FunctionValue<'ctx>>,
+    /// Number of CustomErrorRevert sites per num_args.
+    custom_error_revert_counts: BTreeMap<usize, usize>,
+    /// Cached outlined store_bswap function: void(i32 offset, i256 value).
+    /// Uses unchecked GEP + 4× bswap.i64 + store. Avoids inlining the bswap
+    /// sequence at every call site for variable values.
+    store_bswap_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined load_bswap function: i256(i32 offset).
+    /// Uses unchecked GEP + 4× load + bswap.i64 + combine.
+    #[allow(dead_code)]
+    load_bswap_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined callvalue check + revert function.
+    /// Checks if callvalue is nonzero and reverts with empty data if so.
+    callvalue_check_fn: Option<inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -192,6 +215,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
+            error_string_revert_fns: BTreeMap::new(),
+            error_string_revert_counts: BTreeMap::new(),
+            custom_error_revert_fns: BTreeMap::new(),
+            custom_error_revert_counts: BTreeMap::new(),
+            store_bswap_fn: None,
+            load_bswap_fn: None,
+            callvalue_check_fn: None,
         }
     }
 
@@ -223,6 +253,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             storage_key_globals: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
+            error_string_revert_fns: BTreeMap::new(),
+            error_string_revert_counts: BTreeMap::new(),
+            custom_error_revert_fns: BTreeMap::new(),
+            custom_error_revert_counts: BTreeMap::new(),
+            store_bswap_fn: None,
+            load_bswap_fn: None,
+            callvalue_check_fn: None,
         }
     }
 
@@ -1039,16 +1076,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let panic_block = context.append_basic_block(&block_name);
         context.set_basic_block(panic_block);
 
-        // Emit: mstore(0, 0x4e487b7100000000000000000000000000000000000000000000000000000000)
-        let zero_offset = context.word_const(0);
+        // Emit: mstore(0, 0x4e487b71...) using inline bswap for constant folding
+        let zero_xlen = context.xlen_type().const_int(0, false);
         let panic_selector = context
             .word_const_str_hex("4e487b7100000000000000000000000000000000000000000000000000000000");
-        revive_llvm_context::polkavm_evm_memory::store(context, zero_offset, panic_selector)?;
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context,
+            zero_xlen,
+            panic_selector,
+        )?;
 
-        // Emit: mstore(4, error_code)
-        let four_offset = context.word_const(4);
+        // Emit: mstore(4, error_code) using inline bswap for constant folding
+        let four_xlen = context.xlen_type().const_int(4, false);
         let code_val = context.word_const(error_code as u64);
-        revive_llvm_context::polkavm_evm_memory::store(context, four_offset, code_val)?;
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context, four_xlen, code_val,
+        )?;
 
         // Branch to the shared revert(0, 0x24) block
         let revert_block = self.get_or_create_revert_block(context, 0x24)?;
@@ -1059,6 +1102,404 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         self.panic_blocks.insert(error_code, panic_block);
         Ok(panic_block)
+    }
+
+    /// Gets or creates an outlined function for Error(string) reverts with a given
+    /// number of data words. The function signature is:
+    ///   `void @__revive_error_string_revert_N(i256 %length, i256 %word0, ...) noreturn`
+    ///
+    /// The function body loads the free memory pointer, stores the Error(string) ABI
+    /// encoding (selector + offset + length + data words), and calls revert.
+    fn get_or_create_error_string_revert_fn(
+        &mut self,
+        num_words: usize,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(&func) = self.error_string_revert_fns.get(&num_words) {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let fn_name = format!("__revive_error_string_revert_{num_words}");
+
+        // Build function type: void(i256 length, i256 word0, ..., i256 wordN-1)
+        let mut param_types: Vec<inkwell::types::BasicMetadataTypeEnum> = vec![word_type.into()]; // length
+        for _ in 0..num_words {
+            param_types.push(word_type.into());
+        }
+        let fn_type = context.llvm().void_type().fn_type(&param_types, false);
+
+        let func = context.module().add_function(
+            &fn_name,
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        // Set noinline + noreturn + minsize attributes
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let noreturn_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoReturn as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        // Save current builder position
+        let saved_block = context.basic_block();
+
+        // Build the function body
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        // Get parameters
+        let length_param = func.get_nth_param(0).unwrap().into_int_value();
+        let word_params: Vec<_> = (0..num_words)
+            .map(|i| func.get_nth_param((i + 1) as u32).unwrap().into_int_value())
+            .collect();
+
+        // Load free memory pointer: mload(0x40)
+        let fmp_offset = context.word_const(0x40);
+        let fmp = revive_llvm_context::polkavm_evm_memory::load(context, fmp_offset)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+
+        // mstore(fmp, Error(string) selector)
+        let error_selector = context
+            .word_const_str_hex("08c379a000000000000000000000000000000000000000000000000000000000");
+        revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_selector)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // mstore(fmp + 4, 0x20) — string data offset
+        let fmp_plus_4 = context
+            .builder()
+            .build_int_add(fmp, context.word_const(4), "fmp_4")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset_val = context.word_const(0x20);
+        revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_4, offset_val)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // mstore(fmp + 0x24, length)
+        let fmp_plus_0x24 = context
+            .builder()
+            .build_int_add(fmp, context.word_const(0x24), "fmp_24")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_0x24, length_param)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // mstore(fmp + 0x44, word0), mstore(fmp + 0x64, word1), ...
+        for (i, word_param) in word_params.iter().enumerate() {
+            let offset = 0x44 + (i as u64) * 0x20;
+            let fmp_plus_offset = context
+                .builder()
+                .build_int_add(fmp, context.word_const(offset), &format!("fmp_{offset:x}"))
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_offset, *word_param)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        }
+
+        // revert(fmp, total_length)
+        let total_length = 0x44 + (num_words as u64) * 0x20;
+        let total_length_val = context.word_const(total_length);
+        revive_llvm_context::polkavm_evm_return::revert(context, fmp, total_length_val)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context.build_unreachable();
+
+        // Restore builder position
+        context.set_basic_block(saved_block);
+
+        self.error_string_revert_fns.insert(num_words, func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined function for custom error reverts with N arguments.
+    /// The function signature is:
+    ///   `void @__revive_custom_error_revert_N(i256 %selector, i256 %arg0, ...) noreturn`
+    ///
+    /// The function body stores the selector at scratch\[0\], arguments at scratch\[4\],
+    /// scratch\[0x24\], etc., and calls revert(0, 4 + 32*N).
+    /// Uses store_bswap_unchecked since scratch space offsets are constant and small.
+    fn get_or_create_custom_error_revert_fn(
+        &mut self,
+        num_args: usize,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(&func) = self.custom_error_revert_fns.get(&num_args) {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let fn_name = format!("__revive_custom_error_{num_args}");
+
+        // Build function type: void(i256 selector, i256 arg0, ..., i256 argN-1)
+        // Selector is passed as the first parameter
+        let param_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            (0..=num_args).map(|_| word_type.into()).collect();
+        let fn_type = context.llvm().void_type().fn_type(&param_types, false);
+
+        let func = context.module().add_function(
+            &fn_name,
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        // Set noinline + noreturn + minsize attributes
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let noreturn_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoReturn as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        // Save current builder position
+        let saved_block = context.basic_block();
+
+        // Build the function body
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        // param 0 = selector, params 1..=num_args = dynamic args
+        let selector_param = func.get_nth_param(0).unwrap().into_int_value();
+        let arg_params: Vec<_> = (1..=num_args)
+            .map(|i| func.get_nth_param(i as u32).unwrap().into_int_value())
+            .collect();
+
+        // mstore(0, selector)
+        let offset_0 = context.xlen_type().const_int(0, false);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context,
+            offset_0,
+            selector_param,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // mstore(4, arg0), mstore(0x24, arg1), ...
+        for (i, arg_param) in arg_params.iter().enumerate() {
+            let byte_offset = 4 + (i as u64) * 0x20;
+            let offset_val = context.xlen_type().const_int(byte_offset, false);
+            revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+                context, offset_val, *arg_param,
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        }
+
+        // revert(0, 4 + 32*num_args) - use outlined revert to avoid duplicating exit sequence
+        let const_len = 4 + (num_args as u64) * 0x20;
+        let length_xlen = context.xlen_type().const_int(const_len, false);
+        revive_llvm_context::polkavm_evm_return::revert_outlined(context, length_xlen)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context.build_unreachable();
+
+        // Restore builder position
+        context.set_basic_block(saved_block);
+
+        self.custom_error_revert_fns.insert(num_args, func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined store_bswap function: void(i32 offset, i256 value).
+    /// Uses unchecked heap GEP + 4× bswap.i64 + store. This avoids duplicating
+    /// the bswap sequence at every variable-value InlineByteSwap store site.
+    fn get_or_create_store_bswap_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.store_bswap_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let word_type = context.word_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into(), word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_store_bswap",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let value_param = func.get_nth_param(1).unwrap().into_int_value();
+
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context,
+            offset_param,
+            value_param,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.store_bswap_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined load_bswap function: i256(i32 offset).
+    /// Uses unchecked heap GEP + 4× load + bswap.i64 + combine.
+    #[allow(dead_code)]
+    fn get_or_create_load_bswap_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.load_bswap_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let word_type = context.word_type();
+        let fn_type = word_type.fn_type(&[xlen_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_load_bswap",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+
+        let result =
+            revive_llvm_context::polkavm_evm_memory::load_bswap_unchecked(context, offset_param)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context
+            .builder()
+            .build_return(Some(&result))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.load_bswap_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Checks if a region is a simple `revert(0, 0)` with no other side effects.
+    /// The region may contain Let bindings (for intermediate zero literals)
+    /// followed by a Revert statement.
+    fn is_revert_zero_region(region: &crate::ir::Region) -> bool {
+        let mut found_revert = false;
+        for stmt in &region.statements {
+            match stmt {
+                Statement::Let {
+                    value: Expr::Literal { ref value, .. },
+                    ..
+                } => {
+                    // Allow bindings of literal zeros (common Yul pattern: let v := 0)
+                    if !value.is_zero() {
+                        return false;
+                    }
+                }
+                Statement::Let { .. } => {
+                    return false;
+                }
+                Statement::Revert { .. } => {
+                    found_revert = true;
+                }
+                _ => return false,
+            }
+        }
+        found_revert
+    }
+
+    /// Gets or creates an outlined callvalue check + revert function:
+    /// `void __revive_callvalue_check()` that checks if callvalue is nonzero
+    /// and reverts with empty data if so. Returns normally if callvalue is zero.
+    fn get_or_create_callvalue_check_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.callvalue_check_fn {
+            return Ok(func);
+        }
+
+        let void_type = context.llvm().void_type();
+        let fn_type = void_type.fn_type(&[], false);
+        let func = context
+            .module()
+            .add_function("__revive_callvalue_check", fn_type, None);
+
+        // noinline + minsize: don't inline this, optimize for size
+        let noinline_attr = context.llvm().create_enum_attribute(
+            inkwell::attributes::Attribute::get_named_enum_kind_id("noinline"),
+            0,
+        );
+        let minsize_attr = context.llvm().create_enum_attribute(
+            inkwell::attributes::Attribute::get_named_enum_kind_id("minsize"),
+            0,
+        );
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        // Call __revive_callvalue_nonzero() to check if callvalue is nonzero
+        let is_nonzero =
+            revive_llvm_context::polkavm_evm_ether_gas::value_nonzero_outlined(context)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                .into_int_value();
+
+        let revert_block = context.llvm().append_basic_block(func, "revert");
+        let ok_block = context.llvm().append_basic_block(func, "ok");
+
+        context.build_conditional_branch(is_nonzero, revert_block, ok_block)?;
+
+        // Revert block: call __revive_revert_0()
+        context.set_basic_block(revert_block);
+        revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context.build_unreachable();
+
+        // OK block: just return
+        context.set_basic_block(ok_block);
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.callvalue_check_fn = Some(func);
+        Ok(func)
     }
 
     /// Gets or creates a shared basic block for a `return(offset, length)` pattern
@@ -1124,6 +1565,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.use_outlined_calldataload = false;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
         self.has_msize = object.has_msize();
+        self.error_string_revert_counts = object.count_error_string_reverts();
+        self.custom_error_revert_counts = object.count_custom_error_reverts();
 
         // Determine if this is deploy or runtime code and set the code type
         let is_runtime = object.name.ends_with("_deployed");
@@ -1545,6 +1988,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::Stop => "Stop",
             Statement::Invalid => "Invalid",
             Statement::PanicRevert { .. } => "PanicRevert",
+            Statement::ErrorStringRevert { .. } => "ErrorStringRevert",
+            Statement::CustomErrorRevert { .. } => "CustomErrorRevert",
             Statement::DataCopy { .. } => "DataCopy",
         };
 
@@ -1670,12 +2115,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             offset_val,
                             "mstore_offset_xlen",
                         )?;
-                        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-                            context,
-                            offset_xlen,
-                            value_val,
-                        )
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        if value_val.is_const() {
+                            // Constant values: inline bswap so LLVM folds bswap(const) = const
+                            revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+                                context,
+                                offset_xlen,
+                                value_val,
+                            )
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        } else {
+                            // Variable values: call outlined function to avoid
+                            // duplicating 4× bswap.i64 sequence at every site
+                            let func = self.get_or_create_store_bswap_fn(context)?;
+                            let value_word =
+                                self.ensure_word_type(context, value_val, "store_bswap_val")?;
+                            context
+                                .builder()
+                                .build_call(
+                                    func,
+                                    &[offset_xlen.into(), value_word.into()],
+                                    "store_bswap",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        }
                         if self.has_msize {
                             let static_off =
                                 Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
@@ -1784,6 +2246,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 else_region,
                 outputs,
             } => {
+                // Optimization: if `if callvalue() { revert(0, 0) }` with no else/outputs,
+                // replace the entire if with a single call to an outlined function that
+                // checks callvalue and reverts if nonzero. This eliminates the branch,
+                // the then-block, and the join-block at each call site.
+                if self.use_outlined_callvalue
+                    && self.callvalue_value_ids.contains(&condition.id.0)
+                    && else_region.is_none()
+                    && outputs.is_empty()
+                    && Self::is_revert_zero_region(then_region)
+                {
+                    let func = self.get_or_create_callvalue_check_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(func, &[], "callvalue_check")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    return Ok(());
+                }
+
                 // Optimization: if the condition is a callvalue-bound value and we have
                 // the outlined callvalue, use __revive_callvalue_nonzero() which returns
                 // i1 directly. This avoids a 256-bit comparison at every call site.
@@ -2534,6 +3014,152 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let panic_block = self.get_or_create_panic_block(context, *code)?;
                 context.build_unconditional_branch(panic_block);
                 let dead_block = context.append_basic_block("panic_dedup_dead");
+                context.set_basic_block(dead_block);
+            }
+
+            Statement::ErrorStringRevert { length, data } => {
+                let num_words = data.len();
+                let count = self
+                    .error_string_revert_counts
+                    .get(&num_words)
+                    .copied()
+                    .unwrap_or(0);
+
+                // Only outline when >= 2 sites exist to amortize function body cost
+                if count >= 2 {
+                    let func = self.get_or_create_error_string_revert_fn(num_words, context)?;
+
+                    let length_val = context.word_const(*length as u64);
+                    let mut args: Vec<inkwell::values::BasicMetadataValueEnum> =
+                        vec![length_val.into()];
+                    for word in data {
+                        let word_val = context.word_const_str_hex(&word.to_str_radix(16));
+                        args.push(word_val.into());
+                    }
+
+                    context
+                        .builder()
+                        .build_call(func, &args, "error_string_revert")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    context.build_unreachable();
+                } else {
+                    // Emit inline: same code as the outlined function body
+                    let fmp_offset = context.word_const(0x40);
+                    let fmp = revive_llvm_context::polkavm_evm_memory::load(context, fmp_offset)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .into_int_value();
+
+                    let error_sel = context.word_const_str_hex(
+                        "08c379a000000000000000000000000000000000000000000000000000000000",
+                    );
+                    revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_sel)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                    let fmp_4 = context
+                        .builder()
+                        .build_int_add(fmp, context.word_const(4), "fmp_4")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    revive_llvm_context::polkavm_evm_memory::store(
+                        context,
+                        fmp_4,
+                        context.word_const(0x20),
+                    )
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                    let fmp_24 = context
+                        .builder()
+                        .build_int_add(fmp, context.word_const(0x24), "fmp_24")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    revive_llvm_context::polkavm_evm_memory::store(
+                        context,
+                        fmp_24,
+                        context.word_const(*length as u64),
+                    )
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                    for (i, word) in data.iter().enumerate() {
+                        let off = 0x44 + (i as u64) * 0x20;
+                        let fmp_off = context
+                            .builder()
+                            .build_int_add(fmp, context.word_const(off), &format!("fmp_{off:x}"))
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        let word_val = context.word_const_str_hex(&word.to_str_radix(16));
+                        revive_llvm_context::polkavm_evm_memory::store(context, fmp_off, word_val)
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
+
+                    let total_len = 0x44 + (num_words as u64) * 0x20;
+                    revive_llvm_context::polkavm_evm_return::revert(
+                        context,
+                        fmp,
+                        context.word_const(total_len),
+                    )
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    context.build_unreachable();
+                }
+
+                // Add dead block for subsequent code
+                let dead_block = context.append_basic_block("error_string_dead");
+                context.set_basic_block(dead_block);
+            }
+
+            Statement::CustomErrorRevert { selector, args } => {
+                let num_args = args.len();
+                let count = self
+                    .custom_error_revert_counts
+                    .get(&num_args)
+                    .copied()
+                    .unwrap_or(0);
+
+                if count >= 3 {
+                    // Outlined path: call shared function with selector + args
+                    let func = self.get_or_create_custom_error_revert_fn(num_args, context)?;
+
+                    let selector_val = context.word_const_str_hex(&selector.to_str_radix(16));
+                    let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
+                        vec![selector_val.into()];
+                    for arg in args {
+                        let arg_val = self.translate_value(arg)?.into_int_value();
+                        let arg_val =
+                            self.ensure_word_type(context, arg_val, "custom_error_arg")?;
+                        call_args.push(arg_val.into());
+                    }
+
+                    context
+                        .builder()
+                        .build_call(func, &call_args, "custom_error_revert")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    context.build_unreachable();
+                } else {
+                    // Inline path: emit mstores + revert directly using InlineByteSwap
+                    let selector_val = context.word_const_str_hex(&selector.to_str_radix(16));
+                    let offset_0 = context.xlen_type().const_int(0, false);
+                    revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+                        context,
+                        offset_0,
+                        selector_val,
+                    )
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+                    for (i, arg) in args.iter().enumerate() {
+                        let arg_val = self.translate_value(arg)?.into_int_value();
+                        let arg_val =
+                            self.ensure_word_type(context, arg_val, "custom_error_arg")?;
+                        let byte_offset = 4 + (i as u64) * 0x20;
+                        let offset_val = context.xlen_type().const_int(byte_offset, false);
+                        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+                            context, offset_val, arg_val,
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    }
+
+                    let const_len = 4 + (num_args as u64) * 0x20;
+                    let revert_block = self.get_or_create_revert_block(context, const_len)?;
+                    context.build_unconditional_branch(revert_block);
+                }
+
+                // Add dead block for subsequent code
+                let dead_block = context.append_basic_block("custom_error_dead");
                 context.set_basic_block(dead_block);
             }
 

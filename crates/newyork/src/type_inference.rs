@@ -980,7 +980,11 @@ impl TypeInference {
 
             // PanicRevert: no variable values (code is u8 constant)
             // Stop/Invalid: no values
-            Statement::PanicRevert { .. } | Statement::Stop | Statement::Invalid => {}
+            Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. }
+            | Statement::Stop
+            | Statement::Invalid => {}
         }
     }
 
@@ -1290,7 +1294,9 @@ impl TypeInference {
             | Statement::Leave { .. }
             | Statement::Stop
             | Statement::Invalid
-            | Statement::PanicRevert { .. } => {}
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. } => {}
 
             Statement::SetImmutable { value, .. } => {
                 // Immutable values are 256-bit

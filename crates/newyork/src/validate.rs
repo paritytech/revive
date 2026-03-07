@@ -449,7 +449,11 @@ impl Validator {
                 self.use_value(length, context);
             }
 
-            Statement::Stop | Statement::Invalid | Statement::PanicRevert { .. } => {}
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. }
+            | Statement::CustomErrorRevert { .. } => {}
 
             Statement::SelfDestruct { address } => {
                 self.use_value(address, context);

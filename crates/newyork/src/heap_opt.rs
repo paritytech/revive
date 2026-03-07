@@ -336,7 +336,34 @@ impl HeapAnalysis {
                 }
             }
 
-            Statement::For { body, post, .. } => {
+            Statement::For {
+                init_values,
+                loop_vars,
+                condition_stmts,
+                body,
+                post,
+                outputs,
+                ..
+            } => {
+                // Loop-carried variables become PHI nodes in LLVM, so they are
+                // never constants even if the initial value is a literal.
+                // Propagate offset info from init_values but mark as non-literal.
+                for (init_val, loop_var) in init_values.iter().zip(loop_vars.iter()) {
+                    if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
+                        info.from_literal = false;
+                        self.offset_values.insert(loop_var.0, info);
+                    }
+                }
+                // Output variables are also PHI nodes (loop exit values).
+                for (init_val, output) in init_values.iter().zip(outputs.iter()) {
+                    if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
+                        info.from_literal = false;
+                        self.offset_values.insert(output.0, info);
+                    }
+                }
+                for stmt in condition_stmts {
+                    self.analyze_statement(stmt, in_function);
+                }
                 self.analyze_region(body, in_function);
                 self.analyze_region(post, in_function);
             }

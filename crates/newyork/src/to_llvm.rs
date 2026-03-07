@@ -338,6 +338,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ///
     /// Uses the LLVM constant value directly (not the IR ValueId) to avoid
     /// ValueId namespace collisions between outer objects and subobjects.
+    /// The heap analysis tracks variable-accessed offsets to prevent mode
+    /// mismatches when the solc M3 optimizer turns literals into variables.
     fn native_memory_mode(&self, offset_llvm: IntValue<'ctx>) -> NativeMemoryMode {
         if self.heap_opt.all_native() {
             return NativeMemoryMode::AllNative;

@@ -101,6 +101,12 @@ pub struct HeapAnalysis {
     /// FMP native-mode optimization unsafe. Normal Solidity returns from free_ptr
     /// (>= 0x80) so this is only set for inline assembly patterns like `return(0, 96)`.
     has_return_covering_fmp: bool,
+    /// Static offsets that are accessed via non-literal (variable) expressions.
+    /// When the solc M3 optimizer turns literal offsets into variables
+    /// (e.g., `let size := 64; mload(size)`), the LLVM IR value won't be a constant.
+    /// Native mode requires LLVM constant detection, so these offsets must use
+    /// byte-swap mode to avoid store/load mode mismatches.
+    variable_accessed_offsets: BTreeSet<u64>,
 }
 
 /// Information about a value used as a memory offset.
@@ -110,6 +116,10 @@ pub struct OffsetInfo {
     pub static_value: Option<u64>,
     /// Known alignment (in bytes). 32 means word-aligned.
     pub alignment: u32,
+    /// Whether this value originates from a literal expression (not a variable).
+    /// When false, the LLVM IR value may not be a constant even though the
+    /// newyork analysis can resolve it statically.
+    pub from_literal: bool,
 }
 
 impl Default for OffsetInfo {
@@ -117,6 +127,7 @@ impl Default for OffsetInfo {
         OffsetInfo {
             static_value: None,
             alignment: 1, // Assume no alignment by default
+            from_literal: false,
         }
     }
 }
@@ -133,6 +144,7 @@ impl HeapAnalysis {
             min_dynamic_escape_start: None,
             has_dynamic_accesses: false,
             has_return_covering_fmp: false,
+            variable_accessed_offsets: BTreeSet::new(),
         }
     }
 
@@ -186,6 +198,7 @@ impl HeapAnalysis {
 
             Statement::MStore { offset, region, .. } => {
                 let pattern = self.classify_access(offset);
+                self.track_variable_access(offset);
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
                 } else {
@@ -444,6 +457,19 @@ impl HeapAnalysis {
             .and_then(|info| info.static_value)
     }
 
+    /// Records that a static offset was accessed via a non-literal expression.
+    /// This means LLVM may not see it as a constant, causing a mode mismatch
+    /// if we use native mode for literal accesses to the same offset.
+    fn track_variable_access(&mut self, offset: &Value) {
+        if let Some(info) = self.offset_values.get(&offset.id.0) {
+            if let Some(static_val) = info.static_value {
+                if !info.from_literal {
+                    self.variable_accessed_offsets.insert(static_val);
+                }
+            }
+        }
+    }
+
     /// Marks all word-aligned memory regions in [offset, offset+length) as escaping.
     fn mark_escaping_range(&mut self, offset: &Value, length: &Value) {
         let start = self.extract_static_offset(offset);
@@ -486,10 +512,16 @@ impl HeapAnalysis {
                 Some(OffsetInfo {
                     static_value: Some(static_val),
                     alignment: compute_alignment(static_val),
+                    from_literal: true,
                 })
             }
 
-            Expr::Var(id) => self.offset_values.get(&id.0).cloned(),
+            Expr::Var(id) => self.offset_values.get(&id.0).cloned().map(|mut info| {
+                // A variable reference may not be a constant in LLVM IR,
+                // even if the newyork analysis knows its static value.
+                info.from_literal = false;
+                info
+            }),
 
             Expr::Binary { op, lhs, rhs } => {
                 let lhs_info = self.offset_values.get(&lhs.id.0);
@@ -514,6 +546,7 @@ impl HeapAnalysis {
                         Some(OffsetInfo {
                             static_value: static_val,
                             alignment: result_align,
+                            from_literal: false,
                         })
                     }
 
@@ -540,6 +573,7 @@ impl HeapAnalysis {
                         Some(OffsetInfo {
                             static_value: static_val,
                             alignment: mult_align,
+                            from_literal: false,
                         })
                     }
 
@@ -551,6 +585,7 @@ impl HeapAnalysis {
                             Some(OffsetInfo {
                                 static_value: None,
                                 alignment: align.max(1),
+                                from_literal: false,
                             })
                         } else {
                             None
@@ -565,6 +600,7 @@ impl HeapAnalysis {
                                 Some(OffsetInfo {
                                     static_value: None,
                                     alignment: base_align.saturating_mul(1 << shift),
+                                    from_literal: false,
                                 })
                             } else {
                                 None
@@ -594,6 +630,7 @@ impl HeapAnalysis {
         match expr {
             Expr::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
+                self.track_variable_access(offset);
                 if self.extract_static_offset(offset).is_none() {
                     self.has_dynamic_accesses = true;
                 }
@@ -664,6 +701,11 @@ impl HeapAnalysis {
         self.has_return_covering_fmp
     }
 
+    /// Returns the set of static offsets accessed via non-literal expressions.
+    pub fn variable_accessed_offsets(&self) -> &BTreeSet<u64> {
+        &self.variable_accessed_offsets
+    }
+
     /// Returns statistics about the analysis.
     pub fn statistics(&self) -> HeapAnalysisStats {
         let total_accesses = self.memory_accesses.len();
@@ -723,10 +765,6 @@ pub struct HeapOptResults {
     pub native_safe_regions: BTreeSet<u64>,
     /// Static offsets that are known to be safe for native access.
     pub native_safe_offsets: BTreeSet<u64>,
-    /// Mapping from Value ID to offset info (static value and alignment).
-    /// Used to look up offset information during code generation for
-    /// per-access native mode decisions.
-    offset_info: BTreeMap<u32, OffsetInfo>,
     /// Total number of memory accesses analyzed.
     pub total_accesses: usize,
     /// Number of accesses that have unknown/dynamic offsets.
@@ -744,6 +782,10 @@ pub struct HeapOptResults {
     /// Whether any `return` statement covers the FMP slot at 0x40.
     /// When true, the FMP native-mode optimization is unsafe.
     has_return_covering_fmp: bool,
+    /// Static offsets that are accessed via non-literal (variable) expressions.
+    /// These offsets may not be LLVM constants, so native mode would cause
+    /// a store/load mode mismatch with literal accesses to the same offset.
+    variable_accessed_offsets: BTreeSet<u64>,
 }
 
 impl HeapOptResults {
@@ -769,7 +811,6 @@ impl HeapOptResults {
         HeapOptResults {
             native_safe_regions,
             native_safe_offsets,
-            offset_info: analysis.offset_values.clone(),
             total_accesses: analysis.memory_accesses.len(),
             unknown_accesses,
             tainted_count: analysis.tainted_regions().len(),
@@ -778,11 +819,19 @@ impl HeapOptResults {
             min_dynamic_escape_start: analysis.min_dynamic_escape_start(),
             has_dynamic_accesses: analysis.has_dynamic_accesses(),
             has_return_covering_fmp: analysis.has_return_covering_fmp(),
+            variable_accessed_offsets: analysis.variable_accessed_offsets().clone(),
         }
     }
 
     /// Checks if a static offset can use native byte order.
     pub fn can_use_native(&self, offset: u64) -> bool {
+        // When a static offset is also accessed via a non-literal expression
+        // (e.g., `let size := 64; mload(size)`), LLVM may not see it as a constant.
+        // The literal access would get InlineNative, but the variable access would
+        // get ByteSwap, causing a store/load mode mismatch. Disable native mode.
+        if self.variable_accessed_offsets.contains(&offset) {
+            return false;
+        }
         // When there are dynamic-length return statements with known start,
         // any offset at or above that start could escape via the return.
         if let Some(min_start) = self.min_dynamic_escape_start {
@@ -817,7 +866,13 @@ impl HeapOptResults {
     /// This is false when:
     /// - A static `return` covers offset 0x40 (e.g., `return(0, 96)`)
     /// - A dynamic-length escape starts at or before 0x40 (e.g., `return(0, dynamic)`)
+    /// - Offset 0x40 is accessed via a non-literal expression (LLVM won't see a constant)
     pub fn fmp_native_safe(&self) -> bool {
+        // If 0x40 is accessed via a variable, LLVM won't see a constant and will
+        // use ByteSwap mode, mismatching with literal InlineNative stores.
+        if self.variable_accessed_offsets.contains(&0x40) {
+            return false;
+        }
         if self.has_return_covering_fmp {
             return false;
         }
@@ -863,11 +918,6 @@ impl HeapOptResults {
     /// accesses can use native byte order, but we may need mixed mode.
     pub fn has_any_native(&self) -> bool {
         !self.native_safe_regions.is_empty()
-    }
-
-    /// Returns offset info for a value ID, if available.
-    pub fn get_offset_info(&self, value_id: u32) -> Option<&OffsetInfo> {
-        self.offset_info.get(&value_id)
     }
 }
 

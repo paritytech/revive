@@ -530,3 +530,50 @@ load byte-swaps → garbage FMP → panic 0x41 (memory allocation error).
   - **0 new failures**
 - Codesize test: PASS (ERC20 improved -84 bytes)
 - OZ contracts: All compile
+
+## Iteration 7: Fix infinite loop in heap analysis (forwarder.sol, unbalanced_gas_limit.sol)
+
+### Problem
+
+Two contracts caused resolc to hang indefinitely with `RESOLC_USE_NEWYORK=1`:
+- `simple/system/forwarder.sol` (proxy with `revert(0, returndatasize())`)
+- `simple/try_catch/unbalanced_gas_limit.sol` (inline asm `return(0, 320000000000)`)
+
+### Root Causes
+
+1. **ValueId namespace collision across objects**: The `offset_values` map in
+   `HeapAnalysis` was shared between the parent object (constructor) and
+   subobjects (deployed code). Since each object has independent SSA counters
+   (ValueIds restart from 0), a constant like `u64::MAX` from
+   `sub(shl(64,1), 1)` in the constructor was mistakenly used as the static
+   value for `returndatasize()` in the deployed subobject when both happened
+   to use the same ValueId (e.g., ValueId(16)).
+
+   This caused `mark_escaping_range(0, u64::MAX)` to be called for
+   `revert(0, returndatasize())`, triggering the overflow bug below.
+
+2. **Integer overflow in range iteration**: `mark_escaping_range` computed
+   `num_words = (end - start + 31) / 32`. When `end = u64::MAX` and
+   `start = 0`, the `+ 31` overflowed to produce `num_words = 0`, bypassing
+   the `MAX_RANGE_WORDS` guard and entering `while word < u64::MAX` — an
+   effectively infinite loop (10 billion iterations).
+
+### Fixes
+
+- **heap_opt.rs**: Clear `offset_values` before analyzing each subobject
+  to prevent ValueId namespace pollution.
+- **heap_opt.rs**: Use `saturating_add` in all `num_words` computations
+  across `mark_escaping_range`, `taint_range`, and
+  `mark_escaping_and_tainted_range`.
+- **heap_opt.rs**: Added `MAX_RANGE_WORDS = 4096` constant to cap range
+  iteration; ranges exceeding this are treated as dynamic escapes.
+- **heap_opt.rs**: Refactored MCopy and ExternalCall handlers to use
+  shared `taint_range()` and `mark_escaping_and_tainted_range()` helpers.
+
+### Test Results
+- Integration tests: 62 passed, 0 failed
+- Retester: 5844 passed, 7 failed (all pre-existing M3-only: create_many,
+  create2_many, array_tupple)
+- 0 timeouts across all 4,314 test files (was 2 hanging indefinitely)
+- OZ contracts: All compile, identical sizes (no regression)
+- Format + clippy: clean

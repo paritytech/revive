@@ -21,6 +21,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{Block, Expr, MemoryRegion, Object, Region, Statement, Value};
 
+/// Maximum number of words to iterate when marking escaping/tainted ranges.
+/// Contracts with `return(0, 320000000000)` or similar huge constants would
+/// cause billions of loop iterations without this cap. Any range exceeding
+/// this is treated as a dynamic escape instead.
+const MAX_RANGE_WORDS: u64 = 4096;
+
 /// Classification of a memory access pattern.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AccessPattern {
@@ -159,8 +165,13 @@ impl HeapAnalysis {
             self.analyze_block(&function.body, true);
         }
 
-        // Recursively handle subobjects
+        // Recursively handle subobjects.
+        // Each subobject has its own ValueId namespace (SSA counters restart from 0),
+        // so we must clear the offset_values map to avoid stale lookups that could
+        // confuse runtime values (e.g., returndatasize()) with static constants
+        // from the parent object that happened to share the same ValueId.
         for subobject in &object.subobjects {
+            self.offset_values.clear();
             self.analyze_object(subobject);
         }
 
@@ -234,41 +245,9 @@ impl HeapAnalysis {
                 let src_start = self.extract_static_offset(src);
                 let len = self.extract_static_offset(length);
                 // Taint the full destination range
-                match (dest_start, len) {
-                    (Some(addr), Some(size)) if size > 0 => {
-                        let end = addr + size;
-                        let mut word = addr / 32 * 32;
-                        while word < end {
-                            self.tainted_regions.insert(word);
-                            word += 32;
-                        }
-                    }
-                    (Some(addr), _) => {
-                        self.tainted_regions.insert(addr / 32 * 32);
-                        self.has_dynamic_accesses = true;
-                    }
-                    (None, _) => {
-                        self.has_dynamic_accesses = true;
-                    }
-                }
+                self.taint_range(dest_start, len);
                 // Taint the full source range
-                match (src_start, len) {
-                    (Some(addr), Some(size)) if size > 0 => {
-                        let end = addr + size;
-                        let mut word = addr / 32 * 32;
-                        while word < end {
-                            self.tainted_regions.insert(word);
-                            word += 32;
-                        }
-                    }
-                    (Some(addr), _) => {
-                        self.tainted_regions.insert(addr / 32 * 32);
-                        self.has_dynamic_accesses = true;
-                    }
-                    (None, _) => {
-                        self.has_dynamic_accesses = true;
-                    }
-                }
+                self.taint_range(src_start, len);
             }
 
             // Memory escaping to external calls
@@ -282,27 +261,7 @@ impl HeapAnalysis {
                 // Mark input region as escaping (full range)
                 self.mark_escaping_range(args_offset, args_length);
                 // Mark return region as escaping and tainted (written by external code)
-                let ret_start = self.extract_static_offset(ret_offset);
-                let ret_len = self.extract_static_offset(ret_length);
-                match (ret_start, ret_len) {
-                    (Some(addr), Some(size)) if size > 0 => {
-                        let end = addr + size;
-                        let mut word = addr / 32 * 32;
-                        while word < end {
-                            self.escaping_regions.insert(word);
-                            self.tainted_regions.insert(word);
-                            word += 32;
-                        }
-                    }
-                    (Some(addr), None) => {
-                        self.escaping_regions.insert(addr / 32 * 32);
-                        self.tainted_regions.insert(addr / 32 * 32);
-                        self.has_dynamic_escapes = true;
-                    }
-                    _ => {
-                        self.has_dynamic_escapes = true;
-                    }
-                }
+                self.mark_escaping_and_tainted_range(ret_offset, ret_length);
             }
 
             Statement::Revert { offset, length } => {
@@ -323,7 +282,7 @@ impl HeapAnalysis {
                     match (start, len) {
                         (Some(s), Some(l)) => {
                             // Static return: check if it covers the FMP slot
-                            if s <= 0x40 && s + l >= 0x60 {
+                            if s <= 0x40 && s.saturating_add(l) >= 0x60 {
                                 self.has_return_covering_fmp = true;
                             }
                         }
@@ -479,11 +438,20 @@ impl HeapAnalysis {
                 // Zero-length range: nothing escapes
             }
             (Some(addr), Some(size)) => {
-                let end = addr + size;
-                let mut word = addr / 32 * 32;
-                while word < end {
-                    self.escaping_regions.insert(word);
-                    word += 32;
+                let end = addr.saturating_add(size);
+                let first_word = addr / 32 * 32;
+                let range = end.saturating_sub(first_word);
+                let num_words = range.saturating_add(31) / 32;
+                if num_words > MAX_RANGE_WORDS {
+                    // Range too large to enumerate; treat as dynamic escape
+                    self.escaping_regions.insert(first_word);
+                    self.has_dynamic_escapes = true;
+                } else {
+                    let mut word = first_word;
+                    while word < end {
+                        self.escaping_regions.insert(word);
+                        word += 32;
+                    }
                 }
             }
             (Some(addr), None) => {
@@ -491,6 +459,68 @@ impl HeapAnalysis {
                 self.has_dynamic_escapes = true;
             }
             (None, _) => {
+                self.has_dynamic_escapes = true;
+            }
+        }
+    }
+
+    /// Taints all word-aligned memory regions in a range.
+    /// If the range is too large, treats it as a dynamic access instead.
+    fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
+        match (start, len) {
+            (Some(addr), Some(size)) if size > 0 => {
+                let end = addr.saturating_add(size);
+                let first_word = addr / 32 * 32;
+                let num_words = end.saturating_sub(first_word).saturating_add(31) / 32;
+                if num_words > MAX_RANGE_WORDS {
+                    self.tainted_regions.insert(first_word);
+                    self.has_dynamic_accesses = true;
+                } else {
+                    let mut word = first_word;
+                    while word < end {
+                        self.tainted_regions.insert(word);
+                        word += 32;
+                    }
+                }
+            }
+            (Some(addr), _) => {
+                self.tainted_regions.insert(addr / 32 * 32);
+                self.has_dynamic_accesses = true;
+            }
+            (None, _) => {
+                self.has_dynamic_accesses = true;
+            }
+        }
+    }
+
+    /// Marks all word-aligned memory regions in a range as both escaping and tainted.
+    fn mark_escaping_and_tainted_range(&mut self, offset: &Value, length: &Value) {
+        let start = self.extract_static_offset(offset);
+        let len = self.extract_static_offset(length);
+        match (start, len) {
+            (Some(addr), Some(size)) if size > 0 => {
+                let end = addr.saturating_add(size);
+                let first_word = addr / 32 * 32;
+                let num_words = end.saturating_sub(first_word).saturating_add(31) / 32;
+                if num_words > MAX_RANGE_WORDS {
+                    self.escaping_regions.insert(first_word);
+                    self.tainted_regions.insert(first_word);
+                    self.has_dynamic_escapes = true;
+                } else {
+                    let mut word = first_word;
+                    while word < end {
+                        self.escaping_regions.insert(word);
+                        self.tainted_regions.insert(word);
+                        word += 32;
+                    }
+                }
+            }
+            (Some(addr), None) => {
+                self.escaping_regions.insert(addr / 32 * 32);
+                self.tainted_regions.insert(addr / 32 * 32);
+                self.has_dynamic_escapes = true;
+            }
+            _ => {
                 self.has_dynamic_escapes = true;
             }
         }

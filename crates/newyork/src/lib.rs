@@ -35,6 +35,7 @@
 #![deny(clippy::all)]
 
 pub mod from_yul;
+pub mod guard_narrow;
 pub mod heap_opt;
 pub mod inline;
 pub mod ir;
@@ -200,6 +201,12 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     // downstream arithmetic, which DCE alone would miss.
     let mut simplifier2 = Simplifier::new();
     simplifier2.simplify_object(object);
+
+    // Guard narrowing: detect `if gt(val, MASK) { revert/panic }` patterns and
+    // insert `val_narrow = and(val, MASK)` after the guard. This gives type
+    // inference proof that the value fits in fewer bits, enabling downstream
+    // narrowing of comparisons, arithmetic, and memory operations.
+    guard_narrow::narrow_guards_in_object(object);
 
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {

@@ -16,7 +16,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{
-    BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement, Type, ValueId,
+    BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement, Type, UnaryOp,
+    ValueId,
 };
 
 /// Type constraint representing the width bounds for a value.
@@ -499,12 +500,36 @@ impl TypeInference {
             Expr::Binary {
                 lhs,
                 rhs,
-                op: BinOp::Add | BinOp::Or | BinOp::Xor | BinOp::And,
+                op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Or | BinOp::Xor | BinOp::And,
             } => {
                 let mut changed = false;
                 for use_ctx in result_uses {
                     changed |= self.record_use_if_new(lhs.id, *use_ctx);
                     changed |= self.record_use_if_new(rhs.id, *use_ctx);
+                }
+                changed
+            }
+            Expr::Binary {
+                rhs,
+                op: BinOp::Shl,
+                ..
+            } => {
+                // For shl(amount, value), the value operand (rhs) is transparent;
+                // the shift amount (lhs) needs full width. Propagate demand to value.
+                let mut changed = false;
+                for use_ctx in result_uses {
+                    changed |= self.record_use_if_new(rhs.id, *use_ctx);
+                }
+                changed
+            }
+            Expr::Unary {
+                operand,
+                op: UnaryOp::Not,
+            } => {
+                // NOT is transparent: propagate demand to operand.
+                let mut changed = false;
+                for use_ctx in result_uses {
+                    changed |= self.record_use_if_new(operand.id, *use_ctx);
                 }
                 changed
             }
@@ -1002,7 +1027,19 @@ impl TypeInference {
                 // through add/or chains that flow to memory offsets.
                 // Property: for these ops, trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))
                 // when only the lower N bits of the result are observed.
-                BinOp::Add | BinOp::Or | BinOp::Xor | BinOp::And => {}
+                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Or | BinOp::Xor | BinOp::And => {
+                    // Transparent ops: don't record demand. The lower N bits of
+                    // the result depend only on the lower N bits of the operands.
+                    // trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N)) for modular
+                    // arithmetic (add, sub, mul) and bitwise ops (and, or, xor).
+                }
+                BinOp::Shl => {
+                    // Left shift: shl(amount, value) = value << amount.
+                    // Transparent for the value (rhs): the lower N bits of
+                    // (value << amount) depend only on the lower N bits of value
+                    // (for amount < N). The shift amount (lhs) needs Arithmetic.
+                    self.record_use(lhs.id, UseContext::Arithmetic);
+                }
                 _ => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
                     self.record_use(rhs.id, UseContext::Arithmetic);
@@ -1013,9 +1050,15 @@ impl TypeInference {
                 self.record_use(b.id, UseContext::Arithmetic);
                 self.record_use(n.id, UseContext::Arithmetic);
             }
-            Expr::Unary { operand, .. } => {
-                self.record_use(operand.id, UseContext::Arithmetic);
-            }
+            Expr::Unary { operand, op } => match op {
+                UnaryOp::Not => {
+                    // NOT is transparent: ~trunc(x, N) == trunc(~x, N).
+                    // Don't record demand; propagated from result's uses.
+                }
+                _ => {
+                    self.record_use(operand.id, UseContext::Arithmetic);
+                }
+            },
             Expr::MLoad { offset, .. } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);

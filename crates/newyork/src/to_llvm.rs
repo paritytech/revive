@@ -1040,7 +1040,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let revert_block = context.append_basic_block(&block_name);
         context.set_basic_block(revert_block);
 
-        // Call the outlined __revive_revert functions.
+        // Use outlined __revive_revert functions (shared across all call sites).
         // For length 0: use zero-arg __revive_revert_0() (no argument overhead).
         // For length > 0: use __revive_revert(xlen_length) with pre-truncated xlen arg.
         if const_length == 0 {
@@ -1505,6 +1505,113 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_basic_block(saved_block);
         self.callvalue_check_fn = Some(func);
         Ok(func)
+    }
+
+    /// Emit an exit (return or revert) using unchecked heap GEP, bypassing sbrk.
+    /// For non-msize contracts, the heap data was already written by preceding stores,
+    /// so sbrk's bounds checking is redundant. The offset/length must be xlen-typed.
+    /// `is_revert` controls the flags parameter (0=return, 1=revert).
+    fn emit_exit_unchecked(
+        &self,
+        context: &mut PolkaVMContext<'ctx>,
+        offset_xlen: IntValue<'ctx>,
+        length_xlen: IntValue<'ctx>,
+        is_revert: bool,
+    ) -> Result<()> {
+        let heap_pointer = context
+            .build_heap_gep_unchecked(offset_xlen)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset_pointer = context
+            .builder()
+            .build_ptr_to_int(heap_pointer.value, context.xlen_type(), "exit_data_ptr")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let flags = context.xlen_type().const_int(u64::from(is_revert), false);
+        context.build_runtime_call(
+            "seal_return",
+            &[flags.into(), offset_pointer.into(), length_xlen.into()],
+        );
+        // No build_unreachable() here: seal_return never returns at runtime
+        // but isn't marked noreturn in LLVM IR. Subsequent dead code after the
+        // call is valid LLVM IR and will be pruned during optimization.
+        Ok(())
+    }
+
+    /// Emit a deposit_event call with unchecked heap GEP, bypassing sbrk.
+    /// The offset/length should already be xlen-typed (from narrow_offset_for_pointer).
+    fn emit_log_unchecked(
+        &self,
+        context: &mut PolkaVMContext<'ctx>,
+        offset_xlen: IntValue<'ctx>,
+        length_xlen: IntValue<'ctx>,
+        topic_vals: &[BasicValueEnum<'ctx>],
+    ) -> Result<()> {
+        let offset_xlen = context
+            .safe_truncate_int_to_xlen(offset_xlen)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let length_xlen = context
+            .safe_truncate_int_to_xlen(length_xlen)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Compute data pointer via unchecked GEP
+        let heap_pointer = context
+            .build_heap_gep_unchecked(offset_xlen)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let data_ptr = context
+            .builder()
+            .build_ptr_to_int(heap_pointer.value, context.xlen_type(), "log_data_ptr")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        let num_topics = topic_vals.len();
+        if num_topics == 0 {
+            context.build_runtime_call(
+                "deposit_event",
+                &[
+                    context.xlen_type().const_zero().into(),
+                    context.xlen_type().const_zero().into(),
+                    data_ptr.into(),
+                    length_xlen.into(),
+                ],
+            );
+        } else {
+            // Create topics buffer and bswap each topic into it
+            let topics_buffer_size = (num_topics * 32) as u32;
+            let topics_buffer = context.build_alloca_at_entry(
+                context.byte_type().array_type(topics_buffer_size),
+                "topics_buf",
+            );
+            for (i, topic) in topic_vals.iter().enumerate() {
+                let topic_offset = context.xlen_type().const_int((i * 32) as u64, false);
+                let topic_ptr = context.build_gep(
+                    topics_buffer,
+                    &[context.xlen_type().const_zero(), topic_offset],
+                    context.byte_type(),
+                    &format!("topic_{i}_gep"),
+                );
+                let bswapped = context
+                    .build_byte_swap(*topic)
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                context
+                    .build_store(topic_ptr, bswapped)
+                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            }
+            let topics_ptr = context
+                .builder()
+                .build_ptr_to_int(topics_buffer.value, context.xlen_type(), "log_topics_ptr")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            context.build_runtime_call(
+                "deposit_event",
+                &[
+                    topics_ptr.into(),
+                    context
+                        .xlen_type()
+                        .const_int(num_topics as u64, false)
+                        .into(),
+                    data_ptr.into(),
+                    length_xlen.into(),
+                ],
+            );
+        }
+        Ok(())
     }
 
     /// Gets or creates a shared basic block for a `return(offset, length)` pattern
@@ -3283,9 +3390,34 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         return Ok(());
                     }
                 }
-                let offset_val = self.ensure_word_type(context, offset_val, "revert_offset")?;
-                let length_val = self.ensure_word_type(context, length_val, "revert_length")?;
-                revive_llvm_context::polkavm_evm_return::revert(context, offset_val, length_val)?;
+                if !self.has_msize {
+                    // No msize: bypass sbrk overhead by using unchecked heap GEP.
+                    let offset_narrow = self.narrow_offset_for_pointer(
+                        context,
+                        offset_val,
+                        offset.id,
+                        "revert_offset_narrow",
+                    )?;
+                    let length_narrow = self.narrow_offset_for_pointer(
+                        context,
+                        length_val,
+                        length.id,
+                        "revert_length_narrow",
+                    )?;
+                    let offset_xlen = context
+                        .safe_truncate_int_to_xlen(offset_narrow)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let length_xlen = context
+                        .safe_truncate_int_to_xlen(length_narrow)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    self.emit_exit_unchecked(context, offset_xlen, length_xlen, true)?;
+                } else {
+                    let offset_val = self.ensure_word_type(context, offset_val, "revert_offset")?;
+                    let length_val = self.ensure_word_type(context, length_val, "revert_length")?;
+                    revive_llvm_context::polkavm_evm_return::revert(
+                        context, offset_val, length_val,
+                    )?;
+                }
             }
 
             Statement::Return { offset, length } => {
@@ -3306,9 +3438,38 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     return Ok(());
                 }
 
-                let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
-                let length_val = self.ensure_word_type(context, length_val, "return_length")?;
-                revive_llvm_context::polkavm_evm_return::r#return(context, offset_val, length_val)?;
+                let is_deploy = matches!(
+                    context.code_type(),
+                    Some(revive_llvm_context::PolkaVMCodeType::Deploy)
+                );
+                if !self.has_msize && !is_deploy {
+                    // No msize in runtime code: bypass sbrk overhead.
+                    let offset_narrow = self.narrow_offset_for_pointer(
+                        context,
+                        offset_val,
+                        offset.id,
+                        "return_offset_narrow",
+                    )?;
+                    let length_narrow = self.narrow_offset_for_pointer(
+                        context,
+                        length_val,
+                        length.id,
+                        "return_length_narrow",
+                    )?;
+                    let offset_xlen = context
+                        .safe_truncate_int_to_xlen(offset_narrow)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let length_xlen = context
+                        .safe_truncate_int_to_xlen(length_narrow)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    self.emit_exit_unchecked(context, offset_xlen, length_xlen, false)?;
+                } else {
+                    let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
+                    let length_val = self.ensure_word_type(context, length_val, "return_length")?;
+                    revive_llvm_context::polkavm_evm_return::r#return(
+                        context, offset_val, length_val,
+                    )?;
+                }
             }
 
             Statement::Stop => {
@@ -3656,38 +3817,44 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     })
                     .collect::<Result<_>>()?;
 
-                match topic_vals.len() {
-                    0 => revive_llvm_context::polkavm_evm_event::log::<0>(
-                        context,
-                        offset_val,
-                        length_val,
-                        [],
-                    )?,
-                    1 => revive_llvm_context::polkavm_evm_event::log::<1>(
-                        context,
-                        offset_val,
-                        length_val,
-                        [topic_vals[0]],
-                    )?,
-                    2 => revive_llvm_context::polkavm_evm_event::log::<2>(
-                        context,
-                        offset_val,
-                        length_val,
-                        [topic_vals[0], topic_vals[1]],
-                    )?,
-                    3 => revive_llvm_context::polkavm_evm_event::log::<3>(
-                        context,
-                        offset_val,
-                        length_val,
-                        [topic_vals[0], topic_vals[1], topic_vals[2]],
-                    )?,
-                    4 => revive_llvm_context::polkavm_evm_event::log::<4>(
-                        context,
-                        offset_val,
-                        length_val,
-                        [topic_vals[0], topic_vals[1], topic_vals[2], topic_vals[3]],
-                    )?,
-                    _ => return Err(CodegenError::Unsupported("log with >4 topics".into())),
+                if !self.has_msize {
+                    // No msize: emit deposit_event directly with unchecked GEP,
+                    // bypassing the __revive_log_N runtime functions and sbrk.
+                    self.emit_log_unchecked(context, offset_val, length_val, &topic_vals)?;
+                } else {
+                    match topic_vals.len() {
+                        0 => revive_llvm_context::polkavm_evm_event::log::<0>(
+                            context,
+                            offset_val,
+                            length_val,
+                            [],
+                        )?,
+                        1 => revive_llvm_context::polkavm_evm_event::log::<1>(
+                            context,
+                            offset_val,
+                            length_val,
+                            [topic_vals[0]],
+                        )?,
+                        2 => revive_llvm_context::polkavm_evm_event::log::<2>(
+                            context,
+                            offset_val,
+                            length_val,
+                            [topic_vals[0], topic_vals[1]],
+                        )?,
+                        3 => revive_llvm_context::polkavm_evm_event::log::<3>(
+                            context,
+                            offset_val,
+                            length_val,
+                            [topic_vals[0], topic_vals[1], topic_vals[2]],
+                        )?,
+                        4 => revive_llvm_context::polkavm_evm_event::log::<4>(
+                            context,
+                            offset_val,
+                            length_val,
+                            [topic_vals[0], topic_vals[1], topic_vals[2], topic_vals[3]],
+                        )?,
+                        _ => return Err(CodegenError::Unsupported("log with >4 topics".into())),
+                    }
                 }
             }
 

@@ -803,3 +803,90 @@ InlineByteSwap and dynamic-offset via ByteSwap) now use the unchecked GEP path.
 - Codesize test: PASS (0% change on benchmarks)
 - OZ contracts: All compile, all improved
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 11: Sbrk Elimination for Dynamic Return/Revert/Log
+
+### Analysis
+
+After Iteration 10, contracts without `msize()` still had 50-108 sbrk calls in
+the optimized LLVM IR. These came from three sources:
+1. **Dynamic return/revert**: `return(offset, length)` and `revert(offset, length)`
+   where offset/length are runtime values go through `__revive_exit` (AlwaysInline),
+   which calls `build_heap_gep(offset, length)` -> sbrk.
+2. **Log functions**: `__revive_log_N` runtime functions use `build_heap_gep` for the
+   data pointer, adding sbrk overhead to every event emission.
+3. **Other runtime operations**: return_data_copy, keccak256, call_data_copy, external
+   calls still legitimately need sbrk for heap management.
+
+For non-msize contracts, the sbrk in return/revert/log is redundant because:
+- The data was already written to heap by preceding mstore operations
+- Those mstores already used unchecked GEP (from Iteration 10)
+- The sbrk only updates the heap watermark (for msize tracking) and bounds-checks
+
+### Implementation (`to_llvm.rs`)
+
+1. **`emit_exit_unchecked` helper**: Emits `seal_return(flags, heap_gep_unchecked(offset), length)`
+   directly, bypassing the `__revive_exit` runtime function and its sbrk call.
+
+2. **Dynamic `Statement::Revert`**: When `!self.has_msize`, uses `emit_exit_unchecked`
+   with `safe_truncate_int_to_xlen` for the overflow check. Falls back to original
+   `build_exit` path for msize contracts.
+
+3. **Dynamic `Statement::Return`**: Same approach for runtime code. Deploy code always
+   uses the original path (needs `store_immutable_data` before seal_return).
+
+4. **`Statement::Log`**: New `emit_log_unchecked` helper emits `deposit_event` directly
+   with unchecked heap GEP for the data pointer. Topics are bswapped into an alloca
+   buffer inline. This completely eliminates the `__revive_log_N` runtime functions
+   for non-msize contracts.
+
+### What did NOT work
+
+- **Constant revert block unchecked GEP**: Replacing `__revive_revert_0`/`__revive_revert`
+  calls in `get_or_create_revert_block` with inline unchecked GEP caused regressions
+  (oz_gov +475 bytes). The shared runtime functions are more code-size-efficient because
+  their body exists once, while inline code is duplicated per revert block per function.
+
+- **Constant return block unchecked GEP**: Same issue. The `__revive_exit` function
+  (shared via AlwaysInline) is better for constant return blocks because LLVM can
+  optimize the constant arguments through the inlined body.
+
+### Results (vs Iteration 10 baseline)
+
+| Contract   | Before  | After   | Savings | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 39,621  | 38,970  | -651    | -1.64% |
+| erc20      | 52,371  | 51,766  | -605    | -1.16% |
+| erc721     | 58,351  | 57,601  | -750    | -1.29% |
+| oz_gov     | 95,851  | 95,956  | +105    | +0.11% |
+| oz_rwa     | 49,239  | 48,638  | -601    | -1.22% |
+| oz_simple  | 18,145  | 17,573  | -572    | -3.15% |
+| oz_stable  | 52,229  | 51,820  | -409    | -0.78% |
+| proxy      | 3,911   | 3,695   | -216    | -5.52% |
+
+oz_gov has a small regression (+105, 0.1%) because sbrk is not fully eliminated
+(return_data_copy, keccak256, external calls still need it), so the sbrk function
+body remains. The inline log code is slightly larger than calling __revive_log_N
+for the governor's specific pattern mix.
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings  | %      |
+|------------|----------|---------|----------|--------|
+| erc1155    | 43,880   | 38,970  | -4,910   | -11.2% |
+| erc20      | 59,724   | 51,766  | -7,958   | -13.3% |
+| erc721     | 64,946   | 57,601  | -7,345   | -11.3% |
+| oz_gov     | 106,417  | 95,956  | -10,461  | -9.8%  |
+| oz_rwa     | 56,936   | 48,638  | -8,298   | -14.6% |
+| oz_simple  | 20,109   | 17,573  | -2,536   | -12.6% |
+| oz_stable  | 61,801   | 51,820  | -9,981   | -16.2% |
+| proxy      | 4,424    | 3,695   | -729     | -16.5% |
+| **TOTAL**  | 418,237  | 366,019 | -52,218  | **-12.5%** |
+
+### Test Results
+- `make test`: PASS (format, clippy, doc, all workspace tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5844 passed, 7 flaky concurrency failures (all pass individually)
+- Codesize test: PASS
+- OZ contracts: All compile, 7/8 improved, 1 minor regression (+0.1%)
+- deploy_erc20.sh: All assertions pass

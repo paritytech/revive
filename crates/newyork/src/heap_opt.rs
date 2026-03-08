@@ -407,6 +407,7 @@ impl HeapAnalysis {
             // These don't affect memory analysis
             Statement::SStore { .. }
             | Statement::TStore { .. }
+            | Statement::MappingSStore { .. }
             | Statement::SelfDestruct { .. }
             | Statement::Break { .. }
             | Statement::Continue { .. }
@@ -705,6 +706,9 @@ impl HeapAnalysis {
             }
             Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => {
                 // Keccak256Pair/Single use scratch memory internally; nothing to classify
+            }
+            Expr::MappingSLoad { .. } => {
+                // MappingSLoad is a compound keccak256+sload; no heap memory effects
             }
             _ => {}
         }

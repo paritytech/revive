@@ -254,6 +254,16 @@ impl Validator {
                 self.use_value(v, context);
             }
 
+            Statement::MappingSStore {
+                key,
+                slot,
+                value: v,
+            } => {
+                self.use_value(key, context);
+                self.use_value(slot, context);
+                self.use_value(v, context);
+            }
+
             Statement::If {
                 condition,
                 inputs,
@@ -685,6 +695,11 @@ impl Validator {
 
             Expr::Keccak256Single { word0 } => {
                 self.use_value(word0, context);
+            }
+
+            Expr::MappingSLoad { key, slot } => {
+                self.use_value(key, context);
+                self.use_value(slot, context);
             }
 
             Expr::DataOffset { .. }

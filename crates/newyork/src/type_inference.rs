@@ -803,6 +803,12 @@ impl TypeInference {
                 self.record_use(value.id, UseContext::StorageAccess);
             }
 
+            Statement::MappingSStore { key, slot, value } => {
+                self.record_use(key.id, UseContext::StorageAccess);
+                self.record_use(slot.id, UseContext::StorageAccess);
+                self.record_use(value.id, UseContext::StorageAccess);
+            }
+
             Statement::If {
                 condition,
                 then_region,
@@ -1088,6 +1094,10 @@ impl TypeInference {
             Expr::Keccak256Single { word0 } => {
                 self.record_use(word0.id, UseContext::FunctionArg);
             }
+            Expr::MappingSLoad { key, slot } => {
+                self.record_use(key.id, UseContext::FunctionArg);
+                self.record_use(slot.id, UseContext::FunctionArg);
+            }
             Expr::Call { args, .. } => {
                 for arg in args {
                     self.record_use(arg.id, UseContext::FunctionArg);
@@ -1137,6 +1147,12 @@ impl TypeInference {
 
             Statement::TStore { key, value } => {
                 self.widen(key.id, BitWidth::I256);
+                self.widen(value.id, BitWidth::I256);
+            }
+
+            Statement::MappingSStore { key, slot, value } => {
+                self.widen(key.id, BitWidth::I256);
+                self.widen(slot.id, BitWidth::I256);
                 self.widen(value.id, BitWidth::I256);
             }
 
@@ -1558,7 +1574,9 @@ impl TypeInference {
                 BitWidth::I256
             }
 
-            Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => BitWidth::I256,
+            Expr::Keccak256Pair { .. }
+            | Expr::Keccak256Single { .. }
+            | Expr::MappingSLoad { .. } => BitWidth::I256,
 
             // DataOffset returns a contract code hash (256-bit), not an actual offset.
             Expr::DataOffset { .. } => BitWidth::I256,

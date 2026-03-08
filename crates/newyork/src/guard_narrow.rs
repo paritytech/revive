@@ -369,6 +369,10 @@ fn replace_value_ids_in_expr(expr: Expr, replacements: &BTreeMap<u32, ValueId>) 
         Expr::Keccak256Single { word0 } => Expr::Keccak256Single {
             word0: replace_value(word0, replacements),
         },
+        Expr::MappingSLoad { key, slot } => Expr::MappingSLoad {
+            key: replace_value(key, replacements),
+            slot: replace_value(slot, replacements),
+        },
         // Expressions with no Value operands pass through unchanged.
         other => other,
     }
@@ -415,6 +419,11 @@ fn replace_value_ids_in_stmt(stmt: Statement, replacements: &BTreeMap<u32, Value
         },
         Statement::TStore { key, value } => Statement::TStore {
             key: replace_value(key, replacements),
+            value: replace_value(value, replacements),
+        },
+        Statement::MappingSStore { key, slot, value } => Statement::MappingSStore {
+            key: replace_value(key, replacements),
+            slot: replace_value(slot, replacements),
             value: replace_value(value, replacements),
         },
         Statement::If {
@@ -711,6 +720,10 @@ fn find_max_value_id(object: &Object) -> u32 {
             Expr::Keccak256Single { word0 } => {
                 visit_value(word0, max_id);
             }
+            Expr::MappingSLoad { key, slot } => {
+                visit_value(key, max_id);
+                visit_value(slot, max_id);
+            }
         }
     }
 
@@ -742,6 +755,11 @@ fn find_max_value_id(object: &Object) -> u32 {
             }
             Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
                 visit_value(key, max_id);
+                visit_value(value, max_id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                visit_value(key, max_id);
+                visit_value(slot, max_id);
                 visit_value(value, max_id);
             }
             Statement::If {

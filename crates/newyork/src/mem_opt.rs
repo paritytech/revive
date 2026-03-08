@@ -193,6 +193,10 @@ impl MemoryOptimizer {
                 Expr::Keccak256Single { word0 } => {
                     visit_value(word0, max_id);
                 }
+                Expr::MappingSLoad { key, slot } => {
+                    visit_value(key, max_id);
+                    visit_value(slot, max_id);
+                }
                 _ => {}
             }
         }
@@ -224,6 +228,11 @@ impl MemoryOptimizer {
                 }
                 Statement::TStore { key, value } => {
                     visit_value(key, max_id);
+                    visit_value(value, max_id);
+                }
+                Statement::MappingSStore { key, slot, value } => {
+                    visit_value(key, max_id);
+                    visit_value(slot, max_id);
                     visit_value(value, max_id);
                 }
                 Statement::If {
@@ -818,6 +827,7 @@ impl MemoryOptimizer {
                 // These don't affect heap memory state
                 Statement::SStore { .. }
                 | Statement::TStore { .. }
+                | Statement::MappingSStore { .. }
                 | Statement::SetImmutable { .. }
                 | Statement::SelfDestruct { .. }
                 | Statement::Stop
@@ -966,6 +976,13 @@ impl MemoryOptimizer {
             Expr::Keccak256Single { word0 } => {
                 self.pending_stores.clear();
                 Expr::Keccak256Single { word0 }
+            }
+
+            Expr::MappingSLoad { key, slot } => {
+                // MappingSLoad is a compound keccak256+sload; it uses scratch memory
+                // internally, so clear pending stores.
+                self.pending_stores.clear();
+                Expr::MappingSLoad { key, slot }
             }
 
             // All other expressions pass through unchanged

@@ -372,6 +372,18 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
+            Statement::MappingSStore { key, slot, value } => {
+                self.write_indent();
+                self.output.push_str("mapping_sstore(");
+                self.write_value(key);
+                self.output.push_str(", ");
+                self.write_value(slot);
+                self.output.push_str(", ");
+                self.write_value(value);
+                self.output.push(')');
+                self.write_newline();
+            }
+
             Statement::If {
                 condition,
                 inputs,
@@ -1066,6 +1078,14 @@ impl<'a> Printer<'a> {
             Expr::Keccak256Single { word0 } => {
                 self.output.push_str("keccak256_single(");
                 self.write_value(word0);
+                self.output.push(')');
+            }
+
+            Expr::MappingSLoad { key, slot } => {
+                self.output.push_str("mapping_sload(");
+                self.write_value(key);
+                self.output.push_str(", ");
+                self.write_value(slot);
                 self.output.push(')');
             }
 

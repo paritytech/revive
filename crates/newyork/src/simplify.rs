@@ -333,6 +333,12 @@ impl Simplifier {
                 value: self.resolve_value(value),
             }],
 
+            Statement::MappingSStore { key, slot, value } => vec![Statement::MappingSStore {
+                key: self.resolve_value(key),
+                slot: self.resolve_value(slot),
+                value: self.resolve_value(value),
+            }],
+
             Statement::If {
                 condition,
                 inputs,
@@ -911,6 +917,11 @@ impl Simplifier {
                     Expr::Keccak256Pair { word0, word1 }
                 }
             }
+
+            Expr::MappingSLoad { key, slot } => Expr::MappingSLoad {
+                key: self.resolve_value(key),
+                slot: self.resolve_value(slot),
+            },
 
             // All other expressions pass through unchanged
             other => other,
@@ -2145,6 +2156,7 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
             | Expr::MLoad { .. }
             | Expr::SLoad { .. }
             | Expr::TLoad { .. }
+            | Expr::MappingSLoad { .. }
             | Expr::MSize
     )
 }
@@ -2208,6 +2220,10 @@ fn collect_used_in_expr(expr: &Expr, used: &mut BTreeSet<u32>) {
         Expr::Keccak256Single { word0 } => {
             collect_used_in_value(word0, used);
         }
+        Expr::MappingSLoad { key, slot } => {
+            collect_used_in_value(key, used);
+            collect_used_in_value(slot, used);
+        }
         Expr::CallValue
         | Expr::Caller
         | Expr::Origin
@@ -2265,6 +2281,11 @@ fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
         }
         Statement::TStore { key, value } => {
             collect_used_in_value(key, used);
+            collect_used_in_value(value, used);
+        }
+        Statement::MappingSStore { key, slot, value } => {
+            collect_used_in_value(key, used);
+            collect_used_in_value(slot, used);
             collect_used_in_value(value, used);
         }
         Statement::If {
@@ -2706,6 +2727,10 @@ fn find_max_value_id_in_object(object: &Object) -> u32 {
             Expr::Keccak256Single { word0 } => {
                 visit_value(word0, max_id);
             }
+            Expr::MappingSLoad { key, slot } => {
+                visit_value(key, max_id);
+                visit_value(slot, max_id);
+            }
         }
     }
 
@@ -2737,6 +2762,11 @@ fn find_max_value_id_in_object(object: &Object) -> u32 {
             }
             Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
                 visit_value(key, max_id);
+                visit_value(value, max_id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                visit_value(key, max_id);
+                visit_value(slot, max_id);
                 visit_value(value, max_id);
             }
             Statement::If {
@@ -3169,6 +3199,11 @@ impl Canonicalizer {
                 buf.push(0x25);
                 self.encode_value(word0, buf);
             }
+            Expr::MappingSLoad { key, slot } => {
+                buf.push(0x27);
+                self.encode_value(key, buf);
+                self.encode_value(slot, buf);
+            }
             Expr::Truncate { value, to } => {
                 buf.push(0x15);
                 self.encode_value(value, buf);
@@ -3297,6 +3332,12 @@ impl Canonicalizer {
             Statement::TStore { key, value } => {
                 buf.push(0x85);
                 self.encode_value(key, buf);
+                self.encode_value(value, buf);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                buf.push(0xA5);
+                self.encode_value(key, buf);
+                self.encode_value(slot, buf);
                 self.encode_value(value, buf);
             }
             Statement::If {

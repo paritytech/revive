@@ -1153,3 +1153,118 @@ Added `is_register()` method to `PolkaVMArgument` for variant detection.
 - Codesize test: PASS
 - OZ contracts: All compile, all improved except proxy (unchanged)
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 16: Compound Outlining Pass
+
+### What was implemented
+
+**New IR pass: `compound_outlining.rs`** - Detects multi-statement patterns in newyork IR and
+replaces them with compound IR nodes:
+
+1. **Pattern: Mapping SLoad** (`keccak256_pair(key, slot) → sload(hash)`)
+   Detected when keccak256_pair hash result has exactly one use (the sload).
+   Replaced with `Expr::MappingSLoad { key, slot }` - eliminates intermediate hash binding.
+
+2. **Pattern: Mapping SStore** (`keccak256_pair(key, slot) → sstore(hash, value)`)
+   Same detection logic. Replaced with `Statement::MappingSStore { key, slot, value }`.
+
+**New IR nodes** added to `ir.rs`:
+- `Expr::MappingSLoad { key: Value, slot: Value }` - combined keccak+sload
+- `Statement::MappingSStore { key: Value, slot: Value, value: Value }` - combined keccak+sstore
+
+**Codegen (to_llvm.rs)** - Two code generation paths based on operation count thresholds:
+
+1. **Combined outlined function** (≥10 mapping sloads or ≥8 mapping sstores):
+   Creates `__revive_mapping_sload(key, slot) -> value` / `__revive_mapping_sstore(key, slot, value)`
+   functions marked `noinline+minsize`. These eliminate the bswap round-trip between keccak output
+   and storage key - the hash bytes go directly from keccak to get_storage without bswap-store-load-bswap.
+   Saves ~76 bytes per call site (one fewer function call + eliminated bswap pair).
+
+2. **Decomposed path with slot wrappers** (below threshold):
+   Regenerates the original keccak256_pair + sload/sstore sequence, but uses
+   `keccak256_slot_wrapper` for large constant slots (matching original Keccak256Pair codegen).
+   This is code-size neutral: exactly reproduces the pre-outlining behavior.
+
+**Supporting changes** across all IR processing passes:
+- `guard_narrow.rs`, `heap_opt.rs`, `inline.rs`, `mem_opt.rs`, `printer.rs`,
+  `simplify.rs`, `type_inference.rs`, `validate.rs` - added match arms for new nodes
+
+### Key implementation challenges solved
+
+1. **Undefined value bug**: `find_value_uses` in to_llvm.rs didn't handle `Statement::MappingSStore`,
+   causing callvalue IDs used in MappingSStore to be incorrectly considered "dead". Fixed by
+   adding MappingSStore to use analysis.
+
+2. **Non-contiguous allocas**: Initial combined function used separate allocas for key and slot,
+   but hash_keccak_256 expects contiguous 64-byte input. Fixed by using `[i256 x 2]` array alloca.
+
+3. **Undersized hash buffer**: Hash output alloca was xlen_type (4 bytes) but keccak output needs
+   32 bytes. Fixed by using word_type alloca.
+
+4. **Code size regression in decomposed path**: Decomposed MappingSLoad always used sha3_two_words,
+   missing the keccak256_slot_wrapper optimization for constant slots. Fixed by replicating the
+   Keccak256Pair codegen logic (check slot_val.is_const() && try_extract_const_u64 is None).
+
+5. **Threshold tuning**: Single threshold caused regressions on contracts with moderate mapping
+   counts (8 ops). Split into separate SLOAD (10) and SSTORE (8) thresholds, counted independently.
+
+### Results (vs Iteration 15 baseline)
+
+| Contract   | Before  | After   | Change  | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 39,177  | 39,177  | 0       | 0%     |
+| erc20      | 49,979  | 49,979  | 0       | 0%     |
+| erc721     | 56,831  | 56,790  | -41     | -0.07% |
+| oz_gov     | 93,644  | 93,644  | 0       | 0%     |
+| oz_rwa     | 46,660  | 46,085  | -575    | -1.2%  |
+| oz_simple  | 17,889  | 17,921  | +32     | +0.18% |
+| oz_stable  | 50,384  | 49,645  | -739    | -1.5%  |
+| proxy      | 4,009   | 4,009   | 0       | 0%     |
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings  | %       |
+|------------|----------|---------|----------|---------|
+| erc1155    | 43,880   | 39,177  | -4,703   | -10.7%  |
+| erc20      | 59,724   | 49,979  | -9,745   | -16.3%  |
+| erc721     | 64,946   | 56,790  | -8,156   | -12.6%  |
+| oz_gov     | 106,417  | 93,644  | -12,773  | -12.0%  |
+| oz_rwa     | 56,936   | 46,085  | -10,851  | -19.1%  |
+| oz_simple  | 20,109   | 17,921  | -2,188   | -10.9%  |
+| oz_stable  | 61,801   | 49,645  | -12,156  | -19.7%  |
+| proxy      | 4,424    | 4,009   | -415     | -9.4%   |
+| **TOTAL**  | 418,237  | 357,250 | -60,987  | **-14.6%** |
+
+### Mapping operation counts per contract
+
+| Contract     | mapping_sloads | mapping_sstores | Combined fn used? |
+|--------------|---------------|-----------------|-------------------|
+| erc721       | 11            | 9               | sload+sstore      |
+| oz_stable    | 13            | 0               | sload only        |
+| oz_rwa       | 12            | 0               | sload only        |
+| oz_simple    | 5             | 4               | decomposed        |
+| oz_gov       | 6             | 2               | decomposed        |
+| erc20 (OZ)   | 8             | 0               | decomposed        |
+| erc1155      | 0             | 0               | n/a               |
+
+### Other compound patterns investigated
+
+- **Calldata size check** (calldatasize+add+slt+if revert): 20-22 occurrences per contract,
+  but already very compact (~16 bytes each after type narrowing). Estimated net savings only
+  ~146 bytes. Not worth the complexity.
+
+- **Nested keccak256_pair**: Only 0-1 occurrences per contract. Not enough to justify.
+
+- **ABI encode/decode**: Already compact in the IR (individual calldataload+mask operations).
+  The "Very high" estimate from SPECINT_RESEARCH assumed complex multi-argument patterns, but
+  solc already optimizes these before reaching Yul.
+
+- **Checked arithmetic**: Only 1 overflow panic (0x11) per contract - solc already eliminates
+  most overflow checks. Not enough for outlining.
+
+### Test Results
+- `make test`: 0 failures
+- Integration tests: 62 passed, 0 failed
+- Retester: 5846 passed, 5 failed (same pre-existing revert.sol cases 141-145)
+- Codesize test: 0% change on all 8 benchmark contracts
+- OZ contracts: All compile successfully

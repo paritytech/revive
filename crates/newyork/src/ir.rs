@@ -333,6 +333,16 @@ pub enum Expr {
         word0: Value,
     },
 
+    /// Compound mapping load: keccak256(key, slot) → sload.
+    /// Combines a Keccak256Pair hash with a storage load into one outlined call.
+    /// Only valid when the hash intermediate is used exclusively by this load.
+    MappingSLoad {
+        /// The mapping key (first word of keccak256 input).
+        key: Value,
+        /// The storage slot (second word of keccak256 input).
+        slot: Value,
+    },
+
     /// Data offset (for deployed bytecode).
     DataOffset {
         id: String,
@@ -555,6 +565,18 @@ pub enum Statement {
         selector: BigUint,
         /// The arguments to the custom error (0-3 values).
         args: Vec<Value>,
+    },
+
+    /// Compound mapping store: keccak256(key, slot) → sstore(hash, value).
+    /// Combines a Keccak256Pair hash with a storage store into one outlined call.
+    /// Only valid when the hash intermediate is used exclusively by this store.
+    MappingSStore {
+        /// The mapping key (first word of keccak256 input).
+        key: Value,
+        /// The storage slot (second word of keccak256 input).
+        slot: Value,
+        /// The value to store.
+        value: Value,
     },
 
     // External calls

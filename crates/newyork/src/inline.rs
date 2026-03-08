@@ -514,6 +514,10 @@ impl InlineRemapper {
             Expr::Keccak256Single { word0 } => Expr::Keccak256Single {
                 word0: self.remap_value(word0),
             },
+            Expr::MappingSLoad { key, slot } => Expr::MappingSLoad {
+                key: self.remap_value(key),
+                slot: self.remap_value(slot),
+            },
             Expr::DataOffset { id } => Expr::DataOffset { id: id.clone() },
             Expr::DataSize { id } => Expr::DataSize { id: id.clone() },
             Expr::LoadImmutable { key } => Expr::LoadImmutable { key: key.clone() },
@@ -562,6 +566,11 @@ impl InlineRemapper {
             },
             Statement::TStore { key, value } => Statement::TStore {
                 key: self.remap_value(key),
+                value: self.remap_value(value),
+            },
+            Statement::MappingSStore { key, slot, value } => Statement::MappingSStore {
+                key: self.remap_value(key),
+                slot: self.remap_value(slot),
                 value: self.remap_value(value),
             },
             Statement::If {
@@ -819,6 +828,10 @@ fn find_max_value_id(object: &Object) -> u32 {
             Expr::Keccak256Single { word0 } => {
                 update_max_from_value(word0, max_id);
             }
+            Expr::MappingSLoad { key, slot } => {
+                update_max_from_value(key, max_id);
+                update_max_from_value(slot, max_id);
+            }
             _ => {}
         }
     }
@@ -842,6 +855,11 @@ fn find_max_value_id(object: &Object) -> u32 {
             }
             Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
                 update_max_from_value(key, max_id);
+                update_max_from_value(value, max_id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                update_max_from_value(key, max_id);
+                update_max_from_value(slot, max_id);
                 update_max_from_value(value, max_id);
             }
             Statement::If {

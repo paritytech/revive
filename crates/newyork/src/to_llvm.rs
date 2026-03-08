@@ -164,6 +164,16 @@ pub struct LlvmCodegen<'ctx> {
     /// Maps the constant slot hash string to the wrapper `FunctionValue`.
     /// Each wrapper is `noinline (i256) -> i256` calling `__revive_keccak256_two_words(word0, CONST)`.
     keccak256_slot_wrappers: BTreeMap<String, inkwell::values::FunctionValue<'ctx>>,
+    /// Outlined `__revive_mapping_sload(i256 key, i256 slot) -> i256` function.
+    /// Combines keccak256_pair + sload into one function, eliminating redundant bswaps.
+    mapping_sload_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Outlined `__revive_mapping_sstore(i256 key, i256 slot, i256 value)` function.
+    /// Combines keccak256_pair + sstore into one function, eliminating redundant bswaps.
+    mapping_sstore_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Whether to use outlined mapping_sload function (enough call sites to amortize overhead).
+    use_outlined_mapping_sload: bool,
+    /// Whether to use outlined mapping_sstore function (enough call sites to amortize overhead).
+    use_outlined_mapping_sstore: bool,
     /// Whether the contract uses `msize()`. When false, InlineNative stores
     /// can skip the `ensure_heap_size` watermark update.
     has_msize: bool,
@@ -247,6 +257,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_check_fn: None,
             sload_word_fn: None,
             sstore_word_fn: None,
+            mapping_sload_fn: None,
+            mapping_sstore_fn: None,
+            use_outlined_mapping_sload: false,
+            use_outlined_mapping_sstore: false,
         }
     }
 
@@ -290,6 +304,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_check_fn: None,
             sload_word_fn: None,
             sstore_word_fn: None,
+            mapping_sload_fn: None,
+            mapping_sstore_fn: None,
+            use_outlined_mapping_sload: false,
+            use_outlined_mapping_sstore: false,
         }
     }
 
@@ -1722,10 +1740,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             key_pointer.to_int(context).into(),
             value_pointer.to_int(context).into(),
         ];
-        context.build_runtime_call(
-            "get_storage_or_zero",
-            &arguments,
-        );
+        context.build_runtime_call("get_storage_or_zero", &arguments);
 
         // Load result and byte-swap back
         let value = context
@@ -1816,10 +1831,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             key_pointer.to_int(context).into(),
             value_pointer.to_int(context).into(),
         ];
-        context.build_runtime_call(
-            "set_storage_or_clear",
-            &arguments,
-        );
+        context.build_runtime_call("set_storage_or_clear", &arguments);
 
         context
             .builder()
@@ -1828,6 +1840,260 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.set_basic_block(saved_block);
         self.sstore_word_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates `__revive_mapping_sload(i256 key, i256 slot) -> i256`.
+    /// Combines keccak256_pair + sload in a single function, eliminating the
+    /// redundant bswap pair between keccak output and sload key input.
+    fn get_or_create_mapping_sload_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.mapping_sload_fn {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let xlen_type = context.xlen_type();
+        let fn_type = word_type.fn_type(&[word_type.into(), word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_mapping_sload",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let key_param = func.get_nth_param(0).unwrap().into_int_value();
+        let slot_param = func.get_nth_param(1).unwrap().into_int_value();
+
+        // Bswap key and slot for keccak (EVM big-endian)
+        let key_bswap = context
+            .build_byte_swap(key_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+        let slot_bswap = context
+            .build_byte_swap(slot_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+
+        // Allocate contiguous buffer: [key(32) | slot(32)] for keccak input
+        let array_type = word_type.array_type(2);
+        let input_alloca = context
+            .builder()
+            .build_alloca(array_type, "map_sload_input")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        // Hash output buffer (32 bytes) - also reused as storage key pointer
+        let hash_output = context.build_alloca_at_entry(word_type, "map_sload_hash");
+        let value_pointer = context.build_alloca_at_entry(word_type, "map_sload_value");
+
+        // Store bswapped key at [0] and slot at [1]
+        let zero = context.llvm().i32_type().const_int(0, false);
+        let one = context.llvm().i32_type().const_int(1, false);
+        let key_ptr = unsafe {
+            context
+                .builder()
+                .build_gep(array_type, input_alloca, &[zero, zero], "key_ptr")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        };
+        let slot_ptr = unsafe {
+            context
+                .builder()
+                .build_gep(array_type, input_alloca, &[zero, one], "slot_ptr")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        };
+        context
+            .builder()
+            .build_store(key_ptr, key_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_store(slot_ptr, slot_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
+        let input_ptr_int = context
+            .builder()
+            .build_ptr_to_int(input_alloca, xlen_type, "input_ptr_int")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.build_runtime_call(
+            "hash_keccak_256",
+            &[
+                input_ptr_int.into(),
+                xlen_type.const_int(64, false).into(),
+                hash_output.to_int(context).into(),
+            ],
+        );
+
+        // Hash output is in LE byte order (native), same as what get_storage_or_zero
+        // expects. No bswap needed! Use hash_output directly as storage key.
+        let is_transient = xlen_type.const_int(0, false);
+        context.build_runtime_call(
+            "get_storage_or_zero",
+            &[
+                is_transient.into(),
+                hash_output.to_int(context).into(),
+                value_pointer.to_int(context).into(),
+            ],
+        );
+
+        // Load result and bswap back to EVM big-endian
+        let value = context
+            .build_load(value_pointer, "map_sload_result")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let value_bswap = context
+            .build_byte_swap(value)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context
+            .builder()
+            .build_return(Some(&value_bswap))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.mapping_sload_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates `__revive_mapping_sstore(i256 key, i256 slot, i256 value)`.
+    /// Combines keccak256_pair + sstore in a single function, eliminating the
+    /// redundant bswap pair between keccak output and sstore key input.
+    fn get_or_create_mapping_sstore_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.mapping_sstore_fn {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let xlen_type = context.xlen_type();
+        let fn_type = context.llvm().void_type().fn_type(
+            &[word_type.into(), word_type.into(), word_type.into()],
+            false,
+        );
+        let func = context.module().add_function(
+            "__revive_mapping_sstore",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let key_param = func.get_nth_param(0).unwrap().into_int_value();
+        let slot_param = func.get_nth_param(1).unwrap().into_int_value();
+        let value_param = func.get_nth_param(2).unwrap().into_int_value();
+
+        // Bswap key and slot for keccak (EVM big-endian)
+        let key_bswap = context
+            .build_byte_swap(key_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+        let slot_bswap = context
+            .build_byte_swap(slot_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+        let value_bswap = context
+            .build_byte_swap(value_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+
+        // Allocate contiguous buffer: [key(32) | slot(32)] for keccak input
+        let array_type = word_type.array_type(2);
+        let input_alloca = context
+            .builder()
+            .build_alloca(array_type, "map_sstore_input")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        // Hash output buffer (32 bytes) - also reused as storage key pointer
+        let hash_output = context.build_alloca_at_entry(word_type, "map_sstore_hash");
+        let value_pointer = context.build_alloca_at_entry(word_type, "map_sstore_value");
+
+        // Store bswapped key at [0] and slot at [1]
+        let zero = context.llvm().i32_type().const_int(0, false);
+        let one = context.llvm().i32_type().const_int(1, false);
+        let key_ptr = unsafe {
+            context
+                .builder()
+                .build_gep(array_type, input_alloca, &[zero, zero], "key_ptr")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        };
+        let slot_ptr = unsafe {
+            context
+                .builder()
+                .build_gep(array_type, input_alloca, &[zero, one], "slot_ptr")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        };
+        context
+            .builder()
+            .build_store(key_ptr, key_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_store(slot_ptr, slot_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_store(value_pointer.value, value_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
+        let input_ptr_int = context
+            .builder()
+            .build_ptr_to_int(input_alloca, xlen_type, "input_ptr_int")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.build_runtime_call(
+            "hash_keccak_256",
+            &[
+                input_ptr_int.into(),
+                xlen_type.const_int(64, false).into(),
+                hash_output.to_int(context).into(),
+            ],
+        );
+
+        // Hash output is in LE byte order (native), same as what set_storage_or_clear
+        // expects. No bswap needed! Use hash_output directly as storage key.
+        let is_transient = xlen_type.const_int(0, false);
+        context.build_runtime_call(
+            "set_storage_or_clear",
+            &[
+                is_transient.into(),
+                hash_output.to_int(context).into(),
+                value_pointer.to_int(context).into(),
+            ],
+        );
+
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.mapping_sstore_fn = Some(func);
         Ok(func)
     }
 
@@ -2181,6 +2447,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
                     Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
                 }
+                Statement::MappingSStore { key, slot, value } => {
+                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(slot.id.0, callvalue_ids, used);
+                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
+                }
                 _ => {}
             }
             // Recurse into nested regions
@@ -2222,6 +2493,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             | Expr::Keccak256Pair {
                 word0: offset,
                 word1: length,
+            }
+            | Expr::MappingSLoad {
+                key: offset,
+                slot: length,
             } => {
                 Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
                 Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
@@ -2277,6 +2552,84 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
+    /// Counts MappingSLoad and MappingSStore operations separately in an object.
+    fn count_mapping_ops(object: &Object) -> (usize, usize) {
+        fn count_in_stmts(stmts: &[Statement]) -> (usize, usize) {
+            let mut sloads = 0;
+            let mut sstores = 0;
+            for stmt in stmts {
+                match stmt {
+                    Statement::Let {
+                        value: Expr::MappingSLoad { .. },
+                        ..
+                    } => sloads += 1,
+                    Statement::MappingSStore { .. } => sstores += 1,
+                    _ => {}
+                }
+                // Recurse into nested regions
+                match stmt {
+                    Statement::If {
+                        then_region,
+                        else_region,
+                        ..
+                    } => {
+                        let (s, w) = count_in_stmts(&then_region.statements);
+                        sloads += s;
+                        sstores += w;
+                        if let Some(r) = else_region {
+                            let (s, w) = count_in_stmts(&r.statements);
+                            sloads += s;
+                            sstores += w;
+                        }
+                    }
+                    Statement::Switch { cases, default, .. } => {
+                        for c in cases {
+                            let (s, w) = count_in_stmts(&c.body.statements);
+                            sloads += s;
+                            sstores += w;
+                        }
+                        if let Some(d) = default {
+                            let (s, w) = count_in_stmts(&d.statements);
+                            sloads += s;
+                            sstores += w;
+                        }
+                    }
+                    Statement::For {
+                        condition_stmts,
+                        body,
+                        post,
+                        ..
+                    } => {
+                        let (s, w) = count_in_stmts(condition_stmts);
+                        sloads += s;
+                        sstores += w;
+                        let (s, w) = count_in_stmts(&body.statements);
+                        sloads += s;
+                        sstores += w;
+                        let (s, w) = count_in_stmts(&post.statements);
+                        sloads += s;
+                        sstores += w;
+                    }
+                    Statement::Block(region) => {
+                        let (s, w) = count_in_stmts(&region.statements);
+                        sloads += s;
+                        sstores += w;
+                    }
+                    _ => {}
+                }
+            }
+            (sloads, sstores)
+        }
+
+        let (mut total_sloads, mut total_sstores) = count_in_stmts(&object.code.statements);
+        for func in object.functions.values() {
+            let (s, w) = count_in_stmts(&func.body.statements);
+            total_sloads += s;
+            total_sstores += w;
+        }
+        (total_sloads, total_sstores)
+    }
+
     /// Generates LLVM IR for a complete object.
     pub fn generate_object(
         &mut self,
@@ -2301,6 +2654,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // jump) outweighs the alloca+load savings. Measured as net-negative on OZ ERC20 (+717 bytes).
         self.use_outlined_calldataload = false;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
+        // Count mapping operations to decide if combined mapping functions are worth it.
+        // The function body overhead (~250 bytes for sload, ~250 for sstore) needs enough
+        // call sites to amortize. Each call site saves ~30-40 bytes (one fewer function
+        // call + eliminated bswap round-trip between keccak output and storage key).
+        const MAPPING_SLOAD_THRESHOLD: usize = 10;
+        const MAPPING_SSTORE_THRESHOLD: usize = 8;
+        let (mapping_sloads, mapping_sstores) = Self::count_mapping_ops(object);
+        self.use_outlined_mapping_sload = mapping_sloads >= MAPPING_SLOAD_THRESHOLD;
+        self.use_outlined_mapping_sstore = mapping_sstores >= MAPPING_SSTORE_THRESHOLD;
         self.has_msize = object.has_msize();
         self.error_string_revert_counts = object.count_error_string_reverts();
         self.custom_error_revert_counts = object.count_custom_error_reverts();
@@ -2728,6 +3090,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::ErrorStringRevert { .. } => "ErrorStringRevert",
             Statement::CustomErrorRevert { .. } => "CustomErrorRevert",
             Statement::DataCopy { .. } => "DataCopy",
+            Statement::MappingSStore { .. } => "MappingSStore",
         };
 
         if let Err(e) = self.generate_statement_inner(stmt, context) {
@@ -2987,9 +3350,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if key_arg.is_register() {
                     // Value-based path: key is in a register, use outlined function
                     // to avoid alloca+store at each call site for key and value.
-                    let key_val = key_arg.access(context)
+                    let key_val = key_arg
+                        .access(context)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    let value_val = self.value_to_argument(value, context)?.access(context)
+                    let value_val = self
+                        .value_to_argument(value, context)?
+                        .access(context)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     let sstore_fn = self.get_or_create_sstore_word_fn(context)?;
                     context
@@ -3003,9 +3369,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 } else {
                     // Pointer-based path: key is a global constant pointer.
                     let value_arg = self.value_to_argument(value, context)?;
-                    revive_llvm_context::polkavm_evm_storage::store(
-                        context, &key_arg, &value_arg,
-                    )?;
+                    revive_llvm_context::polkavm_evm_storage::store(context, &key_arg, &value_arg)?;
                 }
             }
 
@@ -4348,6 +4712,67 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let _ = self.generate_expr(expr, context, None)?;
             }
 
+            Statement::MappingSStore { key, slot, value } => {
+                let key_val = self.translate_value(key)?.into_int_value();
+                let key_val = self.ensure_word_type(context, key_val, "mapping_sstore_key")?;
+                let slot_val = self.translate_value(slot)?.into_int_value();
+                let slot_val = self.ensure_word_type(context, slot_val, "mapping_sstore_slot")?;
+                let value_val = self.translate_value(value)?.into_int_value();
+                let value_val =
+                    self.ensure_word_type(context, value_val, "mapping_sstore_value")?;
+
+                if self.use_outlined_mapping_sstore {
+                    // Call combined mapping_sstore(key, slot, value)
+                    let mapping_sstore_fn = self.get_or_create_mapping_sstore_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(
+                            mapping_sstore_fn,
+                            &[key_val.into(), slot_val.into(), value_val.into()],
+                            "mapping_sstore_call",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                } else {
+                    // Decompose: keccak256_pair(key, slot) + sstore_word(hash, value)
+                    // Use slot wrapper for large constant slots (same as Keccak256Pair)
+                    let hash_val =
+                        if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
+                            let wrapper_fn =
+                                self.get_or_create_keccak256_slot_wrapper(slot_val, context)?;
+                            let fn_type = context
+                                .word_type()
+                                .fn_type(&[context.word_type().into()], false);
+                            context
+                                .builder()
+                                .build_indirect_call(
+                                    fn_type,
+                                    wrapper_fn.as_global_value().as_pointer_value(),
+                                    &[key_val.into()],
+                                    "keccak256_slot_call",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .try_as_basic_value()
+                                .basic()
+                                .expect("keccak256 slot wrapper should return a value")
+                                .into_int_value()
+                        } else {
+                            revive_llvm_context::polkavm_evm_crypto::sha3_two_words(
+                                context, key_val, slot_val,
+                            )?
+                            .into_int_value()
+                        };
+                    let sstore_fn = self.get_or_create_sstore_word_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(
+                            sstore_fn,
+                            &[hash_val.into(), value_val.into()],
+                            "mapping_sstore_word",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                }
+            }
+
             Statement::SetImmutable { key, value } => {
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
@@ -4886,7 +5311,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if key_arg.is_register() {
                     // Value-based path: key is in a register, use outlined function
                     // to avoid alloca+store at each call site.
-                    let key_val = key_arg.access(context)
+                    let key_val = key_arg
+                        .access(context)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     let sload_fn = self.get_or_create_sload_word_fn(context)?;
                     let result = context
@@ -5100,6 +5526,68 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Ok(revive_llvm_context::polkavm_evm_immutable::load(
                     context, index,
                 )?)
+            }
+
+            Expr::MappingSLoad { key, slot } => {
+                let key_val = self.translate_value(key)?.into_int_value();
+                let key_val = self.ensure_word_type(context, key_val, "mapping_sload_key")?;
+                let slot_val = self.translate_value(slot)?.into_int_value();
+                let slot_val = self.ensure_word_type(context, slot_val, "mapping_sload_slot")?;
+
+                if self.use_outlined_mapping_sload {
+                    // Call combined mapping_sload(key, slot)
+                    let mapping_sload_fn = self.get_or_create_mapping_sload_fn(context)?;
+                    let result = context
+                        .builder()
+                        .build_call(
+                            mapping_sload_fn,
+                            &[key_val.into(), slot_val.into()],
+                            "mapping_sload_call",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .try_as_basic_value()
+                        .basic()
+                        .expect("mapping_sload should return a value");
+                    Ok(result)
+                } else {
+                    // Decompose: keccak256_pair(key, slot) + sload_word(hash)
+                    // Use slot wrapper for large constant slots (same as Keccak256Pair)
+                    let hash_val =
+                        if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
+                            let wrapper_fn =
+                                self.get_or_create_keccak256_slot_wrapper(slot_val, context)?;
+                            let fn_type = context
+                                .word_type()
+                                .fn_type(&[context.word_type().into()], false);
+                            context
+                                .builder()
+                                .build_indirect_call(
+                                    fn_type,
+                                    wrapper_fn.as_global_value().as_pointer_value(),
+                                    &[key_val.into()],
+                                    "keccak256_slot_call",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .try_as_basic_value()
+                                .basic()
+                                .expect("keccak256 slot wrapper should return a value")
+                                .into_int_value()
+                        } else {
+                            revive_llvm_context::polkavm_evm_crypto::sha3_two_words(
+                                context, key_val, slot_val,
+                            )?
+                            .into_int_value()
+                        };
+                    let sload_fn = self.get_or_create_sload_word_fn(context)?;
+                    let result = context
+                        .builder()
+                        .build_call(sload_fn, &[hash_val.into()], "mapping_sload_word")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .try_as_basic_value()
+                        .basic()
+                        .expect("sload_word should return a value");
+                    Ok(result)
+                }
             }
 
             Expr::LinkerSymbol { path } => Ok(

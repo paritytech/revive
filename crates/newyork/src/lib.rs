@@ -34,6 +34,7 @@
 #![allow(missing_docs)]
 #![deny(clippy::all)]
 
+pub mod compound_outlining;
 pub mod from_yul;
 pub mod guard_narrow;
 pub mod heap_opt;
@@ -185,7 +186,6 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     // Run memory optimization pass (load-after-store elimination)
     let mut mem_optimizer = MemoryOptimizer::new();
     let mut mem_opt_results = mem_optimizer.optimize_object(object);
-
     // Run FMP propagation pass (replace mload(0x40) with known constant)
     let mut fmp_prop = mem_opt::FmpPropagation::new(0);
     fmp_prop.propagate_object(object);
@@ -201,6 +201,12 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     // downstream arithmetic, which DCE alone would miss.
     let mut simplifier2 = Simplifier::new();
     simplifier2.simplify_object(object);
+
+    // Compound outlining: detect multi-statement patterns like
+    // `let hash = keccak256_pair(key, slot); let val = sload(hash)` and replace
+    // with compound IR nodes `mapping_sload(key, slot)` that get lowered to
+    // keccak256_pair + sload/sstore calls, eliminating the intermediate hash value.
+    compound_outlining::outline_compounds_in_object(object);
 
     // Guard narrowing: detect `if gt(val, MASK) { revert/panic }` patterns and
     // insert `val_narrow = and(val, MASK)` after the guard. This gives type

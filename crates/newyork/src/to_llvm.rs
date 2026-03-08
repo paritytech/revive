@@ -183,6 +183,14 @@ pub struct LlvmCodegen<'ctx> {
     /// Uses unchecked GEP + 4× bswap.i64 + store. Avoids inlining the bswap
     /// sequence at every call site for variable values.
     store_bswap_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached store_bswap with bounds check: void(i32 offset, i256 value).
+    /// Like store_bswap but adds `offset + 32 <= heap_size` check before unchecked GEP.
+    /// Used for dynamic-offset ByteSwap stores in non-msize contracts to avoid sbrk.
+    store_bswap_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached load_bswap with bounds check: i256(i32 offset).
+    /// Adds `offset + 32 <= heap_size` check before unchecked GEP + bswap load.
+    /// Used for dynamic-offset ByteSwap loads in non-msize contracts to avoid sbrk.
+    load_bswap_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
     /// Cached outlined callvalue check + revert function.
     /// Checks if callvalue is nonzero and reverts with empty data if so.
     callvalue_check_fn: Option<inkwell::values::FunctionValue<'ctx>>,
@@ -221,7 +229,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             custom_error_revert_fns: BTreeMap::new(),
             custom_error_revert_counts: BTreeMap::new(),
             store_bswap_fn: None,
-
+            store_bswap_checked_fn: None,
+            load_bswap_checked_fn: None,
             callvalue_check_fn: None,
         }
     }
@@ -260,7 +269,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             custom_error_revert_fns: BTreeMap::new(),
             custom_error_revert_counts: BTreeMap::new(),
             store_bswap_fn: None,
-
+            store_bswap_checked_fn: None,
+            load_bswap_checked_fn: None,
             callvalue_check_fn: None,
         }
     }
@@ -1365,6 +1375,177 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(func)
     }
 
+    /// Gets or creates an outlined store_bswap with bounds checking:
+    /// void(i32 offset, i256 value).
+    /// Checks `offset > (heap_size - 32)` and traps if out of bounds,
+    /// then uses unchecked GEP + 4× bswap.i64 + store.
+    /// This replaces sbrk-based `__revive_store_heap_word` for non-msize contracts.
+    fn get_or_create_store_bswap_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.store_bswap_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let word_type = context.word_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into(), word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_store_bswap_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let store_block = context.llvm().append_basic_block(func, "store");
+
+        // Entry: bounds check
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let value_param = func.get_nth_param(1).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, store_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Store block: unchecked GEP + bswap store
+        context.set_basic_block(store_block);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context,
+            offset_param,
+            value_param,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.store_bswap_checked_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined load_bswap with bounds checking:
+    /// i256(i32 offset).
+    /// Checks `offset > (heap_size - 32)` and traps if out of bounds,
+    /// then uses unchecked GEP + 4× bswap.i64 + load.
+    /// This replaces sbrk-based `__revive_load_heap_word` for non-msize contracts.
+    fn get_or_create_load_bswap_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.load_bswap_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let word_type = context.word_type();
+        let fn_type = word_type.fn_type(&[xlen_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_load_bswap_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let load_block = context.llvm().append_basic_block(func, "load");
+
+        // Entry: bounds check
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, load_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Load block: unchecked GEP + bswap load
+        context.set_basic_block(load_block);
+        let result =
+            revive_llvm_context::polkavm_evm_memory::load_bswap_unchecked(context, offset_param)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_return(Some(&result))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.load_bswap_checked_fn = Some(func);
+        Ok(func)
+    }
+
     /// Checks if a region is a simple `revert(0, 0)` with no other side effects.
     /// The region may contain Let bindings (for intermediate zero literals)
     /// followed by a Revert statement.
@@ -2428,17 +2609,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                     NativeMemoryMode::ByteSwap => {
-                        // Dynamic offsets need sbrk bounds checking since the offset
-                        // could exceed the heap (e.g. mstore(0xFFFFFFFF, v)).
                         let offset_val = self.narrow_offset_for_pointer(
                             context,
                             offset_val,
                             offset.id,
                             "mstore_offset_narrow",
                         )?;
-                        revive_llvm_context::polkavm_evm_memory::store(
-                            context, offset_val, value_val,
-                        )?;
+                        if !self.has_msize {
+                            // Non-msize: lightweight bounds check + unchecked GEP.
+                            // Avoids sbrk overhead (5+ BBs, watermark update).
+                            let offset_xlen = context
+                                .safe_truncate_int_to_xlen(offset_val)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            let func = self.get_or_create_store_bswap_checked_fn(context)?;
+                            context
+                                .builder()
+                                .build_call(func, &[offset_xlen.into(), value_val.into()], "")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        } else {
+                            // Msize contracts: full sbrk for watermark tracking.
+                            revive_llvm_context::polkavm_evm_memory::store(
+                                context, offset_val, value_val,
+                            )?;
+                        }
                     }
                 }
             }
@@ -4300,15 +4493,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?
                     }
                     NativeMemoryMode::ByteSwap => {
-                        // Dynamic offsets need sbrk bounds checking since the offset
-                        // could exceed the heap (e.g. mload(0xFFFFFFFF)).
                         let offset_val = self.narrow_offset_for_pointer(
                             context,
                             offset_val,
                             offset.id,
                             "mload_offset_narrow",
                         )?;
-                        revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                        if !self.has_msize {
+                            // Non-msize: lightweight bounds check + unchecked GEP.
+                            let offset_xlen = context
+                                .safe_truncate_int_to_xlen(offset_val)
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            let func = self.get_or_create_load_bswap_checked_fn(context)?;
+                            context
+                                .builder()
+                                .build_call(func, &[offset_xlen.into()], "checked_load")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .try_as_basic_value()
+                                .basic()
+                                .expect("load_bswap_checked should return a value")
+                        } else {
+                            // Msize contracts: full sbrk for watermark tracking.
+                            revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
+                        }
                     }
                 };
                 // The free memory pointer (mload(64)) is bounded by the heap size

@@ -404,7 +404,7 @@ impl RuntimeFunction for Keccak256OneWord {
             .const_int(BYTE_LENGTH_WORD as u64, false);
 
         // Allocate output on stack
-        let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
+        let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
         // Call hash_keccak_256
         context.build_runtime_call(
@@ -483,7 +483,7 @@ impl RuntimeFunction for Keccak256TwoWords {
             .const_int(2 * BYTE_LENGTH_WORD as u64, false);
 
         // Allocate output on stack
-        let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
+        let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
         // Call hash_keccak_256
         context.build_runtime_call(

@@ -693,11 +693,31 @@ impl<'ctx> Context<'ctx> {
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        // Allocas at entry coalesce into the stack frame, eliminating per-alloca
-        // dynamic alignment. However, for large functions (e.g. __runtime with 11
-        // switch cases), entry allocas prevent stack slot reuse across disjoint paths,
-        // increasing total stack frame size. Keep allocas at use site for now.
-        self.build_alloca(r#type, name)
+        // Allocas at the entry block coalesce into a single stack frame allocation,
+        // eliminating per-alloca dynamic stack adjustment. LLVM's stack coloring pass
+        // handles lifetime-based slot reuse regardless of alloca placement.
+        let current_block = self.builder.get_insert_block().unwrap();
+        let function = current_block.get_parent().unwrap();
+        let entry_block = function.get_first_basic_block().unwrap();
+
+        // Position at the end of the entry block (before the terminator if any)
+        if let Some(terminator) = entry_block.get_terminator() {
+            self.builder.position_before(&terminator);
+        } else {
+            self.builder.position_at_end(entry_block);
+        }
+
+        let pointer = self.builder.build_alloca(r#type, name).unwrap();
+        pointer
+            .as_instruction()
+            .unwrap()
+            .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
+            .expect("Alignment is valid");
+
+        // Restore insertion point
+        self.builder.position_at_end(current_block);
+
+        Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
     /// Builds an aligned stack allocation at the current position.
@@ -1088,25 +1108,33 @@ impl<'ctx> Context<'ctx> {
                 .into_int_value());
         }
 
-        // Intermediate width (e.g., i64) - extend to word for safe overflow check.
-        // With demand narrowing, intermediate values may exceed xlen range,
-        // so we cannot assume they fit. Reuse WordToPointer for the check.
-        let word_value =
+        // Intermediate width (e.g., i64) - inline overflow check at original width.
+        // Doing the truncate-extend-compare at i64 is much cheaper than extending
+        // to i256 first: on 32-bit PVM, i64 comparison is 2 register pairs vs
+        // i256 comparison requiring 8 words. This saves ~10 instructions per check.
+        let truncated =
             self.builder()
-                .build_int_z_extend(value, self.word_type(), "intermediate_to_word")?;
-        Ok(self
-            .build_call(
-                <WordToPointer as RuntimeFunction>::declaration(self),
-                &[word_value.into()],
-                "word_to_pointer",
-            )
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <WordToPointer as RuntimeFunction>::NAME,
-                )
-            })
-            .into_int_value())
+                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
+        let extended =
+            self.builder()
+                .build_int_z_extend(truncated, value.get_type(), "offset_extended")?;
+        let is_overflow = self.builder().build_int_compare(
+            inkwell::IntPredicate::NE,
+            value,
+            extended,
+            "compare_truncated_extended",
+        )?;
+
+        let block_continue = self.append_basic_block("offset_pointer_ok");
+        let block_invalid = self.append_basic_block("offset_pointer_overflow");
+        self.build_conditional_branch(is_overflow, block_invalid, block_continue)?;
+
+        self.set_basic_block(block_invalid);
+        self.build_runtime_call(revive_runtime_api::polkavm_imports::INVALID, &[]);
+        self.build_unreachable();
+
+        self.set_basic_block(block_continue);
+        Ok(truncated)
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.

@@ -15,6 +15,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use num::ToPrimitive;
+
 use crate::ir::{
     BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement, Type, UnaryOp,
     ValueId,
@@ -157,6 +159,9 @@ pub struct TypeInference {
     /// Set by `refine_demands_from_params` after parameter narrowing.
     /// When present, overrides UseContext::FunctionArg (I256) in `use_demand_width`.
     fn_arg_demand: BTreeMap<u32, BitWidth>,
+    /// Known constant values (from Literal expressions), used for shift-amount
+    /// analysis in forward inference. Only stores values that fit in u64.
+    known_constants: BTreeMap<u32, u64>,
     /// Type inference results for subobjects (each subobject has its own namespace).
     pub sub_inferences: Vec<TypeInference>,
 }
@@ -170,6 +175,7 @@ impl TypeInference {
             changed: false,
             function_returns: BTreeMap::new(),
             fn_arg_demand: BTreeMap::new(),
+            known_constants: BTreeMap::new(),
             sub_inferences: Vec::new(),
         }
     }
@@ -1120,6 +1126,14 @@ impl TypeInference {
     fn infer_statement_forward(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Let { bindings, value } => {
+                // Record known constants for shift-amount analysis
+                if let Expr::Literal { value: lit, .. } = value {
+                    if let Some(v) = lit.to_u64() {
+                        if bindings.len() == 1 {
+                            self.known_constants.insert(bindings[0].0, v);
+                        }
+                    }
+                }
                 let expr_width = self.infer_expr_width(value);
                 for binding in bindings {
                     self.widen(*binding, expr_width);
@@ -1428,8 +1442,19 @@ impl TypeInference {
                     BinOp::Shr | BinOp::Sar => {
                         // Shift right shrinks the value. In EVM, SHR(amount, value),
                         // lhs is shift amount, rhs is the value being shifted.
-                        // Result width is bounded by the value's width.
-                        rhs_width
+                        // When the shift amount is a known constant, the result fits
+                        // in (256 - shift) bits. For shr(224, calldataload(0)), this
+                        // gives I32, enabling narrow switch dispatch comparisons.
+                        if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
+                            if shift >= 256 {
+                                BitWidth::I1
+                            } else {
+                                let remaining = 256u64.saturating_sub(shift);
+                                BitWidth::from_bits(remaining.max(1) as u32)
+                            }
+                        } else {
+                            rhs_width
+                        }
                     }
 
                     // Comparisons: result is boolean.

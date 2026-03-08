@@ -24,6 +24,23 @@ impl BitWidth {
         self as u32
     }
 
+    /// Returns the smallest BitWidth variant that has at least `bits` bits.
+    pub fn from_bits(bits: u32) -> Self {
+        if bits <= 1 {
+            BitWidth::I1
+        } else if bits <= 8 {
+            BitWidth::I8
+        } else if bits <= 32 {
+            BitWidth::I32
+        } else if bits <= 64 {
+            BitWidth::I64
+        } else if bits <= 160 {
+            BitWidth::I160
+        } else {
+            BitWidth::I256
+        }
+    }
+
     /// Determines the minimum bit width that can hold the given value.
     pub fn from_max_value(value: &BigUint) -> Self {
         if *value <= BigUint::from(1u8) {

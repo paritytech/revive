@@ -11,7 +11,7 @@ pub fn sha3<'ctx>(
     let offset_casted = context.safe_truncate_int_to_xlen(offset)?;
     let length_casted = context.safe_truncate_int_to_xlen(length)?;
     let input_pointer = context.build_heap_gep(offset_casted, length_casted)?;
-    let output_pointer = context.build_alloca(context.word_type(), "output_pointer");
+    let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
     context.build_runtime_call(
         revive_runtime_api::polkavm_imports::HASH_KECCAK_256,

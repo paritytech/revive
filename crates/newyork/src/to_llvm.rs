@@ -2672,11 +2672,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             syscall_counts.calldataload >= CALLDATALOAD_OUTLINE_THRESHOLD;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
         // Count mapping operations to decide if combined mapping functions are worth it.
-        // The function body overhead (~250 bytes for sload, ~250 for sstore) needs enough
+        // The function body overhead (~200 bytes for sload, ~200 for sstore) needs enough
         // call sites to amortize. Each call site saves ~30-40 bytes (one fewer function
         // call + eliminated bswap round-trip between keccak output and storage key).
-        const MAPPING_SLOAD_THRESHOLD: usize = 10;
-        const MAPPING_SSTORE_THRESHOLD: usize = 8;
+        // With entry-block allocas the overhead is lower, so threshold 6 breaks even.
+        const MAPPING_SLOAD_THRESHOLD: usize = 6;
+        const MAPPING_SSTORE_THRESHOLD: usize = 6;
         let (mapping_sloads, mapping_sstores) = Self::count_mapping_ops(object);
         self.use_outlined_mapping_sload = mapping_sloads >= MAPPING_SLOAD_THRESHOLD;
         self.use_outlined_mapping_sstore = mapping_sstores >= MAPPING_SSTORE_THRESHOLD;
@@ -3634,8 +3635,34 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 default,
                 outputs,
             } => {
-                let scrut_val = self.translate_value(scrutinee)?.into_int_value();
-                // Use scrutinee at its native width - case constants will match
+                let mut scrut_val = self.translate_value(scrutinee)?.into_int_value();
+                let scrut_width = scrut_val.get_type().get_bit_width();
+
+                // Narrow the scrutinee when provably safe. For dispatch switches
+                // like `switch shr(224, calldataload(0))`, the scrutinee is i256
+                // but provable_narrow_width detects the lshr→32 bits pattern.
+                // Narrowing to i32 turns 8-word i256 comparisons into single-word
+                // i32 comparisons, saving ~14 PVM instructions per case.
+                if scrut_width > 32 {
+                    let all_cases_fit_32 = cases
+                        .iter()
+                        .all(|c| c.value.to_u64().is_some_and(|v| v <= u32::MAX as u64));
+                    if all_cases_fit_32 {
+                        let provable =
+                            Self::provable_narrow_width(scrut_val).unwrap_or(scrut_width);
+                        if provable <= 32 {
+                            scrut_val = context
+                                .builder()
+                                .build_int_truncate(
+                                    scrut_val,
+                                    context.llvm().i32_type(),
+                                    "switch_narrow",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        }
+                    }
+                }
+
                 let scrut_type = scrut_val.get_type();
                 let join_block = context.append_basic_block("switch_join");
 

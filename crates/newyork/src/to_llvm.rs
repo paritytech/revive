@@ -3181,7 +3181,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::MStore {
                 offset,
                 value,
-                region: _,
+                region,
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
@@ -3211,9 +3211,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // is 131072 bytes and all native-safe constant offsets are
                         // well within that range. This avoids sbrk function call overhead.
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
+                        // The free memory pointer (offset 0x40) only holds heap offsets
+                        // bounded by the static heap size (≤131072). Store as i32 to
+                        // eliminate 7/8 of the store width on 32-bit PVM.
+                        let is_fmp_store = Self::try_extract_const_u64(offset_val) == Some(0x40)
+                            && matches!(region, MemoryRegion::FreePointerSlot);
+                        let store_val: inkwell::values::BasicValueEnum = if is_fmp_store {
+                            context
+                                .builder()
+                                .build_int_truncate(
+                                    value_val,
+                                    context.xlen_type(),
+                                    "fmp_store_trunc",
+                                )
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .into()
+                        } else {
+                            value_val.into()
+                        };
                         context
                             .builder()
-                            .build_store(pointer.value, value_val)
+                            .build_store(pointer.value, store_val)
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                             .expect("Alignment is valid");
@@ -5260,11 +5278,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // Constant offsets use unchecked GEP since the static heap
                         // is 131072 bytes and all native-safe offsets fit easily.
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
-                        context
-                            .builder()
-                            .build_load(context.word_type(), pointer.value, "native_load")
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-                            .as_basic_value_enum()
+                        if is_free_pointer {
+                            // FMP only holds heap offsets bounded by heap size (≤131072).
+                            // Load as i32 and zero-extend: eliminates 7/8 of the load
+                            // width on 32-bit PVM and makes the range proof redundant.
+                            let narrow = context
+                                .builder()
+                                .build_load(context.xlen_type(), pointer.value, "fmp_load")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .into_int_value();
+                            context
+                                .builder()
+                                .build_int_z_extend(narrow, context.word_type(), "fmp_zext")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .as_basic_value_enum()
+                        } else {
+                            context
+                                .builder()
+                                .build_load(context.word_type(), pointer.value, "native_load")
+                                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                .as_basic_value_enum()
+                        }
                     }
                     NativeMemoryMode::InlineByteSwap => {
                         let offset_xlen =

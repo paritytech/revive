@@ -1022,3 +1022,63 @@ This eliminates sbrk as dead code for non-msize contracts, along with
 - Codesize test: PASS (no change on benchmarks)
 - OZ contracts: All compile, all improved
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 14: Outlined Exit (Return/Revert) with Bounds Check
+
+### Analysis
+
+After Iteration 13, sbrk was still called from `__revive_exit` (the return/revert
+helper). `__revive_exit` has `AlwaysInline` so sbrk is inlined at every dynamic
+return/revert site (typically 3-5 per contract). Each inlined sbrk brings 6+ basic
+blocks of dead weight.
+
+### Implementation
+
+Created `__revive_exit_checked` — a shared noinline+noreturn function:
+- Signature: `void(i32 flags, i32 offset, i32 length)`
+- Body: `if length > (heap_size - offset) { trap } else { unchecked_gep + seal_return }`
+- `noinline + minsize + noreturn` attributes
+- Replaces sbrk-based `__revive_exit` for dynamic return/revert in non-msize contracts
+- Deploy code excluded (needs `store_immutable_data` before exit)
+
+### Results (vs Iteration 13 baseline)
+
+| Contract   | Before  | After   | Savings | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 39,751  | 39,595  | -156    | -0.39% |
+| erc20      | 52,328  | 52,071  | -257    | -0.49% |
+| erc721     | 58,341  | 58,026  | -315    | -0.54% |
+| oz_gov     | 96,455  | 95,957  | -498    | -0.52% |
+| oz_rwa     | 49,965  | 49,730  | -235    | -0.47% |
+| oz_simple  | 18,171  | 18,182  | +11     | +0.06% |
+| oz_stable  | 53,498  | 52,895  | -603    | -1.13% |
+| proxy      | 3,988   | 4,009   | +21     | +0.53% |
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings  | %       |
+|------------|----------|---------|----------|---------|
+| erc1155    | 43,880   | 39,595  | -4,285   | -9.8%   |
+| erc20      | 59,724   | 52,071  | -7,653   | -12.8%  |
+| erc721     | 64,946   | 58,026  | -6,920   | -10.7%  |
+| oz_gov     | 106,417  | 95,957  | -10,460  | -9.8%   |
+| oz_rwa     | 56,936   | 49,730  | -7,206   | -12.7%  |
+| oz_simple  | 20,109   | 18,182  | -1,927   | -9.6%   |
+| oz_stable  | 61,801   | 52,895  | -8,906   | -14.4%  |
+| proxy      | 4,424    | 4,009   | -415     | -9.4%   |
+| **TOTAL**  | 418,237  | 370,465 | -47,772  | **-11.4%** |
+
+### Codesize Benchmarks
+
+| Contract          | Before | After | Savings | %      |
+|-------------------|--------|-------|---------|--------|
+| Computation       | 1541   | 1446  | -95     | -6.2%  |
+| ERC20             | 11010  | 10802 | -208    | -1.9%  |
+| SHA1              | 5814   | 5618  | -196    | -3.4%  |
+
+### Test Results
+- Integration tests: 62 passed, 0 failed
+- Retester: 5798 passed, 0 failed
+- Codesize test: PASS
+- OZ contracts: All compile, 6 improved, 2 marginal regressions (+11/+21 bytes)
+- deploy_erc20.sh: All assertions pass

@@ -191,6 +191,10 @@ pub struct LlvmCodegen<'ctx> {
     /// Adds `offset + 32 <= heap_size` check before unchecked GEP + bswap load.
     /// Used for dynamic-offset ByteSwap loads in non-msize contracts to avoid sbrk.
     load_bswap_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached exit with bounds check: void(i32 flags, i32 offset, i32 length).
+    /// Checks `offset + length <= heap_size` before unchecked GEP + seal_return.
+    /// Used for dynamic return/revert in non-msize contracts to avoid sbrk.
+    exit_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
     /// Cached outlined callvalue check + revert function.
     /// Checks if callvalue is nonzero and reverts with empty data if so.
     callvalue_check_fn: Option<inkwell::values::FunctionValue<'ctx>>,
@@ -231,6 +235,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             store_bswap_fn: None,
             store_bswap_checked_fn: None,
             load_bswap_checked_fn: None,
+            exit_checked_fn: None,
             callvalue_check_fn: None,
         }
     }
@@ -271,6 +276,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             store_bswap_fn: None,
             store_bswap_checked_fn: None,
             load_bswap_checked_fn: None,
+            exit_checked_fn: None,
             callvalue_check_fn: None,
         }
     }
@@ -1543,6 +1549,105 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.set_basic_block(saved_block);
         self.load_bswap_checked_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined exit with bounds checking:
+    /// void(i32 flags, i32 offset, i32 length).
+    /// Checks `length > heap_size - offset` (catches both offset > heap_size
+    /// and offset + length > heap_size) and traps if out of bounds.
+    /// Then uses unchecked GEP + seal_return. This replaces the sbrk-based
+    /// `__revive_exit` for dynamic return/revert in non-msize contracts.
+    fn get_or_create_exit_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.exit_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let fn_type = context.llvm().void_type().fn_type(
+            &[xlen_type.into(), xlen_type.into(), xlen_type.into()],
+            false,
+        );
+        let func = context.module().add_function(
+            "__revive_exit_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        let noreturn_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoReturn as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let exit_block = context.llvm().append_basic_block(func, "exit");
+
+        // Entry: bounds check
+        context.set_basic_block(entry_block);
+        let flags_param = func.get_nth_param(0).unwrap().into_int_value();
+        let offset_param = func.get_nth_param(1).unwrap().into_int_value();
+        let length_param = func.get_nth_param(2).unwrap().into_int_value();
+
+        let heap_size = context.heap_size();
+        // remaining = heap_size - offset (wraps if offset > heap_size)
+        let remaining = context
+            .builder()
+            .build_int_sub(heap_size, offset_param, "remaining")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        // length > remaining catches both offset > heap_size and offset + length > heap_size
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                length_param,
+                remaining,
+                "exit_oob",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, exit_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "exit_trap");
+        context.build_unreachable();
+
+        // Exit block: unchecked GEP + seal_return
+        context.set_basic_block(exit_block);
+        let heap_pointer = context
+            .build_heap_gep_unchecked(offset_param)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset_pointer = context
+            .builder()
+            .build_ptr_to_int(heap_pointer.value, xlen_type, "exit_ptr")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context.build_runtime_call(
+            "seal_return",
+            &[
+                flags_param.into(),
+                offset_pointer.into(),
+                length_param.into(),
+            ],
+        );
+        context.build_unreachable();
+
+        context.set_basic_block(saved_block);
+        self.exit_checked_fn = Some(func);
         Ok(func)
     }
 
@@ -3442,10 +3547,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         return Ok(());
                     }
                 }
-                // Dynamic offsets need sbrk bounds checking since the offset
-                // could be huge (e.g. revert(0xFFFFFFFF, 1)). Only constant-offset
-                // patterns are handled by the unchecked dedup path above.
-                {
+                if !self.has_msize {
+                    // Non-msize: call shared __revive_exit_checked (noinline).
+                    let offset_xlen = context
+                        .safe_truncate_int_to_xlen(offset_val)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let length_xlen = context
+                        .safe_truncate_int_to_xlen(length_val)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let flags = context.xlen_type().const_int(1, false);
+                    let func = self.get_or_create_exit_checked_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(
+                            func,
+                            &[flags.into(), offset_xlen.into(), length_xlen.into()],
+                            "",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                } else {
                     let offset_val = self.ensure_word_type(context, offset_val, "revert_offset")?;
                     let length_val = self.ensure_word_type(context, length_val, "revert_length")?;
                     revive_llvm_context::polkavm_evm_return::revert(
@@ -3472,10 +3592,30 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     return Ok(());
                 }
 
-                // Dynamic offsets need sbrk bounds checking since the offset
-                // could be huge. Only constant-offset patterns are handled by
-                // the unchecked dedup path above.
+                if !self.has_msize
+                    && !matches!(
+                        context.code_type(),
+                        Some(revive_llvm_context::PolkaVMCodeType::Deploy)
+                    )
                 {
+                    // Non-msize runtime: call shared __revive_exit_checked (noinline).
+                    let offset_xlen = context
+                        .safe_truncate_int_to_xlen(offset_val)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let length_xlen = context
+                        .safe_truncate_int_to_xlen(length_val)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let flags = context.xlen_type().const_int(0, false);
+                    let func = self.get_or_create_exit_checked_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(
+                            func,
+                            &[flags.into(), offset_xlen.into(), length_xlen.into()],
+                            "",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                } else {
                     let offset_val = self.ensure_word_type(context, offset_val, "return_offset")?;
                     let length_val = self.ensure_word_type(context, length_val, "return_length")?;
                     revive_llvm_context::polkavm_evm_return::r#return(

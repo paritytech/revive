@@ -2666,9 +2666,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if self.use_outlined_callvalue {
             self.dead_callvalue_ids = Self::find_dead_callvalue_ids(object);
         }
-        // Calldataload outlining is disabled: function call overhead (register saves, indirect
-        // jump) outweighs the alloca+load savings. Measured as net-negative on OZ ERC20 (+717 bytes).
-        self.use_outlined_calldataload = false;
+        // Calldataload outlining: share alloca+syscall overhead across call sites.
+        const CALLDATALOAD_OUTLINE_THRESHOLD: usize = 20;
+        self.use_outlined_calldataload =
+            syscall_counts.calldataload >= CALLDATALOAD_OUTLINE_THRESHOLD;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
         // Count mapping operations to decide if combined mapping functions are worth it.
         // The function body overhead (~250 bytes for sload, ~250 for sstore) needs enough

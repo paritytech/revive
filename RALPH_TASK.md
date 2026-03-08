@@ -1271,3 +1271,69 @@ replaces them with compound IR nodes:
 - Retester: 5846 passed, 5 failed (same pre-existing revert.sol cases 141-145)
 - Codesize test: 0% change on all 8 benchmark contracts
 - OZ contracts: All compile successfully
+
+---
+
+## Iteration 17: Calldataload outlining + LLVM pipeline analysis
+
+### Change
+Re-enabled calldataload outlining with a threshold of 20 call sites. The previous measurement
+(+717 bytes on ERC20 alone) was done before many other optimizations (sload_word, compound
+outlining, etc.). With the current IR, contracts with >= 20 calldataload sites benefit from
+sharing the alloca+syscall overhead in a single outlined `__revive_calldataload()` function.
+
+File changed: `crates/newyork/src/to_llvm.rs` (line ~2670)
+
+### Calldataload counts per contract
+| Contract    | Sites | Outlined? |
+|-------------|-------|-----------|
+| erc1155     | 34    | yes       |
+| erc20       | 28    | yes       |
+| erc721      | 49    | yes       |
+| oz_gov      | 73    | yes       |
+| oz_rwa      | 20    | yes       |
+| oz_simple   | 10    | no        |
+| oz_stable   | 25    | yes       |
+| proxy       | 0     | no        |
+
+### Code size results
+| Contract   | Before  | After   | Diff    |
+|------------|---------|---------|---------|
+| erc1155    | 39,183  | 38,705  | **-478** |
+| erc20      | 49,986  | 49,886  | **-100** |
+| erc721     | 56,797  | 56,851  | +54     |
+| oz_gov     | 93,651  | 93,154  | **-497** |
+| oz_rwa     | 46,099  | 45,978  | **-121** |
+| oz_simple  | 17,927  | 17,927  | 0       |
+| oz_stable  | 49,658  | 49,617  | **-41** |
+| proxy      | 4,016   | 4,016   | 0       |
+| **Total**  |**357,317**|**356,134**| **-1,183 (-0.33%)** |
+
+### Cumulative reduction from all iterations
+Original baseline: 418,237 bytes → Now: 356,134 bytes = **-62,103 bytes (-14.8%)**
+
+### LLVM double-pass investigation
+Tested running `default<Oz>` twice (and 3×, 4×). Results:
+- Net -1,912 bytes on 2× pass, -3,583 on 3×
+- BUT: triggers polkavm-linker bug on `invalid_opcode_works` test
+  ("inconsistent reachability after optimization")
+- Also causes +194 byte regression on governor
+- **Conclusion**: Abandoned. The polkavm-linker bug makes it unsafe.
+  When polkavm-linker is fixed, this could be revisited.
+
+### Other investigations with no measurable impact
+- **PASS_PIPELINE Gap 1 (pipeline iteration)**: Adding a third simplify pass after
+  guard_narrow produces zero change on all OZ contracts.
+- **DATAFLOW_ANALYSIS extension 1 (state merging)**: Already implemented in mem_opt.rs
+  for if/switch branches. For-loops correctly use conservative (clear all).
+- **Remaining allocas**: All are syscall ABI requirements (calldataload, block_number,
+  chain_id, sload/sstore, call_evm). Cannot be eliminated without runtime API changes.
+- **Block_number outlining**: Only ~7 sites in ERC20, estimated savings ~64 bytes. Not
+  worth the implementation complexity.
+
+### Test Results
+- `make test`: 0 failures
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed
+- Codesize test: passes (no changes to benchmark contracts)
+- OZ contracts: All compile successfully

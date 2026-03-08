@@ -1632,13 +1632,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let length_param = func.get_nth_param(2).unwrap().into_int_value();
 
         let heap_size = context.heap_size();
-        // remaining = heap_size - offset (wraps if offset > heap_size)
+        // Check offset >= heap_size first to avoid wrapping in the subtraction below
+        let offset_oob = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGE,
+                offset_param,
+                heap_size,
+                "offset_oob",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset_ok_block = context.llvm().append_basic_block(func, "offset_ok");
+        context
+            .builder()
+            .build_conditional_branch(offset_oob, trap_block, offset_ok_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // offset < heap_size, so subtraction is safe
+        context.set_basic_block(offset_ok_block);
         let remaining = context
             .builder()
             .build_int_sub(heap_size, offset_param, "remaining")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        // length > remaining catches both offset > heap_size and offset + length > heap_size
-        let out_of_bounds = context
+        let length_oob = context
             .builder()
             .build_int_compare(
                 inkwell::IntPredicate::UGT,
@@ -1649,7 +1665,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context
             .builder()
-            .build_conditional_branch(out_of_bounds, trap_block, exit_block)
+            .build_conditional_branch(length_oob, trap_block, exit_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
         // Trap block

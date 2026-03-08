@@ -1,8 +1,10 @@
 # Compiler optimization task
 
-The task: Read SPECINT_RESEARCH.md and implement 4. Approach A: Extending newyork with Compound Outlining
-
-dont implement the other approaches - no interpreter etc., just this additional newyork IR pass.
+The task: The following optimization opportunities where identified. Pick ONE AT THE TIME:
+1. PASS_PIPELINE.md
+2. Finetune the newyork inliner threshold values
+3. Find a solc yul optimizer string setting that works better for our target cpu than the default one
+4. DATAFLOW_ANALYSIS.md 
 
 WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - This is a complex task. More complex than usual. Senior compiler engineer level complexity.
@@ -38,7 +40,7 @@ A very simple and limited code size test is found at `crates/integration/codesiz
 
 # Debugging and troubleshooting
 
-resolc has `--debug-output-dir` to emit debug artifacts. You should inspect the Yul code as well as emitted optimized, unoptimized ll and also the PVM bytecode. So you can inspect how well code is translated or optimized between steps and get ideas for optimizations by inspecting intermediate representation artifacts and final bytecode.
+resolc has `--debug-output-dir` to emit debug artifacts. resolc also supports the standard `-g` flag to emit debug info. You should inspect the Yul code as well as emitted optimized, unoptimized ll and also the PVM bytecode. So you can inspect how well code is translated or optimized between steps and get ideas for optimizations by inspecting intermediate representation artifacts and final bytecode.
 
 You should be able to use stderr for logs and debugging optimization passes. Just make sure not to spam it as it will eat up ram and spam a lot. Don't bother with stdout at all. resolc spawns itself recursively and uses stdout for intra process communication so printing stuff to stdout will break things.
 

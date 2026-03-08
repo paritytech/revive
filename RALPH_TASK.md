@@ -1082,3 +1082,74 @@ Created `__revive_exit_checked` — a shared noinline+noreturn function:
 - Codesize test: PASS
 - OZ contracts: All compile, 6 improved, 2 marginal regressions (+11/+21 bytes)
 - deploy_erc20.sh: All assertions pass
+
+## Iteration 15: Value-Based Storage Functions (Eliminating Alloca+Store at Call Sites)
+
+### Analysis
+
+The existing `__revive_load_storage_word` and `__revive_store_storage_word` take pointer
+arguments. When called with runtime-computed keys (e.g. keccak256 mapping results), each
+call site generates `alloca i256` + `store i256 %key, ptr %alloca` just to pass the key.
+For `__revive_store_storage_word`, both key AND value need alloca+store.
+
+In the OZ ERC20 optimized IR: 43 SLoad sites and 36 SStore sites with register keys =
+79 alloca+store pairs for keys alone, plus 36 for values = 115 total.
+
+### Implementation
+
+Created two new outlined noinline+minsize functions in `to_llvm.rs`:
+
+1. `__revive_sload_word(i256 key) -> i256`: Takes key as i256 value (not pointer).
+   Internally does bswap + alloca + store + GET_STORAGE syscall + load + bswap.
+   Eliminates alloca+store at each SLoad call site.
+
+2. `__revive_sstore_word(i256 key, i256 value)`: Takes both as i256 values.
+   Internally does bswap both + alloca both + store both + SET_STORAGE syscall.
+   Eliminates 2× alloca+store at each SStore call site.
+
+Modified SLoad/SStore handlers to use value-based functions when the key is a register
+value. Pointer keys (global constants for large constant slots) still use the existing
+pointer-based path since passing a pointer is cheaper than materializing a 256-bit constant.
+
+Added `is_register()` method to `PolkaVMArgument` for variant detection.
+
+### Results (vs Iteration 14 baseline)
+
+| Contract   | Before  | After   | Savings | %      |
+|------------|---------|---------|---------|--------|
+| erc1155    | 39,595  | 39,177  | -418    | -1.1%  |
+| erc20      | 52,071  | 49,979  | -2,092  | -4.0%  |
+| erc721     | 58,026  | 56,831  | -1,195  | -2.1%  |
+| oz_gov     | 95,957  | 93,644  | -2,313  | -2.4%  |
+| oz_rwa     | 49,730  | 46,660  | -3,070  | -6.2%  |
+| oz_simple  | 18,182  | 17,889  | -293    | -1.6%  |
+| oz_stable  | 52,895  | 50,384  | -2,511  | -4.7%  |
+| proxy      | 4,009   | 4,009   | 0       | 0%     |
+
+### Updated Cumulative Results (All Optimizations)
+
+| Contract   | Baseline | Current | Savings  | %       |
+|------------|----------|---------|----------|---------|
+| erc1155    | 43,880   | 39,177  | -4,703   | -10.7%  |
+| erc20      | 59,724   | 49,979  | -9,745   | -16.3%  |
+| erc721     | 64,946   | 56,831  | -8,115   | -12.5%  |
+| oz_gov     | 106,417  | 93,644  | -12,773  | -12.0%  |
+| oz_rwa     | 56,936   | 46,660  | -10,276  | -18.0%  |
+| oz_simple  | 20,109   | 17,889  | -2,220   | -11.0%  |
+| oz_stable  | 61,801   | 50,384  | -11,417  | -18.5%  |
+| proxy      | 4,424    | 4,009   | -415     | -9.4%   |
+| **TOTAL**  | 418,237  | 358,573 | -59,664  | **-14.3%** |
+
+### Codesize Benchmarks
+
+| Contract          | Before | After | Savings | %      |
+|-------------------|--------|-------|---------|--------|
+| ERC20             | 10,802 | 10,234| -568    | -5.3%  |
+| Flipper           | 1,321  | 1,162 | -159    | -12.0% |
+
+### Test Results
+- Integration tests: 62 passed, 0 failed
+- Retester: 5846 passed, 5 failed (same pre-existing 141-145 failures)
+- Codesize test: PASS
+- OZ contracts: All compile, all improved except proxy (unchanged)
+- deploy_erc20.sh: All assertions pass

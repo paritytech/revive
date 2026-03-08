@@ -198,6 +198,14 @@ pub struct LlvmCodegen<'ctx> {
     /// Cached outlined callvalue check + revert function.
     /// Checks if callvalue is nonzero and reverts with empty data if so.
     callvalue_check_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined storage load by value: i256(i256 key).
+    /// Takes key as i256 value (not pointer), internally bswaps + alloca + syscall.
+    /// Eliminates alloca+store at each call site for runtime-computed keys.
+    sload_word_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined storage store by value: void(i256 key, i256 value).
+    /// Takes key and value as i256 values, internally bswaps + alloca + syscall.
+    /// Eliminates alloca+store at each call site for runtime-computed keys/values.
+    sstore_word_fn: Option<inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -237,6 +245,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             load_bswap_checked_fn: None,
             exit_checked_fn: None,
             callvalue_check_fn: None,
+            sload_word_fn: None,
+            sstore_word_fn: None,
         }
     }
 
@@ -278,6 +288,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             load_bswap_checked_fn: None,
             exit_checked_fn: None,
             callvalue_check_fn: None,
+            sload_word_fn: None,
+            sstore_word_fn: None,
         }
     }
 
@@ -1651,6 +1663,174 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(func)
     }
 
+    /// Gets or creates the outlined `__revive_sload_word(i256 key) -> i256` function.
+    /// Takes the storage key as an i256 value (not pointer), internally handles
+    /// bswap, alloca, and the GET_STORAGE syscall. Eliminates alloca+store at
+    /// each call site for runtime-computed keys (e.g. keccak256 mapping results).
+    fn get_or_create_sload_word_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.sload_word_fn {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let xlen_type = context.xlen_type();
+        let fn_type = word_type.fn_type(&[word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_sload_word",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let key_param = func.get_nth_param(0).unwrap().into_int_value();
+
+        // Byte-swap key (EVM big-endian -> RISC-V little-endian)
+        let key_bswap = context
+            .build_byte_swap(key_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+
+        // Alloca for key and value pointers
+        let key_pointer = context.build_alloca_at_entry(word_type, "sload_key");
+        let value_pointer = context.build_alloca_at_entry(word_type, "sload_value");
+
+        // Store bswapped key
+        context
+            .builder()
+            .build_store(key_pointer.value, key_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Call GET_STORAGE syscall
+        let is_transient = xlen_type.const_int(0, false);
+        let arguments = [
+            is_transient.into(),
+            key_pointer.to_int(context).into(),
+            value_pointer.to_int(context).into(),
+        ];
+        context.build_runtime_call(
+            "get_storage_or_zero",
+            &arguments,
+        );
+
+        // Load result and byte-swap back
+        let value = context
+            .build_load(value_pointer, "sload_result")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let value_bswap = context
+            .build_byte_swap(value)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context
+            .builder()
+            .build_return(Some(&value_bswap))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.sload_word_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates the outlined `__revive_sstore_word(i256 key, i256 value)` function.
+    /// Takes key and value as i256 values (not pointers), internally handles
+    /// bswap, alloca, and the SET_STORAGE syscall. Eliminates alloca+store at
+    /// each call site for runtime-computed keys and values.
+    fn get_or_create_sstore_word_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.sstore_word_fn {
+            return Ok(func);
+        }
+
+        let word_type = context.word_type();
+        let xlen_type = context.xlen_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[word_type.into(), word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_sstore_word",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        context.set_basic_block(entry_block);
+
+        let key_param = func.get_nth_param(0).unwrap().into_int_value();
+        let value_param = func.get_nth_param(1).unwrap().into_int_value();
+
+        // Byte-swap key and value (EVM big-endian -> RISC-V little-endian)
+        let key_bswap = context
+            .build_byte_swap(key_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+        let value_bswap = context
+            .build_byte_swap(value_param.as_basic_value_enum())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .into_int_value();
+
+        // Alloca for key and value pointers
+        let key_pointer = context.build_alloca_at_entry(word_type, "sstore_key");
+        let value_pointer = context.build_alloca_at_entry(word_type, "sstore_value");
+
+        // Store bswapped key and value
+        context
+            .builder()
+            .build_store(key_pointer.value, key_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_store(value_pointer.value, value_bswap)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Call SET_STORAGE syscall
+        let is_transient = xlen_type.const_int(0, false);
+        let arguments = [
+            is_transient.into(),
+            key_pointer.to_int(context).into(),
+            value_pointer.to_int(context).into(),
+        ];
+        context.build_runtime_call(
+            "set_storage_or_clear",
+            &arguments,
+        );
+
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.sstore_word_fn = Some(func);
+        Ok(func)
+    }
+
     /// Checks if a region is a simple `revert(0, 0)` with no other side effects.
     /// The region may contain Let bindings (for intermediate zero literals)
     /// followed by a Revert statement.
@@ -2804,8 +2984,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 static_slot: _,
             } => {
                 let key_arg = self.value_to_storage_key_argument(key, context)?;
-                let value_arg = self.value_to_argument(value, context)?;
-                revive_llvm_context::polkavm_evm_storage::store(context, &key_arg, &value_arg)?;
+                if key_arg.is_register() {
+                    // Value-based path: key is in a register, use outlined function
+                    // to avoid alloca+store at each call site for key and value.
+                    let key_val = key_arg.access(context)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let value_val = self.value_to_argument(value, context)?.access(context)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let sstore_fn = self.get_or_create_sstore_word_fn(context)?;
+                    context
+                        .builder()
+                        .build_call(
+                            sstore_fn,
+                            &[key_val.into(), value_val.into()],
+                            "sstore_word",
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                } else {
+                    // Pointer-based path: key is a global constant pointer.
+                    let value_arg = self.value_to_argument(value, context)?;
+                    revive_llvm_context::polkavm_evm_storage::store(
+                        context, &key_arg, &value_arg,
+                    )?;
+                }
             }
 
             Statement::TStore { key, value } => {
@@ -4682,9 +4883,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 static_slot: _,
             } => {
                 let key_arg = self.value_to_storage_key_argument(key, context)?;
-                Ok(revive_llvm_context::polkavm_evm_storage::load(
-                    context, &key_arg,
-                )?)
+                if key_arg.is_register() {
+                    // Value-based path: key is in a register, use outlined function
+                    // to avoid alloca+store at each call site.
+                    let key_val = key_arg.access(context)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                    let sload_fn = self.get_or_create_sload_word_fn(context)?;
+                    let result = context
+                        .builder()
+                        .build_call(sload_fn, &[key_val.into()], "sload_word")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                        .try_as_basic_value()
+                        .basic()
+                        .expect("sload_word should return a value");
+                    Ok(result)
+                } else {
+                    // Pointer-based path: key is a global constant pointer.
+                    Ok(revive_llvm_context::polkavm_evm_storage::load(
+                        context, &key_arg,
+                    )?)
+                }
             }
 
             Expr::TLoad { key } => {

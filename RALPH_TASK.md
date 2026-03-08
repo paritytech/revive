@@ -4,7 +4,8 @@ The task: The following optimization opportunities where identified. Pick ONE AT
 1. PASS_PIPELINE.md
 2. Finetune the newyork inliner threshold values
 3. Find a solc yul optimizer string setting that works better for our target cpu than the default one
-4. DATAFLOW_ANALYSIS.md 
+4. It was noted that there are many, many calls to alloca - ideally they are eliminated and hoisted (note: only secure if they are immediatly read and never read afterwards again)
+5. DATAFLOW_ANALYSIS.md 
 
 WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - This is a complex task. More complex than usual. Senior compiler engineer level complexity.

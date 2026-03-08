@@ -36,6 +36,19 @@ impl Optimizer {
     pub fn default_mode() -> char {
         'z'
     }
+
+    /// Optimizer settings tuned for PolkaVM code size.
+    ///
+    /// Uses the default solc optimizer with a custom Yul sequence that adds
+    /// an extra `[LScsTulD]` cleanup loop for better code size on PolkaVM.
+    pub fn for_polkavm(enabled: bool) -> Self {
+        let details = if enabled {
+            Details::for_polkavm()
+        } else {
+            Details::default()
+        };
+        Self::new(enabled, Self::default_mode(), details)
+    }
 }
 
 impl Default for Optimizer {

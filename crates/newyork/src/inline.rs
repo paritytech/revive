@@ -27,7 +27,7 @@ use crate::ir::{
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
-const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 8;
+const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 6;
 
 /// Maximum function size (in IR nodes) beyond which a function is never inlined.
 const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
@@ -36,7 +36,7 @@ const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
 /// Larger single-call functions are deferred to LLVM's inliner (which has better register
 /// allocation awareness). This prevents creating monolithic dispatcher functions that
 /// exceed LLVM's optimization capacity.
-const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 40;
+const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 20;
 
 /// Maximum number of call sites beyond which a function is never inlined.
 const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 10;

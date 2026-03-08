@@ -214,6 +214,12 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     // narrowing of comparisons, arithmetic, and memory operations.
     guard_narrow::narrow_guards_in_object(object);
 
+    // Third simplify pass: compound outlining and guard narrowing introduce new
+    // constant expressions and dead code. A final simplify pass propagates these
+    // opportunities and cleans up the IR before LLVM codegen.
+    let mut simplifier3 = Simplifier::new();
+    simplifier3.simplify_object(object);
+
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {
         let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);

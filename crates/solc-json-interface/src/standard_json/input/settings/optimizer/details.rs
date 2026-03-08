@@ -64,6 +64,31 @@ impl Details {
         }
     }
 
+    /// Optimizer details tuned for PolkaVM code size.
+    ///
+    /// Appends an extra `[LScsTulD]` loop to the default solc Yul optimizer
+    /// sequence. This adds a final round of LoadResolver, UnusedStoreEliminator,
+    /// CSE, ExpressionSimplifier, LiteralRematerialiser, UnusedPruner, and
+    /// DeadCodeEliminator that reduces code size by ~174 bytes on OZ contracts.
+    pub fn for_polkavm() -> Self {
+        // The solc default Yul sequence with an extra cleanup loop appended.
+        // Default: dhfoDgvulfnTUtnIfxa[r]EscLMVcul [j]Trpeulxa[r]cLgvifMCTUca[r]
+        //          LSsTFOtfDnca[r]IulcscCTUtgvifMx[scCTUt]TOntnfDIulgvifMjmul[jul]
+        //          VcTOcul jmul:fDnTOcmuO
+        // Added:   [LScsTulD] before the cleanup colon
+        let steps = "dhfoDgvulfnTUtnIfxa[r]EscLMVcul \
+                     [j]Trpeulxa[r]cLgvifMCTUca[r]LSsTFOtfDnca[r]\
+                     IulcscCTUtgvifMx[scCTUt]TOntnfDIulgvifMjmul[jul]\
+                     VcTOcul jmul[LScsTulD]:fDnTOcmuO"
+            .to_string();
+        Self {
+            yul: Some(true),
+            yul_details: Some(YulDetails::new(None, Some(steps))),
+            ..Default::default()
+        }
+    }
+
+    /// Creates disabled optimizer details.
     pub fn disabled(version: &semver::Version) -> Self {
         let inliner = if version >= &semver::Version::new(0, 8, 5) {
             Some(false)

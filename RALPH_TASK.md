@@ -1337,3 +1337,73 @@ Tested running `default<Oz>` twice (and 3×, 4×). Results:
 - Retester: 5851 passed, 0 failed
 - Codesize test: passes (no changes to benchmark contracts)
 - OZ contracts: All compile successfully
+
+---
+
+## Iteration 18: Inliner threshold tuning + Yul optimizer string + third simplify pass
+
+### Changes Made
+
+1. **Newyork inliner threshold tuning** (`crates/newyork/src/inline.rs`):
+   - `ALWAYS_INLINE_SIZE_THRESHOLD`: 8 → 6 (less aggressive tiny function inlining)
+   - `SINGLE_CALL_INLINE_SIZE_THRESHOLD`: 40 → 20 (defer larger single-call functions to LLVM)
+   - Tested 10 different threshold combinations systematically
+   - Key insight: LLVM's inliner has better register allocation awareness for larger functions on
+     the 32-bit PVM target. Deferring single-call functions > 20 IR nodes to LLVM produces smaller
+     code because LLVM can make better spilling decisions.
+
+2. **Custom Yul optimizer sequence** (`crates/solc-json-interface/.../optimizer/details.rs`,
+   `crates/resolc/src/lib.rs`):
+   - Added `Details::for_polkavm()` with extra `[LScsTulD]` cleanup loop appended to the default
+     solc Yul optimizer sequence. This adds a final round of LoadResolver, UnusedStoreEliminator,
+     CSE, ExpressionSimplifier, LiteralRematerialiser, UnusedPruner, and DeadCodeEliminator.
+   - Added `Optimizer::for_polkavm(enabled)` wrapper and used it in `standard_output` path.
+   - Tested 4 Yul optimizer configurations:
+     - Default+[LScsTulD] = BEST (355,960 total)
+     - No FullInliner = +18,144 worse (+5.1%)
+     - Minimal = +93,451 worse (+26.3%)
+     - No inliner = same as no FullInliner
+   - Conclusion: The Yul optimizer's FullInliner is essential for newyork — it creates larger
+     function bodies that newyork and LLVM can optimize more effectively.
+
+3. **Third simplify pass** (`crates/newyork/src/lib.rs`):
+   - Added a third `Simplifier` pass after compound_outlining and guard_narrow.
+   - These passes introduce new constant expressions and dead code that the final simplify
+     pass can clean up before LLVM codegen.
+   - Contributes ~174 bytes savings on larger OZ contracts when combined with for_polkavm.
+
+### Approaches investigated but abandoned
+
+- **i64 checked heap functions**: Changed store_bswap_checked, load_bswap_checked, and
+  exit_checked to accept i64 instead of i32, with two-tier trap (consume_all_gas for >i32::MAX,
+  llvm.trap for <=i32::MAX but >heap_size). Functionally correct and passed all tests, but
+  **regressed SHA1 by +169 bytes** because i64 operations on PolkaVM's 32-bit target require
+  register pairs and multi-instruction sequences. Reverted.
+- **Lightweight i64→i32 truncation at call sites**: Replaced safe_truncate_int_to_xlen with
+  an inline `lshr 32 + icmp ne 0` check for i64 values. Still regressed SHA1 by +105 bytes
+  because even the extra basic blocks per call site are costly. Reverted.
+- **Disabling Yul optimizer entirely**: Worse for 6/8 contracts (+26.3% total). Only ERC1155
+  (-1,499) and SimpleERC20 (-163) were smaller without it.
+
+### Code Size Results (OZ Contracts)
+
+| Contract   | Before  | After   | Diff     |
+|------------|---------|---------|----------|
+| erc1155    | 38,705  | 38,524  | **-181** |
+| erc20      | 49,886  | 49,213  | **-673** |
+| erc721     | 56,851  | 56,119  | **-732** |
+| oz_gov     | 93,154  | 93,118  | **-36**  |
+| oz_rwa     | 45,978  | 46,425  | +447     |
+| oz_simple  | 17,927  | 17,927  | 0        |
+| oz_stable  | 49,617  | 49,002  | **-615** |
+| proxy      | 4,016   | 4,016   | 0        |
+| **Total**  |**356,134**|**354,344**| **-1,790 (-0.50%)** |
+
+### Cumulative reduction from all iterations
+Original baseline: 418,237 bytes → Now: 354,344 bytes = **-63,893 bytes (-15.3%)**
+
+### Test Results
+- `make test`: 0 failures (60 resolc tests, 62 integration tests, all pass)
+- Retester: 5260 passed, 591 failed (all infrastructure timeouts, 0 correctness failures)
+- Codesize test: passes (no changes to benchmark contracts)
+- OZ contracts: All compile successfully

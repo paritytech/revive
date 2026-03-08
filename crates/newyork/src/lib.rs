@@ -220,6 +220,11 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     let mut simplifier3 = Simplifier::new();
     simplifier3.simplify_object(object);
 
+    // Second dedup pass: guard narrowing and compound outlining canonicalize
+    // code into forms that may expose new duplicate or near-duplicate functions.
+    let _dedup_count2 = deduplicate_functions(object);
+    let _fuzzy_dedup_count2 = simplify::deduplicate_functions_fuzzy(object);
+
     // Recursively optimize subobjects
     for subobject in &mut object.subobjects {
         let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);

@@ -28,10 +28,16 @@ impl Optimizer {
         target_machine: &TargetMachine,
         module: &inkwell::module::Module,
     ) -> Result<(), inkwell::support::LLVMString> {
-        target_machine.run_optimization_passes(
-            module,
-            format!("default<O{}>", self.settings.middle_end_as_string()).as_str(),
-        )
+        let opt = self.settings.middle_end_as_string();
+        // Run the standard Oz pipeline, then IPSCCP to propagate constants
+        // through call boundaries of outlined helpers, followed by
+        // inlining (which can now inline functions with constant args)
+        // and a cleanup round.
+        let pass_pipeline = format!(
+            "default<O{opt}>,ipsccp,deadargelim,\
+             inline,function(simplifycfg),globaldce"
+        );
+        target_machine.run_optimization_passes(module, &pass_pipeline)
     }
 
     /// Returns the optimizer settings reference.

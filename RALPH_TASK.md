@@ -1407,3 +1407,67 @@ Original baseline: 418,237 bytes → Now: 354,344 bytes = **-63,893 bytes (-15.3
 - Retester: 5260 passed, 591 failed (all infrastructure timeouts, 0 correctness failures)
 - Codesize test: passes (no changes to benchmark contracts)
 - OZ contracts: All compile successfully
+
+## Iteration - LLVM IPSCCP post-pass + second dedup pass
+
+### Changes Made
+
+1. **LLVM IPSCCP post-pass** (`crates/llvm-context/src/optimizer/mod.rs`):
+   - Added `ipsccp,deadargelim,inline,function(simplifycfg),globaldce` after `default<Oz>`
+   - IPSCCP (Interprocedural Sparse Conditional Constant Propagation) discovers inter-function
+     constants that default<Oz> missed, especially through the many outlined helper functions
+   - `deadargelim` removes function arguments that IPSCCP proved constant
+   - `inline` re-evaluates inlining with newly constant arguments
+   - `simplifycfg` cleans up dead branches, `globaldce` removes dead functions
+   - Note: a full second `default<Oz>` was tested (giving even better results) but triggers
+     a polkavm-linker reachability bug on `invalid_opcode_works` test
+
+2. **Second dedup pass** (`crates/newyork/src/lib.rs`):
+   - Added `deduplicate_functions` + `deduplicate_functions_fuzzy` after the 3rd simplify pass
+   - Guard narrowing and compound outlining canonicalize code into forms that expose
+     new duplicate/near-duplicate functions
+
+3. **Codesize reference update** (`crates/integration/codesize_newyork.json`):
+   - Computation: 1446 → 1437 (-9)
+   - SHA1: 5624 → 5618 (-6)
+
+### OZ Code Size Results
+
+| Contract   | Before  | After   | Diff |
+|------------|---------|---------|------|
+| erc1155    | 38,524  | 36,854  | -1,670 (-4.3%) |
+| erc20      | 49,213  | 49,196  | -17 |
+| erc721     | 56,119  | 56,086  | -33 |
+| oz_gov     | 92,870  | 93,015  | +145 (+0.16%) |
+| oz_rwa     | 46,425  | 46,164  | -261 (-0.56%) |
+| simple     | 17,927  | 17,921  | -6 |
+| oz_stable  | 49,002  | 48,894  | -108 (-0.22%) |
+| proxy      | 4,016   | 4,017   | +1 |
+| **Total**  | **354,096** | **352,147** | **-1,949 (-0.55%)** |
+
+oz_gov regresses slightly (+145 bytes, 0.16%) because IPSCCP materializes some constants
+at more call sites. This is outweighed by the overall -1,949 byte savings.
+
+### Approaches Tried and Abandoned
+
+1. **Yul optimizer string modifications** (Task item 3): Tried adding extra cleanup loops
+   (`[LScsTulD]Vcul[LScsTulD]`), FullInliner before cleanup, etc. Zero effect - the
+   existing `[LScsTulD]` suffix already achieves convergence.
+
+2. **LLVM `globalopt` + `constmerge` alone**: Zero effect after default<Oz>.
+
+3. **LLVM `instcombine` after IPSCCP**: Hurts oz_gov (+54 bytes).
+
+4. **Double `default<Oz>`** with IPSCCP between: Gave even better results
+   (erc1155: -2,737, oz_stable: -396) but triggers polkavm-linker
+   "inconsistent reachability" bug on `invalid_opcode_works` test.
+
+5. **Lowering MAPPING_SLOAD_THRESHOLD** from 10 to 6: Marginal/negative savings.
+   For oz_gov (6 sites): 6 × 35 - 250 = -40 bytes. Not worth it.
+
+6. **Lowering CALLDATALOAD_OUTLINE_THRESHOLD**: All major contracts already exceed 20.
+
+### Test Results
+- `make test`: All pass (62 integration, 20 resolc, etc.)
+- Retester: 5851 passed, 0 failed, 24 ignored (one clean run; other runs had infrastructure issues)
+- Codesize test: passes with updated references

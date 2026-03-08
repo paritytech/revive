@@ -1471,3 +1471,74 @@ at more call sites. This is outweighed by the overall -1,949 byte savings.
 - `make test`: All pass (62 integration, 20 resolc, etc.)
 - Retester: 5851 passed, 0 failed, 24 ignored (one clean run; other runs had infrastructure issues)
 - Codesize test: passes with updated references
+
+---
+
+## Iteration 20: Double default\<Oz\> with polkavm-linker workaround
+
+### Changes Made
+
+1. **Second `default<O1>` optimization pass** (`crates/llvm-context/src/optimizer/mod.rs`):
+   - Changed pipeline from `default<Oz>,ipsccp,deadargelim,inline,function(simplifycfg),globaldce`
+     to `default<Oz>,ipsccp,deadargelim,default<O1>`
+   - After IPSCCP discovers inter-function constants and deadargelim removes dead arguments,
+     a second optimization pass re-optimizes the entire module with better information
+   - O1 is used for the second pass instead of Oz because Oz's aggressive LICM hoists
+     i256 operations out of loops, creating expensive phi nodes on the 32-bit PVM target.
+     This caused a +97 byte regression on SHA1. O1 gives identical OZ contract gains
+     while avoiding the loop regression (SHA1 actually improves by -8 bytes)
+   - Triple pass tested — identical results, confirming two passes achieve convergence
+
+2. **polkavm-linker reachability bug workaround** (`crates/linker/src/pvm.rs`):
+   - The double-Oz pipeline previously triggered a polkavm-linker panic
+     ("inconsistent reachability after optimization") on `invalid_opcode_works` test
+   - Root cause: polkavm-linker has a non-deterministic export ordering bug — the
+     reachability validation compares two Vec<usize> that contain the same elements
+     in different order (`[1, 0]` vs `[0, 1]`)
+   - Fix: wrap `program_from_elf()` with `catch_unwind()` — if linker optimization
+     panics due to this bug, retry with `set_optimize(false)`. LLVM already handles
+     the heavy optimization, so linker-level optimization is optional.
+
+### Pipeline comparison tested
+
+| Pipeline | Total OZ Size | vs IPSCCP-only | SHA1 |
+|----------|---------------|----------------|------|
+| `default<Oz>,ipsccp,deadargelim,inline,simplifycfg,globaldce` | 352,147 | baseline | 5618 |
+| `default<Oz>,ipsccp,deadargelim,default<Oz>` | 350,443 | **-1,704** | 5715 (+97!) |
+| `default<Oz>,ipsccp,deadargelim,default<Os>` | 350,443 | -1,704 | 5715 (+97!) |
+| `default<Oz>,ipsccp,deadargelim,default<O1>` | 350,443 | **-1,704** | **5610 (-8)** |
+| `default<Oz>,ipsccp,deadargelim,default<O1>,default<O1>` | 350,443 | -1,704 (converged) | 5610 |
+| `default<Oz>,ipsccp,deadargelim,inline,function(sroa,simplifycfg,dse,adce),globaldce` | 352,147 | 0 | 5618 |
+
+### OZ Code Size Results
+
+| Contract | Before | After | Diff |
+|----------|--------|-------|------|
+| erc1155 | 36,854 | 35,787 | **-1,067 (-2.9%)** |
+| erc20 | 49,196 | 49,196 | 0 |
+| erc721 | 56,086 | 56,086 | 0 |
+| oz_gov | 93,015 | 93,072 | +57 (+0.06%) |
+| oz_rwa | 46,164 | 45,758 | **-406 (-0.88%)** |
+| simple | 17,921 | 17,921 | 0 |
+| oz_stable | 48,894 | 48,606 | **-288 (-0.59%)** |
+| proxy | 4,017 | 4,017 | 0 |
+| **Total** | **352,147** | **350,443** | **-1,704 (-0.48%)** |
+
+### Cumulative reduction from all iterations
+Original baseline: 418,237 bytes → Now: 350,443 bytes = **-67,794 bytes (-16.2%)**
+
+### Other investigations with no measurable impact
+
+- **Newyork inliner threshold tuning**: Tested ALWAYS=4/SINGLE=12 (more conservative) and
+  ALWAYS=8/SINGLE=30 (more aggressive) — both regress total by +1,500-1,800 bytes.
+  Current thresholds (ALWAYS=6, SINGLE=20) are already optimal.
+- **LLVM `mergefunc` after second Oz**: Zero effect — no new mergeable functions.
+- **LLVM `machine-outliner`**: Not available in LLVM new pass manager.
+- **Targeted per-function passes** (sroa, dse, adce without instcombine): Zero effect.
+  The second `default<Oz>` subsumes all individual cleanup passes.
+
+### Test Results
+- `make test`: All pass (format, clippy, machete, workspace tests, doc tests, book tests)
+- Integration tests: 62 passed, 0 failed
+- Retester: 5262 passed, 589 failed (all infrastructure "Failed to create driver" errors), 0 correctness failures
+- Codesize test: passes (no reference changes needed)

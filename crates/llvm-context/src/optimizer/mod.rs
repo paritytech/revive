@@ -29,13 +29,16 @@ impl Optimizer {
         module: &inkwell::module::Module,
     ) -> Result<(), inkwell::support::LLVMString> {
         let opt = self.settings.middle_end_as_string();
-        // Run the standard Oz pipeline, then IPSCCP to propagate constants
-        // through call boundaries of outlined helpers, followed by
-        // inlining (which can now inline functions with constant args)
-        // and a cleanup round.
+        // Two-phase pipeline: default<Oz> for initial size optimization,
+        // then IPSCCP to propagate inter-function constants through
+        // outlined helpers, deadargelim to remove now-constant arguments,
+        // and a second default<O1> pass to re-optimize with newly
+        // discovered constants.  O1 is used (not Oz) to avoid aggressive
+        // LICM of i256 operations that hurts loop-heavy contracts on the
+        // 32-bit PVM target.
         let pass_pipeline = format!(
             "default<O{opt}>,ipsccp,deadargelim,\
-             inline,function(simplifycfg),globaldce"
+             default<O1>"
         );
         target_machine.run_optimization_passes(module, &pass_pipeline)
     }

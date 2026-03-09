@@ -485,22 +485,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.type_info.get(id).min_width
     }
 
-    /// Gets the LLVM int type for a given bit-width.
-    fn int_type_for_width(
-        &self,
-        context: &PolkaVMContext<'ctx>,
-        width: BitWidth,
-    ) -> inkwell::types::IntType<'ctx> {
-        match width {
-            BitWidth::I1 => context.llvm().bool_type(),
-            BitWidth::I8 => context.llvm().i8_type(),
-            BitWidth::I32 => context.llvm().i32_type(),
-            BitWidth::I64 => context.llvm().i64_type(),
-            BitWidth::I160 => context.llvm().custom_width_int_type(160),
-            BitWidth::I256 => context.word_type(),
-        }
-    }
-
     /// Ensures a value is extended to 256-bit word type.
     /// Used when a narrower value needs to be used in operations requiring full width.
     fn ensure_word_type(
@@ -949,39 +933,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         None
-    }
-
-    /// Converts a value to the inferred type for storage.
-    /// If the inferred type is narrower, truncates; if wider, zero-extends.
-    /// Phase 2 infrastructure: available for future optimizations.
-    #[allow(dead_code)]
-    fn convert_to_inferred_type(
-        &self,
-        context: &PolkaVMContext<'ctx>,
-        value: IntValue<'ctx>,
-        target_id: ValueId,
-        name: &str,
-    ) -> Result<IntValue<'ctx>> {
-        let inferred_width = self.inferred_width(target_id);
-        let target_type = self.int_type_for_width(context, inferred_width);
-        let value_width = value.get_type().get_bit_width();
-        let target_width = target_type.get_bit_width();
-
-        if value_width == target_width {
-            Ok(value)
-        } else if value_width > target_width {
-            // Truncate to narrower type
-            context
-                .builder()
-                .build_int_truncate(value, target_type, name)
-                .map_err(|e| CodegenError::Llvm(e.to_string()))
-        } else {
-            // Zero-extend to wider type
-            context
-                .builder()
-                .build_int_z_extend(value, target_type, name)
-                .map_err(|e| CodegenError::Llvm(e.to_string()))
-        }
     }
 
     /// Narrows a memory offset or length value to i64 when type inference

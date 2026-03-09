@@ -233,23 +233,6 @@ impl TypeInference {
         }
     }
 
-    /// Sets the constraint for a value, returning true if changed.
-    #[allow(dead_code)]
-    fn set(&mut self, id: ValueId, constraint: TypeConstraint) -> bool {
-        let existing = self.get(id);
-        if constraint.min_width > existing.min_width
-            || constraint.max_width < existing.max_width
-            || (constraint.is_signed && !existing.is_signed)
-        {
-            let joined = existing.join(&constraint);
-            self.constraints.insert(id.0, joined);
-            self.changed = true;
-            true
-        } else {
-            false
-        }
-    }
-
     /// Widens a value's constraint to at least the given width.
     fn widen(&mut self, id: ValueId, width: BitWidth) -> bool {
         let mut constraint = self.get(id);

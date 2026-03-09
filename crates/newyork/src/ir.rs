@@ -804,6 +804,307 @@ impl Object {
             || self.functions.values().any(|f| has_msize_in_block(&f.body))
             || self.subobjects.iter().any(|s| s.has_msize())
     }
+
+    /// Finds the maximum ValueId used anywhere in this object (code + functions).
+    /// Does NOT recurse into subobjects.
+    pub fn find_max_value_id(&self) -> u32 {
+        let mut max_id: u32 = 0;
+
+        fn update(id: u32, max: &mut u32) {
+            *max = (*max).max(id);
+        }
+
+        fn scan_expr(expr: &Expr, m: &mut u32) {
+            match expr {
+                Expr::Var(id) => update(id.0, m),
+                Expr::Binary { lhs, rhs, .. } => {
+                    update(lhs.id.0, m);
+                    update(rhs.id.0, m);
+                }
+                Expr::Ternary { a, b, n, .. } => {
+                    update(a.id.0, m);
+                    update(b.id.0, m);
+                    update(n.id.0, m);
+                }
+                Expr::Unary { operand, .. } => update(operand.id.0, m),
+                Expr::CallDataLoad { offset } => update(offset.id.0, m),
+                Expr::ExtCodeSize { address }
+                | Expr::ExtCodeHash { address }
+                | Expr::Balance { address } => update(address.id.0, m),
+                Expr::BlockHash { number } => update(number.id.0, m),
+                Expr::BlobHash { index } => update(index.id.0, m),
+                Expr::MLoad { offset, .. } => update(offset.id.0, m),
+                Expr::SLoad { key, .. } | Expr::TLoad { key } => update(key.id.0, m),
+                Expr::Call { args, .. } => {
+                    for a in args {
+                        update(a.id.0, m);
+                    }
+                }
+                Expr::Truncate { value, .. }
+                | Expr::ZeroExtend { value, .. }
+                | Expr::SignExtendTo { value, .. } => update(value.id.0, m),
+                Expr::Keccak256 { offset, length } => {
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                }
+                Expr::Keccak256Pair { word0, word1 }
+                | Expr::MappingSLoad {
+                    key: word0,
+                    slot: word1,
+                } => {
+                    update(word0.id.0, m);
+                    update(word1.id.0, m);
+                }
+                Expr::Keccak256Single { word0 } => update(word0.id.0, m),
+                _ => {}
+            }
+        }
+
+        fn scan_stmt(stmt: &Statement, m: &mut u32) {
+            match stmt {
+                Statement::Let { bindings, value } => {
+                    for b in bindings {
+                        update(b.0, m);
+                    }
+                    scan_expr(value, m);
+                }
+                Statement::MStore { offset, value, .. }
+                | Statement::MStore8 { offset, value, .. } => {
+                    update(offset.id.0, m);
+                    update(value.id.0, m);
+                }
+                Statement::MCopy { dest, src, length } => {
+                    update(dest.id.0, m);
+                    update(src.id.0, m);
+                    update(length.id.0, m);
+                }
+                Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                    update(key.id.0, m);
+                    update(value.id.0, m);
+                }
+                Statement::MappingSStore { key, slot, value } => {
+                    update(key.id.0, m);
+                    update(slot.id.0, m);
+                    update(value.id.0, m);
+                }
+                Statement::If {
+                    condition,
+                    inputs,
+                    then_region,
+                    else_region,
+                    outputs,
+                } => {
+                    update(condition.id.0, m);
+                    for v in inputs {
+                        update(v.id.0, m);
+                    }
+                    scan_region(then_region, m);
+                    if let Some(r) = else_region {
+                        scan_region(r, m);
+                    }
+                    for o in outputs {
+                        update(o.0, m);
+                    }
+                }
+                Statement::Switch {
+                    scrutinee,
+                    inputs,
+                    cases,
+                    default,
+                    outputs,
+                } => {
+                    update(scrutinee.id.0, m);
+                    for v in inputs {
+                        update(v.id.0, m);
+                    }
+                    for c in cases {
+                        scan_region(&c.body, m);
+                    }
+                    if let Some(r) = default {
+                        scan_region(r, m);
+                    }
+                    for o in outputs {
+                        update(o.0, m);
+                    }
+                }
+                Statement::For {
+                    init_values,
+                    loop_vars,
+                    condition_stmts,
+                    condition,
+                    body,
+                    post_input_vars,
+                    post,
+                    outputs,
+                } => {
+                    for v in init_values {
+                        update(v.id.0, m);
+                    }
+                    for v in loop_vars {
+                        update(v.0, m);
+                    }
+                    for s in condition_stmts {
+                        scan_stmt(s, m);
+                    }
+                    scan_expr(condition, m);
+                    scan_region(body, m);
+                    for v in post_input_vars {
+                        update(v.0, m);
+                    }
+                    scan_region(post, m);
+                    for o in outputs {
+                        update(o.0, m);
+                    }
+                }
+                Statement::Leave { return_values }
+                | Statement::Break {
+                    values: return_values,
+                }
+                | Statement::Continue {
+                    values: return_values,
+                } => {
+                    for v in return_values {
+                        update(v.id.0, m);
+                    }
+                }
+                Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                }
+                Statement::SelfDestruct { address } => update(address.id.0, m),
+                Statement::ExternalCall {
+                    gas,
+                    address,
+                    value,
+                    args_offset,
+                    args_length,
+                    ret_offset,
+                    ret_length,
+                    result,
+                    ..
+                } => {
+                    update(gas.id.0, m);
+                    update(address.id.0, m);
+                    if let Some(v) = value {
+                        update(v.id.0, m);
+                    }
+                    update(args_offset.id.0, m);
+                    update(args_length.id.0, m);
+                    update(ret_offset.id.0, m);
+                    update(ret_length.id.0, m);
+                    update(result.0, m);
+                }
+                Statement::Create {
+                    value,
+                    offset,
+                    length,
+                    salt,
+                    result,
+                    ..
+                } => {
+                    update(value.id.0, m);
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                    if let Some(s) = salt {
+                        update(s.id.0, m);
+                    }
+                    update(result.0, m);
+                }
+                Statement::Log {
+                    offset,
+                    length,
+                    topics,
+                } => {
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                    for t in topics {
+                        update(t.id.0, m);
+                    }
+                }
+                Statement::CodeCopy {
+                    dest,
+                    offset,
+                    length,
+                }
+                | Statement::ReturnDataCopy {
+                    dest,
+                    offset,
+                    length,
+                }
+                | Statement::DataCopy {
+                    dest,
+                    offset,
+                    length,
+                }
+                | Statement::CallDataCopy {
+                    dest,
+                    offset,
+                    length,
+                } => {
+                    update(dest.id.0, m);
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                }
+                Statement::ExtCodeCopy {
+                    address,
+                    dest,
+                    offset,
+                    length,
+                } => {
+                    update(address.id.0, m);
+                    update(dest.id.0, m);
+                    update(offset.id.0, m);
+                    update(length.id.0, m);
+                }
+                Statement::Block(region) => scan_region(region, m),
+                Statement::Expr(expr) => scan_expr(expr, m),
+                Statement::SetImmutable { value, .. } => update(value.id.0, m),
+                Statement::CustomErrorRevert { args, .. } => {
+                    for a in args {
+                        update(a.id.0, m);
+                    }
+                }
+                Statement::Stop
+                | Statement::Invalid
+                | Statement::PanicRevert { .. }
+                | Statement::ErrorStringRevert { .. } => {}
+            }
+        }
+
+        fn scan_region(region: &Region, m: &mut u32) {
+            for stmt in &region.statements {
+                scan_stmt(stmt, m);
+            }
+            for v in &region.yields {
+                update(v.id.0, m);
+            }
+        }
+
+        fn scan_block(block: &Block, m: &mut u32) {
+            for stmt in &block.statements {
+                scan_stmt(stmt, m);
+            }
+        }
+
+        scan_block(&self.code, &mut max_id);
+        for function in self.functions.values() {
+            for (param_id, _) in &function.params {
+                update(param_id.0, &mut max_id);
+            }
+            for id in &function.return_values_initial {
+                update(id.0, &mut max_id);
+            }
+            for id in &function.return_values {
+                update(id.0, &mut max_id);
+            }
+            scan_block(&function.body, &mut max_id);
+        }
+        for sub in &self.subobjects {
+            max_id = max_id.max(sub.find_max_value_id());
+        }
+
+        max_id
+    }
 }
 
 /// Counts the occurrences of callvalue and calldataload expressions.
@@ -847,22 +1148,58 @@ impl Object {
     }
 }
 
-fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
-    let mut counts = SyscallCounts::default();
-    for stmt in &block.statements {
-        counts += count_syscalls_in_statement(stmt);
+/// Visits every statement in a slice recursively, calling `f` on each one.
+/// Handles structural recursion into If/Switch/For/Block regions.
+pub fn for_each_stmt(stmts: &[Statement], f: &mut dyn FnMut(&Statement)) {
+    for stmt in stmts {
+        f(stmt);
+        match stmt {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                for_each_stmt(&then_region.statements, f);
+                if let Some(r) = else_region {
+                    for_each_stmt(&r.statements, f);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    for_each_stmt(&case.body.statements, f);
+                }
+                if let Some(r) = default {
+                    for_each_stmt(&r.statements, f);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for_each_stmt(condition_stmts, f);
+                for_each_stmt(&body.statements, f);
+                for_each_stmt(&post.statements, f);
+            }
+            Statement::Block(region) => for_each_stmt(&region.statements, f),
+            _ => {}
+        }
     }
-    counts
 }
 
-fn count_syscalls_in_statement(stmt: &Statement) -> SyscallCounts {
-    match stmt {
-        Statement::Let { value, .. } => count_syscalls_in_expr(value),
+fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
+    let mut counts = SyscallCounts::default();
+    for_each_stmt(&block.statements, &mut |stmt| match stmt {
+        Statement::Let { value, .. } | Statement::Expr(value) => match value {
+            Expr::CallValue => counts.callvalue += 1,
+            Expr::CallDataLoad { .. } => counts.calldataload += 1,
+            Expr::Caller => counts.caller += 1,
+            Expr::MLoad { .. } | Expr::Keccak256 { .. } => counts.heap_operations += 1,
+            _ => {}
+        },
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
-            SyscallCounts {
-                heap_operations: 1,
-                ..Default::default()
-            }
+            counts.heap_operations += 1;
         }
         Statement::Revert { .. }
         | Statement::Return { .. }
@@ -870,436 +1207,84 @@ fn count_syscalls_in_statement(stmt: &Statement) -> SyscallCounts {
         | Statement::ExtCodeCopy { .. }
         | Statement::ReturnDataCopy { .. }
         | Statement::DataCopy { .. }
-        | Statement::CallDataCopy { .. } => SyscallCounts {
-            heap_operations: 1,
-            ..Default::default()
-        },
-        Statement::ExternalCall { .. } | Statement::Create { .. } => SyscallCounts {
-            heap_operations: 2,
-            ..Default::default()
-        },
-        Statement::Log { topics, .. } => SyscallCounts {
-            heap_operations: 1 + topics.len(),
-            ..Default::default()
-        },
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            let mut n = count_syscalls_in_region(then_region);
-            if let Some(r) = else_region {
-                n += count_syscalls_in_region(r);
-            }
-            n
+        | Statement::CallDataCopy { .. } => {
+            counts.heap_operations += 1;
         }
-        Statement::Switch { cases, default, .. } => {
-            let mut n = SyscallCounts::default();
-            for case in cases {
-                n += count_syscalls_in_region(&case.body);
-            }
-            if let Some(r) = default {
-                n += count_syscalls_in_region(r);
-            }
-            n
+        Statement::ExternalCall { .. } | Statement::Create { .. } => {
+            counts.heap_operations += 2;
         }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            let mut n = SyscallCounts::default();
-            for s in condition_stmts {
-                n += count_syscalls_in_statement(s);
-            }
-            n += count_syscalls_in_region(body);
-            n += count_syscalls_in_region(post);
-            n
+        Statement::Log { topics, .. } => {
+            counts.heap_operations += 1 + topics.len();
         }
-        Statement::Block(region) => count_syscalls_in_region(region),
-        _ => SyscallCounts::default(),
-    }
-}
-
-fn count_syscalls_in_expr(expr: &Expr) -> SyscallCounts {
-    match expr {
-        Expr::CallValue => SyscallCounts {
-            callvalue: 1,
-            ..Default::default()
-        },
-        Expr::CallDataLoad { .. } => SyscallCounts {
-            calldataload: 1,
-            ..Default::default()
-        },
-        Expr::Caller => SyscallCounts {
-            caller: 1,
-            ..Default::default()
-        },
-        Expr::MLoad { .. } | Expr::Keccak256 { .. } => SyscallCounts {
-            heap_operations: 1,
-            ..Default::default()
-        },
-        _ => SyscallCounts::default(),
-    }
-}
-
-fn count_syscalls_in_region(region: &Region) -> SyscallCounts {
-    let mut counts = SyscallCounts::default();
-    for stmt in &region.statements {
-        counts += count_syscalls_in_statement(stmt);
-    }
+        _ => {}
+    });
     counts
 }
 
-/// Counts heap memory operations in a block recursively.
 fn count_heap_ops_in_block(block: &Block) -> usize {
-    let mut count = 0;
-    for stmt in &block.statements {
-        count += count_heap_ops_in_statement(stmt);
-    }
+    let mut count = 0usize;
+    for_each_stmt(&block.statements, &mut |stmt| match stmt {
+        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
+            count += 1;
+        }
+        Statement::Let {
+            value: Expr::MLoad { .. },
+            ..
+        } => count += 1,
+        _ => {}
+    });
     count
 }
 
-/// Counts heap memory operations in a single statement recursively.
-fn count_heap_ops_in_statement(stmt: &Statement) -> usize {
-    match stmt {
-        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => 1,
-        Statement::Let { value, .. } => count_heap_ops_in_expr(value),
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            let mut n = count_heap_ops_in_region(then_region);
-            if let Some(r) = else_region {
-                n += count_heap_ops_in_region(r);
-            }
-            n
-        }
-        Statement::Switch { cases, default, .. } => {
-            let mut n = 0;
-            for case in cases {
-                n += count_heap_ops_in_region(&case.body);
-            }
-            if let Some(r) = default {
-                n += count_heap_ops_in_region(r);
-            }
-            n
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            let mut n = 0;
-            for s in condition_stmts {
-                n += count_heap_ops_in_statement(s);
-            }
-            n += count_heap_ops_in_region(body);
-            n += count_heap_ops_in_region(post);
-            n
-        }
-        Statement::Block(region) => count_heap_ops_in_region(region),
-        _ => 0,
-    }
-}
-
-/// Counts heap memory operations in an expression (only MLoad).
-fn count_heap_ops_in_expr(expr: &Expr) -> usize {
-    match expr {
-        Expr::MLoad { .. } => 1,
-        _ => 0,
-    }
-}
-
-/// Counts heap memory operations in a region.
-fn count_heap_ops_in_region(region: &Region) -> usize {
-    let mut count = 0;
-    for stmt in &region.statements {
-        count += count_heap_ops_in_statement(stmt);
-    }
-    count
-}
-
-/// Counts exit operations (Return, Revert, Stop) in a block recursively.
 fn count_exit_ops_in_block(block: &Block) -> usize {
-    let mut count = 0;
-    for stmt in &block.statements {
-        count += count_exit_ops_in_statement(stmt);
-    }
+    let mut count = 0usize;
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if matches!(
+            stmt,
+            Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop
+        ) {
+            count += 1;
+        }
+    });
     count
 }
 
-/// Counts exit operations in a single statement recursively.
-fn count_exit_ops_in_statement(stmt: &Statement) -> usize {
-    match stmt {
-        Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop => 1,
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            let mut n = count_exit_ops_in_region(then_region);
-            if let Some(r) = else_region {
-                n += count_exit_ops_in_region(r);
-            }
-            n
-        }
-        Statement::Switch { cases, default, .. } => {
-            let mut n = 0;
-            for case in cases {
-                n += count_exit_ops_in_region(&case.body);
-            }
-            if let Some(r) = default {
-                n += count_exit_ops_in_region(r);
-            }
-            n
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            let mut n = 0;
-            for s in condition_stmts {
-                n += count_exit_ops_in_statement(s);
-            }
-            n += count_exit_ops_in_region(body);
-            n += count_exit_ops_in_region(post);
-            n
-        }
-        Statement::Block(region) => count_exit_ops_in_region(region),
-        _ => 0,
-    }
-}
-
-/// Counts exit operations in a region.
-fn count_exit_ops_in_region(region: &Region) -> usize {
-    let mut count = 0;
-    for stmt in &region.statements {
-        count += count_exit_ops_in_statement(stmt);
-    }
-    count
-}
-
-/// Counts `Keccak256Single` expression nodes in a block.
 fn count_keccak_single_in_block(block: &Block) -> usize {
-    block
-        .statements
-        .iter()
-        .map(count_keccak_single_in_statement)
-        .sum()
-}
-
-/// Counts `Keccak256Single` expression nodes in a statement (recursively).
-fn count_keccak_single_in_statement(stmt: &Statement) -> usize {
-    match stmt {
-        Statement::Let { value, .. } | Statement::Expr(value) => {
+    let mut count = 0usize;
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
             if matches!(value, Expr::Keccak256Single { .. }) {
-                1
-            } else {
-                0
+                count += 1;
             }
         }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            count_keccak_single_in_region(then_region)
-                + else_region
-                    .as_ref()
-                    .map_or(0, count_keccak_single_in_region)
-        }
-        Statement::Switch { cases, default, .. } => {
-            cases
-                .iter()
-                .map(|c| count_keccak_single_in_region(&c.body))
-                .sum::<usize>()
-                + default.as_ref().map_or(0, count_keccak_single_in_region)
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            condition_stmts
-                .iter()
-                .map(count_keccak_single_in_statement)
-                .sum::<usize>()
-                + count_keccak_single_in_region(body)
-                + count_keccak_single_in_region(post)
-        }
-        Statement::Block(region) => count_keccak_single_in_region(region),
-        _ => 0,
-    }
+    });
+    count
 }
 
-/// Counts `Keccak256Single` expression nodes in a region.
-fn count_keccak_single_in_region(region: &Region) -> usize {
-    region
-        .statements
-        .iter()
-        .map(count_keccak_single_in_statement)
-        .sum()
-}
-
-/// Counts ErrorStringRevert statements in a block, grouped by num_words.
 fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for stmt in &block.statements {
-        count_error_string_reverts_in_statement(stmt, counts);
-    }
-}
-
-/// Counts ErrorStringRevert statements in a statement recursively.
-fn count_error_string_reverts_in_statement(stmt: &Statement, counts: &mut BTreeMap<usize, usize>) {
-    match stmt {
-        Statement::ErrorStringRevert { data, .. } => {
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if let Statement::ErrorStringRevert { data, .. } = stmt {
             *counts.entry(data.len()).or_insert(0) += 1;
         }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            count_error_string_reverts_in_region(then_region, counts);
-            if let Some(r) = else_region {
-                count_error_string_reverts_in_region(r, counts);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for case in cases {
-                count_error_string_reverts_in_region(&case.body, counts);
-            }
-            if let Some(r) = default {
-                count_error_string_reverts_in_region(r, counts);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            for s in condition_stmts {
-                count_error_string_reverts_in_statement(s, counts);
-            }
-            count_error_string_reverts_in_region(body, counts);
-            count_error_string_reverts_in_region(post, counts);
-        }
-        Statement::Block(region) => count_error_string_reverts_in_region(region, counts),
-        _ => {}
-    }
+    });
 }
 
-/// Counts ErrorStringRevert statements in a region.
-fn count_error_string_reverts_in_region(region: &Region, counts: &mut BTreeMap<usize, usize>) {
-    for stmt in &region.statements {
-        count_error_string_reverts_in_statement(stmt, counts);
-    }
-}
-
-/// Counts CustomErrorRevert statements in a block, grouped by num_args.
 fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for stmt in &block.statements {
-        count_custom_error_reverts_in_statement(stmt, counts);
-    }
-}
-
-/// Counts CustomErrorRevert statements in a statement recursively.
-fn count_custom_error_reverts_in_statement(stmt: &Statement, counts: &mut BTreeMap<usize, usize>) {
-    match stmt {
-        Statement::CustomErrorRevert { args, .. } => {
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if let Statement::CustomErrorRevert { args, .. } = stmt {
             *counts.entry(args.len()).or_insert(0) += 1;
         }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            count_custom_error_reverts_in_region(then_region, counts);
-            if let Some(r) = else_region {
-                count_custom_error_reverts_in_region(r, counts);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for case in cases {
-                count_custom_error_reverts_in_region(&case.body, counts);
-            }
-            if let Some(r) = default {
-                count_custom_error_reverts_in_region(r, counts);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            for s in condition_stmts {
-                count_custom_error_reverts_in_statement(s, counts);
-            }
-            count_custom_error_reverts_in_region(body, counts);
-            count_custom_error_reverts_in_region(post, counts);
-        }
-        Statement::Block(region) => count_custom_error_reverts_in_region(region, counts),
-        _ => {}
-    }
+    });
 }
 
-/// Counts CustomErrorRevert statements in a region.
-fn count_custom_error_reverts_in_region(region: &Region, counts: &mut BTreeMap<usize, usize>) {
-    for stmt in &region.statements {
-        count_custom_error_reverts_in_statement(stmt, counts);
-    }
-}
-
-/// Returns true if any expression in the block uses `msize()`.
 fn has_msize_in_block(block: &Block) -> bool {
-    block.statements.iter().any(has_msize_in_statement)
-}
-
-/// Returns true if a statement or its sub-expressions contain `msize()`.
-fn has_msize_in_statement(stmt: &Statement) -> bool {
-    match stmt {
-        Statement::Let { value, .. } | Statement::Expr(value) => has_msize_in_expr(value),
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            has_msize_in_region(then_region)
-                || else_region.as_ref().is_some_and(has_msize_in_region)
+    let mut found = false;
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
+            if matches!(value, Expr::MSize) {
+                found = true;
+            }
         }
-        Statement::Switch { cases, default, .. } => {
-            cases.iter().any(|c| has_msize_in_region(&c.body))
-                || default.as_ref().is_some_and(has_msize_in_region)
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            condition_stmts.iter().any(has_msize_in_statement)
-                || has_msize_in_region(body)
-                || has_msize_in_region(post)
-        }
-        Statement::Block(region) => has_msize_in_region(region),
-        _ => false,
-    }
-}
-
-/// Returns true if an expression is or contains `msize()`.
-fn has_msize_in_expr(expr: &Expr) -> bool {
-    matches!(expr, Expr::MSize)
-}
-
-/// Returns true if a region contains `msize()`.
-fn has_msize_in_region(region: &Region) -> bool {
-    region.statements.iter().any(has_msize_in_statement)
+    });
+    found
 }

@@ -689,7 +689,9 @@ impl<'ctx> Context<'ctx> {
 
     /// Pops the current function scope.
     pub fn pop_function_scope(&mut self) {
-        self.function_scope.pop();
+        self.function_scope
+            .pop()
+            .expect("ICE: tried to pop an empty function scope stack");
     }
 
     /// Returns the debug info.

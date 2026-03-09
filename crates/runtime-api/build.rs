@@ -24,7 +24,7 @@ fn compile(source_path: &str, bitcode_path: &str) {
             "-Xclang",
             "-target-feature",
             "-Xclang",
-            "+fast-unaligned-access,+xtheadcondmov",
+            "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax,+unaligned-scalar-mem,+short-forward-branch-opt",
             "-fno-exceptions",
             "-ffreestanding",
             "-Wall",

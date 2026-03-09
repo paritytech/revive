@@ -29,7 +29,7 @@ impl TargetMachine {
 
     /// LLVM target features.
     pub const VM_FEATURES: &'static str =
-        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax";
+        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax,+unaligned-scalar-mem,+short-forward-branch-opt";
 
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.

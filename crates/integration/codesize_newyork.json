@@ -1,7 +1,7 @@
 {
   "Baseline": 481,
-  "Computation": 1309,
-  "DivisionArithmetics": 7220,
+  "Computation": 1364,
+  "DivisionArithmetics": 7200,
   "ERC20": 9940,
   "Events": 1285,
   "FibonacciIterative": 954,

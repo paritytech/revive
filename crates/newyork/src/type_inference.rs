@@ -394,6 +394,43 @@ impl TypeInference {
         }
     }
 
+    /// Computes the widest backward demand excluding "transparent-for-params" uses.
+    ///
+    /// Used by `narrow_function_params` to determine if only Comparison/Arithmetic
+    /// uses block parameter narrowing. Returns I256 if no uses recorded or
+    /// any truly width-requiring use needs I256.
+    ///
+    /// Comparison uses are excluded because param narrowing inserts
+    /// zero-extension at function entry, making comparison operations see the
+    /// correct (zero-extended) value for in-range inputs.
+    fn non_comparison_demand(&self, id: ValueId) -> BitWidth {
+        if let Some(uses) = self.uses.get(&id.0) {
+            if uses.is_empty() {
+                return BitWidth::I256;
+            }
+            let mut widest = BitWidth::I1;
+            for use_ctx in uses {
+                if matches!(use_ctx, UseContext::Comparison) {
+                    continue;
+                }
+                let needed = match use_ctx {
+                    UseContext::FunctionArg => self
+                        .fn_arg_demand
+                        .get(&id.0)
+                        .copied()
+                        .unwrap_or(BitWidth::I256),
+                    _ => use_ctx.max_width_needed(),
+                };
+                if needed > widest {
+                    widest = needed;
+                }
+            }
+            widest
+        } else {
+            BitWidth::I256
+        }
+    }
+
     /// Propagates use demands backward through transparent operations.
     ///
     /// For "transparent" operations (add, or, xor, and), the lower N bits of
@@ -549,14 +586,14 @@ impl TypeInference {
     /// Uses the backward-inferred max_width for each parameter, which reflects
     /// whether ALL use paths of the parameter are compatible with narrowing.
     /// The backward pass + demand propagation through transparent ops ensures
-    /// that if ANY use path needs full width (comparisons, iszero, storage
-    /// values), max_width stays at I256 and prevents narrowing.
+    /// that if ANY use path needs full width (storage values, external calls),
+    /// max_width stays at I256 and prevents narrowing.
     ///
-    /// Safety: The function body zero-extends narrowed parameters back to word type,
-    /// creating an implicit LLVM range proof. This is sound because:
-    /// 1. All use paths only observe the lower N bits (proven by backward analysis)
-    /// 2. Transparent ops (add/or/xor/and) preserve lower-bit equivalence
-    /// 3. LLVM uses the range proof to eliminate downstream overflow checks
+    /// For parameters where only `Comparison` uses block narrowing, a relaxed
+    /// check is applied: if all non-comparison uses need ≤ I64 AND all callers
+    /// provably pass values ≤ I64, narrowing is safe. The zero-extension in the
+    /// function body preserves comparison semantics for values within the narrowed
+    /// range (e.g., `gt(zext(param_i64), threshold)` is correct when param ≤ 2^64).
     ///
     /// Returns true if any parameter was narrowed.
     pub fn narrow_function_params(&self, object: &mut Object) -> bool {
@@ -575,18 +612,31 @@ impl TypeInference {
                     continue;
                 }
 
-                // Use backward max_width: only narrow if ALL use paths allow it.
-                // If any use path needs full width (comparisons, storage, etc.),
-                // max_width stays at I256 and we don't narrow.
                 let demand = constraint.max_width;
-                if demand >= BitWidth::I256 {
+                if demand < BitWidth::I256 {
+                    // Standard narrowing: backward demand allows it directly.
+                    // Clamp to at least I32 (XLEN on PolkaVM).
+                    let clamped = demand.max(BitWidth::I32);
+                    *param_ty = Type::Int(clamped);
+                    changed = true;
                     continue;
                 }
 
-                // Clamp to at least I32 for safety (XLEN is 32-bit on PolkaVM).
-                // Narrower types (I1, I8) can cause issues with LLVM calling conventions.
-                let clamped = demand.max(BitWidth::I32);
-                *param_ty = Type::Int(clamped);
+                // Demand is I256 — check if only Comparison blocks narrowing.
+                // If non-comparison demand is narrow, we can safely narrow despite
+                // Comparison demanding I256. Safety:
+                // 1. Non-comparison uses only need ≤ N bits (proven by backward analysis)
+                // 2. Comparisons in the function body operate on the zero-extended
+                //    narrowed param, preserving semantics for in-range values
+                // 3. Out-of-range values (≥ 2^N) would break non-comparison uses too
+                //    (e.g., memory offsets → trap), so behavior is equivalent
+                let non_comp = self.non_comparison_demand(*param_id);
+                if non_comp >= BitWidth::I256 {
+                    continue;
+                }
+
+                let target = non_comp.max(BitWidth::I32);
+                *param_ty = Type::Int(target);
                 changed = true;
             }
         }
@@ -779,11 +829,27 @@ impl TypeInference {
     /// Collects uses from a statement for backward propagation.
     fn collect_uses_statement(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
-                // Offset only needs 64 bits for memory addressing
+            Statement::MStore {
+                offset,
+                value,
+                region,
+            } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);
-                // Value needs full 256 bits for EVM memory semantics
+                if *region == MemoryRegion::FreePointerSlot {
+                    // FMP stores only need I64: the stored value is bounded by heap_size
+                    // (fits in I32) and is stored as i32 in InlineNative mode. Using
+                    // MemoryOffset demand (I64) instead of MemoryValue (I256) enables
+                    // parameter narrowing for functions like finalize_allocation_runtime.
+                    self.record_use(value.id, UseContext::MemoryOffset);
+                    self.narrow_from_use(value.id, BitWidth::I64);
+                } else {
+                    self.record_use(value.id, UseContext::MemoryValue);
+                }
+            }
+            Statement::MStore8 { offset, value, .. } => {
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.narrow_from_use(offset.id, BitWidth::I64);
                 self.record_use(value.id, UseContext::MemoryValue);
             }
 

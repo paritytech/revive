@@ -464,12 +464,15 @@ impl<'ctx> Context<'ctx> {
         is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let name = if is_frontend {
-            if let Some(scope) = self.function_scope.last() {
-                assert!(
-                    !scope.contains_key(name),
-                    "ICE: function '{name}' declared subsequently in the same scope"
-                );
-            }
+            let scope = self
+                .function_scope
+                .last_mut()
+                .expect("ICE: function scope must be pushed before declaring frontend functions");
+
+            assert!(
+                !scope.contains_key(name),
+                "ICE: function '{name}' declared subsequently in the same scope"
+            );
             let counter = self.function_counter;
             self.function_counter += 1;
             let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());

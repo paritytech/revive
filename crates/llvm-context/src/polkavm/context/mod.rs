@@ -453,6 +453,12 @@ impl<'ctx> Context<'ctx> {
         &self.llvm_runtime
     }
 
+    pub fn get_current_scope(&mut self) -> &mut BTreeMap<String, String> {
+        self.function_scope
+            .last_mut()
+            .expect("ICE: function scope must be pushed before declaring frontend functions")
+    }
+
     /// Appends a function to the current module.
     pub fn add_function(
         &mut self,
@@ -464,21 +470,15 @@ impl<'ctx> Context<'ctx> {
         is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let name = if is_frontend {
-            let scope = self
-                .function_scope
-                .last_mut()
-                .expect("ICE: function scope must be pushed before declaring frontend functions");
-
             assert!(
-                !scope.contains_key(name),
+                !self.get_current_scope().contains_key(name),
                 "ICE: function '{name}' declared subsequently in the same scope"
             );
             let counter = self.function_counter;
             self.function_counter += 1;
             let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
-            if let Some(scope) = self.function_scope.last_mut() {
-                scope.insert(name.to_string(), mangled.clone());
-            }
+            self.get_current_scope()
+                .insert(name.to_string(), mangled.clone());
             mangled
         } else {
             name.to_string()

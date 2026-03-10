@@ -1,6 +1,7 @@
 //! The LLVM IR generator context.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -84,6 +85,10 @@ pub struct Context<'ctx> {
     current_function: Option<Rc<RefCell<Function<'ctx>>>>,
     /// The loop context stack.
     loop_stack: Vec<Loop<'ctx>>,
+    /// Monotonic counter for unique frontend function name mangling.
+    function_counter: usize,
+    /// Scope stack mapping Yul names to mangled LLVM names.
+    function_scope: Vec<BTreeMap<String, String>>,
     /// The PVM memory configuration.
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
 
@@ -246,6 +251,8 @@ impl<'ctx> Context<'ctx> {
             functions: HashMap::with_capacity(Self::FUNCTIONS_HASHMAP_INITIAL_CAPACITY),
             current_function: None,
             loop_stack: Vec::with_capacity(Self::LOOP_STACK_INITIAL_CAPACITY),
+            function_counter: 0,
+            function_scope: Vec::new(),
             memory_config,
 
             debug_info,
@@ -446,6 +453,12 @@ impl<'ctx> Context<'ctx> {
         &self.llvm_runtime
     }
 
+    pub fn get_current_scope(&mut self) -> &mut BTreeMap<String, String> {
+        self.function_scope
+            .last_mut()
+            .expect("ICE: function scope must be pushed before declaring frontend functions")
+    }
+
     /// Appends a function to the current module.
     pub fn add_function(
         &mut self,
@@ -456,12 +469,20 @@ impl<'ctx> Context<'ctx> {
         location: Option<(u32, u32)>,
         is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
-        assert!(
-            self.get_function(name, is_frontend).is_none(),
-            "ICE: function '{name}' declared subsequentally"
-        );
-
-        let name = self.internal_function_name(name, is_frontend);
+        let name = if is_frontend {
+            assert!(
+                !self.get_current_scope().contains_key(name),
+                "ICE: function '{name}' declared subsequently in the same scope"
+            );
+            let counter = self.function_counter;
+            self.function_counter += 1;
+            let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
+            self.get_current_scope()
+                .insert(name.to_string(), mangled.clone());
+            mangled
+        } else {
+            name.to_string()
+        };
         let value = self.module().add_function(&name, r#type, linkage);
 
         if self.debug_info().is_some() {
@@ -524,9 +545,16 @@ impl<'ctx> Context<'ctx> {
         name: &str,
         is_frontend: bool,
     ) -> Option<Rc<RefCell<Function<'ctx>>>> {
-        self.functions
-            .get(&self.internal_function_name(name, is_frontend))
-            .cloned()
+        if is_frontend {
+            let mangled = self
+                .function_scope
+                .iter()
+                .rev()
+                .find_map(|scope| scope.get(name))?;
+            self.functions.get(mangled).cloned()
+        } else {
+            self.functions.get(name).cloned()
+        }
     }
 
     /// Returns a shared reference to the current active function.
@@ -652,6 +680,18 @@ impl<'ctx> Context<'ctx> {
         self.loop_stack
             .last()
             .expect("The current context is not in a loop")
+    }
+
+    /// Pushes a new function scope.
+    pub fn push_function_scope(&mut self) {
+        self.function_scope.push(BTreeMap::new());
+    }
+
+    /// Pops the current function scope.
+    pub fn pop_function_scope(&mut self) {
+        self.function_scope
+            .pop()
+            .expect("ICE: tried to pop an empty function scope stack");
     }
 
     /// Returns the debug info.
@@ -1427,15 +1467,6 @@ impl<'ctx> Context<'ctx> {
                 .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
             false,
         )
-    }
-
-    /// Returns the internal function name.
-    fn internal_function_name(&self, name: &str, is_frontend: bool) -> String {
-        if is_frontend {
-            format!("{name}_{}", self.code_type().unwrap())
-        } else {
-            name.to_string()
-        }
     }
 
     /// Scans all functions in the module and removes the `MinSize` attribute

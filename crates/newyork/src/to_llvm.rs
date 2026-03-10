@@ -671,15 +671,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Both operands must be provably narrow for truncation to be correct
         let max_needed = a_effective.max(b_effective);
 
-        // Map to standard width (8, 32, 64) for LLVM optimization
+        // Map to standard width (8, 32, 64, 128) for LLVM optimization.
+        // i128 on riscv64 uses 2 registers (~4 instructions for compare)
+        // vs i256 which uses 4 registers (~8 instructions for compare).
         let target_bits = if max_needed <= 8 {
             8
         } else if max_needed <= 32 {
             32
         } else if max_needed <= 64 {
             64
+        } else if max_needed <= 128 {
+            128
         } else {
-            // One or both operands need >64 bits; fall back to widening
+            // One or both operands need >128 bits; fall back to widening
             return self.ensure_same_type(context, a, b, "cmp");
         };
 
@@ -759,8 +763,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 32
             } else if proven_width <= 64 {
                 64
+            } else if proven_width <= 128 {
+                128 // i128 uses 2 registers vs 4 for i256 on riscv64
             } else {
-                // > 64 bits — not worth narrowing to non-standard widths
+                // > 128 bits — not worth narrowing to non-standard widths
                 0 // Fall through to strategy 2
             };
 
@@ -793,6 +799,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 BitWidth::I1 | BitWidth::I8 => 8,
                 BitWidth::I32 => 32,
                 BitWidth::I64 => 64,
+                BitWidth::I128 => 128,
                 _ => return Ok(value), // I160 or I256: not worth narrowing
             };
             if target_bits < value_width {
@@ -5186,6 +5193,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     self.ensure_exact_width(context, rhs_val, 64, "dnbit_r")?;
                                 return self.generate_binop(*op, lhs_val, rhs_val, context);
                             }
+                            if db <= 128 {
+                                let lhs_val =
+                                    self.ensure_exact_width(context, lhs_val, 128, "dnbit128_l")?;
+                                let rhs_val =
+                                    self.ensure_exact_width(context, rhs_val, 128, "dnbit128_r")?;
+                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                            }
                         }
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "bitwise")?;
@@ -5207,29 +5221,50 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     self.ensure_exact_width(context, rhs_val, 64, "dnarith_r")?;
                                 return self.generate_binop(*op, lhs_val, rhs_val, context);
                             }
+                            if db <= 128 {
+                                let lhs_val =
+                                    self.ensure_exact_width(context, lhs_val, 128, "dnarith128_l")?;
+                                let rhs_val =
+                                    self.ensure_exact_width(context, rhs_val, 128, "dnarith128_r")?;
+                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                            }
                         }
 
                         let lhs_inferred = self.inferred_width(lhs.id);
                         let rhs_inferred = self.inferred_width(rhs.id);
-                        let result_width = match op {
+                        let max_operand = lhs_inferred.max(rhs_inferred);
+
+                        // For i64 tier: use widen_by_one to guarantee no overflow.
+                        // add(I32, I32) → I64 guaranteed, sub(I32, I32) → i64 wraps correctly.
+                        let result_fits_i64 = match op {
                             BinOp::Add => {
-                                crate::type_inference::widen_by_one(lhs_inferred.max(rhs_inferred))
+                                crate::type_inference::widen_by_one(max_operand).bits() <= 64
                             }
-                            BinOp::Sub => BitWidth::I256,
+                            BinOp::Sub => false,
                             BinOp::Mul => {
-                                crate::type_inference::double_width(lhs_inferred.max(rhs_inferred))
+                                crate::type_inference::double_width(max_operand).bits() <= 64
                             }
                             _ => unreachable!(),
                         };
 
-                        if result_width.bits() <= 64 {
+                        // For i128 tier: if both operands fit in i64, the result of
+                        // add/sub fits in i65 (< i128). For mul, if both operands fit
+                        // in i64, the product fits in i128.
+                        let result_fits_i128 = max_operand.bits() <= 64;
+
+                        if result_fits_i64 {
                             // Result fits in i64 — use narrow arithmetic.
-                            // Extend both operands to at least i64 for headroom.
                             let (lhs_val, rhs_val) =
                                 self.ensure_min_width(context, lhs_val, rhs_val, 64, "arith")?;
                             self.generate_binop(*op, lhs_val, rhs_val, context)
+                        } else if result_fits_i128 {
+                            // Both operands ≤ I64: result fits in i128 (65 bits for
+                            // add/sub, 128 bits for mul). Uses 2 registers on riscv64.
+                            let (lhs_val, rhs_val) =
+                                self.ensure_min_width(context, lhs_val, rhs_val, 128, "arith128")?;
+                            self.generate_binop(*op, lhs_val, rhs_val, context)
                         } else {
-                            // Result needs > i64 — use i256 for correct wrapping.
+                            // Result needs > i128 — use i256 for correct wrapping.
                             let lhs_val = self.ensure_word_type(context, lhs_val, "arith_lhs")?;
                             let rhs_val = self.ensure_word_type(context, rhs_val, "arith_rhs")?;
                             self.generate_binop(*op, lhs_val, rhs_val, context)

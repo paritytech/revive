@@ -14,6 +14,7 @@ pub enum BitWidth {
     I8 = 8,
     I32 = 32,
     I64 = 64,
+    I128 = 128,
     I160 = 160,
     I256 = 256,
 }
@@ -34,6 +35,8 @@ impl BitWidth {
             BitWidth::I32
         } else if bits <= 64 {
             BitWidth::I64
+        } else if bits <= 128 {
+            BitWidth::I128
         } else if bits <= 160 {
             BitWidth::I160
         } else {
@@ -51,6 +54,8 @@ impl BitWidth {
             BitWidth::I32
         } else if *value <= BigUint::from(u64::MAX) {
             BitWidth::I64
+        } else if *value <= BigUint::from(u128::MAX) {
+            BitWidth::I128
         } else if *value < BigUint::from(2u8).pow(160) {
             BitWidth::I160
         } else {

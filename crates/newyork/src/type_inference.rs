@@ -1687,7 +1687,8 @@ pub fn widen_by_one(width: BitWidth) -> BitWidth {
         BitWidth::I1 => BitWidth::I8,
         BitWidth::I8 => BitWidth::I32,
         BitWidth::I32 => BitWidth::I64,
-        BitWidth::I64 => BitWidth::I160,
+        BitWidth::I64 => BitWidth::I128,
+        BitWidth::I128 => BitWidth::I160,
         BitWidth::I160 => BitWidth::I256,
         BitWidth::I256 => BitWidth::I256,
     }
@@ -1699,7 +1700,8 @@ pub fn double_width(width: BitWidth) -> BitWidth {
         BitWidth::I1 => BitWidth::I8,
         BitWidth::I8 => BitWidth::I32,
         BitWidth::I32 => BitWidth::I64,
-        BitWidth::I64 => BitWidth::I256,
+        BitWidth::I64 => BitWidth::I128,
+        BitWidth::I128 => BitWidth::I256,
         BitWidth::I160 => BitWidth::I256,
         BitWidth::I256 => BitWidth::I256,
     }
@@ -1722,9 +1724,17 @@ mod tests {
         let width = inference.infer_expr_width(&expr);
         assert_eq!(width, BitWidth::I8);
 
-        // Large literal
+        // Large literal (fits in 128 bits)
         let expr = Expr::Literal {
             value: BigUint::from(1u128) << 100,
+            ty: Type::default(),
+        };
+        let width = inference.infer_expr_width(&expr);
+        assert_eq!(width, BitWidth::I128);
+
+        // Very large literal (needs > 128 bits)
+        let expr = Expr::Literal {
+            value: BigUint::from(1u128) << 140,
             ty: Type::default(),
         };
         let width = inference.infer_expr_width(&expr);

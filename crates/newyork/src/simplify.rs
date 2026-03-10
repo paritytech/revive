@@ -3048,6 +3048,7 @@ fn bitwidth_tag(bw: BitWidth) -> u8 {
         BitWidth::I8 => 8,
         BitWidth::I32 => 32,
         BitWidth::I64 => 64,
+        BitWidth::I128 => 128,
         BitWidth::I160 => 160,
         BitWidth::I256 => 0,
     }

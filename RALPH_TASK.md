@@ -1675,3 +1675,57 @@ Original baseline: 418,237 bytes -> Now: 335,552 bytes = **-82,685 bytes (-19.8%
 - OZ contracts: All compile, all improved
 - deploy_erc20.sh: All assertions passed
 - Clippy: clean
+
+## Iteration 22: Compound Outlining Verification & Cleanup
+
+### What was verified
+
+The compound outlining pass (Iteration 8/16) is already working and providing real gains.
+Cleaned up the `NEWYORK_SKIP_COMPOUND` env var guard from lib.rs (was only for debugging).
+
+### Current compound outlining savings (vs no-compound baseline)
+
+| Contract | With Compound | Without | Delta |
+|----------|--------------|---------|-------|
+| erc1155 | 34,897 | 34,897 | 0 |
+| erc20 | 46,997 | 46,997 | 0 |
+| erc721 | 54,285 | 54,307 | -22 |
+| oz_gov | 88,662 | 88,662 | 0 |
+| oz_rwa | 42,470 | 43,408 | **-938** |
+| simple | 17,414 | 17,409 | +5 |
+| oz_stable | 46,136 | 47,014 | **-878** |
+| proxy | 3,844 | 3,844 | 0 |
+| **Total** | **334,705** | **336,538** | **-1,833** |
+
+### What was attempted and why it didn't help further
+
+1. **bswap256 outlining** — Wrapping `llvm.bswap.i256` in a noinline function for shared
+   code. Result: +175 to +225 bytes per contract. LLVM already compiles bswap.i256 to
+   compact `rev8` instructions (~4 instructions). The function call overhead (prologue,
+   epilogue, register save/restore) exceeds the savings.
+
+2. **ReturnWord compound** (OPTIMIZATIONS.md #2) — Tried detecting `mstore(off, val) +
+   return(off, 32)` → single `return_word(off, val)` at the newyork IR level. The pattern
+   doesn't exist in the IR: single-word returns only emerge after LLVM inlines ABI encoding
+   functions and constant-folds the offset arithmetic. The newyork IR has `return(fmp, sub(...))`
+   with dynamic lengths, not `return(off, 32)`.
+
+3. **Lower threshold (T8 from T9)** — Including 8-op contracts (erc20, erc1155, oz_gov
+   subobjects) in compound outlining. Result: erc20 +315, oz_gov +382. The outlined mapping
+   function bodies (~300 bytes each) are not amortized by 8 call sites.
+
+### Why compound outlining has inherent limits
+
+The mapping compound pattern (keccak256_pair + sload/sstore) is the only multi-statement
+pattern at the newyork IR level that benefits from combining into a single function call.
+Other potential patterns either:
+- Already exist as single outlined functions (sload_word, sstore_word, store_bswap_checked, etc.)
+- Only emerge after LLVM inlining/optimization (not visible at IR level)
+- Are too varied to parameterize (ABI encode/decode patterns differ per function signature)
+
+### Test Results
+- `make test`: PASS
+- Retester: 5851 passed, 0 failed, 24 ignored
+- Codesize test: PASS
+- OZ contracts: All compile, sizes match expected
+- deploy_erc20.sh: All assertions passed

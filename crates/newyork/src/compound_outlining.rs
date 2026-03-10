@@ -9,7 +9,6 @@
 //!   → `let val = mapping_sload(key, slot)`
 //! - Mapping SStore: `let hash = keccak256_pair(key, slot); sstore(hash, value)`
 //!   → `mapping_sstore(key, slot, value)`
-
 use std::collections::BTreeMap;
 
 use crate::ir::{Block, Expr, Object, Region, Statement, Value};
@@ -48,7 +47,7 @@ fn outline_block(block: &mut Block, stats: &mut CompoundOutliningStats) {
         outline_nested_regions(stmt, stats);
     }
 
-    // Then transform this level's statement list
+    // Transform this level's statement list
     outline_statements(&mut block.statements, stats);
 }
 

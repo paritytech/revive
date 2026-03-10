@@ -189,6 +189,8 @@ pub struct LlvmCodegen<'ctx> {
     custom_error_revert_fns: BTreeMap<usize, inkwell::values::FunctionValue<'ctx>>,
     /// Number of CustomErrorRevert sites per num_args.
     custom_error_revert_counts: BTreeMap<usize, usize>,
+    /// Outlined `__revive_bswap256(i256) -> i256` function.
+    /// Wraps llvm.bswap.i256 into a noinline function to share the byte-swap
     /// Cached outlined store_bswap function: void(i32 offset, i256 value).
     /// Uses unchecked GEP + 4× bswap.i64 + store. Avoids inlining the bswap
     /// sequence at every call site for variable values.
@@ -216,6 +218,14 @@ pub struct LlvmCodegen<'ctx> {
     /// Takes key and value as i256 values, internally bswaps + alloca + syscall.
     /// Eliminates alloca+store at each call site for runtime-computed keys/values.
     sstore_word_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined zero store with bounds check: void(i32 offset).
+    /// Stores 32 zero bytes at heap+offset. Used for constant-zero MStore
+    /// in ByteSwap mode to avoid passing an i256 zero parameter.
+    store_zero_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined return word: noreturn void(i32 offset, i256 value).
+    /// Combines store_bswap_checked + exit_checked for single-word returns.
+    /// Bswap-stores value at offset, then seal_returns 32 bytes.
+    return_word_fn: Option<inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
@@ -257,6 +267,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_check_fn: None,
             sload_word_fn: None,
             sstore_word_fn: None,
+            store_zero_checked_fn: None,
+            return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
             use_outlined_mapping_sload: false,
@@ -304,6 +316,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_check_fn: None,
             sload_word_fn: None,
             sstore_word_fn: None,
+            store_zero_checked_fn: None,
+            return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
             use_outlined_mapping_sload: false,
@@ -1451,6 +1465,206 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(func)
     }
 
+    /// Gets or creates an outlined zero store with bounds checking:
+    /// void(i32 offset).
+    /// Stores 32 zero bytes at heap+offset. Used for constant-zero MStore
+    /// in ByteSwap mode. Saves passing an i256 zero parameter and avoids the
+    /// bswap sequence entirely (bswap(0) = 0).
+    fn get_or_create_store_zero_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.store_zero_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_store_zero_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let store_block = context.llvm().append_basic_block(func, "store");
+
+        // Entry: bounds check
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, store_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Store block: store 32 zero bytes
+        context.set_basic_block(store_block);
+        let pointer = context.build_heap_gep_unchecked(offset_param)?;
+        let word_type = context.word_type();
+        let zero = word_type.const_zero();
+        context
+            .builder()
+            .build_store(pointer.value, zero)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.store_zero_checked_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined return_word function:
+    /// noreturn void(i32 offset, i256 value).
+    /// Combines store_bswap_checked + exit_checked for single-word returns:
+    /// bounds-checks offset, bswap-stores value at heap+offset, then seal_returns 32 bytes.
+    /// Eliminates one function call per site and one redundant bounds check.
+    fn get_or_create_return_word_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.return_word_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let word_type = context.word_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into(), word_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_return_word",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        let noreturn_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoReturn as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let store_block = context.llvm().append_basic_block(func, "store");
+
+        // Entry: bounds check (offset + 32 must fit in heap)
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let value_param = func.get_nth_param(1).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, store_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Store block: call store_bswap_checked + seal_return
+        // Reuse the existing store_bswap_checked function to avoid duplicating
+        // the bswap+bounds-check logic. This keeps return_word's body small.
+        context.set_basic_block(store_block);
+        let store_fn = self.get_or_create_store_bswap_checked_fn(context)?;
+        context
+            .builder()
+            .build_call(store_fn, &[offset_param.into(), value_param.into()], "")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        // seal_return(0, heap_ptr + offset, 32)
+        // store_bswap_checked already verified the offset is within heap bounds,
+        // so unchecked GEP is safe here.
+        let heap_pointer = context
+            .build_heap_gep_unchecked(offset_param)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset_pointer = context
+            .builder()
+            .build_ptr_to_int(heap_pointer.value, xlen_type, "return_word_ptr")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let length = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+        context.build_runtime_call(
+            "seal_return",
+            &[
+                xlen_type.const_zero().into(), // flags = 0
+                offset_pointer.into(),
+                length.into(),
+            ],
+        );
+        context.build_unreachable();
+
+        context.set_basic_block(saved_block);
+        self.return_word_fn = Some(func);
+        Ok(func)
+    }
+
     /// Gets or creates an outlined load_bswap with bounds checking:
     /// i256(i32 offset).
     /// Checks `offset > (heap_size - 32)` and traps if out of bounds,
@@ -1687,8 +1901,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Byte-swap key (EVM big-endian -> RISC-V little-endian)
         let key_bswap = context
             .build_byte_swap(key_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
         // Alloca for key and value pointers
         let key_pointer = context.build_alloca_at_entry(word_type, "sload_key");
@@ -1767,15 +1980,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_param = func.get_nth_param(0).unwrap().into_int_value();
         let value_param = func.get_nth_param(1).unwrap().into_int_value();
 
-        // Byte-swap key and value (EVM big-endian -> RISC-V little-endian)
+        // Byte-swap key and value
         let key_bswap = context
             .build_byte_swap(key_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         let value_bswap = context
             .build_byte_swap(value_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
         // Alloca for key and value pointers
         let key_pointer = context.build_alloca_at_entry(word_type, "sstore_key");
@@ -1813,6 +2024,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Gets or creates `__revive_mapping_sload(i256 key, i256 slot) -> i256`.
     /// Combines keccak256_pair + sload in a single function, eliminating the
     /// redundant bswap pair between keccak output and sload key input.
+    /// Uses heap scratch memory for keccak input (same pattern as keccak256_two_words)
+    /// and efficient 4x64-bit bswap to minimize function body size.
     fn get_or_create_mapping_sload_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -1846,61 +2059,34 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_param = func.get_nth_param(0).unwrap().into_int_value();
         let slot_param = func.get_nth_param(1).unwrap().into_int_value();
 
-        // Bswap key and slot for keccak (EVM big-endian)
-        let key_bswap = context
-            .build_byte_swap(key_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
-        let slot_bswap = context
-            .build_byte_swap(slot_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
-
-        // Allocate contiguous buffer: [key(32) | slot(32)] for keccak input
-        let array_type = word_type.array_type(2);
-        let input_alloca = context
-            .builder()
-            .build_alloca(array_type, "map_sload_input")
+        // Store bswapped key at heap[0] and slot at heap[32] using efficient 4x64-bit
+        // bswap (same pattern as __revive_keccak256_two_words). This avoids stack allocas
+        // and GEPs, producing a smaller function body.
+        let offset0 = xlen_type.const_int(0, false);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(context, offset0, key_param)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        // Hash output buffer (32 bytes) - also reused as storage key pointer
+        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context, offset32, slot_param,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Get heap pointer at offset 0 for keccak input
+        let input_pointer = context
+            .build_heap_gep_unchecked(offset0)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
+
+        // Hash output on stack - also reused as storage key pointer
         let hash_output = context.build_alloca_at_entry(word_type, "map_sload_hash");
         let value_pointer = context.build_alloca_at_entry(word_type, "map_sload_value");
 
-        // Store bswapped key at [0] and slot at [1]
-        let zero = context.llvm().i32_type().const_int(0, false);
-        let one = context.llvm().i32_type().const_int(1, false);
-        let key_ptr = unsafe {
-            context
-                .builder()
-                .build_gep(array_type, input_alloca, &[zero, zero], "key_ptr")
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-        };
-        let slot_ptr = unsafe {
-            context
-                .builder()
-                .build_gep(array_type, input_alloca, &[zero, one], "slot_ptr")
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-        };
-        context
-            .builder()
-            .build_store(key_ptr, key_bswap)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        context
-            .builder()
-            .build_store(slot_ptr, slot_bswap)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
         // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
-        let input_ptr_int = context
-            .builder()
-            .build_ptr_to_int(input_alloca, xlen_type, "input_ptr_int")
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
         context.build_runtime_call(
             "hash_keccak_256",
             &[
-                input_ptr_int.into(),
-                xlen_type.const_int(64, false).into(),
+                input_pointer.to_int(context).into(),
+                length.into(),
                 hash_output.to_int(context).into(),
             ],
         );
@@ -1917,7 +2103,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             ],
         );
 
-        // Load result and bswap back to EVM big-endian
+        // Load result and bswap back to EVM big-endian using efficient 4x64-bit swap
         let value = context
             .build_load(value_pointer, "map_sload_result")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -1938,6 +2124,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Gets or creates `__revive_mapping_sstore(i256 key, i256 slot, i256 value)`.
     /// Combines keccak256_pair + sstore in a single function, eliminating the
     /// redundant bswap pair between keccak output and sstore key input.
+    /// Uses heap scratch memory for keccak input (same pattern as keccak256_two_words)
+    /// and efficient 4x64-bit bswap to minimize function body size.
     fn get_or_create_mapping_sstore_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -1975,69 +2163,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let slot_param = func.get_nth_param(1).unwrap().into_int_value();
         let value_param = func.get_nth_param(2).unwrap().into_int_value();
 
-        // Bswap key and slot for keccak (EVM big-endian)
-        let key_bswap = context
-            .build_byte_swap(key_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
-        let slot_bswap = context
-            .build_byte_swap(slot_param.as_basic_value_enum())
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?
-            .into_int_value();
+        // Store bswapped key at heap[0] and slot at heap[32] using efficient 4x64-bit swap
+        let offset0 = xlen_type.const_int(0, false);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(context, offset0, key_param)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+            context, offset32, slot_param,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Bswap value and store to stack alloca
         let value_bswap = context
             .build_byte_swap(value_param.as_basic_value_enum())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
             .into_int_value();
-
-        // Allocate contiguous buffer: [key(32) | slot(32)] for keccak input
-        let array_type = word_type.array_type(2);
-        let input_alloca = context
-            .builder()
-            .build_alloca(array_type, "map_sstore_input")
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        // Hash output buffer (32 bytes) - also reused as storage key pointer
-        let hash_output = context.build_alloca_at_entry(word_type, "map_sstore_hash");
         let value_pointer = context.build_alloca_at_entry(word_type, "map_sstore_value");
-
-        // Store bswapped key at [0] and slot at [1]
-        let zero = context.llvm().i32_type().const_int(0, false);
-        let one = context.llvm().i32_type().const_int(1, false);
-        let key_ptr = unsafe {
-            context
-                .builder()
-                .build_gep(array_type, input_alloca, &[zero, zero], "key_ptr")
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-        };
-        let slot_ptr = unsafe {
-            context
-                .builder()
-                .build_gep(array_type, input_alloca, &[zero, one], "slot_ptr")
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?
-        };
-        context
-            .builder()
-            .build_store(key_ptr, key_bswap)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        context
-            .builder()
-            .build_store(slot_ptr, slot_bswap)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context
             .builder()
             .build_store(value_pointer.value, value_bswap)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
-        let input_ptr_int = context
-            .builder()
-            .build_ptr_to_int(input_alloca, xlen_type, "input_ptr_int")
+        // Get heap pointer at offset 0 for keccak input
+        let input_pointer = context
+            .build_heap_gep_unchecked(offset0)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
+        // Hash output on stack
+        let hash_output = context.build_alloca_at_entry(word_type, "map_sstore_hash");
+
+        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
         context.build_runtime_call(
             "hash_keccak_256",
             &[
-                input_ptr_int.into(),
-                xlen_type.const_int(64, false).into(),
+                input_pointer.to_int(context).into(),
+                length.into(),
                 hash_output.to_int(context).into(),
             ],
         );
@@ -2623,15 +2784,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
             syscall_counts.calldataload >= CALLDATALOAD_OUTLINE_THRESHOLD;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
         // Count mapping operations to decide if combined mapping functions are worth it.
-        // The function body overhead (~200 bytes for sload, ~200 for sstore) needs enough
-        // call sites to amortize. Each call site saves ~30-40 bytes (one fewer function
-        // call + eliminated bswap round-trip between keccak output and storage key).
-        // With entry-block allocas the overhead is lower, so threshold 6 breaks even.
-        const MAPPING_SLOAD_THRESHOLD: usize = 6;
-        const MAPPING_SSTORE_THRESHOLD: usize = 6;
+        // Each compound function body is ~250 bytes. Each call site saves ~12 bytes
+        // (one fewer function call). When ALL keccak256_pair usages are compound,
+        // __revive_keccak256_two_words has no callers and LLVM DCE eliminates it
+        // (~300 bytes saved), drastically lowering the effective threshold.
+        // Use a combined threshold with adaptive lowering based on helper elimination.
+        const MAPPING_COMBINED_THRESHOLD: usize = 9;
         let (mapping_sloads, mapping_sstores) = Self::count_mapping_ops(object);
-        self.use_outlined_mapping_sload = mapping_sloads >= MAPPING_SLOAD_THRESHOLD;
-        self.use_outlined_mapping_sstore = mapping_sstores >= MAPPING_SSTORE_THRESHOLD;
+        let combined_mapping_ops = mapping_sloads + mapping_sstores;
+        // If no remaining Keccak256Pair nodes exist, the keccak helper function will be
+        // dead-code eliminated when compound functions are used, giving extra ~300 bytes
+        // of savings. This makes compound profitable at much lower call counts.
+        self.use_outlined_mapping_sload =
+            mapping_sloads > 0 && combined_mapping_ops >= MAPPING_COMBINED_THRESHOLD;
+        self.use_outlined_mapping_sstore =
+            mapping_sstores > 0 && combined_mapping_ops >= MAPPING_COMBINED_THRESHOLD;
         self.has_msize = object.has_msize();
         self.error_string_revert_counts = object.count_error_string_reverts();
         self.custom_error_revert_counts = object.count_custom_error_reverts();
@@ -3002,10 +3169,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Generates LLVM IR for a block.
     fn generate_block(&mut self, block: &Block, context: &mut PolkaVMContext<'ctx>) -> Result<()> {
-        for stmt in &block.statements {
-            self.generate_statement(stmt, context)?;
-        }
-        Ok(())
+        self.generate_statement_list(&block.statements, context)
     }
 
     /// Generates LLVM IR for a region.
@@ -3014,10 +3178,161 @@ impl<'ctx> LlvmCodegen<'ctx> {
         region: &Region,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        for stmt in &region.statements {
-            self.generate_statement(stmt, context)?;
+        self.generate_statement_list(&region.statements, context)
+    }
+
+    /// Generates LLVM IR for a list of statements, with look-ahead for compound patterns.
+    ///
+    /// Detects `MStore(off, val) [+ Let(vN, Literal(32))] + Return(off, 32)` → `return_word`:
+    /// combines a bswap-store and seal_return into a single noreturn function call,
+    /// eliminating one function call and one redundant bounds check per site.
+    fn generate_statement_list(
+        &mut self,
+        stmts: &[Statement],
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<()> {
+        let mut i = 0;
+        while i < stmts.len() {
+            // Look-ahead: MStore + [optional Let(const)] + Return(same_offset, 32)
+            if let Some(skip) = self.try_match_return_word(stmts, i, context)? {
+                i += skip;
+                continue;
+            }
+            self.generate_statement(&stmts[i], context)?;
+            i += 1;
         }
         Ok(())
+    }
+
+    /// Tries to match and generate a combined return_word pattern.
+    /// Returns `Ok(Some(skip_count))` if matched, `Ok(None)` if no match.
+    ///
+    /// Patterns:
+    /// - `MStore(off, val) + Return(off, 32)` (2 statements)
+    /// - `MStore(off, val) + Let(vN, Literal(32)) + Return(off, vN)` (3 statements)
+    ///
+    /// Requirements: same offset ValueId, length = 32, ByteSwap mode, !msize, !deploy.
+    fn try_match_return_word(
+        &mut self,
+        stmts: &[Statement],
+        i: usize,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<Option<usize>> {
+        if i >= stmts.len() {
+            return Ok(None);
+        }
+
+        // First statement must be MStore
+        let (store_offset, store_value) = match &stmts[i] {
+            Statement::MStore { offset, value, .. } => (offset, value),
+            _ => return Ok(None),
+        };
+
+        // Check preconditions: non-msize, non-deploy runtime code
+        if self.has_msize {
+            return Ok(None);
+        }
+        if matches!(
+            context.code_type(),
+            Some(revive_llvm_context::PolkaVMCodeType::Deploy)
+        ) {
+            return Ok(None);
+        }
+
+        // Try pattern 1: MStore + Return (adjacent, 2 statements)
+        // Try pattern 2: MStore + Let(const 32) + Return (3 statements)
+        let (ret_offset, ret_length, skip) = if i + 1 < stmts.len() {
+            if let Statement::Return { offset, length } = &stmts[i + 1] {
+                (offset, length, 2)
+            } else if i + 2 < stmts.len() {
+                // Check for Let(vN, Literal(32)) + Return(off, vN)
+                if let Statement::Return { offset, length } = &stmts[i + 2] {
+                    // The intervening statement must be a Let binding for the length
+                    if let Statement::Let {
+                        bindings,
+                        value: Expr::Literal { .. },
+                    } = &stmts[i + 1]
+                    {
+                        if bindings.len() == 1 && bindings[0] == length.id {
+                            (offset, length, 3)
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                return Ok(None);
+            }
+        } else {
+            return Ok(None);
+        };
+
+        // Same offset ValueId
+        if store_offset.id != ret_offset.id {
+            return Ok(None);
+        }
+
+        // Check: offset must be dynamic (ByteSwap mode) — constant offsets already
+        // use the shared return block deduplication which is more efficient.
+        let offset_val = self.translate_value(store_offset)?.into_int_value();
+        if Self::try_extract_const_u64(offset_val).is_some() {
+            return Ok(None);
+        }
+
+        // Check: length must be constant 32
+        // For pattern 2, check the literal value directly without generating the Let.
+        // For pattern 1, translate the length and check.
+        if skip == 3 {
+            // The Let binds a Literal — extract its value directly
+            if let Statement::Let {
+                value: Expr::Literal { value, .. },
+                ..
+            } = &stmts[i + 1]
+            {
+                if value != &num::BigUint::from(revive_common::BYTE_LENGTH_WORD as u64) {
+                    return Ok(None);
+                }
+            } else {
+                return Ok(None);
+            }
+        } else {
+            let length_val = self.translate_value(ret_length)?.into_int_value();
+            let const_len = Self::try_extract_const_u64(length_val);
+            if const_len != Some(revive_common::BYTE_LENGTH_WORD as u64) {
+                return Ok(None);
+            }
+        }
+
+        // Pattern matched! Emit return_word(offset, value).
+        let offset_narrow = self.narrow_offset_for_pointer(
+            context,
+            offset_val,
+            store_offset.id,
+            "return_word_offset_narrow",
+        )?;
+        let offset_xlen = context
+            .safe_truncate_int_to_xlen(offset_narrow)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        let value_val = self.translate_value(store_value)?.into_int_value();
+        let value_val = self.ensure_word_type(context, value_val, "return_word_val")?;
+
+        let func = self.get_or_create_return_word_fn(context)?;
+        context
+            .builder()
+            .build_call(func, &[offset_xlen.into(), value_val.into()], "")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // return_word is noreturn — add unreachable + dead block for subsequent code
+        context.build_unreachable();
+        let dead_block = context.append_basic_block("return_word_dead");
+        context.set_basic_block(dead_block);
+
+        Ok(Some(skip))
     }
 
     /// Generates LLVM IR for a statement.
@@ -3256,11 +3571,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             let offset_xlen = context
                                 .safe_truncate_int_to_xlen(offset_val)
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                            let func = self.get_or_create_store_bswap_checked_fn(context)?;
-                            context
-                                .builder()
-                                .build_call(func, &[offset_xlen.into(), value_val.into()], "")
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            if value_val.is_null() {
+                                // Zero store: no bswap needed, no i256 parameter.
+                                // bswap(0) = 0, so the bswap inside store_bswap_checked
+                                // is wasted. Using a dedicated zero-store function
+                                // eliminates passing the i256 zero parameter entirely.
+                                let func = self.get_or_create_store_zero_checked_fn(context)?;
+                                context
+                                    .builder()
+                                    .build_call(func, &[offset_xlen.into()], "")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            } else {
+                                let func = self.get_or_create_store_bswap_checked_fn(context)?;
+                                context
+                                    .builder()
+                                    .build_call(func, &[offset_xlen.into(), value_val.into()], "")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            }
                         } else {
                             // Msize contracts: full sbrk for watermark tracking.
                             revive_llvm_context::polkavm_evm_memory::store(

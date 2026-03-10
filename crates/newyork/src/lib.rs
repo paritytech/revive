@@ -136,16 +136,25 @@ pub fn translate_yul_object(
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
-    // Iterative parameter narrowing with cascading demand refinement.
-    // Each iteration: narrow params → update call-site demands → re-apply
-    // backward constraints → narrow more params. This cascades: when function
-    // B's param is narrowed, function A (which only passes to B) can also
-    // narrow its param in the next iteration.
+    // Iterative parameter narrowing with full re-inference.
+    // Each iteration: narrow params → re-run full type inference with the new
+    // param types → refine call-site demands. The re-inference cascades forward
+    // widths: narrowed params (I64) produce narrow add/and results. The demand
+    // refinement ensures call-site arguments also get narrow demands.
     for _ in 0..4 {
         let changed = type_info.narrow_function_params(&mut ir_object);
         if !changed {
             break;
         }
+        // Re-run full type inference with narrowed param types.
+        // The forward pass reads function.params (now narrowed), seeding
+        // min_width at I64 instead of I256. This cascades through the
+        // function body: add(I64, I8) → I65, and(I65, I256) → I65, etc.
+        type_info = TypeInference::new();
+        type_info.infer_object_tree(&ir_object);
+        // Refine call-site demands with the narrowed param types.
+        // This updates fn_arg_demand so argument values get narrow backward
+        // demands, enabling further param narrowing in the next iteration.
         type_info.refine_demands_from_params(&ir_object);
     }
 

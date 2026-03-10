@@ -1729,3 +1729,60 @@ Other potential patterns either:
 - Codesize test: PASS
 - OZ contracts: All compile, sizes match expected
 - deploy_erc20.sh: All assertions passed
+
+## Iteration 23: Full Type Re-inference After Parameter Narrowing
+
+### Problem
+After `narrow_function_params` changes parameter types from I256 to I64, the forward
+widths (min_width) in TypeConstraint are NOT updated. `infer_function_forward` only
+calls `widen()` which never narrows. So even though params are declared I64, the
+forward pass still thinks values are I256. This means `inferred_width()` returns I256
+for all arithmetic inside narrowed functions, defeating the purpose of narrowing.
+
+### Solution
+In `translate_yul_object` (lib.rs), after each `narrow_function_params` call that
+changes something, create a fresh `TypeInference::new()` and re-run
+`infer_object_tree()`. This seeds the forward pass with the narrowed param types,
+cascading narrow widths through the entire function body:
+- `add(I64, I8)` → I65 (≤ I64 demand threshold)
+- `and(I65, I256)` → I65
+
+Then `refine_demands_from_params()` updates call-site demands for the next iteration.
+
+### Code Change
+```rust
+for _ in 0..4 {
+    let changed = type_info.narrow_function_params(&mut ir_object);
+    if !changed { break; }
+    // NEW: re-run full type inference with narrowed param types
+    type_info = TypeInference::new();
+    type_info.infer_object_tree(&ir_object);
+    type_info.refine_demands_from_params(&ir_object);
+}
+```
+
+### Results
+| Contract | Before | After | Delta |
+|----------|--------|-------|-------|
+| erc1155 | 35,787 | 34,495 | -1,292 |
+| erc20 | 49,196 | 47,034 | -2,162 |
+| erc721 | 56,086 | 54,175 | -1,911 |
+| oz_gov | 93,072 | 87,267 | -5,805 |
+| oz_rwa | 45,758 | 42,532 | -3,226 |
+| simple | 17,921 | 17,434 | -487 |
+| oz_stable | 48,606 | 46,117 | -2,489 |
+| proxy | 4,017 | 3,864 | -153 |
+| **Total** | **350,443** | **332,918** | **-17,525** |
+
+Cumulative from baseline 418,237: **-85,319 bytes (-20.4%)**
+
+This is the single largest improvement in the entire optimization effort.
+The re-inference cascades narrow types through function bodies, enabling LLVM to
+use i64 arithmetic instead of i256 for most operations.
+
+### Test Results
+- `make test`: PASS
+- Retester: 5851 passed, 0 failed, 24 ignored
+- Codesize test: PASS
+- OZ contracts: All compile, sizes as above
+- deploy_erc20.sh: All assertions passed

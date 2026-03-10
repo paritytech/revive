@@ -80,11 +80,6 @@ const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
 /// IR-level decision was made. Very small functions benefit from inlining.
 const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
 
-/// Maximum function size for AlwaysInline when called exactly twice (CostBenefit).
-/// Functions larger than this are left to LLVM's judgment or marked NoInline to avoid
-/// code duplication that outweighs interprocedural optimization benefits.
-const COST_BENEFIT_INLINE_SIZE_LIMIT: usize = 20;
-
 /// LLVM code generator for newyork IR.
 /// Tracks phi nodes at the continue-landing block of a for loop.
 /// These phi nodes merge values from the body's normal exit and from continue sites.
@@ -2977,11 +2972,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             // respects MinSize). Functions with 3+ call sites get NoInline to prevent
             // code bloat from excessive duplication.
             Some(crate::InlineDecision::CostBenefit) => {
-                if function.call_count == 2
-                    && function.size_estimate <= COST_BENEFIT_INLINE_SIZE_LIMIT
-                {
-                    Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
-                } else if function.call_count >= 3 {
+                if function.call_count >= 2 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
                 } else {
                     None

@@ -830,32 +830,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
         match instruction.get_opcode() {
             InstructionOpcode::ZExt => {
                 let operand = instruction.get_operand(0)?.value()?.into_int_value();
-                Some(operand.get_type().get_bit_width())
+                // Use the provable narrow width of the source if tighter than its type
+                let type_width = operand.get_type().get_bit_width();
+                let proven = Self::provable_narrow_width(operand).unwrap_or(type_width);
+                Some(proven.min(type_width))
             }
             InstructionOpcode::And => {
-                // and %val, constant_mask → result fits in mask's bit width
+                // and %a, %b → result fits in min(width(a), width(b)) bits
+                // AND can only clear bits, so the result is bounded by either operand.
                 let op0 = instruction.get_operand(0)?.value()?.into_int_value();
                 let op1 = instruction.get_operand(1)?.value()?.into_int_value();
-                // Check if either operand is a constant mask
-                if op1.is_const() {
-                    Self::constant_effective_width(op1)
-                } else if op0.is_const() {
+                let w0 = if op0.is_const() {
                     Self::constant_effective_width(op0)
                 } else {
-                    // If either operand has a provable narrow width, the AND
-                    // result is bounded by the narrower operand.
-                    let w0 = Self::provable_narrow_width(op0);
-                    let w1 = Self::provable_narrow_width(op1);
-                    match (w0, w1) {
-                        (Some(a), Some(b)) => Some(a.min(b)),
-                        (Some(a), None) => Some(a),
-                        (None, Some(b)) => Some(b),
-                        (None, None) => None,
-                    }
+                    Self::provable_narrow_width(op0)
+                };
+                let w1 = if op1.is_const() {
+                    Self::constant_effective_width(op1)
+                } else {
+                    Self::provable_narrow_width(op1)
+                };
+                match (w0, w1) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (Some(a), None) => Some(a),
+                    (None, Some(b)) => Some(b),
+                    (None, None) => None,
                 }
             }
             InstructionOpcode::Trunc => {
-                Some(instruction.get_type().into_int_type().get_bit_width())
+                let target_width = instruction.get_type().into_int_type().get_bit_width();
+                // Also check if the source is provably narrower than the target
+                let operand = instruction.get_operand(0)?.value()?.into_int_value();
+                let src_narrow = Self::provable_narrow_width(operand)
+                    .unwrap_or(operand.get_type().get_bit_width());
+                Some(src_narrow.min(target_width))
             }
             InstructionOpcode::LShr => {
                 // lshr %val, constant_amount → result has at most (width - amount) bits
@@ -884,6 +892,46 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let w1 = Self::provable_narrow_width(op1);
                 match (w0, w1) {
                     (Some(a), Some(b)) => Some(a.max(b)),
+                    _ => None,
+                }
+            }
+            InstructionOpcode::Add => {
+                // add %a, %b → result fits in max(width(a), width(b)) + 1 bits
+                let op0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let op1 = instruction.get_operand(1)?.value()?.into_int_value();
+                let w0 = Self::provable_narrow_width(op0)
+                    .or_else(|| Self::constant_effective_width(op0));
+                let w1 = Self::provable_narrow_width(op1)
+                    .or_else(|| Self::constant_effective_width(op1));
+                match (w0, w1) {
+                    (Some(a), Some(b)) => {
+                        let result_width = a.max(b) + 1;
+                        if result_width <= 128 {
+                            Some(result_width)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            InstructionOpcode::Mul => {
+                // mul %a, %b → result fits in width(a) + width(b) bits
+                let op0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let op1 = instruction.get_operand(1)?.value()?.into_int_value();
+                let w0 = Self::provable_narrow_width(op0)
+                    .or_else(|| Self::constant_effective_width(op0));
+                let w1 = Self::provable_narrow_width(op1)
+                    .or_else(|| Self::constant_effective_width(op1));
+                match (w0, w1) {
+                    (Some(a), Some(b)) => {
+                        let result_width = a + b;
+                        if result_width <= 128 {
+                            Some(result_width)
+                        } else {
+                            None
+                        }
+                    }
                     _ => None,
                 }
             }

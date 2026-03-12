@@ -61,6 +61,15 @@ fn narrow_block(block: &mut Block, next_id: &mut u32, stats: &mut GuardNarrowSta
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
     // gt_check_id -> (guarded_value, boundary_mask)
     let mut gt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
+    // Track and(val, MASK) definitions for eq-based patterns:
+    // and_result_id -> (original_value_id, and_result_id_as_ValueId)
+    let mut and_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    // Track eq(val, and(val, MASK)) definitions:
+    // eq_result_id -> original_value_id (to be replaced with and_result after guard)
+    let mut eq_mask_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    // Track iszero(eq_check) definitions:
+    // iszero_result_id -> (original_value_id, and_result_id)
+    let mut iszero_eq_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
     // Accumulated replacements: old_value_id -> new_value_id
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
@@ -106,6 +115,61 @@ fn narrow_block(block: &mut Block, next_id: &mut u32, stats: &mut GuardNarrowSta
                             };
                             gt_defs.insert(bid, (guarded, mask.clone()));
                         }
+                    }
+                }
+
+                // Track and(val, MASK) where MASK is a boundary mask.
+                // Used for eq-based address validation: iszero(eq(val, and(val, MASK)))
+                if let Expr::Binary {
+                    op: BinOp::And,
+                    ref lhs,
+                    ref rhs,
+                } = value
+                {
+                    let lhs_id = resolve_id(lhs.id, &replacements);
+                    let rhs_id = resolve_id(rhs.id, &replacements);
+                    // Check if either operand is a boundary mask constant.
+                    if let Some(mask) = constants.get(&rhs_id.0) {
+                        if is_wide_boundary_mask(mask) {
+                            and_defs.insert(bid, (lhs_id.0, ValueId(bid)));
+                        }
+                    } else if let Some(mask) = constants.get(&lhs_id.0) {
+                        if is_wide_boundary_mask(mask) {
+                            and_defs.insert(bid, (rhs_id.0, ValueId(bid)));
+                        }
+                    }
+                }
+
+                // Track eq(val, and(val, MASK)) definitions.
+                if let Expr::Binary {
+                    op: BinOp::Eq,
+                    ref lhs,
+                    ref rhs,
+                } = value
+                {
+                    let lhs_id = resolve_id(lhs.id, &replacements);
+                    let rhs_id = resolve_id(rhs.id, &replacements);
+                    // Check both orderings: eq(val, and_result) or eq(and_result, val)
+                    if let Some(&(orig_id, and_val_id)) = and_defs.get(&rhs_id.0) {
+                        if orig_id == lhs_id.0 {
+                            eq_mask_defs.insert(bid, (orig_id, and_val_id));
+                        }
+                    } else if let Some(&(orig_id, and_val_id)) = and_defs.get(&lhs_id.0) {
+                        if orig_id == rhs_id.0 {
+                            eq_mask_defs.insert(bid, (orig_id, and_val_id));
+                        }
+                    }
+                }
+
+                // Track iszero(eq_check) definitions.
+                if let Expr::Unary {
+                    op: UnaryOp::IsZero,
+                    ref operand,
+                } = value
+                {
+                    let op_id = resolve_id(operand.id, &replacements);
+                    if let Some(&(orig_id, and_val_id)) = eq_mask_defs.get(&op_id.0) {
+                        iszero_eq_defs.insert(bid, (orig_id, and_val_id));
                     }
                 }
             }
@@ -157,6 +221,25 @@ fn narrow_block(block: &mut Block, next_id: &mut u32, stats: &mut GuardNarrowSta
 
                     // Replace subsequent uses of the guarded value.
                     replacements.insert(guarded_val.id.0, narrow_id);
+                    stats.guards_narrowed += 1;
+                    continue;
+                }
+
+                // Check for eq-based guard pattern:
+                // let masked = and(val, MASK)
+                // let eq_check = eq(val, masked)
+                // let not_check = iszero(eq_check)
+                // if not_check { <terminates> }
+                // After: val == masked, so val fits in MASK bits.
+                // Replace subsequent uses of val with masked.
+                if let Some(&(orig_id, and_val_id)) = iszero_eq_defs.get(&cond_id.0) {
+                    // Push the if statement first.
+                    new_stmts.push(stmt);
+
+                    // Replace subsequent uses of the original value with the
+                    // AND-masked value. No new instructions needed since the
+                    // and(val, MASK) already exists.
+                    replacements.insert(orig_id, and_val_id);
                     stats.guards_narrowed += 1;
                     continue;
                 }
@@ -221,11 +304,9 @@ fn narrow_region(region: &mut Region, next_id: &mut u32, stats: &mut GuardNarrow
     region.statements = block.statements;
 }
 
-/// Returns true if `val` is a useful boundary mask for guard narrowing.
-/// Only masks that fit in a native register width (≤64 bits) are useful,
-/// since the codegen can narrow arithmetic and comparisons to i64.
-/// Larger masks (e.g., 128-bit, 160-bit, 192-bit) don't benefit from
-/// narrowing because there's no efficient native type for them.
+/// Returns true if `val` is a useful boundary mask for gt-based guard narrowing.
+/// Only masks that fit in a native register width (≤64 bits) are useful for
+/// the gt pattern, since we need to insert a new AND instruction.
 fn is_boundary_mask(val: &BigUint) -> bool {
     if val.is_zero() {
         return false;
@@ -237,6 +318,28 @@ fn is_boundary_mask(val: &BigUint) -> bool {
     }
     // Only useful if the mask fits in 64 bits (native register width).
     *val <= BigUint::from(u64::MAX)
+}
+
+/// Returns true if `val` is a boundary mask useful for eq-based guard narrowing.
+/// For eq-based patterns (iszero(eq(val, and(val, MASK)))), we accept wider
+/// masks up to 160 bits (address width). The AND already exists in the IR,
+/// so we just redirect uses — no new instruction is emitted.
+///
+/// Narrowing from i256 to i160 is significant on a 32-bit target: 5 words
+/// instead of 8, saving 37.5% register pressure per address value.
+fn is_wide_boundary_mask(val: &BigUint) -> bool {
+    if val.is_zero() {
+        return false;
+    }
+    // Must be 2^N - 1 (all low bits set).
+    let plus_one = val + 1u32;
+    if (plus_one.clone() & val) != BigUint::ZERO {
+        return false;
+    }
+    // Accept masks up to 160 bits (address width). Wider masks don't
+    // provide enough savings to justify the narrowing overhead.
+    let bits = val.bits();
+    bits <= 160
 }
 
 /// Returns true if a region terminates (doesn't fall through).

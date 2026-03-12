@@ -33,10 +33,11 @@ const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 6;
 const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
 
 /// Maximum function size for single-call inlining at IR level.
-/// Larger single-call functions are deferred to LLVM's inliner (which has better register
-/// allocation awareness). This prevents creating monolithic dispatcher functions that
-/// exceed LLVM's optimization capacity.
-const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 20;
+/// Since single-call functions are eliminated entirely (zero code duplication),
+/// a higher threshold is justified. The interprocedural optimizations from
+/// inlining (constant propagation, dead code elimination, type narrowing)
+/// usually outweigh the register pressure increase for moderate-sized functions.
+const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 30;
 
 /// Maximum number of call sites beyond which a function is never inlined.
 const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 10;

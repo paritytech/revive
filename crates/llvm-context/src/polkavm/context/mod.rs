@@ -494,17 +494,25 @@ impl<'ctx> Context<'ctx> {
             0 => FunctionReturn::none(),
             1 => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(self.word_type(), "return_pointer");
+                // Use the actual return type from the function signature.
+                // This allows narrowed return types (e.g., i64 instead of i256)
+                // to flow through, reducing register pressure and spills.
+                let alloca_type = r#type
+                    .get_return_type()
+                    .unwrap_or_else(|| self.word_type().as_basic_type_enum());
+                let pointer = self.build_alloca(alloca_type, "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
             size => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(
+                // Use the actual return type from the function signature.
+                let alloca_type = r#type.get_return_type().unwrap_or_else(|| {
                     self.structure_type(
                         vec![self.word_type().as_basic_type_enum(); size].as_slice(),
-                    ),
-                    "return_pointer",
-                );
+                    )
+                    .as_basic_type_enum()
+                });
+                let pointer = self.build_alloca(alloca_type, "return_pointer");
                 FunctionReturn::compound(pointer, size)
             }
         };
@@ -1407,6 +1415,8 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Returns a Yul function type with the specified arguments and number of return values.
+    /// All return values use word_type (i256). For narrowed return types, use
+    /// `function_type_with_returns`.
     pub fn function_type<T>(
         &self,
         argument_types: Vec<T>,
@@ -1430,6 +1440,39 @@ impl<'ctx> Context<'ctx> {
             size => self
                 .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
+        }
+    }
+
+    /// Returns a function type with explicit return types instead of word_type.
+    /// Used by the newyork codegen for functions with narrowed return types.
+    pub fn function_type_with_returns<T>(
+        &self,
+        argument_types: Vec<T>,
+        return_types: &[inkwell::types::IntType<'ctx>],
+    ) -> inkwell::types::FunctionType<'ctx>
+    where
+        T: BasicType<'ctx>,
+    {
+        let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
+            .as_slice()
+            .iter()
+            .map(T::as_basic_type_enum)
+            .map(inkwell::types::BasicMetadataTypeEnum::from)
+            .collect();
+        match return_types.len() {
+            0 => self
+                .llvm
+                .void_type()
+                .fn_type(argument_types.as_slice(), false),
+            1 => return_types[0].fn_type(argument_types.as_slice(), false),
+            _ => {
+                let field_types: Vec<inkwell::types::BasicTypeEnum> = return_types
+                    .iter()
+                    .map(|t| t.as_basic_type_enum())
+                    .collect();
+                self.structure_type(&field_types)
+                    .fn_type(argument_types.as_slice(), false)
+            }
         }
     }
 

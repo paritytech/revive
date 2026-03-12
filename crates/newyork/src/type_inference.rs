@@ -648,6 +648,361 @@ impl TypeInference {
         changed
     }
 
+    /// Narrows function parameters based on call-site argument widths.
+    ///
+    /// For each function, examines ALL call sites and computes the forward
+    /// min_width of each argument. If every caller passes an argument that
+    /// provably fits in fewer than 256 bits, the parameter can be narrowed.
+    ///
+    /// This is the "forward" complement to the demand-based `narrow_function_params`:
+    /// - `narrow_function_params`: narrows based on how values are USED inside the function
+    /// - `narrow_function_params_from_callers`: narrows based on what callers PROVIDE
+    ///
+    /// Key use case: after guard_narrow inserts `and(val, 2^160-1)` for address
+    /// validation, the call-site argument has min_width=I160. This pass detects
+    /// that ALL callers provide I160 values and narrows the parameter to I160.
+    pub fn narrow_function_params_from_callers(&self, object: &mut Object) -> bool {
+        // Collect the widest min_width for each parameter across all call sites.
+        // Key: (func_id, param_index) → widest min_width seen across all callers.
+        let mut arg_widths: BTreeMap<(u32, usize), BitWidth> = BTreeMap::new();
+        // Track which functions are called at all.
+        let mut called_funcs: BTreeSet<u32> = BTreeSet::new();
+
+        // Walk all code and function bodies to find call sites.
+        self.collect_arg_widths_block(&object.code, &mut arg_widths, &mut called_funcs);
+        for func in object.functions.values() {
+            self.collect_arg_widths_block(&func.body, &mut arg_widths, &mut called_funcs);
+        }
+
+        let mut changed = false;
+        for (&func_id, function) in &mut object.functions {
+            // Only narrow functions that have at least one call site.
+            if !called_funcs.contains(&func_id.0) {
+                continue;
+            }
+            for (i, (_, param_ty)) in function.params.iter_mut().enumerate() {
+                if !matches!(param_ty, Type::Int(BitWidth::I256)) {
+                    continue;
+                }
+                if let Some(&width) = arg_widths.get(&(func_id.0, i)) {
+                    if width < BitWidth::I256 {
+                        let clamped = width.max(BitWidth::I32);
+                        *param_ty = Type::Int(clamped);
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        // Recurse into subobjects
+        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
+            changed |= sub_inf.narrow_function_params_from_callers(subobject);
+        }
+        changed
+    }
+
+    /// Helper: walk a block collecting argument min_widths at call sites.
+    fn collect_arg_widths_block(
+        &self,
+        block: &Block,
+        arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
+        called_funcs: &mut BTreeSet<u32>,
+    ) {
+        for stmt in &block.statements {
+            self.collect_arg_widths_stmt(stmt, arg_widths, called_funcs);
+        }
+    }
+
+    /// Helper: walk a statement collecting argument min_widths at call sites.
+    fn collect_arg_widths_stmt(
+        &self,
+        stmt: &Statement,
+        arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
+        called_funcs: &mut BTreeSet<u32>,
+    ) {
+        // Check if this statement contains a call expression.
+        if let Statement::Let {
+            value:
+                Expr::Call {
+                    function: ref fid,
+                    ref args,
+                },
+            ..
+        } = stmt
+        {
+            called_funcs.insert(fid.0);
+            for (i, arg) in args.iter().enumerate() {
+                let arg_width = self.get(arg.id).min_width;
+                let entry = arg_widths.entry((fid.0, i)).or_insert(arg_width);
+                // Take the MAX across all callers (widest argument wins).
+                if arg_width > *entry {
+                    *entry = arg_width;
+                }
+            }
+        }
+
+        // Also handle Expr in Statement::Expr(Expr::Call { .. })
+        if let Statement::Expr(Expr::Call {
+            function: ref fid,
+            ref args,
+        }) = stmt
+        {
+            called_funcs.insert(fid.0);
+            for (i, arg) in args.iter().enumerate() {
+                let arg_width = self.get(arg.id).min_width;
+                let entry = arg_widths.entry((fid.0, i)).or_insert(arg_width);
+                if arg_width > *entry {
+                    *entry = arg_width;
+                }
+            }
+        }
+
+        // Recurse into nested regions.
+        match stmt {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                self.collect_arg_widths_region(then_region, arg_widths, called_funcs);
+                if let Some(r) = else_region {
+                    self.collect_arg_widths_region(r, arg_widths, called_funcs);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    self.collect_arg_widths_region(&case.body, arg_widths, called_funcs);
+                }
+                if let Some(d) = default {
+                    self.collect_arg_widths_region(d, arg_widths, called_funcs);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for s in condition_stmts {
+                    self.collect_arg_widths_stmt(s, arg_widths, called_funcs);
+                }
+                self.collect_arg_widths_region(body, arg_widths, called_funcs);
+                self.collect_arg_widths_region(post, arg_widths, called_funcs);
+            }
+            Statement::Block(region) => {
+                self.collect_arg_widths_region(region, arg_widths, called_funcs);
+            }
+            _ => {}
+        }
+    }
+
+    /// Helper: walk a region collecting argument min_widths.
+    fn collect_arg_widths_region(
+        &self,
+        region: &Region,
+        arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
+        called_funcs: &mut BTreeSet<u32>,
+    ) {
+        for stmt in &region.statements {
+            self.collect_arg_widths_stmt(stmt, arg_widths, called_funcs);
+        }
+    }
+
+    /// Narrows function return types based on forward min_width analysis.
+    ///
+    /// For each function with returns, examines the return value IDs' min_width
+    /// from the forward pass. If the min_width is provably < I256, narrows
+    /// the return type. This enables LLVM to use narrow return types (e.g., i64)
+    /// instead of i256, reducing register pressure and spills.
+    ///
+    /// Safety: The forward pass's min_width represents the minimum bit-width
+    /// required to represent the value based on the operations that produce it.
+    /// Narrowing is safe because the function provably never produces values
+    /// wider than min_width.
+    ///
+    /// Returns true if any return type was narrowed.
+    pub fn narrow_function_returns(&self, object: &mut Object) -> bool {
+        let mut changed = false;
+        for function in object.functions.values_mut() {
+            for (i, ret_ty) in function.returns.iter_mut().enumerate() {
+                // Only narrow I256 integer returns
+                if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
+                    continue;
+                }
+
+                // Look up the return value ID's min_width from forward analysis
+                let ret_id = match function.return_values.get(i) {
+                    Some(id) => *id,
+                    None => continue,
+                };
+
+                let constraint = self.get(ret_id);
+
+                // Skip signed values (truncation + zero-extension doesn't preserve sign)
+                if constraint.is_signed {
+                    continue;
+                }
+
+                let width = constraint.min_width;
+                if width < BitWidth::I256 {
+                    // Clamp to at least I32 (XLEN on PolkaVM)
+                    let clamped = width.max(BitWidth::I32);
+                    *ret_ty = Type::Int(clamped);
+                    changed = true;
+                }
+            }
+        }
+
+        // Recurse into subobjects
+        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
+            changed |= sub_inf.narrow_function_returns(subobject);
+        }
+        changed
+    }
+
+    /// Narrows function return types based on backward demand analysis.
+    ///
+    /// For each function with I256 returns, examines ALL call sites to determine
+    /// the widest use demand for each return value. If all callers only use the
+    /// lower N bits (e.g., only as memory offsets needing I64), the return type
+    /// can be narrowed to N bits.
+    ///
+    /// This is more aggressive than forward-only narrowing because it catches cases
+    /// where a function internally computes I256 values (e.g., from SLOAD + arithmetic)
+    /// but all callers only need narrow results.
+    ///
+    /// Safety: Narrowing truncates the return value. This is safe because:
+    /// 1. All callers provably only use the lower N bits (backward demand analysis)
+    /// 2. Comparisons are excluded (UseContext::Comparison demands I256)
+    /// 3. External calls/storage are excluded (demand I256)
+    ///
+    /// Returns true if any return type was narrowed.
+    pub fn narrow_function_returns_from_demand(&self, object: &mut Object) -> bool {
+        // Compute return demand per function: for each function, find the widest
+        // use demand across all call sites for each return value position.
+        let mut return_demands: BTreeMap<u32, Vec<BitWidth>> = BTreeMap::new();
+
+        // Walk all code and function bodies to find Expr::Call sites
+        self.collect_return_demands_block(&object.code, &mut return_demands);
+        for function in object.functions.values() {
+            self.collect_return_demands_block(&function.body, &mut return_demands);
+        }
+
+        let mut changed = false;
+        for function in object.functions.values_mut() {
+            let demands = match return_demands.get(&function.id.0) {
+                Some(d) => d,
+                None => continue, // No call sites found (dead function)
+            };
+
+            for (i, ret_ty) in function.returns.iter_mut().enumerate() {
+                // Only narrow I256 integer returns (skip already-narrowed ones)
+                if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
+                    continue;
+                }
+
+                let demand = match demands.get(i) {
+                    Some(d) => *d,
+                    None => continue,
+                };
+
+                if demand < BitWidth::I256 {
+                    let clamped = demand.max(BitWidth::I32);
+                    *ret_ty = Type::Int(clamped);
+                    changed = true;
+                }
+            }
+        }
+
+        // Recurse into subobjects
+        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
+            changed |= sub_inf.narrow_function_returns_from_demand(subobject);
+        }
+        changed
+    }
+
+    /// Walks a block collecting return demands from Expr::Call in Let statements.
+    fn collect_return_demands_block(
+        &self,
+        block: &Block,
+        demands: &mut BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        for stmt in &block.statements {
+            self.collect_return_demands_stmt(stmt, demands);
+        }
+    }
+
+    /// Walks a statement collecting return demands.
+    fn collect_return_demands_stmt(
+        &self,
+        stmt: &Statement,
+        demands: &mut BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        match stmt {
+            Statement::Let {
+                bindings,
+                value: Expr::Call { function, .. },
+            } => {
+                // Each binding corresponds to a return value position
+                for (i, binding_id) in bindings.iter().enumerate() {
+                    let demand = self.use_demand_width(*binding_id);
+                    let entry = demands.entry(function.0).or_default();
+                    // Ensure the vec is long enough
+                    while entry.len() <= i {
+                        entry.push(BitWidth::I1);
+                    }
+                    // Take the widest demand across all call sites
+                    entry[i] = entry[i].max(demand);
+                }
+            }
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                self.collect_return_demands_region(then_region, demands);
+                if let Some(else_r) = else_region {
+                    self.collect_return_demands_region(else_r, demands);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for cond_stmt in condition_stmts {
+                    self.collect_return_demands_stmt(cond_stmt, demands);
+                }
+                self.collect_return_demands_region(body, demands);
+                self.collect_return_demands_region(post, demands);
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    self.collect_return_demands_region(&case.body, demands);
+                }
+                if let Some(default_region) = default {
+                    self.collect_return_demands_region(default_region, demands);
+                }
+            }
+            Statement::Block(region) => {
+                self.collect_return_demands_region(region, demands);
+            }
+            _ => {}
+        }
+    }
+
+    /// Walks a region collecting return demands.
+    fn collect_return_demands_region(
+        &self,
+        region: &Region,
+        demands: &mut BTreeMap<u32, Vec<BitWidth>>,
+    ) {
+        for stmt in &region.statements {
+            self.collect_return_demands_stmt(stmt, demands);
+        }
+    }
+
     /// Refines demand widths based on narrowed function parameter types.
     ///
     /// After `narrow_function_params` has narrowed function parameter types,

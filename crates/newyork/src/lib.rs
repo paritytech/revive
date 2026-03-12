@@ -136,17 +136,25 @@ pub fn translate_yul_object(
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
-    // Iterative parameter narrowing with full re-inference.
-    // Each iteration: narrow params → re-run full type inference with the new
-    // param types → refine call-site demands. The re-inference cascades forward
+    // Iterative parameter and return type narrowing with full re-inference.
+    // Each iteration: narrow params/returns → re-run full type inference with the new
+    // types → refine call-site demands. The re-inference cascades forward
     // widths: narrowed params (I64) produce narrow add/and results. The demand
     // refinement ensures call-site arguments also get narrow demands.
     for _ in 0..4 {
-        let changed = type_info.narrow_function_params(&mut ir_object);
+        let mut changed = type_info.narrow_function_params(&mut ir_object);
+        // Call-site forward narrowing: narrow params where ALL callers provide
+        // narrow arguments (e.g., and(val, 2^160-1) for address validation).
+        changed |= type_info.narrow_function_params_from_callers(&mut ir_object);
+        // Forward-based return narrowing: narrow returns whose min_width < I256
+        changed |= type_info.narrow_function_returns(&mut ir_object);
+        // Backward demand-based return narrowing: narrow returns where ALL callers
+        // only use narrow results (e.g., as memory offsets)
+        changed |= type_info.narrow_function_returns_from_demand(&mut ir_object);
         if !changed {
             break;
         }
-        // Re-run full type inference with narrowed param types.
+        // Re-run full type inference with narrowed param/return types.
         // The forward pass reads function.params (now narrowed), seeding
         // min_width at I64 instead of I256. This cascades through the
         // function body: add(I64, I8) → I65, and(I65, I256) → I65, etc.

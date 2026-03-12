@@ -110,6 +110,12 @@ pub struct LlvmCodegen<'ctx> {
     /// Function parameter types: maps IR FunctionId to parameter types.
     /// Used by call sites to match argument types to narrowed parameter types.
     function_param_types: BTreeMap<u32, Vec<Type>>,
+    /// Function return types: maps IR FunctionId to return types.
+    /// Used by call sites to zero-extend narrow return values back to i256.
+    function_return_types: BTreeMap<u32, Vec<Type>>,
+    /// Return types of the currently generating function.
+    /// Set during `generate_function` and used by `Leave` codegen.
+    current_return_types: Vec<Type>,
     /// Set of function names that have already been generated.
     /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
     generated_functions: BTreeSet<String>,
@@ -234,6 +240,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
+            function_return_types: BTreeMap::new(),
+            current_return_types: Vec::new(),
             generated_functions: BTreeSet::new(),
             heap_opt,
             type_info,
@@ -283,6 +291,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             values: BTreeMap::new(),
             function_names: BTreeMap::new(),
             function_param_types: BTreeMap::new(),
+            function_return_types: BTreeMap::new(),
+            current_return_types: Vec::new(),
             generated_functions,
             heap_opt,
             type_info,
@@ -2869,6 +2879,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 func_id.0,
                 function.params.iter().map(|(_, ty)| *ty).collect(),
             );
+            self.function_return_types
+                .insert(func_id.0, function.returns.clone());
         }
 
         // Set LLVM inline attributes based on our custom heuristics.
@@ -2970,7 +2982,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map(|(_, ty)| self.ir_type_to_llvm(*ty, context))
             .collect();
 
-        let function_type = context.function_type(argument_types, function.returns.len());
+        // Check if any return types are narrowed from I256
+        let has_narrow_returns = function
+            .returns
+            .iter()
+            .any(|ty| matches!(ty, Type::Int(bw) if *bw < BitWidth::I256));
+
+        let function_type = if has_narrow_returns {
+            let return_types: Vec<_> = function
+                .returns
+                .iter()
+                .map(|ty| match ty {
+                    Type::Int(bw) => context.integer_type(bw.bits() as usize),
+                    _ => context.word_type(),
+                })
+                .collect();
+            context.function_type_with_returns(argument_types, &return_types)
+        } else {
+            context.function_type(argument_types, function.returns.len())
+        };
 
         context.add_function(
             &function.name,
@@ -3020,12 +3050,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             // CostBenefit: tune inlining based on call count and function size.
-            // Small functions called exactly 2 times get AlwaysInline because inlining
-            // enables interprocedural optimizations (range proof propagation, constant
-            // folding through arguments) that eliminate more code than the duplication
-            // adds. Larger functions called 2 times are left to LLVM's judgment (which
-            // respects MinSize). Functions with 3+ call sites get NoInline to prevent
-            // code bloat from excessive duplication.
+            // Functions with 2+ call sites get NoInline to prevent code bloat.
+            // Single-call functions are left to LLVM's judgment (it respects MinSize).
             Some(crate::InlineDecision::CostBenefit) => {
                 if function.call_count >= 2 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
@@ -3086,6 +3112,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Each function has its own SSA namespace
         let saved_values = std::mem::take(&mut self.values);
         let saved_callvalue_ids = std::mem::take(&mut self.callvalue_value_ids);
+        let saved_return_types =
+            std::mem::replace(&mut self.current_return_types, function.returns.clone());
 
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
@@ -3129,16 +3157,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Generate body
         self.generate_block(&function.body, context)?;
 
-        // Store return values to return pointer before going to return block
+        // Store return values to return pointer before going to return block.
+        // For narrowed return types, truncate the i256 value to the narrow type.
         match context.current_function().borrow().r#return() {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
-                // Single return value - must be word type for the pointer
                 if !function.return_values.is_empty() {
                     if let Ok(ret_val) = self.get_value(function.return_values[0]) {
                         let ret_val = if ret_val.is_int_value() {
-                            self.ensure_word_type(context, ret_val.into_int_value(), "ret_val")?
-                                .as_basic_value_enum()
+                            let int_val = ret_val.into_int_value();
+                            match function.returns.first() {
+                                Some(Type::Int(bw)) if *bw < BitWidth::I256 => {
+                                    let target = context.integer_type(bw.bits() as usize);
+                                    let val_bits = int_val.get_type().get_bit_width();
+                                    let tgt_bits = target.get_bit_width();
+                                    if val_bits > tgt_bits {
+                                        context
+                                            .builder()
+                                            .build_int_truncate(int_val, target, "ret_narrow")
+                                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                            .as_basic_value_enum()
+                                    } else if val_bits < tgt_bits {
+                                        context
+                                            .builder()
+                                            .build_int_z_extend(int_val, target, "ret_widen")
+                                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                            .as_basic_value_enum()
+                                    } else {
+                                        int_val.as_basic_value_enum()
+                                    }
+                                }
+                                _ => self
+                                    .ensure_word_type(context, int_val, "ret_val")?
+                                    .as_basic_value_enum(),
+                            }
                         } else {
                             ret_val
                         };
@@ -3147,22 +3199,54 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
-                // Multiple return values - build a struct
-                // Struct fields are word type, so ensure each value is word type
+                // Multiple return values - build a struct with possibly narrow fields
                 let field_types: Vec<_> = (0..size)
-                    .map(|_| context.word_type().as_basic_type_enum())
+                    .map(|i| match function.returns.get(i) {
+                        Some(Type::Int(bw)) if *bw < BitWidth::I256 => context
+                            .integer_type(bw.bits() as usize)
+                            .as_basic_type_enum(),
+                        _ => context.word_type().as_basic_type_enum(),
+                    })
                     .collect();
                 let struct_type = context.structure_type(&field_types);
                 let mut struct_val = struct_type.get_undef();
                 for (i, ret_id) in function.return_values.iter().enumerate() {
                     if let Ok(ret_val) = self.get_value(*ret_id) {
                         let ret_val = if ret_val.is_int_value() {
-                            self.ensure_word_type(
-                                context,
-                                ret_val.into_int_value(),
-                                &format!("ret_val_{}", i),
-                            )?
-                            .as_basic_value_enum()
+                            let int_val = ret_val.into_int_value();
+                            match function.returns.get(i) {
+                                Some(Type::Int(bw)) if *bw < BitWidth::I256 => {
+                                    let target = context.integer_type(bw.bits() as usize);
+                                    let val_bits = int_val.get_type().get_bit_width();
+                                    let tgt_bits = target.get_bit_width();
+                                    if val_bits > tgt_bits {
+                                        context
+                                            .builder()
+                                            .build_int_truncate(
+                                                int_val,
+                                                target,
+                                                &format!("ret_narrow_{}", i),
+                                            )
+                                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                            .as_basic_value_enum()
+                                    } else if val_bits < tgt_bits {
+                                        context
+                                            .builder()
+                                            .build_int_z_extend(
+                                                int_val,
+                                                target,
+                                                &format!("ret_widen_{}", i),
+                                            )
+                                            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                            .as_basic_value_enum()
+                                    } else {
+                                        int_val.as_basic_value_enum()
+                                    }
+                                }
+                                _ => self
+                                    .ensure_word_type(context, int_val, &format!("ret_val_{}", i))?
+                                    .as_basic_value_enum(),
+                            }
                         } else {
                             ret_val
                         };
@@ -3206,6 +3290,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Restore the saved values map, shared blocks, and caches from before this function
         self.values = saved_values;
         self.callvalue_value_ids = saved_callvalue_ids;
+        self.current_return_types = saved_return_types;
         self.revert_blocks = saved_revert_blocks;
         self.return_blocks = saved_return_blocks;
         self.panic_blocks = saved_panic_blocks;
@@ -3486,6 +3571,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .builder()
                             .build_extract_value(struct_val, index as u32, &format!("{}", index))
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        // If the extracted field is a narrow int (from a function with
+                        // narrow return types), zero-extend it back to i256 for the
+                        // function body which operates on i256 values.
+                        let field = if field.is_int_value() {
+                            let int_val = field.into_int_value();
+                            if int_val.get_type().get_bit_width() < 256 {
+                                context
+                                    .builder()
+                                    .build_int_z_extend(
+                                        int_val,
+                                        context.word_type(),
+                                        &format!("{}_extend", index),
+                                    )
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    .as_basic_value_enum()
+                            } else {
+                                int_val.as_basic_value_enum()
+                            }
+                        } else {
+                            field
+                        };
                         self.set_value(*binding, field);
                     }
                 }
@@ -4420,20 +4526,48 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Leave { return_values } => {
-                // Store return values to return pointer before branching to return block
+                // Store return values to return pointer before branching to return block.
+                // For narrowed return types, truncate values to match the pointer type.
                 match context.current_function().borrow().r#return() {
                     revive_llvm_context::PolkaVMFunctionReturn::None => {}
                     revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
-                        // Single return value - must be word type for the pointer
                         if !return_values.is_empty() {
                             if let Ok(ret_val) = self.translate_value(&return_values[0]) {
                                 let ret_val = if ret_val.is_int_value() {
-                                    self.ensure_word_type(
-                                        context,
-                                        ret_val.into_int_value(),
-                                        "leave_ret_val",
-                                    )?
-                                    .as_basic_value_enum()
+                                    let int_val = ret_val.into_int_value();
+                                    match self.current_return_types.first() {
+                                        Some(Type::Int(bw)) if *bw < BitWidth::I256 => {
+                                            let target = context.integer_type(bw.bits() as usize);
+                                            let val_bits = int_val.get_type().get_bit_width();
+                                            let tgt_bits = target.get_bit_width();
+                                            if val_bits > tgt_bits {
+                                                context
+                                                    .builder()
+                                                    .build_int_truncate(
+                                                        int_val,
+                                                        target,
+                                                        "leave_narrow",
+                                                    )
+                                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                                    .as_basic_value_enum()
+                                            } else if val_bits < tgt_bits {
+                                                context
+                                                    .builder()
+                                                    .build_int_z_extend(
+                                                        int_val,
+                                                        target,
+                                                        "leave_widen",
+                                                    )
+                                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                                    .as_basic_value_enum()
+                                            } else {
+                                                int_val.as_basic_value_enum()
+                                            }
+                                        }
+                                        _ => self
+                                            .ensure_word_type(context, int_val, "leave_ret_val")?
+                                            .as_basic_value_enum(),
+                                    }
                                 } else {
                                     ret_val
                                 };
@@ -4442,22 +4576,57 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                     revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
-                        // Multiple return values - build a struct
-                        // Struct fields are word type, so ensure each value is word type
                         let field_types: Vec<_> = (0..size)
-                            .map(|_| context.word_type().as_basic_type_enum())
+                            .map(|i| match self.current_return_types.get(i) {
+                                Some(Type::Int(bw)) if *bw < BitWidth::I256 => context
+                                    .integer_type(bw.bits() as usize)
+                                    .as_basic_type_enum(),
+                                _ => context.word_type().as_basic_type_enum(),
+                            })
                             .collect();
                         let struct_type = context.structure_type(&field_types);
                         let mut struct_val = struct_type.get_undef();
                         for (i, ret_val) in return_values.iter().enumerate() {
                             if let Ok(val) = self.translate_value(ret_val) {
                                 let val = if val.is_int_value() {
-                                    self.ensure_word_type(
-                                        context,
-                                        val.into_int_value(),
-                                        &format!("leave_ret_val_{}", i),
-                                    )?
-                                    .as_basic_value_enum()
+                                    let int_val = val.into_int_value();
+                                    match self.current_return_types.get(i) {
+                                        Some(Type::Int(bw)) if *bw < BitWidth::I256 => {
+                                            let target = context.integer_type(bw.bits() as usize);
+                                            let val_bits = int_val.get_type().get_bit_width();
+                                            let tgt_bits = target.get_bit_width();
+                                            if val_bits > tgt_bits {
+                                                context
+                                                    .builder()
+                                                    .build_int_truncate(
+                                                        int_val,
+                                                        target,
+                                                        &format!("leave_narrow_{}", i),
+                                                    )
+                                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                                    .as_basic_value_enum()
+                                            } else if val_bits < tgt_bits {
+                                                context
+                                                    .builder()
+                                                    .build_int_z_extend(
+                                                        int_val,
+                                                        target,
+                                                        &format!("leave_widen_{}", i),
+                                                    )
+                                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                                    .as_basic_value_enum()
+                                            } else {
+                                                int_val.as_basic_value_enum()
+                                            }
+                                        }
+                                        _ => self
+                                            .ensure_word_type(
+                                                context,
+                                                int_val,
+                                                &format!("leave_ret_val_{}", i),
+                                            )?
+                                            .as_basic_value_enum(),
+                                    }
                                 } else {
                                     val
                                 };
@@ -5835,7 +6004,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 // build_call returns None for void functions, which is valid
                 // For void functions, return a zero value as a placeholder
-                Ok(result.unwrap_or_else(|| context.word_const(0).as_basic_value_enum()))
+                let result = result.unwrap_or_else(|| context.word_const(0).as_basic_value_enum());
+
+                // For functions with a single narrow return type, zero-extend back to i256
+                // so downstream uses (which operate on i256) work correctly.
+                // Multi-return (struct) results are handled at the extract_value site.
+                let return_types = self.function_return_types.get(&function.0);
+                let result = match return_types {
+                    Some(ret_types)
+                        if ret_types.len() == 1
+                            && matches!(ret_types[0], Type::Int(bw) if bw < BitWidth::I256) =>
+                    {
+                        if result.is_int_value() {
+                            let int_val = result.into_int_value();
+                            if int_val.get_type().get_bit_width() < 256 {
+                                context
+                                    .builder()
+                                    .build_int_z_extend(
+                                        int_val,
+                                        context.word_type(),
+                                        "call_ret_extend",
+                                    )
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    .as_basic_value_enum()
+                            } else {
+                                result
+                            }
+                        } else {
+                            result
+                        }
+                    }
+                    _ => result,
+                };
+
+                Ok(result)
             }
 
             Expr::Truncate { value, to } => {

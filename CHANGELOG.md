@@ -4,9 +4,21 @@
 
 This is a development pre-release.
 
+### Added
+- Support for solc v0.8.34.
+
 ### Fixed
 
 - npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
+- Yul mode now properly exits when solc reports validation errors (e.g., invalid hex literals), matching `--standard-json` behavior. [#477](https://github.com/paritytech/revive/issues/477)
+
+### Changed
+
+- Updated `LLVM` from `18.1.8` to LLVM `21.1.8`
+- Updated `musl` to `1.2.5`
+- Updated `inkwell` to `0.8.0`
+- Updated `polkavm-*` to `0.31.0`
+- Updated `EMSDK` to `5.0.0`
 
 ## v1.0.0
 

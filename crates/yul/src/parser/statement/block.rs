@@ -136,6 +136,7 @@ impl Block {
 
 impl PolkaVMWriteLLVM for Block {
     fn into_llvm(self, context: &mut PolkaVMContext) -> anyhow::Result<()> {
+        context.push_function_scope();
         let current_function = context.current_function().borrow().name().to_owned();
         let current_block = context.basic_block();
 
@@ -223,6 +224,7 @@ impl PolkaVMWriteLLVM for Block {
         }
 
         context.pop_debug_scope();
+        context.pop_function_scope();
 
         Ok(())
     }

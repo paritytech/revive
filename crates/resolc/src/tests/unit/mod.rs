@@ -9,3 +9,4 @@ mod remappings;
 mod runtime_code;
 mod standard_json;
 mod unsupported_opcodes;
+mod yul_function_scoping;

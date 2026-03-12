@@ -9,7 +9,7 @@ description = "Implements the low level runtime API bindings with pallet contrac
 
 [dependencies]
 anyhow = { workspace = true }
-inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm18-1"] }
+inkwell = { workspace = true, features = ["target-riscv", "no-libffi-linking", "llvm21-1"] }
 
 revive-common = { workspace = true }
 

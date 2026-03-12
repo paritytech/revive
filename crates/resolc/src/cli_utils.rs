@@ -22,6 +22,14 @@ pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
 pub const YUL_MEMSET_CONTRACT_PATH: &str = "src/tests/data/yul/memset.yul";
 /// The return YUL contract test fixture path.
 pub const YUL_RETURN_CONTRACT_PATH: &str = "src/tests/data/yul/return.yul";
+/// The invalid YUL contract test fixture path (hex literal with odd number of nibbles).
+pub const YUL_INVALID_HEX_NIBBLES_PATH: &str = "src/tests/data/yul/invalid_hex_nibbles.yul";
+/// Yul contract with duplicate function names in switch cases.
+pub const YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH: &str =
+    "src/tests/data/yul/duplicate_functions_switch.yul";
+/// Yul contract with duplicate function names in deeply nested switch cases.
+pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
+    "src/tests/data/yul/duplicate_functions_deep_nesting.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

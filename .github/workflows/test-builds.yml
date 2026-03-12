@@ -4,19 +4,8 @@ on:
   workflow_call:
 
 env:
-  # Common base directory for all directories in `PROJECTS_DIRS`.
-  BASE_PROJECTS_DIR: resolc-compiler-tests/fixtures
-  # The directories containing the contracts to be compiled.
-  # Each subdirectory (e.g. ...solidity/complex/defi) in each of the directories listed are
-  # treated as projects and will be compiled together in order to resolve imports during compilation.
-  PROJECTS_DIRS: "resolc-compiler-tests/fixtures/solidity/simple, resolc-compiler-tests/fixtures/solidity/complex, resolc-compiler-tests/fixtures/solidity/translated_semantic_tests, resolc-compiler-tests/fixtures/yul"
-  # The optimization levels to use for compilation.
-  OPT_LEVELS: "0,3,z"
-  # The prefix for hash artifact names (e.g., "hashes-linux-musl").
-  # This allows download steps to only download the relevant artifacts.
-  ARTIFACT_PREFIX: hashes-
-  # The output hash file name used by all platforms.
-  OUTPUT_FILE: hashes.json
+  # The compiler modes to use for compilation by retester.
+  MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
 
 jobs:
   build:
@@ -46,7 +35,7 @@ jobs:
           path: resolc-universal-apple-darwin
           retention-days: 1
 
-  compile-and-hash-native:
+  compile-and-export-hashes-native:
     needs: [build, create-macos-universal]
     strategy:
       fail-fast: false
@@ -76,12 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: revive
-
-      - name: Checkout resolc-compiler-tests
-        uses: actions/checkout@v4
-        with:
-          repository: paritytech/resolc-compiler-tests
-          path: resolc-compiler-tests
+          submodules: recursive
 
       - name: Download Binary
         uses: actions/download-artifact@v4
@@ -89,117 +73,43 @@ jobs:
           name: ${{ matrix.artifact }}
           path: resolc-bin
 
-      - name: Install Solc
-        uses: ./revive/.github/actions/get-solc
-
-      - name: Set Up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-
-      - name: Compile Contracts and Collect Hashes
-        # TODO: Set timeout when we know how long everything takes.
-        # timeout-minutes: 30
+      - name: Make resolc Executable
         shell: bash
-        run: |
-          RESOLC="resolc-bin/${{ matrix.binary }}"
-          chmod +x "$RESOLC"
+        run: chmod +x "resolc-bin/${{ matrix.binary }}"
 
-          node ./revive/.github/scripts/compile-and-hash.mjs \
-              --resolc "$RESOLC" \
-              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
-              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
-              --output-file "${{ env.OUTPUT_FILE }}" \
-              --opt-levels "${{ env.OPT_LEVELS }}" \
-              --platform-label "${{ matrix.platform }}"
-
-      - name: Upload Hashes
-        uses: actions/upload-artifact@v4
+      - name: Compile Contracts
+        id: compile
+        uses: ./revive/revive-differential-tests/.github/actions/compile-contracts
         with:
-          name: ${{ env.ARTIFACT_PREFIX }}${{ matrix.platform }}
-          path: ${{ env.OUTPUT_FILE }}
-          retention-days: 3
+          revive-differential-tests-path: revive/revive-differential-tests
+          resolc-path: resolc-bin/${{ matrix.binary }}
+          solc-version: "0.8.33"
+          modes: ${{ env.MODES }}
+          upload-artifact-name: compilation-report-${{ matrix.platform }}
 
-  compile-and-hash-wasm:
-    needs: [build]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout revive
-        uses: actions/checkout@v4
+      - name: Export Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/export-bytecode-hashes
         with:
-          path: revive
-
-      - name: Checkout resolc-compiler-tests
-        uses: actions/checkout@v4
-        with:
-          repository: paritytech/resolc-compiler-tests
-          path: resolc-compiler-tests
-
-      - name: Download Wasm Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: resolc.{js,wasm}
-          path: resolc-wasm
-          merge-multiple: true
-
-      - name: Download soljson.js
-        run: |
-          curl -sSLo resolc-wasm/soljson.js https://github.com/ethereum/solidity/releases/download/v0.8.33/soljson.js
-
-      - name: Set Up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-
-      - name: Compile Contracts and Collect Hashes
-        # TODO: Set timeout when we know how long everything takes.
-        # timeout-minutes: 30
-        shell: bash
-        run: |
-          node ./revive/.github/scripts/compile-and-hash.mjs \
-              --resolc "resolc-wasm/resolc.js" \
-              --soljson "resolc-wasm/soljson.js" \
-              --base-dir "${{ env.BASE_PROJECTS_DIR }}" \
-              --projects-dirs "${{ env.PROJECTS_DIRS }}" \
-              --output-file "${{ env.OUTPUT_FILE }}" \
-              --opt-levels "${{ env.OPT_LEVELS }}" \
-              --platform-label "wasm32-unknown-emscripten"
-
-      - name: Upload Hashes
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_PREFIX }}wasm
-          path: ${{ env.OUTPUT_FILE }}
-          retention-days: 3
+          revive-differential-tests-path: revive/revive-differential-tests
+          report-path: ${{ steps.compile.outputs.report-path }}
+          remove-prefix: ${{ steps.compile.outputs.contracts-source-prefix }}
+          platform-label: ${{ matrix.platform }}
+          upload-artifact-name: hashes-${{ matrix.platform }}
 
   verify-reproducible-builds:
-    needs: [compile-and-hash-native, compile-and-hash-wasm]
+    needs: [compile-and-export-hashes-native]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4
         with:
           path: revive
+          submodules: true
 
-      - name: Download All Hashes
-        uses: actions/download-artifact@v4
+      - name: Compare Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
-          pattern: ${{ env.ARTIFACT_PREFIX }}*
-          path: all-hashes
-          merge-multiple: false
-
-      - name: Set Up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "lts/*"
-
-      - name: Compare Hashes Across Platforms
-        shell: bash
-        run: |
-          HASHES_DIR="all-hashes"
-          ALL_HASH_FILES="**/${{ env.OUTPUT_FILE }}"
-
-          node ./revive/.github/scripts/compare-hashes.mjs \
-              "$HASHES_DIR" \
-              "$ALL_HASH_FILES" \
-              "${{ env.OPT_LEVELS }}"
+          revive-differential-tests-path: revive/revive-differential-tests
+          hash-artifact-names: "hashes-linux-musl, hashes-macos-universal, hashes-windows"
+          modes: ${{ env.MODES }}
+          upload-artifact-name: hash-comparison-result

@@ -41,18 +41,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: linux-musl
-            artifact: resolc-x86_64-unknown-linux-musl
+          - platform: linux
+            target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
-            binary: resolc-x86_64-unknown-linux-musl
-          - platform: macos-universal
-            artifact: resolc-universal-apple-darwin
+          - platform: macos
+            target: universal-apple-darwin
             runner: macos-15
-            binary: resolc-universal-apple-darwin
           - platform: windows
-            artifact: resolc-x86_64-pc-windows-msvc
+            target: x86_64-pc-windows-msvc
             runner: windows-2022
-            binary: resolc-x86_64-pc-windows-msvc.exe
     runs-on: ${{ matrix.runner }}
     steps:
       # For some deeply nested contracts in `resolc-compiler-tests`, Windows
@@ -70,19 +67,19 @@ jobs:
       - name: Download Binary
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: resolc-${{ matrix.target }}
           path: resolc-bin
 
       - name: Make resolc Executable
         shell: bash
-        run: chmod +x "resolc-bin/${{ matrix.binary }}"
+        run: chmod +x "resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}"
 
       - name: Compile Contracts
         id: compile
         uses: ./revive/revive-differential-tests/.github/actions/compile-contracts
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          resolc-path: resolc-bin/${{ matrix.binary }}
+          resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
           solc-version: "0.8.33"
           modes: ${{ env.MODES }}
           upload-artifact-name: compilation-report-${{ matrix.platform }}
@@ -110,6 +107,6 @@ jobs:
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          hash-artifact-names: "hashes-linux-musl, hashes-macos-universal, hashes-windows"
+          hash-artifact-names: "hashes-linux, hashes-macos, hashes-windows"
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result

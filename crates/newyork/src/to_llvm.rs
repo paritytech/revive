@@ -4278,10 +4278,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.build_unconditional_branch(cond_block);
                 context.set_basic_block(cond_block);
 
-                // Create phi nodes for loop-carried variables at the condition block
+                // Create phi nodes for loop-carried variables at the condition block.
+                // All phis must be created first (LLVM requires phis grouped at block top).
                 let mut loop_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
                 let mut loop_phi_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
-                for (i, loop_var) in loop_vars.iter().enumerate() {
+                for (i, _loop_var) in loop_vars.iter().enumerate() {
                     let phi = context
                         .builder()
                         .build_phi(context.word_type(), &format!("loop_var_{}", i))
@@ -4292,10 +4293,40 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         phi.add_incoming(&[(&init_llvm_values[i], entry_block)]);
                     }
 
-                    // Make the phi value available as the loop variable
-                    self.set_value(*loop_var, phi.as_basic_value());
                     loop_phi_values.push(phi.as_basic_value());
                     loop_phis.push(phi);
+                }
+
+                // After all phis are created, apply demand-based narrowing and
+                // bind the (possibly truncated) values to the loop variables.
+                // Loop phis are i256, but if the non-comparison demand is ≤ i64,
+                // truncate the value so body operations use the narrower type.
+                // This is safe because:
+                // 1. Only unsigned loop vars are narrowed (signed needs sign-extend)
+                // 2. non_comparison_demand excludes Comparison uses
+                // 3. If ANY non-comparison use needs I256 (Arithmetic, StorageAccess,
+                //    ExternalCall, etc.), the demand stays at I256 and no truncation occurs
+                // 4. Yield values are zero-extended back to i256 via translate_value_as_word
+                for (i, loop_var) in loop_vars.iter().enumerate() {
+                    let phi_val = loop_phis[i].as_basic_value();
+                    let non_comp = self.type_info.non_comparison_demand(*loop_var);
+                    let loop_val = if !self.type_info.get(*loop_var).is_signed
+                        && matches!(non_comp, BitWidth::I32 | BitWidth::I64)
+                    {
+                        let narrow_type = context.integer_type(non_comp.bits() as usize);
+                        let truncated = context
+                            .builder()
+                            .build_int_truncate(
+                                phi_val.into_int_value(),
+                                narrow_type,
+                                &format!("loop_narrow_{}", i),
+                            )
+                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        truncated.as_basic_value_enum()
+                    } else {
+                        phi_val
+                    };
+                    self.set_value(*loop_var, loop_val);
                 }
 
                 // Generate condition statements (these may use loop_vars)

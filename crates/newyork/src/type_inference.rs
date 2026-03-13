@@ -403,7 +403,7 @@ impl TypeInference {
     /// Comparison uses are excluded because param narrowing inserts
     /// zero-extension at function entry, making comparison operations see the
     /// correct (zero-extended) value for in-range inputs.
-    fn non_comparison_demand(&self, id: ValueId) -> BitWidth {
+    pub fn non_comparison_demand(&self, id: ValueId) -> BitWidth {
         if let Some(uses) = self.uses.get(&id.0) {
             if uses.is_empty() {
                 return BitWidth::I256;

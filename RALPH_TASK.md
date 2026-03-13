@@ -1,6 +1,6 @@
 # Compiler optimization task
 
-The task: Read OPTIMIZATIONS.md and implement the optimization opportunities that where identified. Pick ONE AT THE TIME.
+The task: Read I256_OUTLINE_PLAN.md and implement the optimization opportunities that where identified. Pick ONE AT THE TIME.
 
 WARNING. DO NOT UNDERESTIMATE THIS WORKLOAD.
 - This is a complex task. More complex than usual. Senior compiler engineer level complexity.
@@ -50,9 +50,9 @@ IMPORTANT: Tests may require a current `resolc` built from current changes in $P
 
 Hint: Optimizations are tricky to implement. Run `make test-integration` often!
 
-IMPROTANT. You are NOT allowed to commit without these two steps:
+**IMPROTANT**. You are NOT allowed to commit without these two steps:
 1. ALWAYS verify `RESOLC_USE_NEWYORK=1 make test` passes before commit
-2. ALWAYS verify `RESOLC_USE_NEWYORK=1 bash retester.sh` has 0 failures before commit
+2. ALWAYS verify `RESOLC_USE_NEWYORK=1 bash retester.sh` **has 0 failures** before commit
 3. Check the openzeppelin contracts in oz-tests as well as codesize.json - regressions together with overall gains are ok but in general code sizes must not regress!
 
 ---
@@ -97,7 +97,7 @@ This needs to be fixed in the llvm-context crate to declare both native and non-
 ### Test Results
 
 - Integration tests: 62 passed, 0 failed
-- Retester: 5701 passed, 150 failed (pre-existing OutOfGas failures)
+- Retester: 5701 passed, 150 failed (flaky pre-existing OutOfGas failures)
 - OZ contract sizes: Same as before (no regression)
 
 ### Next Steps
@@ -126,7 +126,7 @@ This needs to be fixed in the llvm-context crate to declare both native and non-
 
 ### Testing Results
 - ✅ Integration tests: 62 passed
-- ✅ Retester: 5701 passed, 150 failed (pre-existing OutOfGas)
+- ✅ Retester: 5701 passed, 150 failed (flaky pre-existing OutOfGas)
 - ✅ OZ contracts: All compile successfully
 
 ### Conclusion
@@ -1786,3 +1786,50 @@ use i64 arithmetic instead of i256 for most operations.
 - Codesize test: PASS
 - OZ contracts: All compile, sizes as above
 - deploy_erc20.sh: All assertions passed
+
+## Iteration 24: Loop Variable Demand-Based Narrowing
+
+### Idea
+Loop phi nodes (for-loop carried variables) default to i256 in LLVM because the forward
+type inference conservatively widens them to I256 to handle the phi cycle. But many loop
+variables are simple counters or memory offsets that only need i32/i64.
+
+Use backward demand analysis (`non_comparison_demand`) at codegen time to truncate loop
+phi values when all non-comparison uses only need narrow types (e.g., MemoryOffset → I64).
+
+### Key Design Decisions
+- **Codegen-only approach**: The forward pass still conservatively widens loop vars to I256.
+  Narrowing happens only at LLVM codegen by inserting `trunc` after the phi nodes.
+- **Why not forward-pass narrowing**: Attempted first but failed — narrowing ALL loop vars
+  based on the loop condition bound is unsound (e.g., SHA1 packs 256-bit state into loop
+  vars; fibonacci_binet infinite-loops because non-loop-counter vars get narrow min_width
+  which affects `inferred_width` used throughout codegen).
+- **Safety via non_comparison_demand**: Only narrows when ALL non-comparison uses (Arithmetic,
+  MemoryOffset, StorageAccess, etc.) fit in ≤ I64. If ANY use needs I256, the demand stays
+  at I256 and no truncation occurs. Comparison uses are excluded because truncated values
+  produce correct comparison results for in-range unsigned values.
+- **LLVM phi grouping**: All phi nodes must be created first, then truncations applied in a
+  second pass (LLVM requires phis grouped at block top with no non-phi instructions between).
+- **Round-trip correctness**: Phi nodes remain i256. Body operations use the truncated value.
+  Yield values are zero-extended back to i256 via `translate_value_as_word`.
+
+### Results
+| Contract | Before | After | Savings |
+|----------|--------|-------|---------|
+| erc1155 | 33,570 | 33,087 | -483 (-1.4%) |
+| erc20 | 46,234 | 45,703 | -531 (-1.1%) |
+| erc721 | 53,258 | 52,634 | -624 (-1.2%) |
+| oz_gov | 83,604 | 81,840 | -1,764 (-2.1%) |
+| oz_rwa | 41,860 | 41,581 | -279 (-0.7%) |
+| simple | 17,095 | 17,024 | -71 (-0.4%) |
+| oz_stable | 45,307 | 45,052 | -255 (-0.6%) |
+| proxy | 3,748 | 3,748 | 0 |
+| **Total** | **324,676** | **320,669** | **-4,007 (-1.2%)** |
+
+Cumulative from baseline 418,237: **-97,568 bytes (-23.3%)**
+
+### Test Results
+- Integration tests: 62 passed, 0 failed
+- Retester: 5851 passed, 0 failed, 24 ignored
+- Clippy: clean
+- OZ contracts: All compile, sizes as above

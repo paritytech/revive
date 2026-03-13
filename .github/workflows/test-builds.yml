@@ -1,0 +1,112 @@
+name: Verify Reproducible Builds
+
+on:
+  workflow_call:
+
+env:
+  # The compiler modes to use for compilation by retester.
+  MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: false
+      retention_days: 1
+
+  create-macos-universal:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - name: Download MacOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create MacOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: 1
+
+  compile-and-export-hashes-native:
+    needs: [build, create-macos-universal]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - platform: macos
+            target: universal-apple-darwin
+            runner: macos-15
+          - platform: windows
+            target: x86_64-pc-windows-msvc
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # For some deeply nested contracts in `resolc-compiler-tests`, Windows
+      # will generate a "Filename too long" error. This step enables long paths.
+      - name: Enable Git Long Paths (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: git config --system core.longpaths true
+
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: recursive
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: resolc-${{ matrix.target }}
+          path: resolc-bin
+
+      - name: Make resolc Executable
+        shell: bash
+        run: chmod +x "resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}"
+
+      - name: Compile Contracts
+        id: compile
+        uses: ./revive/revive-differential-tests/.github/actions/compile-contracts
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
+          solc-version: "0.8.33"
+          modes: ${{ env.MODES }}
+          upload-artifact-name: compilation-report-${{ matrix.platform }}
+
+      - name: Export Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/export-bytecode-hashes
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          report-path: ${{ steps.compile.outputs.report-path }}
+          remove-prefix: ${{ steps.compile.outputs.contracts-source-prefix }}
+          platform-label: ${{ matrix.platform }}
+          upload-artifact-name: hashes-${{ matrix.platform }}
+
+  verify-reproducible-builds:
+    needs: [compile-and-export-hashes-native]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: true
+
+      - name: Compare Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          hash-artifact-names: "hashes-linux, hashes-macos, hashes-windows"
+          modes: ${{ env.MODES }}
+          upload-artifact-name: hash-comparison-result

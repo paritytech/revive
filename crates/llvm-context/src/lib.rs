@@ -104,8 +104,17 @@ pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[Stri
         return; // Tests don't go through a recursive process
     };
 
+    // Disable LICM promotion and machine LICM: on the PVM target (rv64e),
+    // LICM hoists i256 operations out of loops, increasing register pressure
+    // and causing excessive stack spills that outweigh the loop optimization.
+    let default_args = [
+        "--disable-licm-promotion".to_string(),
+        "--disable-machine-licm".to_string(),
+        "--enable-machine-outliner".to_string(),
+    ];
     let argv = [name.to_string()]
         .iter()
+        .chain(default_args.iter())
         .chain(llvm_arguments)
         .map(|arg| CString::new(arg.as_bytes()).unwrap())
         .collect::<Vec<_>>();

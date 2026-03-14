@@ -32,9 +32,19 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
     let mut stats = GuardNarrowStats::default();
 
-    narrow_block(&mut object.code, &mut next_id, &mut stats);
+    let _ = narrow_block(&mut object.code, &mut next_id, &mut stats);
     for func in object.functions.values_mut() {
-        narrow_block(&mut func.body, &mut next_id, &mut stats);
+        let replacements = narrow_block(&mut func.body, &mut next_id, &mut stats);
+        // Apply replacements to function return values. Without this, functions
+        // like abi_decode_address return the unmasked value (i256) instead of
+        // the AND-masked value (i160), blocking return type narrowing.
+        if !replacements.is_empty() {
+            for ret_val in &mut func.return_values {
+                if let Some(&new_id) = replacements.get(&ret_val.0) {
+                    *ret_val = new_id;
+                }
+            }
+        }
     }
 
     for sub in &mut object.subobjects {
@@ -47,7 +57,13 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 }
 
 /// Process a block: find guard patterns and insert AND masks.
-fn narrow_block(block: &mut Block, next_id: &mut u32, stats: &mut GuardNarrowStats) {
+/// Returns the accumulated replacements map so callers can apply it to
+/// function return values and other metadata outside the block.
+fn narrow_block(
+    block: &mut Block,
+    next_id: &mut u32,
+    stats: &mut GuardNarrowStats,
+) -> BTreeMap<u32, ValueId> {
     // First, recurse into nested regions within each statement.
     for stmt in &mut block.statements {
         narrow_stmt_regions(stmt, next_id, stats);
@@ -250,6 +266,7 @@ fn narrow_block(block: &mut Block, next_id: &mut u32, stats: &mut GuardNarrowSta
     }
 
     block.statements = new_stmts;
+    replacements
 }
 
 /// Recurse into nested regions within a statement.

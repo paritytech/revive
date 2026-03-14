@@ -32,9 +32,16 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
     let mut stats = GuardNarrowStats::default();
 
-    let _ = narrow_block(&mut object.code, &mut next_id, &mut stats);
+    // Pre-scan: detect validator functions (void, single param, contains
+    // eq-based guard pattern like `if iszero(eq(param, and(param, MASK))) { revert }`).
+    // These prove their parameter fits in MASK bits, but the proof doesn't
+    // propagate to callers. We record (function_id → mask) so that call sites
+    // can insert narrowing ANDs.
+    let validators = detect_validator_functions(object);
+
+    let _ = narrow_block(&mut object.code, &mut next_id, &mut stats, &validators);
     for func in object.functions.values_mut() {
-        let replacements = narrow_block(&mut func.body, &mut next_id, &mut stats);
+        let replacements = narrow_block(&mut func.body, &mut next_id, &mut stats, &validators);
         // Apply replacements to function return values. Without this, functions
         // like abi_decode_address return the unmasked value (i256) instead of
         // the AND-masked value (i160), blocking return type narrowing.
@@ -56,6 +63,137 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     stats
 }
 
+/// Detects "validator" functions that prove their parameter fits in a mask.
+///
+/// Pattern: void function with one parameter whose body contains:
+/// ```text
+/// let masked = and(param, MASK)
+/// let eq_check = eq(param, masked)
+/// let not_check = iszero(eq_check)
+/// if not_check { <terminates> }
+/// ```
+///
+/// Returns a map from FunctionId to the boundary mask (BigUint).
+fn detect_validator_functions(object: &Object) -> BTreeMap<u32, BigUint> {
+    let mut validators = BTreeMap::new();
+
+    for (func_id, function) in &object.functions {
+        // Must be void (no return values) with exactly one parameter
+        if !function.returns.is_empty() || function.params.len() != 1 {
+            continue;
+        }
+
+        let param_id = function.params[0].0;
+        if let Some(mask) = detect_validator_mask(&function.body, param_id) {
+            validators.insert(func_id.0, mask);
+        }
+    }
+
+    validators
+}
+
+/// Checks if a block contains the eq-based validator pattern for the given param.
+/// Returns the boundary mask if found.
+fn detect_validator_mask(block: &Block, param_id: ValueId) -> Option<BigUint> {
+    let stmts = &block.statements;
+
+    // Track definitions to resolve the pattern
+    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut and_defs: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new(); // and_id -> (orig_id, mask)
+    let mut eq_mask_defs: BTreeMap<u32, BigUint> = BTreeMap::new(); // eq_id -> mask
+    let mut iszero_eq_defs: BTreeMap<u32, BigUint> = BTreeMap::new(); // iszero_id -> mask
+
+    for stmt in stmts {
+        if let Statement::Let {
+            ref bindings,
+            ref value,
+        } = stmt
+        {
+            if bindings.len() != 1 {
+                continue;
+            }
+            let bid = bindings[0].0;
+
+            if let Expr::Literal {
+                value: ref lit_val, ..
+            } = value
+            {
+                constants.insert(bid, lit_val.clone());
+            }
+
+            // Track and(param, MASK)
+            if let Expr::Binary {
+                op: BinOp::And,
+                ref lhs,
+                ref rhs,
+            } = value
+            {
+                let (val_id, mask_id) = (lhs.id.0, rhs.id.0);
+                if val_id == param_id.0 {
+                    if let Some(mask) = constants.get(&mask_id) {
+                        if is_wide_boundary_mask(mask) {
+                            and_defs.insert(bid, (val_id, mask.clone()));
+                        }
+                    }
+                } else if mask_id == param_id.0 {
+                    if let Some(mask) = constants.get(&val_id) {
+                        if is_wide_boundary_mask(mask) {
+                            and_defs.insert(bid, (mask_id, mask.clone()));
+                        }
+                    }
+                }
+            }
+
+            // Track eq(param, and_result) or eq(and_result, param)
+            if let Expr::Binary {
+                op: BinOp::Eq,
+                ref lhs,
+                ref rhs,
+            } = value
+            {
+                if let Some((orig_id, ref mask)) = and_defs.get(&rhs.id.0) {
+                    if *orig_id == lhs.id.0 {
+                        eq_mask_defs.insert(bid, mask.clone());
+                    }
+                } else if let Some((orig_id, ref mask)) = and_defs.get(&lhs.id.0) {
+                    if *orig_id == rhs.id.0 {
+                        eq_mask_defs.insert(bid, mask.clone());
+                    }
+                }
+            }
+
+            // Track iszero(eq_check)
+            if let Expr::Unary {
+                op: UnaryOp::IsZero,
+                ref operand,
+            } = value
+            {
+                if let Some(mask) = eq_mask_defs.get(&operand.id.0) {
+                    iszero_eq_defs.insert(bid, mask.clone());
+                }
+            }
+        }
+
+        // Check for if iszero_check { <terminates> }
+        if let Statement::If {
+            ref condition,
+            ref then_region,
+            ref else_region,
+            ref outputs,
+            ..
+        } = stmt
+        {
+            if else_region.is_none() && outputs.is_empty() && region_terminates(then_region) {
+                if let Some(mask) = iszero_eq_defs.get(&condition.id.0) {
+                    return Some(mask.clone());
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Process a block: find guard patterns and insert AND masks.
 /// Returns the accumulated replacements map so callers can apply it to
 /// function return values and other metadata outside the block.
@@ -63,10 +201,11 @@ fn narrow_block(
     block: &mut Block,
     next_id: &mut u32,
     stats: &mut GuardNarrowStats,
+    validators: &BTreeMap<u32, BigUint>,
 ) -> BTreeMap<u32, ValueId> {
     // First, recurse into nested regions within each statement.
     for stmt in &mut block.statements {
-        narrow_stmt_regions(stmt, next_id, stats);
+        narrow_stmt_regions(stmt, next_id, stats, validators);
     }
 
     // Now process this block's top-level statements for guard patterns.
@@ -262,6 +401,60 @@ fn narrow_block(
             }
         }
 
+        // Interprocedural validator narrowing: detect calls to validator functions
+        // that prove their argument fits in a boundary mask. Insert AND after the
+        // call to give type inference the narrowed value.
+        if let Statement::Expr(Expr::Call {
+            ref function,
+            ref args,
+        }) = stmt
+        {
+            if args.len() == 1 {
+                if let Some(mask) = validators.get(&function.0) {
+                    let arg_id = resolve_id(args[0].id, &replacements);
+                    // Don't re-narrow if already replaced (e.g., earlier validator call)
+                    if let std::collections::btree_map::Entry::Vacant(e) =
+                        replacements.entry(arg_id.0)
+                    {
+                        let mask_id = ValueId(*next_id);
+                        *next_id += 1;
+                        let narrow_id = ValueId(*next_id);
+                        *next_id += 1;
+
+                        // Push the validator call first.
+                        new_stmts.push(stmt);
+
+                        // Emit: let mask_id = MASK
+                        new_stmts.push(Statement::Let {
+                            bindings: vec![mask_id],
+                            value: Expr::Literal {
+                                value: mask.clone(),
+                                ty: Type::Int(BitWidth::I256),
+                            },
+                        });
+
+                        // Emit: let narrow_id = and(arg, mask_id)
+                        new_stmts.push(Statement::Let {
+                            bindings: vec![narrow_id],
+                            value: Expr::Binary {
+                                op: BinOp::And,
+                                lhs: Value {
+                                    id: arg_id,
+                                    ty: Type::Int(BitWidth::I256),
+                                },
+                                rhs: Value::int(mask_id),
+                            },
+                        });
+
+                        // Replace subsequent uses of the argument.
+                        e.insert(narrow_id);
+                        stats.guards_narrowed += 1;
+                        continue;
+                    }
+                }
+            }
+        }
+
         new_stmts.push(stmt);
     }
 
@@ -270,24 +463,29 @@ fn narrow_block(
 }
 
 /// Recurse into nested regions within a statement.
-fn narrow_stmt_regions(stmt: &mut Statement, next_id: &mut u32, stats: &mut GuardNarrowStats) {
+fn narrow_stmt_regions(
+    stmt: &mut Statement,
+    next_id: &mut u32,
+    stats: &mut GuardNarrowStats,
+    validators: &BTreeMap<u32, BigUint>,
+) {
     match stmt {
         Statement::If {
             then_region,
             else_region,
             ..
         } => {
-            narrow_region(then_region, next_id, stats);
+            narrow_region(then_region, next_id, stats, validators);
             if let Some(r) = else_region {
-                narrow_region(r, next_id, stats);
+                narrow_region(r, next_id, stats, validators);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for case in cases {
-                narrow_region(&mut case.body, next_id, stats);
+                narrow_region(&mut case.body, next_id, stats, validators);
             }
             if let Some(d) = default {
-                narrow_region(d, next_id, stats);
+                narrow_region(d, next_id, stats, validators);
             }
         }
         Statement::For {
@@ -299,25 +497,30 @@ fn narrow_stmt_regions(stmt: &mut Statement, next_id: &mut u32, stats: &mut Guar
             let mut cond_block = Block {
                 statements: std::mem::take(condition_stmts),
             };
-            narrow_block(&mut cond_block, next_id, stats);
+            narrow_block(&mut cond_block, next_id, stats, validators);
             *condition_stmts = cond_block.statements;
 
-            narrow_region(body, next_id, stats);
-            narrow_region(post, next_id, stats);
+            narrow_region(body, next_id, stats, validators);
+            narrow_region(post, next_id, stats, validators);
         }
         Statement::Block(region) => {
-            narrow_region(region, next_id, stats);
+            narrow_region(region, next_id, stats, validators);
         }
         _ => {}
     }
 }
 
 /// Process a region as a block.
-fn narrow_region(region: &mut Region, next_id: &mut u32, stats: &mut GuardNarrowStats) {
+fn narrow_region(
+    region: &mut Region,
+    next_id: &mut u32,
+    stats: &mut GuardNarrowStats,
+    validators: &BTreeMap<u32, BigUint>,
+) {
     let mut block = Block {
         statements: std::mem::take(&mut region.statements),
     };
-    narrow_block(&mut block, next_id, stats);
+    narrow_block(&mut block, next_id, stats, validators);
     region.statements = block.statements;
 }
 

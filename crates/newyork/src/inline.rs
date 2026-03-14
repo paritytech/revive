@@ -37,7 +37,7 @@ const NEVER_INLINE_SIZE_THRESHOLD: usize = 70;
 /// a higher threshold is justified. The interprocedural optimizations from
 /// inlining (constant propagation, dead code elimination, type narrowing)
 /// usually outweigh the register pressure increase for moderate-sized functions.
-const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 30;
+const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 22;
 
 /// Maximum number of call sites beyond which a function is never inlined.
 const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 10;

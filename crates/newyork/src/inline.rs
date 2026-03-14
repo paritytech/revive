@@ -27,10 +27,10 @@ use crate::ir::{
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
-const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 6;
+const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 8;
 
 /// Maximum function size (in IR nodes) beyond which a function is never inlined.
-const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
+const NEVER_INLINE_SIZE_THRESHOLD: usize = 70;
 
 /// Maximum function size for single-call inlining at IR level.
 /// Since single-call functions are eliminated entirely (zero code duplication),

@@ -168,7 +168,12 @@ impl<'ctx> Function<'ctx> {
             );
         }
 
-        Self::set_attributes(llvm, declaration, &[Attribute::NoFree], false);
+        Self::set_attributes(
+            llvm,
+            declaration,
+            &[Attribute::NoFree, Attribute::NoUnwind],
+            false,
+        );
     }
 
     /// Sets the front-end runtime attributes.

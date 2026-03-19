@@ -93,8 +93,8 @@ jobs:
           platform-label: ${{ matrix.platform }}
           upload-artifact-name: hashes-${{ matrix.platform }}
 
-  verify-reproducible-builds:
-    needs: [compile-and-export-hashes-native]
+  compare-hashes:
+    needs: compile-and-export-hashes-native
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
@@ -110,3 +110,66 @@ jobs:
           hash-artifact-names: "hashes-linux, hashes-macos, hashes-windows"
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result
+
+  run-differential-tests:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      POLKADOT_SDK_REF: "30cda2aad8612a10ff729d494acd9d5353294d63"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      RUSTFLAGS: "-Awarnings"
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["revive-dev-node-revm-solc", "revive-dev-node-polkavm-resolc"]
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: recursive
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: resolc-x86_64-unknown-linux-musl
+          path: ./resolc-bin
+
+      - name: Make resolc Executable
+        shell: bash
+        run: chmod +x ./resolc-bin/resolc-x86_64-unknown-linux-musl
+
+      - name: Checkout Polkadot SDK
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/polkadot-sdk
+          ref: ${{ env.POLKADOT_SDK_REF }}
+          path: polkadot-sdk
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler llvm clang libclang-dev
+
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: "1.90.0"
+          target: "wasm32-unknown-unknown"
+          components: "rust-src"
+          rustflags: ""
+
+      - name: Run Differential E2E Tests
+        uses: ./revive/revive-differential-tests/.github/actions/run-differential-tests
+        with:
+          polkadot-sdk-path: ./polkadot-sdk
+          platform: ${{ matrix.platform }}
+          resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
+          revive-differential-tests-path: revive/revive-differential-tests
+          # TODO: expectations-file-path: ..

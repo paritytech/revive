@@ -1,0 +1,178 @@
+name: Verify Reproducible Builds
+
+on:
+  workflow_call:
+
+env:
+  # The compiler modes to use for compilation by retester.
+  MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
+  SOLC_VERSION: "0.8.33"
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      is_release: false
+      retention_days: 1
+
+  create-macos-universal:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - name: Download MacOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create MacOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: 1
+
+  compile-and-export-hashes-native:
+    needs: [build, create-macos-universal]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - platform: macos
+            target: universal-apple-darwin
+            runner: macos-15
+          - platform: windows
+            target: x86_64-pc-windows-msvc
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      # For some deeply nested contracts in `resolc-compiler-tests`, Windows
+      # will generate a "Filename too long" error. This step enables long paths.
+      - name: Enable Git Long Paths (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: git config --system core.longpaths true
+
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: recursive
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: resolc-${{ matrix.target }}
+          path: resolc-bin
+
+      - name: Make resolc Executable
+        shell: bash
+        run: chmod +x "resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}"
+
+      - name: Compile Contracts
+        id: compile
+        uses: ./revive/revive-differential-tests/.github/actions/compile-contracts
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
+          solc-version: ${{ env.SOLC_VERSION }}
+          modes: ${{ env.MODES }}
+          upload-artifact-name: compilation-report-${{ matrix.platform }}
+
+      - name: Export Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/export-bytecode-hashes
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          report-path: ${{ steps.compile.outputs.report-path }}
+          remove-prefix: ${{ steps.compile.outputs.contracts-source-prefix }}
+          platform-label: ${{ matrix.platform }}
+          upload-artifact-name: hashes-${{ matrix.platform }}
+
+  compare-hashes:
+    needs: compile-and-export-hashes-native
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: true
+
+      - name: Compare Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          hash-artifact-names: "hashes-linux, hashes-macos, hashes-windows"
+          modes: ${{ env.MODES }}
+          upload-artifact-name: hash-comparison-result
+
+  run-differential-tests:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      POLKADOT_SDK_REF: "30cda2aad8612a10ff729d494acd9d5353294d63"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      RUSTFLAGS: "-Awarnings"
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["revive-dev-node-revm-solc", "revive-dev-node-polkavm-resolc"]
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: recursive
+
+      - name: Download Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: resolc-x86_64-unknown-linux-musl
+          path: ./resolc-bin
+
+      - name: Make resolc Executable
+        shell: bash
+        run: chmod +x ./resolc-bin/resolc-x86_64-unknown-linux-musl
+
+      - name: Checkout Polkadot SDK
+        uses: actions/checkout@v4
+        with:
+          repository: paritytech/polkadot-sdk
+          ref: ${{ env.POLKADOT_SDK_REF }}
+          path: polkadot-sdk
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler llvm clang libclang-dev
+
+      - name: Run sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: "1.90.0"
+          target: "wasm32-unknown-unknown"
+          components: "rust-src"
+          rustflags: ""
+
+      - name: Run Differential E2E Tests
+        uses: ./revive/revive-differential-tests/.github/actions/run-differential-tests
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          polkadot-sdk-path: ./polkadot-sdk
+          platform: ${{ matrix.platform }}
+          resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
+          solc-version: ${{ env.SOLC_VERSION }}
+          # TODO: expectations-file-path: ..

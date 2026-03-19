@@ -114,6 +114,7 @@ jobs:
 
   run-differential-tests:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:

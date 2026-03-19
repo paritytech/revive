@@ -6,6 +6,7 @@ on:
 env:
   # The compiler modes to use for compilation by retester.
   MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
+  SOLC_VERSION: "0.8.33"
 
 jobs:
   build:
@@ -80,7 +81,7 @@ jobs:
         with:
           revive-differential-tests-path: revive/revive-differential-tests
           resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
-          solc-version: "0.8.33"
+          solc-version: ${{ env.SOLC_VERSION }}
           modes: ${{ env.MODES }}
           upload-artifact-name: compilation-report-${{ matrix.platform }}
 
@@ -168,8 +169,9 @@ jobs:
       - name: Run Differential E2E Tests
         uses: ./revive/revive-differential-tests/.github/actions/run-differential-tests
         with:
+          revive-differential-tests-path: revive/revive-differential-tests
           polkadot-sdk-path: ./polkadot-sdk
           platform: ${{ matrix.platform }}
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
-          revive-differential-tests-path: revive/revive-differential-tests
+          solc-version: ${{ env.SOLC_VERSION }}
           # TODO: expectations-file-path: ..

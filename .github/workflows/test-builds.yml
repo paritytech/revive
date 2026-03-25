@@ -116,9 +116,12 @@ jobs:
     needs: build
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # TODO: Set when we know how long it usually takes.
+    # timeout-minutes: 60
     env:
-      POLKADOT_SDK_REF: "30cda2aad8612a10ff729d494acd9d5353294d63"
+      # TODO: Which Polkadot SDK commit do we want to use?
+      # The below one is as of March. 25, 2026.
+      POLKADOT_SDK_REF: "9d8a2fefd2414591c4a243460f3ffc5195a71deb"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
       RUSTFLAGS: "-Awarnings"

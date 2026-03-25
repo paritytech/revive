@@ -2,7 +2,9 @@
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH, YUL_INVALID_HEX_NIBBLES_PATH,
+    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH,
+    YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH, YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH,
+    YUL_INVALID_HEX_NIBBLES_PATH,
 };
 
 #[test]
@@ -34,4 +36,30 @@ fn bails_with_invalid_input_file() {
 
     let solc_result = execute_solc(&[YUL_INVALID_HEX_NIBBLES_PATH, SOLC_YUL_FLAG]);
     assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn duplicate_functions_in_switch_cases() {
+    let resolc_result = execute_resolc(&[
+        YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH,
+        RESOLC_YUL_FLAG,
+        "--bin",
+    ]);
+    assert_command_success(
+        &resolc_result,
+        "Duplicate function names in different switch cases",
+    );
+}
+
+#[test]
+fn duplicate_functions_deep_nesting() {
+    let resolc_result = execute_resolc(&[
+        YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH,
+        RESOLC_YUL_FLAG,
+        "--bin",
+    ]);
+    assert_command_success(
+        &resolc_result,
+        "Duplicate function names in deeply nested switch cases",
+    );
 }

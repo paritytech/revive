@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-575cfd18.js";
+            window.path_to_searchindex_js = "searchindex-33d72552.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6f3f265e.js"></script>
+        <script src="toc-196b9d9b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -643,7 +643,228 @@ contract Test is InnerContract {
 <p>We use upstream LLVM, but release and use our custom builds. We require the compiler builtins specifically built for the PVM <code>rv64emacb</code> target and always leave assertions on. Furthermore, we need cross builds because <code>resolc</code> itself targets emscripten and musl. The <a href="https://crates.io/crates/revive-llvm-builder">revive-llvm-builer</a> functions as a cross-platform build script and is used to build and release the LLVM dependency.</p>
 <p>We also maintain the <a href="https://crates.io/crates/lld-sys">lld-sys crate</a> for interfacing with <code>LLD</code>. The LLVM linker is used during the compilation process, but we don’t want to distribute another binary.</p>
 <h2 id="custom-optimizations"><a class="header" href="#custom-optimizations">Custom optimizations</a></h2>
-<p>At the moment, no significant custom optimizations are implemented. Thus, we are missing some optimization opportunities that neither <code>solc</code> nor LLVM can realize (due to their lack of domain specific knowledge about the semantics of our target environment). Furthermore, <code>solc</code> optimizes for EVM gas and a target machine orthogonal to our target (BE 256-bit stack machine EVM vs. 64-bit LE RISC architecture PVM). We have started working on an additional IR layer between Yul and LLVM to capture missed optimization opportunities, though.</p>
+<p>An experimental <a href="#the-newyork-optimizer"><code>newyork</code> optimizer</a> introduces a custom IR layer between Yul and LLVM IR to capture optimization opportunities that neither <code>solc</code> nor LLVM can realize on their own. <code>solc</code> optimizes for EVM gas on a 256-bit big-endian stack machine, while LLVM lacks the domain knowledge to understand EVM memory semantics or Solidity patterns. The newyork IR bridges this gap with passes for type narrowing, memory optimization, function deduplication, and more.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-newyork-optimizer"><a class="header" href="#the-newyork-optimizer">The newyork optimizer</a></h1>
+<p>The <code>newyork</code> crate (<code>crates/newyork/</code>) introduces an additional intermediate representation (IR) layer between Yul and LLVM IR. It enables domain-specific optimizations that neither <code>solc</code> nor LLVM can perform on their own, because they lack semantic knowledge about the cross-domain compilation from EVM to PolkaVM.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The newyork optimizer is experimental. It is gated behind the <code>RESOLC_USE_NEWYORK=1</code> environment variable (for standard JSON mode) or the <code>--newyork</code> CLI flag, and not yet enabled by default.</p>
+</blockquote>
+<h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
+<p>The EVM and PolkaVM are fundamentally different machines:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Property</th><th>EVM</th><th>PolkaVM (RISC-V)</th></tr>
+</thead>
+<tbody>
+<tr><td>Word size</td><td>256-bit</td><td>64-bit</td></tr>
+<tr><td>Endianness</td><td>Big-endian</td><td>Little-endian</td></tr>
+<tr><td>Architecture</td><td>Stack machine</td><td>Register-based</td></tr>
+<tr><td>Memory model</td><td>Linear with free pointer convention</td><td>Flat address space</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>solc</code> optimizes Yul IR for EVM gas costs on a 256-bit big-endian stack machine. LLVM, on the other hand, operates at too low a level to understand EVM memory semantics or Solidity patterns. By the time Yul reaches LLVM IR, the high-level intent is lost.</p>
+<p>The newyork IR sits between these two worlds and recovers enough semantic information to make optimization decisions that neither compiler can make alone.</p>
+<h2 id="pipeline-overview"><a class="header" href="#pipeline-overview">Pipeline overview</a></h2>
+<pre><code class="language-text">                    ┌──────────────────────────────────────────────────┐
+Yul AST ──────────► │                  newyork IR                      │ ──► LLVM IR ──► RISC-V
+            from_yul│                                                  │ to_llvm
+                    │  1. inline                                       │
+                    │  2. simplify (pass 1)                            │
+                    │  3. dedup (exact + fuzzy)                        │
+                    │  4. mem_opt + fmp_prop + keccak_fold             │
+                    │  5. simplify (pass 2)                            │
+                    │  6. compound_outlining + guard_narrow            │
+                    │  7. simplify (pass 3)                            │
+                    │  8. dedup (exact + fuzzy, pass 2)                │
+                    │  ── recursive on subobjects ──                   │
+                    │  9. heap_opt (analysis)                          │
+                    │ 10. type_inference (4 iterative rounds)          │
+                    │ 11. validate                                     │
+                    └──────────────────────────────────────────────────┘
+</code></pre>
+<p>The optimizer runs the following passes in order:</p>
+<ol>
+<li><strong>Inlining</strong> – custom heuristics tuned for PolkaVM call overhead, with Tarjan SCC-based recursion detection and quadratic leave-overhead modeling.</li>
+<li><strong>Simplify</strong> (pass 1) – constant folding, algebraic identities, strength reduction (<code>mul</code> by power-of-2 to <code>shl</code>), copy propagation, dead code elimination, environment read CSE (<code>callvalue</code>, <code>caller</code>, <code>origin</code>, etc.), and revert pattern outlining (panic selectors, custom error selectors).</li>
+<li><strong>Function deduplication</strong> – exact structural match, then fuzzy dedup (functions differing only in literal constants are parameterized and merged, up to 4 differing positions).</li>
+<li><strong>Memory optimization</strong> – load-after-store elimination, keccak256 fusion (<code>mstore</code> + <code>keccak256</code> sequences into <code>Keccak256Single</code>/<code>Keccak256Pair</code> nodes), free memory pointer propagation (replaces <code>mload(0x40)</code> with a known constant), and constant keccak256 folding (precomputes hashes of compile-time-constant inputs).</li>
+<li><strong>Simplify</strong> (pass 2) – cleans up dead code and new constant expressions exposed by memory optimization and keccak folding.</li>
+<li><strong>Compound outlining</strong> – detects <code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code> sequences and fuses them into <code>MappingSLoad</code>/<code>MappingSStore</code> IR nodes, eliminating intermediate hash values. <strong>Guard narrowing</strong> – detects <code>if gt(val, MASK) { revert }</code> and <code>iszero(eq(val, and(val, MASK)))</code> patterns and inserts AND-mask narrowing, giving type inference proof that values fit in fewer bits.</li>
+<li><strong>Simplify</strong> (pass 3) – propagates opportunities created by compound outlining and guard narrowing.</li>
+<li><strong>Function deduplication</strong> (pass 2) – catches new duplicates exposed by guard narrowing and compound outlining canonicalization.</li>
+<li><strong>Heap analysis</strong> – analyzes memory access patterns (alignment, static offsets, taintedness, escaping regions) to determine which accesses can use native little-endian layout, skipping byte-swap operations. Uses GCD-based alignment propagation and per-region taint tracking.</li>
+<li><strong>Type inference</strong> – narrows 256-bit values to smaller widths (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>) where provable. Runs iteratively for up to 4 cascading refinement rounds, combining forward min-width propagation, backward use-context demands, transparent-operation demand propagation, and interprocedural parameter/return narrowing.</li>
+<li><strong>Validation</strong> – checks SSA well-formedness (use-before-def, multiple definitions), yield count consistency, and function reference correctness.</li>
+</ol>
+<p>Steps 1-8 run recursively on subobjects (deployed contract code), where optimization impact is greatest. Steps 9-11 run on the full object tree.</p>
+<h2 id="ir-design"><a class="header" href="#ir-design">IR design</a></h2>
+<p>The newyork IR is an SSA form with structured control flow, inspired by MLIR’s SCF dialect. Key design choices:</p>
+<ul>
+<li><strong>Explicit types with address spaces</strong>: Every value carries a bit-width (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>, <code>I256</code>) and pointers carry address space information (<code>Heap</code>, <code>Stack</code>, <code>Storage</code>, <code>Code</code>). All values start as <code>I256</code> and are narrowed by type inference.</li>
+<li><strong>Pure expressions vs. effectful statements</strong>: Expressions compute values without side effects; statements perform memory, storage, or control flow effects. This separation simplifies analysis and rewriting.</li>
+<li><strong>Semantic annotations</strong>: Memory operations are tagged with region information (<code>Scratch</code>, <code>FreePointerSlot</code>, <code>Dynamic</code>). Storage operations carry static slot values when known at compile time.</li>
+<li><strong>Structured control flow</strong>: <code>If</code>, <code>Switch</code>, and <code>For</code> nodes preserve the high-level structure from Yul, with explicit region arguments and yields for value flow across control edges.</li>
+</ul>
+<h2 id="key-optimizations-explained"><a class="header" href="#key-optimizations-explained">Key optimizations explained</a></h2>
+<h3 id="type-narrowing"><a class="header" href="#type-narrowing">Type narrowing</a></h3>
+<p>EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:</p>
+<ul>
+<li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>)</li>
+<li><strong>Backward</strong>: constrains width from use-site contexts via 9 context types (<code>MemoryOffset</code> demands <code>I64</code>, <code>StorageAccess</code> demands <code>I256</code>, etc.)</li>
+<li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code></li>
+<li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types by analyzing callers and call sites, running up to 4 refinement rounds until a fixed point is reached. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
+</ul>
+<p>This allows LLVM to emit native 32/64-bit instructions instead of software-emulated 256-bit arithmetic, and eliminates expensive multi-instruction comparison sequences (16-20 RISC-V instructions for i256 comparisons reduced to 1-2 for i64).</p>
+<h3 id="guard-narrowing"><a class="header" href="#guard-narrowing">Guard narrowing</a></h3>
+<p>Solidity emits runtime guards that prove values fit in narrow ranges (e.g., address validation via <code>if gt(val, 2^160-1) { revert }</code>). The guard narrowing pass detects these patterns and inserts explicit AND-mask narrowing after the guard. This gives downstream type inference proof that the value fits in fewer bits, enabling cascading narrowing of comparisons, arithmetic, and memory operations that use the guarded value.</p>
+<p>Two pattern families are recognized:</p>
+<ul>
+<li><strong>GT-based guards</strong>: <code>if gt(val, MASK) { &lt;terminates&gt; }</code> where MASK is a boundary value like <code>2^N - 1</code></li>
+<li><strong>EQ-based guards</strong>: <code>iszero(eq(val, and(val, MASK)))</code> patterns common in Solidity’s address validation</li>
+</ul>
+<h3 id="heap-optimization"><a class="header" href="#heap-optimization">Heap optimization</a></h3>
+<p>PVM doesn’t provide EVM-compatible linear memory, so the compiler emulates it using a byte buffer with byte-swap operations for big-endian compatibility. The heap analysis pass determines which memory accesses can use native little-endian layout by analyzing access patterns:</p>
+<ul>
+<li>Tracks alignment and static offset information for all memory accesses using GCD-based propagation</li>
+<li>Propagates taintedness when addresses escape to external calls, are written by external sources (<code>codecopy</code>, <code>calldatacopy</code>), or use unaligned access patterns</li>
+<li>Tracks variable-accessed offsets to prevent mode mismatches between native and byte-swap accesses to the same location</li>
+<li>Handles loop-carried variables conservatively (marked as non-literal to prevent false constant propagation)</li>
+</ul>
+<p>The codegen backend supports four memory access modes: <code>AllNative</code> (all accesses skip byte-swap), <code>InlineNative</code> (constant-offset accesses use native layout), <code>InlineByteSwap</code> (constant-offset accesses use inline byte-swap), and <code>ByteSwap</code> (standard byte-swap through helper functions).</p>
+<h3 id="free-memory-pointer-range-proof"><a class="header" href="#free-memory-pointer-range-proof">Free memory pointer range proof</a></h3>
+<p>The Solidity free memory pointer (<code>mload(0x40)</code>) always fits in 32 bits at the IR level. By encoding this fact via a truncate-extend pair, LLVM’s range propagation eliminates overflow checks across the entire call graph. Despite only affecting a few direct sites, this produced a disproportionately large codesize reduction (see results below) due to LLVM’s multiplicative propagation effect.</p>
+<h3 id="keccak256-fusion-and-folding"><a class="header" href="#keccak256-fusion-and-folding">Keccak256 fusion and folding</a></h3>
+<p>Two complementary optimizations target the common Solidity pattern of hashing values for storage slot computation:</p>
+<ul>
+<li><strong>Fusion</strong>: Recognizes <code>mstore</code> + <code>keccak256</code> sequences and fuses them into dedicated IR nodes (<code>Keccak256Single</code>, <code>Keccak256Pair</code>), eliminating intermediate memory traffic.</li>
+<li><strong>Constant folding</strong>: When all keccak256 inputs are compile-time constants, the hash is computed at compile time and replaced with a literal.</li>
+</ul>
+<h3 id="compound-outlining-mapping-access"><a class="header" href="#compound-outlining-mapping-access">Compound outlining (mapping access)</a></h3>
+<p>Solidity mapping accesses follow a predictable pattern: hash a key with a storage slot, then load/store the result. The compound outlining pass detects <code>keccak256_pair(key, slot)</code> followed by <code>sload</code>/<code>sstore</code> and fuses them into <code>MappingSLoad</code>/<code>MappingSStore</code> IR nodes. These are lowered to outlined helper functions (<code>__revive_mapping_sload</code>, <code>__revive_mapping_sstore</code>) that combine the hash computation with the storage operation, eliminating intermediate values and redundant byte-swaps.</p>
+<h3 id="fuzzy-function-deduplication"><a class="header" href="#fuzzy-function-deduplication">Fuzzy function deduplication</a></h3>
+<p>Solidity generates many near-identical functions that differ only in literal constants (e.g., error selectors, storage slot offsets). Fuzzy deduplication identifies such groups, parameterizes the differing literals (up to 4 positions), and replaces all copies with calls to a single shared implementation.</p>
+<h3 id="revert-pattern-outlining"><a class="header" href="#revert-pattern-outlining">Revert pattern outlining</a></h3>
+<p>The simplify pass detects common revert patterns and replaces them with compact IR nodes:</p>
+<ul>
+<li><strong>Panic reverts</strong>: Solidity <code>Panic(uint256)</code> sequences (selector <code>0x4e487b71</code> + encoded panic code) are collapsed into <code>PanicRevert { code }</code> nodes, which are lowered to shared helper functions.</li>
+<li><strong>Custom error reverts</strong>: ABI-encoded custom error reverts with known selectors are collapsed into <code>CustomErrorRevert { selector, args }</code> nodes.</li>
+</ul>
+<p>These patterns appear dozens of times in typical contracts, and outlining them into shared blocks eliminates significant code duplication.</p>
+<h3 id="outlined-helper-functions"><a class="header" href="#outlined-helper-functions">Outlined helper functions</a></h3>
+<p>The LLVM codegen backend generates approximately 15 types of outlined helper functions for common operations:</p>
+<ul>
+<li><strong>Storage</strong>: <code>__revive_sload_word</code>, <code>__revive_sstore_word</code> (handle byte-swap internally)</li>
+<li><strong>Mapping</strong>: <code>__revive_mapping_sload</code>, <code>__revive_mapping_sstore</code> (keccak256 + storage in one call)</li>
+<li><strong>Callvalue</strong>: <code>__revive_callvalue</code>, <code>__revive_callvalue_nonzero</code> (boolean optimization for non-payable checks)</li>
+<li><strong>Calldataload</strong>: <code>__revive_calldataload</code> (outlined when &gt;= 20 call sites)</li>
+<li><strong>Memory</strong>: <code>__revive_store_bswap</code>, <code>__revive_exit_checked</code>, <code>__revive_return_word</code></li>
+<li><strong>Errors</strong>: <code>__revive_error_string_revert_N</code>, <code>__revive_custom_error_N</code> (per data-word count)</li>
+<li><strong>Keccak wrappers</strong>: <code>__revive_keccak256_slot_wrapper_*</code> (per constant slot)</li>
+</ul>
+<p>Additionally, common exit patterns (revert with constant length, zero-value returns) are deduplicated into shared LLVM basic blocks, saving hundreds of instruction copies in large contracts.</p>
+<h2 id="codesize-results"><a class="header" href="#codesize-results">Codesize results</a></h2>
+<h3 id="integration-test-contracts"><a class="header" href="#integration-test-contracts">Integration test contracts</a></h3>
+<p>Measured against the main branch baseline:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Contract</th><th>main (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
+</thead>
+<tbody>
+<tr><td>Baseline</td><td>870</td><td>649</td><td>-25.4%</td></tr>
+<tr><td>Computation</td><td>2,418</td><td>1,591</td><td>-34.2%</td></tr>
+<tr><td>DivisionArithmetics</td><td>9,327</td><td>7,681</td><td>-17.6%</td></tr>
+<tr><td>ERC20</td><td>17,160</td><td>11,849</td><td>-30.9%</td></tr>
+<tr><td>Events</td><td>1,662</td><td>1,434</td><td>-13.7%</td></tr>
+<tr><td>FibonacciIterative</td><td>1,427</td><td>1,201</td><td>-15.8%</td></tr>
+<tr><td>Flipper</td><td>2,240</td><td>1,536</td><td>-31.4%</td></tr>
+<tr><td>SHA1</td><td>8,009</td><td>5,958</td><td>-25.6%</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="openzeppelin-contracts"><a class="header" href="#openzeppelin-contracts">OpenZeppelin contracts</a></h3>
+<p>Measured on real-world contracts generated with the OpenZeppelin Wizard:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Contract</th><th>Baseline (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
+</thead>
+<tbody>
+<tr><td>Governor (oz_gov.sol)</td><td>147,712</td><td>105,448</td><td>-28.6%</td></tr>
+<tr><td>RWA Token (oz_rwa.sol)</td><td>79,991</td><td>56,936</td><td>-28.8%</td></tr>
+<tr><td>Stablecoin (oz_stable.sol)</td><td>82,660</td><td>61,801</td><td>-25.2%</td></tr>
+<tr><td>ERC-721</td><td>92,738</td><td>64,946</td><td>-30.0%</td></tr>
+<tr><td>ERC-1155</td><td>59,931</td><td>43,376</td><td>-27.6%</td></tr>
+<tr><td>ERC-20</td><td>83,863</td><td>59,724</td><td>-28.8%</td></tr>
+<tr><td>TimelockController</td><td>47,032</td><td>32,709</td><td>-30.5%</td></tr>
+</tbody>
+</table>
+</div>
+<p>The optimizer consistently achieves <strong>25-34% codesize reduction</strong> across both small test contracts and large real-world contracts.</p>
+<h2 id="development-history-and-challenges"><a class="header" href="#development-history-and-challenges">Development history and challenges</a></h2>
+<p>The newyork optimizer was developed over approximately three weeks in February 2026, largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:</p>
+<p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
+<p><strong>Phase 2 – Optimization passes</strong>: Once the baseline was stable, optimization passes were added iteratively: inlining, simplification, memory optimization, function deduplication, keccak256 fusion, and type inference. Each pass was validated against differential tests comparing EVM and PVM execution.</p>
+<p><strong>Phase 3 – Soundness hardening</strong>: Several type inference and narrowing approaches turned out to be unsound and had to be reworked:</p>
+<ul>
+<li>An early type inference approach caused namespace collisions across subobjects and was scoped per-object.</li>
+<li>Caller-based parameter narrowing was polluted by overly aggressive inference and replaced with body-based structural analysis.</li>
+<li>Backward demand-driven narrowing required multiple iterations to become provably safe.</li>
+</ul>
+<p><strong>Phase 4 – Measuring and tuning</strong>: Systematic measurement of OpenZeppelin contracts revealed which optimizations had the most impact and which approaches regressed performance.</p>
+<h3 id="approaches-that-did-not-work"><a class="header" href="#approaches-that-did-not-work">Approaches that did not work</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Approach</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td>Storage bswap decomposition (4x bswap.i64)</td><td>Regressed: LLVM handles bswap.i256 better natively</td></tr>
+<tr><td>NoInline on <code>__revive_int_truncate</code></td><td>+62% regression: PolkaVM call overhead exceeds inline cost</td></tr>
+<tr><td>Native FMP memory (inline sbrk)</td><td>Mixed: small contracts improved, large ones regressed from sbrk bloat</td></tr>
+<tr><td>Shared overflow trap block</td><td>Mixed: prevented LLVM from eliminating individual dead overflow checks</td></tr>
+</tbody>
+</table>
+</div>
+<p>These results highlight a recurring theme: interacting well with LLVM’s own optimization passes is critical. Optimizations at the IR level can inadvertently inhibit LLVM’s downstream passes, sometimes causing surprising regressions.</p>
+<h2 id="known-limitations-and-future-work"><a class="header" href="#known-limitations-and-future-work">Known limitations and future work</a></h2>
+<p>The following opportunities have been identified but are not yet implemented:</p>
+<ul>
+<li><strong>Bitwise algebraic simplifications</strong>: <code>BitAnd</code>, <code>BitOr</code>, <code>BitXor</code> identity patterns fall through without simplification.</li>
+<li><strong>Cross-control-flow memory optimization</strong>: Memory state is conservatively cleared at <code>if</code>/<code>switch</code>/<code>for</code> boundaries. Preserving state across simple branches would enable more load-after-store eliminations.</li>
+<li><strong>Adaptive inlining thresholds</strong>: Current thresholds are static constants. Profile-guided or contract-size-aware heuristics could improve decisions for diverse contract sizes.</li>
+<li><strong>Extended fuzzy deduplication</strong>: The current pass only compares functions by structure of <code>Let</code> bindings. Extending to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
+<li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structural correctness, but does not yet verify type consistency of operations (the <code>TypeMismatch</code> error variant exists but is not yet wired).</li>
+<li><strong>Loop variable narrowing</strong>: Loop-carried variables are conservatively widened to <code>I256</code>. Reaching a fixed-point across loop iterations could allow narrower types for simple counters.</li>
+</ul>
+<h2 id="module-reference"><a class="header" href="#module-reference">Module reference</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Module</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>lib.rs</code></td><td>Pipeline orchestration and pass sequencing</td></tr>
+<tr><td><code>ir.rs</code></td><td>Core IR data structures (types, expressions, statements, functions, objects)</td></tr>
+<tr><td><code>from_yul.rs</code></td><td>Yul AST to newyork IR translation (two-pass with forward reference support)</td></tr>
+<tr><td><code>to_llvm.rs</code></td><td>newyork IR to LLVM IR codegen with outlined helpers and narrowing</td></tr>
+<tr><td><code>simplify.rs</code></td><td>Constant folding, algebraic identities, strength reduction, copy propagation, DCE, environment read CSE, revert outlining, callvalue hoisting, function deduplication (exact and fuzzy), constant keccak folding</td></tr>
+<tr><td><code>inline.rs</code></td><td>Function inlining with PolkaVM-tuned heuristics (Tarjan SCC, leave elimination)</td></tr>
+<tr><td><code>type_inference.rs</code></td><td>Bidirectional integer width narrowing with transparent demand propagation</td></tr>
+<tr><td><code>mem_opt.rs</code></td><td>Load-after-store elimination, keccak256 fusion, FMP propagation</td></tr>
+<tr><td><code>heap_opt.rs</code></td><td>Heap access pattern analysis, alignment tracking, byte-swap elimination</td></tr>
+<tr><td><code>compound_outlining.rs</code></td><td>Mapping access pattern detection and fusion (<code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code>)</td></tr>
+<tr><td><code>guard_narrow.rs</code></td><td>Guard pattern detection and AND-mask narrowing insertion</td></tr>
+<tr><td><code>validate.rs</code></td><td>IR well-formedness checks (SSA, yields, function references)</td></tr>
+<tr><td><code>printer.rs</code></td><td>Human-readable IR pretty printer with configurable output</td></tr>
+<tr><td><code>ssa.rs</code></td><td>SSA construction helpers (scope management, phi-node merging)</td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

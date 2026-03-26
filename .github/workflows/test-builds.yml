@@ -114,7 +114,6 @@ jobs:
 
   run-differential-tests:
     needs: build
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     # TODO: Set when we know how long it usually takes.
     # timeout-minutes: 60
@@ -179,3 +178,13 @@ jobs:
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
           # TODO: expectations-file-path: ..
+
+  # Sentinel job that depends on the jobs we want to allow completing
+  # (instead of being canceled once the other job chains complete).
+  # Thus, run-differential-tests will always run even if compare-hashes finishes first.
+  wait-for-jobs:
+    if: ${{ always() }}
+    needs: [compare-hashes, run-differential-tests]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "All jobs finished"

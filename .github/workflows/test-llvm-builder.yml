@@ -45,6 +45,13 @@ jobs:
         run: |
           choco install ninja
 
+      # Provides MSVC toolchain (ml64, headers, libs) used by clang-cl when building LLVM.
+      - name: Set Up MSVC Developer Environment
+        if: matrix.runner == 'windows-2022'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Test
         run: make test-llvm-builder
         env:

@@ -101,6 +101,13 @@ jobs:
         run: |
           choco install ninja
 
+      # Provides MSVC toolchain (ml64, headers, libs) used by clang-cl when building LLVM.
+      - name: Set Up MSVC Developer Environment
+        if: ${{ matrix.host == 'windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Install LLVM Builder
         run: |
           cargo install --locked --force --path crates/llvm-builder

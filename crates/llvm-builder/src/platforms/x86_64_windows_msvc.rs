@@ -1,8 +1,8 @@
 //! The revive LLVM amd64 `windows-msvc` builder.
 //!
-//! Uses `clang-cl` and `lld-link` (Clang's MSVC-compatible drivers) instead of
-//! MSVC (`cl.exe`) to match the Clang toolchain used on our Linux and MacOS
-//! variants, while keeping the MSVC ABI and C++ runtime.
+//! Uses `clang-cl` and `lld-link` (Clang's MSVC-compatible drivers)
+//! to match the Clang toolchain used on our Linux and MacOS variants,
+//! while keeping the MSVC ABI and C++ runtime.
 
 use std::collections::HashSet;
 use std::process::Command;

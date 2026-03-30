@@ -114,6 +114,8 @@ runs:
               core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
               process.exit();
             }
+            // Use the API URL (rather than `browser_download_url`) so that
+            // the authorization header is respected for draft releases.
             return asset.url;
           }
 
@@ -127,6 +129,7 @@ runs:
     - name: download
       shell: bash
       run: |
+        # Pass the authorization token to allow downloading draft release assets.
         curl -sSLo llvm.tar.gz -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/octet-stream" ${{ steps.find.outputs.result }}
 
     - name: unpack

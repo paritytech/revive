@@ -127,7 +127,7 @@ runs:
     - name: download
       shell: bash
       run: |
-        curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
+        curl -sSLo llvm.tar.gz -H "Authorization: Bearer ${{ github.token }}" ${{ steps.find.outputs.result }}
 
     - name: unpack
       shell: bash

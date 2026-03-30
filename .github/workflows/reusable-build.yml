@@ -119,6 +119,8 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: ${{ matrix.target }}
+          # TODO: Remove after publishing the draft LLVM release.
+          version: "llvm-21.1.8-revive.c24d65b"
 
       - name: Build (Native)
         if: ${{ steps.cache.outputs.cache-hit != 'true' && matrix.type == 'native' }}
@@ -205,12 +207,16 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: x86_64-unknown-linux-gnu
+          # TODO: Remove after publishing the draft LLVM release.
+          version: "llvm-21.1.8-revive.c24d65b"
 
       - name: Download Wasm LLVM
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: wasm32-unknown-emscripten
+          # TODO: Remove after publishing the draft LLVM release.
+          version: "llvm-21.1.8-revive.c24d65b"
 
       - name: Download EMSDK
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}

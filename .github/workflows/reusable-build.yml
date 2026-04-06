@@ -120,7 +120,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           # TODO: Remove after publishing the draft LLVM release.
-          version: "llvm-21.1.8-revive.c24d65b"
+          version: "llvm-21.1.8-revive.f780256"
 
       - name: Build (Native)
         if: ${{ steps.cache.outputs.cache-hit != 'true' && matrix.type == 'native' }}

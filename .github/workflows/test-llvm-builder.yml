@@ -53,6 +53,7 @@ jobs:
           arch: x64
 
       - name: Apply LLVM fix (temporary)
+        shell: bash
         run: git -C llvm apply ../patches/llvm-190219.patch
 
       - name: Test

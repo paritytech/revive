@@ -116,6 +116,7 @@ jobs:
           cargo install --locked --force --path crates/llvm-builder
 
       - name: Apply LLVM fix (temporary)
+        shell: bash
         run: git -C llvm apply ../patches/llvm-190219.patch
 
       - name: Build LLVM

@@ -1,6 +1,6 @@
 //! The LLVM builder utilities.
 
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -9,12 +9,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 use path_slash::PathBufExt;
-
-/// The LLVM host repository URL.
-pub const LLVM_HOST_SOURCE_URL: &str = "https://github.com/llvm/llvm-project";
-
-/// The LLVM host repository tag.
-pub const LLVM_HOST_SOURCE_TAG: &str = "llvmorg-18.1.8";
 
 /// The minimum required XCode version.
 pub const XCODE_MIN_VERSION: u32 = 11;
@@ -216,6 +210,56 @@ pub fn install_emsdk() -> anyhow::Result<()> {
         "run 'source {}emsdk_env.sh' to finish the emsdk installation",
         emsdk_source_path.display()
     );
+
+    Ok(())
+}
+
+/// Applies all LLVM `.patch` files to the LLVM source.
+///
+/// Patches that have already been applied are skipped.
+pub fn apply_patches() -> anyhow::Result<()> {
+    let patches_directory = PathBuf::from(crate::LLVMPath::DIRECTORY_PATCHES);
+    if !patches_directory.exists() {
+        log::debug!("no patches directory found, skipping");
+        return Ok(());
+    }
+
+    let llvm_source = PathBuf::from(crate::LLVMPath::DIRECTORY_LLVM_SOURCE);
+    let mut patches: Vec<_> = read_dir(&patches_directory)?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "patch")
+        })
+        .collect();
+    patches.sort();
+
+    for patch in patches {
+        let patch = absolute_path(&patch)?;
+        let already_applied = Command::new("git")
+            .args(["apply", "--reverse", "--check"])
+            .arg(&patch)
+            .current_dir(&llvm_source)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+
+        if already_applied {
+            log::info!("patch already applied, skipping: {}", patch.display());
+            continue;
+        }
+
+        command(
+            Command::new("git")
+                .args(["apply"])
+                .arg(&patch)
+                .current_dir(&llvm_source),
+            &format!("applying patch {}", patch.display()),
+        )?;
+    }
 
     Ok(())
 }

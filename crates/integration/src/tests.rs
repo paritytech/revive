@@ -74,6 +74,7 @@ test_spec!(
     "StructDeleteStorage",
     "StructDeleteStorage.sol"
 );
+test_spec!(internal_fn, "InternalFn", "InternalFn.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

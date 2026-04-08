@@ -2871,6 +2871,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             context.set_code_type(revive_llvm_context::PolkaVMCodeType::Deploy);
         }
 
+        // Push a function scope for this object's frontend function declarations.
+        // The LLVM context requires a scope to track Yul-name → mangled-name mappings
+        // when declaring frontend functions via add_function(..., is_frontend: true).
+        context.push_function_scope();
+
         // First pass: declare all user-defined functions
         for (func_id, function) in &object.functions {
             self.declare_function(function, context)?;
@@ -2936,6 +2941,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.build_return(None);
 
         context.pop_debug_scope();
+        context.pop_function_scope();
 
         // Recursively handle subobjects (inner_object for deployed code)
         // Each subobject gets a fresh codegen instance for values (SSA values are scoped to objects)

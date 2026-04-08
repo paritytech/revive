@@ -108,14 +108,14 @@ jobs:
       - name: Build LLVM
         if: ${{ matrix.target != 'wasm32-unknown-emscripten' }}
         run: |
-          RUST_LOG=info revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld --llvm-projects clang
+          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld --llvm-projects clang
 
       - name: Build LLVM
         if: ${{ matrix.target == 'wasm32-unknown-emscripten' }}
         run: |
           revive-llvm emsdk
           source emsdk/emsdk_env.sh
-          RUST_LOG=info revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld
+          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld
 
       - name: Remove Unnecessary Binaries
         shell: bash

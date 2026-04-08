@@ -252,6 +252,7 @@ pub fn apply_patches() -> anyhow::Result<()> {
             continue;
         }
 
+        log::info!("applying patch: {}", patch.display());
         command(
             Command::new("git")
                 .args(["apply"])

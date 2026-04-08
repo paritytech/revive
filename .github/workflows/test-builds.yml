@@ -121,8 +121,6 @@ jobs:
       # TODO: Which Polkadot SDK commit do we want to use?
       # The below one is as of March. 25, 2026.
       POLKADOT_SDK_REF: "9d8a2fefd2414591c4a243460f3ffc5195a71deb"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       RUSTFLAGS: "-Awarnings"
     strategy:
       fail-fast: false
@@ -158,8 +156,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler llvm clang libclang-dev
 
-      - name: Run sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Install forklift
+        run: |
+          curl -fsSLo forklift https://github.com/paritytech/forklift/releases/download/0.15.0/forklift_0.15.0_linux_amd64
+          chmod +x forklift
+          sudo mv forklift /usr/local/bin/
 
       - name: Set Up Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -174,6 +175,7 @@ jobs:
         with:
           revive-differential-tests-path: revive/revive-differential-tests
           polkadot-sdk-path: ./polkadot-sdk
+          cargo-command: "forklift cargo"
           platform: ${{ matrix.platform }}
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}

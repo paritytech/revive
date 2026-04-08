@@ -52,10 +52,6 @@ jobs:
         with:
           arch: x64
 
-      - name: Apply LLVM fix (temporary)
-        shell: bash
-        run: git -C llvm apply ../patches/llvm-190219.patch
-
       - name: Test
         run: make test-llvm-builder
         env:

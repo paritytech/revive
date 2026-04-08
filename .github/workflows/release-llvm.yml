@@ -73,8 +73,6 @@ jobs:
       contents: write # for uploading assets to release
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -114,10 +112,6 @@ jobs:
       - name: Install LLVM Builder
         run: |
           cargo install --locked --force --path crates/llvm-builder
-
-      - name: Apply LLVM fix (temporary)
-        shell: bash
-        run: git -C llvm apply ../patches/llvm-190219.patch
 
       - name: Build LLVM
         if: ${{ matrix.target != 'wasm32-unknown-emscripten' }}

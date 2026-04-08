@@ -162,6 +162,11 @@ jobs:
           chmod +x forklift
           sudo mv forklift /usr/local/bin/
 
+      - name: Configure forklift
+        run: |
+          mkdir -p .forklift
+          cp polkadot-sdk/.forklift/config.toml .forklift/config.toml
+
       - name: Set Up Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:

@@ -35,6 +35,8 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: x86_64-unknown-linux-gnu
+          # TODO: Remove (testing draft release)
+          version: "llvm-21.1.8-revive.0f80912"
 
       - name: Set LLVM Environment Variables
         run: |

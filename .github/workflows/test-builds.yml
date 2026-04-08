@@ -114,7 +114,7 @@ jobs:
 
   run-differential-tests:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: parity-large
     # TODO: Set when we know how long it usually takes.
     # timeout-minutes: 60
     env:

@@ -1,4 +1,8 @@
-//! The revive LLVM amd64 `windows-gnu` builder.
+//! The revive LLVM amd64 `windows-msvc` builder.
+//!
+//! Uses `clang-cl` and `lld-link` (Clang's MSVC-compatible drivers)
+//! to match the Clang toolchain used on our Linux and MacOS variants,
+//! while keeping the MSVC ABI and C++ runtime.
 
 use std::collections::HashSet;
 use std::process::Command;
@@ -27,6 +31,9 @@ pub fn build(
     sanitizer: Option<Sanitizer>,
 ) -> anyhow::Result<()> {
     crate::utils::check_presence("cmake")?;
+    crate::utils::check_presence("clang-cl")?;
+    crate::utils::check_presence("lld-link")?;
+    crate::utils::check_presence("ninja")?;
 
     let llvm_module_llvm =
         LLVMPath::llvm_module_llvm().and_then(crate::utils::path_windows_to_unix)?;
@@ -43,12 +50,16 @@ pub fn build(
                 "-B",
                 llvm_build_final.to_string_lossy().as_ref(),
                 "-G",
-                "Visual Studio 17 2022",
+                "Ninja",
                 format!(
                     "-DCMAKE_INSTALL_PREFIX='{}'",
                     llvm_target_final.to_string_lossy().as_ref(),
                 )
                 .as_str(),
+                format!("-DCMAKE_BUILD_TYPE='{build_type}'").as_str(),
+                "-DCMAKE_C_COMPILER='clang-cl'",
+                "-DCMAKE_CXX_COMPILER='clang-cl'",
+                "-DLLVM_USE_LINKER='lld-link'",
                 format!(
                     "-DLLVM_TARGETS_TO_BUILD='{}'",
                     targets
@@ -99,17 +110,7 @@ pub fn build(
         "LLVM building cmake",
     )?;
 
-    crate::utils::command(
-        Command::new("cmake").args([
-            "--build",
-            llvm_build_final.to_string_lossy().as_ref(),
-            "--target",
-            "install",
-            "--config",
-            build_type.to_string().as_str(),
-        ]),
-        "Building with msbuild",
-    )?;
+    crate::utils::ninja(llvm_build_final.as_ref())?;
 
     Ok(())
 }

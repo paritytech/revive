@@ -8,7 +8,7 @@ inputs:
   target:
     required: true
   version:
-    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest LLVM release."
+    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest published LLVM release. To test a specific draft release, use the full name (e.g. 'llvm-21.1.8-revive.0f80912')."
     required: false
     default: ""
 

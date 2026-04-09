@@ -111,6 +111,10 @@ impl<'ctx> Function<'ctx> {
                         inkwell::attributes::AttributeLoc::Function,
                         Attribute::NoInline as u32,
                     );
+                    declaration.value.remove_enum_attribute(
+                        inkwell::attributes::AttributeLoc::Function,
+                        Attribute::OptimizeNone as u32,
+                    );
                     declaration.value.add_attribute(
                         inkwell::attributes::AttributeLoc::Function,
                         llvm.create_enum_attribute(*attribute_kind as u32, 0),
@@ -165,6 +169,15 @@ impl<'ctx> Function<'ctx> {
                 declaration,
                 &[Attribute::OptimizeForSize, Attribute::MinSize],
                 false,
+            );
+        }
+
+        if !optimizer.settings().is_middle_end_enabled() {
+            Self::set_attributes(
+                llvm,
+                declaration,
+                &[Attribute::NoInline, Attribute::OptimizeNone],
+                true,
             );
         }
 

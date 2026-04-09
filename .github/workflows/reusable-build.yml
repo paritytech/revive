@@ -37,6 +37,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:2a8837c43bf12e246f1ebd05191de9ee27fcd22f9ca81511ccd4cf75dc16d71c
+  # Empty string is interpreted as the latest published release.
+  # To test a specific draft release, use the full name (e.g. "llvm-21.1.8-revive.5789e11").
+  # TODO: Update to `""` after publishing the draft LLVM release.
+  LLVM_VERSION: "llvm-21.1.8-revive.5789e11"
 
 jobs:
   build:
@@ -119,8 +123,7 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: ${{ matrix.target }}
-          # TODO: Remove after publishing the draft LLVM release.
-          version: "llvm-21.1.8-revive.f780256"
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Build (Native)
         if: ${{ steps.cache.outputs.cache-hit != 'true' && matrix.type == 'native' }}
@@ -207,16 +210,14 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: x86_64-unknown-linux-gnu
-          # TODO: Remove after publishing the draft LLVM release.
-          version: "llvm-21.1.8-revive.c24d65b"
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Download Wasm LLVM
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: wasm32-unknown-emscripten
-          # TODO: Remove after publishing the draft LLVM release.
-          version: "llvm-21.1.8-revive.c24d65b"
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Download EMSDK
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}

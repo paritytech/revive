@@ -8,7 +8,7 @@ inputs:
   target:
     required: true
   version:
-    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest LLVM release."
+    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest published LLVM release. To test a specific draft release, use the full name (e.g. 'llvm-21.1.8-revive.0f80912')."
     required: false
     default: ""
 
@@ -114,7 +114,9 @@ runs:
               core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
               process.exit();
             }
-            return asset.browser_download_url;
+            // Use the API URL (rather than `browser_download_url`) so that
+            // the authorization header is respected for draft releases.
+            return asset.url;
           }
 
           if (versionPrefix) {
@@ -127,7 +129,8 @@ runs:
     - name: download
       shell: bash
       run: |
-        curl -sSLo llvm.tar.gz ${{ steps.find.outputs.result }}
+        # Pass the authorization token to allow downloading draft release assets.
+        curl -sSLo llvm.tar.gz -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/octet-stream" ${{ steps.find.outputs.result }}
 
     - name: unpack
       shell: bash

@@ -11,6 +11,7 @@ This is a development pre-release.
 
 - npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
 - Yul mode now properly exits when solc reports validation errors (e.g., invalid hex literals), matching `--standard-json` behavior. [#477](https://github.com/paritytech/revive/issues/477)
+- Fixed a bytecode divergence (yet functionally equivalent) between the resolc Linux/macOS builds and the Windows build for Solidity contracts containing a value multiplied by itself (e.g. via explicit squaring or exponentiation), manifesting primarily when using optimization level `-O0`. [#500](https://github.com/paritytech/revive/pull/500)
 
 ### Changed
 

@@ -183,7 +183,10 @@ jobs:
           platform: ${{ matrix.platform }}
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
-          # TODO: expectations-file-path: ..
+          # TODO: Verify that the expected failures in the files are actually expected.
+          #       The entries in those files come from the generated expectations file
+          #       from this run: https://github.com/paritytech/revive/actions/runs/24132123802/job/70412879350
+          expectations-file-path: ./revive/.github/assets/${{ matrix.platform }}.json
 
   # Sentinel job that depends on the jobs we want to allow completing
   # (instead of being canceled once the other job chains complete).

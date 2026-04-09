@@ -19,6 +19,7 @@ This is a development pre-release.
 - Updated `inkwell` to `0.8.0`
 - Updated `polkavm-*` to `0.31.0`
 - Updated `EMSDK` to `5.0.0`
+- Switched building LLVM for Windows from Visual Studio to MSVC-compatible Clang (clang-cl) and Ninja. [#497](https://github.com/paritytech/revive/pull/497)
 
 ## v1.0.0
 

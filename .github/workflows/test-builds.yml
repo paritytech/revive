@@ -115,16 +115,12 @@ jobs:
   run-differential-tests:
     needs: build
     runs-on: parity-large
-    timeout-minutes: 90
+    timeout-minutes: 75
     env:
       # TODO: Which Polkadot SDK commit do we want to use?
       # The below one is as of March. 25, 2026.
       POLKADOT_SDK_REF: "9d8a2fefd2414591c4a243460f3ffc5195a71deb"
       RUSTFLAGS: "-Awarnings"
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ["revive-dev-node-revm-solc", "revive-dev-node-polkavm-resolc"]
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4
@@ -180,17 +176,14 @@ jobs:
           revive-differential-tests-path: revive/revive-differential-tests
           polkadot-sdk-path: ./polkadot-sdk
           cargo-command: "forklift cargo"
-          platform: ${{ matrix.platform }}
+          platform: revive-dev-node-polkavm-resolc
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
-          # TODO: Verify that the expected failures in the files are actually expected.
-          #       The entries in those files come from the generated expectations file
-          #       from this run: https://github.com/paritytech/revive/actions/runs/24132123802/job/70412879350
-          expectations-file-path: ./revive/.github/assets/${{ matrix.platform }}.json
+          expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
 
-  # Sentinel job that depends on the jobs we want to allow completing
-  # (instead of being canceled once the other job chains complete).
-  # Thus, run-differential-tests will always run even if compare-hashes finishes first.
+  # Sentinel job that depends on the jobs we want to allow completing (instead of
+  # being canceled once the other job chains complete). Thus, run-differential-tests
+  # will always run even if compare-hashes finishes first, and vice versa.
   wait-for-jobs:
     if: ${{ always() }}
     needs: [compare-hashes, run-differential-tests]

@@ -2,16 +2,23 @@
 
 ## Unreleased
 
-This is a development pre-release.
+Supported `polkadot-sdk` rev: `2603`
+
+## v1.1.0
+
+Supported `polkadot-sdk` rev: `2603`
 
 ### Added
 - Support for solc v0.8.34.
+- Inherit `STDERR` in recursive processes, allowing debug logs to be printed to the console [#485](https://github.com/paritytech/revive/pull/485)
 
 ### Fixed
 
 - npm package: The `--bin` CLI flag was not producing bytecode because the `outputSelection` was not updated to explicitly requested it.
 - Yul mode now properly exits when solc reports validation errors (e.g., invalid hex literals), matching `--standard-json` behavior. [#477](https://github.com/paritytech/revive/issues/477)
 - Fixed a bytecode divergence (yet functionally equivalent) between the resolc Linux/macOS builds and the Windows build for Solidity contracts containing a value multiplied by itself (e.g. via explicit squaring or exponentiation), manifesting primarily when using optimization level `-O0`. [#500](https://github.com/paritytech/revive/pull/500)
+- Recursive processes use the current executable by default [#484](https://github.com/paritytech/revive/pull/484)
+- Work around some LLVM indeterminism problem [#500](https://github.com/paritytech/revive/pull/500)
 
 ### Changed
 
@@ -21,6 +28,7 @@ This is a development pre-release.
 - Updated `polkavm-*` to `0.31.0`
 - Updated `EMSDK` to `5.0.0`
 - Switched building LLVM for Windows from Visual Studio to MSVC-compatible Clang (clang-cl) and Ninja. [#497](https://github.com/paritytech/revive/pull/497)
+- Append optnone and noinline for -O0 optlevel [#502](https://github.com/paritytech/revive/pull/502)
 
 ## v1.0.0
 

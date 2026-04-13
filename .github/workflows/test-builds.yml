@@ -117,9 +117,11 @@ jobs:
     runs-on: parity-large
     timeout-minutes: 75
     env:
-      # TODO: Which Polkadot SDK commit do we want to use?
-      # The below one is as of March. 25, 2026.
-      POLKADOT_SDK_REF: "9d8a2fefd2414591c4a243460f3ffc5195a71deb"
+      # Commit SHA that produced the polkadot-sdk crate pinned in Cargo.toml,
+      # obtained from the crate's .cargo_vcs_info.json via:
+      # curl -sL https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO '*/.cargo_vcs_info.json'
+      # Current version: 2507.4.0
+      POLKADOT_SDK_REF: "60f0f390c895d79f9cccedd6e73c8266ab0860a8"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive
@@ -151,7 +153,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler llvm clang libclang-dev
 
-      - name: Install forklift
+      - name: Download forklift
         run: |
           curl -fsSLo forklift https://github.com/paritytech/forklift/releases/download/0.15.0/forklift_0.15.0_linux_amd64
           chmod +x forklift

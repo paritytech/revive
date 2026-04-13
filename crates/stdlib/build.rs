@@ -24,10 +24,17 @@ fn main() {
         "failed to assemble the stdlib: {output:?}"
     );
 
-    let bitcode = fs::read(bitcode_path).expect("bitcode should have been built");
+    // `inkwell::MemoryBuffer::create_from_memory_range` requires a trailing nul byte
+    // (it subtracts one from the length to drop the terminator), so we embed the bitcode
+    // with an extra nul byte appended.
+    let mut bitcode = fs::read(bitcode_path).expect("bitcode should have been built");
+    bitcode.push(0);
+    let padded_lib = "stdlib_nul.bc";
+    let padded_path = Path::new(&out_dir).join(padded_lib);
+    fs::write(&padded_path, &bitcode).expect("should be able to write in $OUT_DIR");
     let len = bitcode.len();
     let src_path = Path::new(&out_dir).join("stdlib.rs");
-    let src = format!("pub static BITCODE: &[u8; {len}] = include_bytes!(\"{lib}\");");
+    let src = format!("pub static BITCODE: &[u8; {len}] = include_bytes!(\"{padded_lib}\");");
     fs::write(src_path, src).expect("should be able to write in $OUT_DIR");
 
     println!("cargo:rerun-if-changed=stdlib.ll");

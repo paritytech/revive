@@ -1,5 +1,7 @@
 //! The LLVM intrinsic functions.
 
+use std::num::NonZeroU32;
+
 use inkwell::types::BasicType;
 
 use crate::polkavm::context::function::declaration::Declaration as FunctionDeclaration;
@@ -37,8 +39,17 @@ impl<'ctx> Intrinsics<'ctx> {
         module: &inkwell::module::Module<'ctx>,
     ) -> Self {
         let void_type = llvm.void_type();
-        let word_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
-        let address_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32);
+        let word_type = llvm
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_WORD as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width");
+        let address_type = llvm
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_ETH_ADDRESS as u32)
+                    .expect("const is non-zero"),
+            )
+            .expect("valid integer width");
 
         let trap = Self::declare(
             llvm,
@@ -94,13 +105,21 @@ impl<'ctx> Intrinsics<'ctx> {
         llvm: &'ctx inkwell::context::Context,
         name: &str,
     ) -> Vec<inkwell::types::BasicTypeEnum<'ctx>> {
-        let word_type = llvm.custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32);
+        let word_type = llvm
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_WORD as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width");
 
         match name {
             _ if name == Self::FUNCTION_BYTE_SWAP_WORD => vec![word_type.as_basic_type_enum()],
             _ if name == Self::FUNCTION_BYTE_SWAP_ETH_ADDRESS => {
                 vec![llvm
-                    .custom_width_int_type(revive_common::BIT_LENGTH_ETH_ADDRESS as u32)
+                    .custom_width_int_type(
+                        NonZeroU32::new(revive_common::BIT_LENGTH_ETH_ADDRESS as u32)
+                            .expect("const is non-zero"),
+                    )
+                    .expect("valid integer width")
                     .as_basic_type_enum()]
             }
             _ if name == Self::FUNCTION_COUNT_LEADING_ZEROS => {

@@ -24,7 +24,7 @@ jobs:
           - platform: linux-x86_64
             target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
-          - platform: macos-aarch64
+          - platform: macos-arm64
             target: universal-apple-darwin
             runner: macos-15
           - platform: macos-x86_64
@@ -90,7 +90,7 @@ jobs:
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-aarch64, hashes-macos-x86_64, hashes-windows-x86_64"
+          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-arm64, hashes-macos-x86_64, hashes-windows-x86_64"
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result
 

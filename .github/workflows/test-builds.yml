@@ -120,8 +120,8 @@ jobs:
       # Commit SHA that produced the polkadot-sdk crate pinned in Cargo.toml,
       # obtained from the crate's .cargo_vcs_info.json via:
       # curl -sL https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO '*/.cargo_vcs_info.json'
-      # Current version: 2507.4.0
-      POLKADOT_SDK_REF: "60f0f390c895d79f9cccedd6e73c8266ab0860a8"
+      # Current version: 2603.0.0
+      POLKADOT_SDK_REF: "c56b086a3cfcb3a48b75fd1ef9c77ad9b7408b95"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive

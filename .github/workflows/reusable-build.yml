@@ -185,13 +185,22 @@ jobs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
       resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
     steps:
+      - name: Check Build Cache
+        id: cache
+        uses: actions/cache@v5
+        with:
+          path: resolc-universal-apple-darwin
+          key: build-universal-apple-darwin-${{ github.sha }}
+
       - name: Download macOS Artifacts
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: actions/download-artifact@v4
         with:
           pattern: resolc-*-apple-darwin
           merge-multiple: true
 
       - name: Create macOS Fat Binary
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         run: |
           lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
           chmod +x resolc-universal-apple-darwin

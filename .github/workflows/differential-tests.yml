@@ -15,29 +15,8 @@ jobs:
       is_release: false
       retention_days: 1
 
-  create-macos-universal:
-    needs: build
-    runs-on: macos-15
-    steps:
-      - name: Download macOS Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: resolc-*-apple-darwin
-          merge-multiple: true
-
-      - name: Create macOS Fat Binary
-        run: |
-          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
-
-      - name: Upload Universal Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolc-universal-apple-darwin
-          path: resolc-universal-apple-darwin
-          retention-days: 1
-
   compile-and-export-hashes-native:
-    needs: [build, create-macos-universal]
+    needs: build
     strategy:
       fail-fast: false
       matrix:

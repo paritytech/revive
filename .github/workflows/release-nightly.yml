@@ -53,46 +53,11 @@ jobs:
       is_release: false
       retention_days: 40
 
-  create-macos-fat-binary:
-    if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
-    needs: [build]
-    outputs:
-      resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
-      resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
-    runs-on: macos-15
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-
-      - name: Create macOS Fat Binary
-        run: |
-          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
-
-      - name: Make Executable
-        run: |
-          chmod +x resolc-universal-apple-darwin
-
-      - uses: actions/upload-artifact@v4
-        id: artifact-upload-step
-        with:
-          name: resolc-universal-apple-darwin
-          path: resolc-universal-apple-darwin
-          retention-days: 40
-
-      - name: Set output variables
-        id: set-output
-        env:
-          TARGET: resolc-universal-apple-darwin
-        run: |
-          echo "${TARGET}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
-          echo "${TARGET}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
-
   generate-nightly-json:
     runs-on: ubuntu-24.04
     if: ${{ needs.check_commits.outputs.has_commits == 'true' }}
     environment: tags
-    needs: [build, create-macos-fat-binary, check_commits]
+    needs: [build, check_commits]
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4
@@ -129,8 +94,6 @@ jobs:
         run: |
           echo '[' > data.json
           echo '${{ toJSON(needs.build.outputs) }}' >> data.json
-          echo ',' >> data.json
-          echo '${{ toJSON(needs.create-macos-fat-binary.outputs) }}' >> data.json
           echo ']' >> data.json
           chmod +x bins/resolc-x86_64-unknown-linux-musl
           export FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")

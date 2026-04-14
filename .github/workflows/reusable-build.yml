@@ -25,6 +25,10 @@ on:
         value: ${{ jobs.build.outputs.resolc-x86_64-apple-darwin_url }}
       resolc-x86_64-apple-darwin_sha:
         value: ${{ jobs.build.outputs.resolc-x86_64-apple-darwin_sha }}
+      resolc-universal-apple-darwin_url:
+        value: ${{ jobs.create-macos-universal.outputs.resolc-universal-apple-darwin_url }}
+      resolc-universal-apple-darwin_sha:
+        value: ${{ jobs.create-macos-universal.outputs.resolc-universal-apple-darwin_sha }}
       resolc-x86_64-pc-windows-msvc_url:
         value: ${{ jobs.build.outputs.resolc-x86_64-pc-windows-msvc_url }}
       resolc-x86_64-pc-windows-msvc_sha:
@@ -169,6 +173,39 @@ jobs:
         run: |
           echo "resolc-${{ matrix.target }}_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
           echo "resolc-${{ matrix.target }}_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
+
+  create-macos-universal:
+    needs: build
+    runs-on: macos-15
+    outputs:
+      resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
+      resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}
+    steps:
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create macOS Fat Binary
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+          chmod +x resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        uses: actions/upload-artifact@v4
+        id: artifact-upload-step
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: ${{ inputs.retention_days }}
+
+      - name: Set output variables
+        if: ${{ !inputs.is_release }}
+        id: set-output
+        run: |
+          echo "resolc-universal-apple-darwin_url=${{ steps.artifact-upload-step.outputs.artifact-url }}" >> "$GITHUB_OUTPUT"
+          echo "resolc-universal-apple-darwin_sha=${{ steps.artifact-upload-step.outputs.artifact-digest }}" >> "$GITHUB_OUTPUT"
 
   build-wasm:
     runs-on: ubuntu-24.04

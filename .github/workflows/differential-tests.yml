@@ -6,7 +6,7 @@ on:
 env:
   # The compiler modes to use for compilation by retester.
   MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
-  SOLC_VERSION: "0.8.33"
+  SOLC_VERSION: "0.8.34"
 
 jobs:
   build:

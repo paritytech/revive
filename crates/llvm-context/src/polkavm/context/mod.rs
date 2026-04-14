@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use inkwell::debug_info::AsDIScope;
@@ -1208,23 +1209,37 @@ impl<'ctx> Context<'ctx> {
     /// Returns the default byte type.
     pub fn byte_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_BYTE as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_BYTE as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the integer type of the specified bit-length.
     pub fn integer_type(&self, bit_length: usize) -> inkwell::types::IntType<'ctx> {
-        self.llvm.custom_width_int_type(bit_length as u32)
+        self.llvm
+            .custom_width_int_type(
+                NonZeroU32::new(bit_length as u32).expect("bit length is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the XLEN witdh sized type.
     pub fn xlen_type(&self) -> inkwell::types::IntType<'ctx> {
-        self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
+        self.llvm
+            .custom_width_int_type(
+                NonZeroU32::new(crate::polkavm::XLEN as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the PolkaVM native register width sized type.
     pub fn register_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_X64 as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_X64 as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the sentinel pointer value.
@@ -1244,13 +1259,19 @@ impl<'ctx> Context<'ctx> {
     /// Returns the runtime value width sized type.
     pub fn value_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_VALUE as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_VALUE as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the default word type.
     pub fn word_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_WORD as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the array type with the specified length.

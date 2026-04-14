@@ -60,7 +60,6 @@ impl pallet_balances::Config for Runtime {
 impl pallet_timestamp::Config for Runtime {}
 
 parameter_types! {
-    pub const UnstableInterface: bool = true;
     pub const DebugFlag: bool = true;
     pub const DepositPerByte: Balance = 1;
     pub const DepositPerItem: Balance = 2;
@@ -81,7 +80,6 @@ impl pallet_revive::Config for Runtime {
     type AddressMapper = AccountId32Mapper<Self>;
     type RuntimeMemory = ConstU32<{ 512 * 1024 * 1024 }>;
     type PVFMemory = ConstU32<{ 1024 * 1024 * 1024 }>;
-    type UnsafeUnstableInterface = UnstableInterface;
     type UploadOrigin = EnsureSigned<Self::AccountId>;
     type InstantiateOrigin = EnsureSigned<Self::AccountId>;
     type CodeHashLockupDepositPercent = CodeHashLockupDepositPercent;

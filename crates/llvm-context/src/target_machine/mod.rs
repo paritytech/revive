@@ -59,10 +59,10 @@ impl TargetMachine {
     }
 
     /// Writes the LLVM module to a memory buffer.
-    pub fn write_to_memory_buffer(
+    pub fn write_to_memory_buffer<'ctx>(
         &self,
-        module: &inkwell::module::Module,
-    ) -> Result<inkwell::memory_buffer::MemoryBuffer, inkwell::support::LLVMString> {
+        module: &inkwell::module::Module<'ctx>,
+    ) -> Result<inkwell::memory_buffer::MemoryBuffer<'ctx>, inkwell::support::LLVMString> {
         match self.target {
             Target::PVM => self
                 .target_machine

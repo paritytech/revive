@@ -60,3 +60,8 @@ jobs:
 
       - name: Test docs
         run: make doc
+
+  run-differential-tests:
+    # Only run this if `test` successfully completes.
+    needs: test
+    uses: ./.github/workflows/differential-tests.yml

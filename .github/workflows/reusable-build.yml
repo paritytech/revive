@@ -177,6 +177,10 @@ jobs:
   create-macos-universal:
     needs: build
     runs-on: macos-15
+    concurrency:
+      # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
+      group: reusable-build-universal-apple-darwin-${{ github.sha }}
+      cancel-in-progress: false
     outputs:
       resolc-universal-apple-darwin_url: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_url }}
       resolc-universal-apple-darwin_sha: ${{ steps.set-output.outputs.resolc-universal-apple-darwin_sha }}

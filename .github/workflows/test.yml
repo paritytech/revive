@@ -61,7 +61,7 @@ jobs:
       - name: Test docs
         run: make doc
 
-  test-builds:
+  run-differential-tests:
     # Only run this if `test` successfully completes.
     needs: test
-    uses: ./.github/workflows/test-builds.yml
+    uses: ./.github/workflows/differential-tests.yml

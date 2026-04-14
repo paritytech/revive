@@ -115,7 +115,7 @@ jobs:
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result
 
-  run-differential-tests:
+  run-e2e-tests:
     needs: build
     runs-on: parity-large
     timeout-minutes: 75
@@ -187,11 +187,11 @@ jobs:
           expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
 
   # Sentinel job that depends on the jobs we want to allow completing (instead of
-  # being canceled once the other job chains complete). Thus, run-differential-tests
+  # being canceled once the other job chains complete). Thus, run-e2e-tests
   # will always run even if compare-hashes finishes first, and vice versa.
   wait-for-jobs:
     if: ${{ always() }}
-    needs: [compare-hashes, run-differential-tests]
+    needs: [compare-hashes, run-e2e-tests]
     runs-on: ubuntu-24.04
     steps:
       - run: echo "All jobs finished"

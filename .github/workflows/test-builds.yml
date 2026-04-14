@@ -19,13 +19,13 @@ jobs:
     needs: build
     runs-on: macos-15
     steps:
-      - name: Download MacOS artifacts
+      - name: Download macOS Artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: resolc-*-apple-darwin
           merge-multiple: true
 
-      - name: Create MacOS Fat Binary
+      - name: Create macOS Fat Binary
         run: |
           lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
 
@@ -42,13 +42,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: linux
+          - platform: linux-x86_64
             target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
-          - platform: macos
+          - platform: macos-aarch64
             target: universal-apple-darwin
             runner: macos-15
-          - platform: windows
+          - platform: macos-x86_64
+            target: universal-apple-darwin
+            runner: macos-15-intel
+          - platform: windows-x86_64
             target: x86_64-pc-windows-msvc
             runner: windows-2022
     runs-on: ${{ matrix.runner }}
@@ -108,7 +111,7 @@ jobs:
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          hash-artifact-names: "hashes-linux, hashes-macos, hashes-windows"
+          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-aarch64, hashes-macos-x86_64, hashes-windows-x86_64"
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result
 

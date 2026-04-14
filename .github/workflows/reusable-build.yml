@@ -251,7 +251,7 @@ jobs:
           node -e "
           // Make sure to require './solc/soljson' and not 'solc/soljson' in order to use
           // the explicitly downloaded solc, rather than resolving an npm package potentially
-          // installed in prior workflow jobs.
+          // installed in prior workflow steps.
           const soljson = require('./solc/soljson');
           const createRevive = require('./resolc-wasm32-unknown-emscripten/resolc.js');
 

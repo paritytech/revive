@@ -78,7 +78,7 @@ polkadot-sdk = { version = "=2603.0.0" }
 
 # llvm
 [workspace.dependencies.inkwell]
-path = "/Users/nikolaypanchenko/workspaces/inkwell"
+version = "0.9.0"
 default-features = false
 features = ["serde", "llvm22-1", "no-libffi-linking", "target-riscv"]
 

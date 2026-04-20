@@ -12,11 +12,8 @@ publish = false
 ignored = [
     "alloy-genesis",
     "polkadot-sdk",
-    "resolc",
-    "revive-differential",
     "revive-llvm-context",
     "revive-solc-json-interface",
-    "serde_json",
 ]
 
 [[bin]]
@@ -35,11 +32,13 @@ alloy-genesis = { workspace = true }
 anyhow = { workspace = true }
 hex = { workspace = true }
 rand = "0.9"
-regex = { workspace = true }
 serde_json = { workspace = true }
 env_logger = { workspace = true }
-log = { workspace = true }
 clap = { workspace = true, features = ["help", "std", "derive"] }
+serde = { workspace = true, features = ["derive"] }
+
+libc = { workspace = true }
+num_cpus = { workspace = true }
 
 polkadot-sdk.workspace = true
 polkadot-sdk.features = [

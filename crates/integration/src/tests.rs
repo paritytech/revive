@@ -75,6 +75,17 @@ test_spec!(
     "StructDeleteStorage.sol"
 );
 test_spec!(internal_fn, "InternalFn", "InternalFn.sol");
+test_spec!(
+    sub_type_validation,
+    "SubTypeValidation",
+    "SubTypeValidation.sol"
+);
+test_spec!(factorial, "Factorial", "Factorial.sol");
+test_spec!(
+    uint128_arithmetic,
+    "Uint128Arithmetic",
+    "Uint128Arithmetic.sol"
+);
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

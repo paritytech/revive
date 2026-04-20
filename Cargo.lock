@@ -9142,6 +9142,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "revive-fuzzer"
+version = "1.0.0"
+dependencies = [
+ "alloy-genesis",
+ "alloy-primitives",
+ "anyhow",
+ "clap",
+ "env_logger 0.11.8",
+ "hex",
+ "log",
+ "polkadot-sdk",
+ "rand 0.9.2",
+ "regex",
+ "resolc",
+ "revive-differential",
+ "revive-llvm-context",
+ "revive-runner",
+ "revive-solc-json-interface",
+ "serde_json",
+]
+
+[[package]]
 name = "revive-integration"
 version = "1.0.0"
 dependencies = [

@@ -614,30 +614,19 @@ impl TypeInference {
 
                 let demand = constraint.max_width;
                 if demand < BitWidth::I256 {
-                    // Standard narrowing: backward demand allows it directly.
                     // Clamp to at least I32 (XLEN on PolkaVM).
                     let clamped = demand.max(BitWidth::I32);
                     *param_ty = Type::Int(clamped);
                     changed = true;
-                    continue;
                 }
-
-                // Demand is I256 — check if only Comparison blocks narrowing.
-                // If non-comparison demand is narrow, we can safely narrow despite
-                // Comparison demanding I256. Safety:
-                // 1. Non-comparison uses only need ≤ N bits (proven by backward analysis)
-                // 2. Comparisons in the function body operate on the zero-extended
-                //    narrowed param, preserving semantics for in-range values
-                // 3. Out-of-range values (≥ 2^N) would break non-comparison uses too
-                //    (e.g., memory offsets → trap), so behavior is equivalent
-                let non_comp = self.non_comparison_demand(*param_id);
-                if non_comp >= BitWidth::I256 {
-                    continue;
-                }
-
-                let target = non_comp.max(BitWidth::I32);
-                *param_ty = Type::Int(target);
-                changed = true;
+                // If demand == I256 we do NOT narrow even when only Comparison uses
+                // block narrowing. Solidity's ABI validation emits
+                // `eq(val, and(val, mask))` to trap on out-of-range inputs; the
+                // comparison's correctness depends on observing val's *full* i256
+                // width. Pre-narrowing val loses the high bits the comparison is
+                // meant to detect and silently accepts out-of-range values. See
+                // the `sub_type_validation`, `factorial`, and `uint128_arithmetic`
+                // integration tests for the regression this prevents.
             }
         }
 

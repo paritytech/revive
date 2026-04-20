@@ -888,6 +888,15 @@ impl HeapOptResults {
 
     /// Checks if a static offset can use native byte order.
     pub fn can_use_native(&self, offset: u64) -> bool {
+        // Any fully dynamic mload/mstore may hit this offset in ByteSwap mode
+        // while a literal access here uses native (little-endian) storage.
+        // The dynamic read/write would disagree on byte order. Inline asm like
+        // `mload(calldataload(4))` is the canonical trigger — the fuzzer caught
+        // this on MLoad.loadAt where Solidity's prelude stores FMP at 0x40 in
+        // native mode and a dynamic mload(0x40) misinterprets the bytes as BE.
+        if self.has_dynamic_accesses {
+            return false;
+        }
         // When a static offset is also accessed via a non-literal expression
         // (e.g., `let size := 64; mload(size)`), LLVM may not see it as a constant.
         // The literal access would get InlineNative, but the variable access would
@@ -930,10 +939,18 @@ impl HeapOptResults {
     /// - A static `return` covers offset 0x40 (e.g., `return(0, 96)`)
     /// - A dynamic-length escape starts at or before 0x40 (e.g., `return(0, dynamic)`)
     /// - Offset 0x40 is accessed via a non-literal expression (LLVM won't see a constant)
+    /// - Any memory access uses a fully dynamic offset (could touch 0x40)
     pub fn fmp_native_safe(&self) -> bool {
         // If 0x40 is accessed via a variable, LLVM won't see a constant and will
         // use ByteSwap mode, mismatching with literal InlineNative stores.
         if self.variable_accessed_offsets.contains(&0x40) {
+            return false;
+        }
+        // A fully dynamic mload/mstore (offset unknown at compile time) may hit
+        // 0x40 using ByteSwap mode while the literal Solidity-prelude store at
+        // 0x40 uses InlineNative. The two disagree on byte order. See the
+        // matching check in `can_use_native`.
+        if self.has_dynamic_accesses {
             return false;
         }
         if self.has_return_covering_fmp {

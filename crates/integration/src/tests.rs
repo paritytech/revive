@@ -756,6 +756,32 @@ fn mload_huge_offset_traps() {
     .run();
 }
 
+/// Regression: `mload(0x40)` on a contract that only does inline-assembly
+/// `mload(dynamic)` must return Solidity's free-memory pointer (0x80).
+/// Fuzzer found divergence on offsets near 0x40 under newyork; suspected
+/// heap-optimization native-mode / byteswap mismatch.
+#[test]
+fn mload_at_fmp_slot() {
+    for &offset in &[0x40u64, 0x21, 0x3f, 0x42] {
+        let data = Contract::load_at(Uint::from(offset)).calldata;
+        let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
+        actions.append(&mut vec![Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        }]);
+        Specs {
+            actions,
+            differential: true,
+            ..Default::default()
+        }
+        .run();
+    }
+}
+
 /// Load from heap memory using an out of bounds offset and expect the
 /// contract to hit the `invalid` syscall to use all gas (like on EVM).
 ///

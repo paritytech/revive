@@ -2,9 +2,9 @@
   "Baseline": 479,
   "Computation": 1376,
   "DivisionArithmetics": 7192,
-  "ERC20": 9996,
+  "ERC20": 10138,
   "Events": 1279,
   "FibonacciIterative": 949,
-  "Flipper": 1078,
-  "SHA1": 5142
+  "Flipper": 1123,
+  "SHA1": 6286
 }

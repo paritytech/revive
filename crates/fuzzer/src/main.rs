@@ -46,6 +46,12 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     fail_fast: bool,
 
+    /// Loop forever: after draining the corpus, re-queue with a fresh seed
+    /// per contract (derived from the iteration number). SIGINT to stop.
+    /// Summary is printed periodically and on exit.
+    #[arg(long, default_value_t = false)]
+    forever: bool,
+
     /// Number of parallel worker processes (default: half of CPU count).
     #[arg(short, long)]
     jobs: Option<usize>,
@@ -93,37 +99,128 @@ fn run_parent(cli: Cli) -> Result<()> {
         .collect();
 
     let jobs = cli.jobs.unwrap_or_else(|| (num_cpus::get() / 2).max(1));
+    let exe = std::env::current_exe().context("current_exe")?;
 
     eprintln!(
-        "fuzzing {} files with {} workers, {} MB cap each",
+        "fuzzing {} files with {} workers, {} MB cap each{}",
         filtered.len(),
         jobs,
-        cli.memory_limit_mb
+        cli.memory_limit_mb,
+        if cli.forever {
+            " (forever; SIGINT to stop)"
+        } else {
+            ""
+        }
     );
 
-    let exe = std::env::current_exe().context("current_exe")?;
-    let queue = Arc::new(crossbeam_queue());
-    for p in &filtered {
-        queue.push(p.clone());
-    }
-
+    let stop_flag = install_sigint_handler();
     let total_calls = Arc::new(AtomicU64::new(0));
     let total_divergences = Arc::new(AtomicU64::new(0));
-    let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let start = Instant::now();
 
-    let mut handles = Vec::with_capacity(jobs);
-    for _ in 0..jobs {
-        let exe = exe.clone();
+    let mut pass = 0u64;
+    loop {
+        if stop_flag.load(Ordering::Relaxed) {
+            break;
+        }
+        // Each pass derives a fresh per-contract seed so we don't repeat
+        // the same boundary+random set every iteration. The first pass
+        // uses the user-provided seed unchanged, so single-shot runs
+        // remain reproducible.
+        let pass_seed = cli.seed.wrapping_add(pass);
+        let pass_calls = Arc::new(AtomicU64::new(0));
+        let pass_divs = Arc::new(AtomicU64::new(0));
+        let pass_start = Instant::now();
+        if cli.forever {
+            eprintln!("--- pass {pass} (seed {pass_seed}) ---");
+        }
+
+        run_pass(RunPass {
+            exe: &exe,
+            files: &filtered,
+            jobs,
+            stop_flag: &stop_flag,
+            cli: &cli,
+            seed: pass_seed,
+            pass_calls: &pass_calls,
+            pass_divs: &pass_divs,
+        });
+
+        let pc = pass_calls.load(Ordering::Relaxed);
+        let pd = pass_divs.load(Ordering::Relaxed);
+        total_calls.fetch_add(pc, Ordering::Relaxed);
+        total_divergences.fetch_add(pd, Ordering::Relaxed);
+
+        if cli.forever {
+            let pe = pass_start.elapsed().as_secs_f64();
+            eprintln!(
+                "pass {pass}: {pc} calls, {pd} divergences, {:.1}s ({:.0} calls/s) | totals: {} calls, {} divergences",
+                pe,
+                if pe > 0.0 { pc as f64 / pe } else { 0.0 },
+                total_calls.load(Ordering::Relaxed),
+                total_divergences.load(Ordering::Relaxed),
+            );
+        }
+
+        if !cli.forever {
+            break;
+        }
+        if cli.fail_fast && pd > 0 {
+            break;
+        }
+        pass = pass.wrapping_add(1);
+    }
+
+    let elapsed = start.elapsed();
+    let calls = total_calls.load(Ordering::Relaxed);
+    let divs = total_divergences.load(Ordering::Relaxed);
+    eprintln!("\n=== Summary ===");
+    eprintln!("passes:       {}", pass + 1);
+    eprintln!("calls:        {calls}");
+    eprintln!("divergences:  {divs}");
+    eprintln!("time:         {:.1}s", elapsed.as_secs_f64());
+    if elapsed.as_secs_f64() > 0.0 {
+        eprintln!(
+            "rate:         {:.1} calls/s",
+            calls as f64 / elapsed.as_secs_f64()
+        );
+    }
+
+    if divs > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+struct RunPass<'a> {
+    exe: &'a Path,
+    files: &'a [PathBuf],
+    jobs: usize,
+    stop_flag: &'a Arc<std::sync::atomic::AtomicBool>,
+    cli: &'a Cli,
+    seed: u64,
+    pass_calls: &'a Arc<AtomicU64>,
+    pass_divs: &'a Arc<AtomicU64>,
+}
+
+fn run_pass(p: RunPass) {
+    let queue = Arc::new(WorkQueue::default());
+    for path in p.files {
+        queue.push(path.clone());
+    }
+
+    let mut handles = Vec::with_capacity(p.jobs);
+    for _ in 0..p.jobs {
+        let exe = p.exe.to_path_buf();
         let queue = queue.clone();
-        let total_calls = total_calls.clone();
-        let total_divergences = total_divergences.clone();
-        let stop_flag = stop_flag.clone();
-        let memory_limit_mb = cli.memory_limit_mb;
-        let timeout = cli.worker_timeout_secs;
-        let num_inputs = cli.num_inputs;
-        let seed = cli.seed;
-        let fail_fast = cli.fail_fast;
+        let pass_calls = p.pass_calls.clone();
+        let pass_divs = p.pass_divs.clone();
+        let stop_flag = p.stop_flag.clone();
+        let memory_limit_mb = p.cli.memory_limit_mb;
+        let timeout = p.cli.worker_timeout_secs;
+        let num_inputs = p.cli.num_inputs;
+        let seed = p.seed;
+        let fail_fast = p.cli.fail_fast;
 
         handles.push(std::thread::spawn(move || {
             while !stop_flag.load(Ordering::Relaxed) {
@@ -139,9 +236,8 @@ fn run_parent(cli: Cli) -> Result<()> {
 
                 match result {
                     Ok(report) => {
-                        total_calls.fetch_add(report.calls, Ordering::Relaxed);
-                        total_divergences
-                            .fetch_add(report.divergences.len() as u64, Ordering::Relaxed);
+                        pass_calls.fetch_add(report.calls, Ordering::Relaxed);
+                        pass_divs.fetch_add(report.divergences.len() as u64, Ordering::Relaxed);
                         for div in &report.divergences {
                             print_divergence(&sol_path, div);
                         }
@@ -167,30 +263,43 @@ fn run_parent(cli: Cli) -> Result<()> {
     for h in handles {
         let _ = h.join();
     }
-
-    let elapsed = start.elapsed();
-    let calls = total_calls.load(Ordering::Relaxed);
-    let divs = total_divergences.load(Ordering::Relaxed);
-    eprintln!("\n=== Summary ===");
-    eprintln!("calls:        {calls}");
-    eprintln!("divergences:  {divs}");
-    eprintln!("time:         {:.1}s", elapsed.as_secs_f64());
-    if elapsed.as_secs_f64() > 0.0 {
-        eprintln!(
-            "rate:         {:.1} calls/s",
-            calls as f64 / elapsed.as_secs_f64()
-        );
-    }
-
-    if divs > 0 {
-        std::process::exit(1);
-    }
-    Ok(())
 }
 
-// Tiny lock-free-ish work queue. We don't pull in crossbeam just for this.
-fn crossbeam_queue() -> WorkQueue {
-    WorkQueue::default()
+/// SIGINT handler: flips a shared atomic so worker threads exit between
+/// contracts and the main loop breaks. The handler also resets SIGINT to
+/// default disposition so a second Ctrl-C kills immediately if we're stuck
+/// waiting on a worker.
+///
+/// The flag lives in a process-wide `OnceLock`; we publish a raw pointer to
+/// it via `AtomicPtr` so the C signal handler can reach it without UB
+/// around mutable statics.
+fn install_sigint_handler() -> Arc<std::sync::atomic::AtomicBool> {
+    use std::sync::atomic::AtomicPtr;
+    use std::sync::OnceLock;
+    static FLAG: OnceLock<Arc<std::sync::atomic::AtomicBool>> = OnceLock::new();
+    static FLAG_PTR: AtomicPtr<std::sync::atomic::AtomicBool> =
+        AtomicPtr::new(std::ptr::null_mut());
+    extern "C" fn handler(_: libc::c_int) {
+        let p = FLAG_PTR.load(Ordering::Relaxed);
+        if !p.is_null() {
+            unsafe { (*p).store(true, Ordering::Relaxed) };
+        }
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+        }
+    }
+    let flag = FLAG
+        .get_or_init(|| Arc::new(std::sync::atomic::AtomicBool::new(false)))
+        .clone();
+    FLAG_PTR.store(
+        Arc::as_ptr(&flag) as *mut std::sync::atomic::AtomicBool,
+        Ordering::Relaxed,
+    );
+    let handler_addr = handler as *const () as libc::sighandler_t;
+    unsafe {
+        libc::signal(libc::SIGINT, handler_addr);
+    }
+    flag
 }
 
 #[derive(Default)]

@@ -129,7 +129,17 @@ impl UseContext {
     /// Returns the maximum width needed for this use context.
     fn max_width_needed(&self) -> BitWidth {
         match self {
-            UseContext::MemoryOffset => BitWidth::I64,
+            // Memory-offset use must NOT drive narrowing. The mload/mstore
+            // codegen narrows the offset to xlen via a checked truncate
+            // (`safe_truncate_int_to_xlen`); demand-narrowing the source
+            // value to I64 first would silently drop the upper bits of an
+            // out-of-range offset before the check could observe it. This
+            // surfaced as `mload(2^128) == 0` returning success when it
+            // should OOG. Returning I256 here makes the value flow as i256
+            // and lets the use-site check trap correctly. Other use
+            // contexts (Arithmetic, StorageAccess, etc.) keep their wide
+            // demand for separate reasons.
+            UseContext::MemoryOffset => BitWidth::I256,
             UseContext::MemoryValue => BitWidth::I256,
             UseContext::StorageAccess => BitWidth::I256,
             UseContext::Comparison => BitWidth::I256, // Preserve, don't constrain

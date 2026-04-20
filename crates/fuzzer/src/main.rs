@@ -64,6 +64,13 @@ struct Cli {
     #[arg(long, default_value_t = 120)]
     worker_timeout_secs: u64,
 
+    /// Length of chained call sequences per Specs run. 1 = single-call mode
+    /// (fresh instantiate per input, current default). >= 2 runs a sequence
+    /// of randomly-picked function calls against a single instance so bugs
+    /// that depend on built-up storage or memory state can surface.
+    #[arg(long, default_value_t = 1)]
+    sequence_len: usize,
+
     /// Internal: run as a worker for the given .sol file (one path).
     #[arg(long, hide = true)]
     worker: Option<PathBuf>,
@@ -220,6 +227,7 @@ fn run_pass(p: RunPass) {
         let timeout = p.cli.worker_timeout_secs;
         let num_inputs = p.cli.num_inputs;
         let seed = p.seed;
+        let sequence_len = p.cli.sequence_len;
         let fail_fast = p.cli.fail_fast;
 
         handles.push(std::thread::spawn(move || {
@@ -232,6 +240,7 @@ fn run_pass(p: RunPass) {
                     timeout_secs: timeout,
                     num_inputs,
                     seed,
+                    sequence_len,
                 });
 
                 match result {
@@ -323,6 +332,7 @@ struct WorkerInvocation<'a> {
     timeout_secs: u64,
     num_inputs: usize,
     seed: u64,
+    sequence_len: usize,
 }
 
 enum WorkerFailure {
@@ -362,6 +372,8 @@ fn spawn_worker(inv: WorkerInvocation) -> Result<WorkerReport, WorkerFailure> {
         .arg(inv.num_inputs.to_string())
         .arg("--seed")
         .arg(inv.seed.to_string())
+        .arg("--sequence-len")
+        .arg(inv.sequence_len.to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -556,58 +568,118 @@ fn run_worker(sol_path: &Path, cli: &Cli) -> Result<()> {
     let mut rng = rand::rngs::SmallRng::seed_from_u64(cli.seed);
     let mut report = WorkerReport::default_with_version();
 
-    for func in &functions {
-        let inputs = generate_inputs(&func.input_types, cli.num_inputs, &mut rng);
-        for args in &inputs {
-            let calldata = encode_calldata(&func.selector, args);
-            report.calls += 1;
+    let balances = vec![
+        (ALICE, 1_000_000_000_000),
+        (BOB, 1_000_000_000_000),
+        (CHARLIE, 1_000_000_000_000),
+    ];
+    let make_instantiate = || SpecsAction::Instantiate {
+        origin: TestAddress::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: Some(DEPOSIT_LIMIT),
+        code: Code::Solidity {
+            path: Some(sol_path.to_path_buf()),
+            solc_optimizer: Some(true),
+            contract: contract_name.clone(),
+            libraries: Default::default(),
+        },
+        data: vec![],
+        salt: Default::default(),
+    };
+    let make_call = |calldata: Vec<u8>| SpecsAction::Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: Some(DEPOSIT_LIMIT),
+        data: calldata,
+    };
 
-            // Differential mode runs EVM (geth) + PVM (pallet-revive) and
-            // asserts they agree on output, balance, and storage. resolc's
-            // process-local cache means recompilation is free after the
-            // first call.
-            let result = std::panic::catch_unwind(|| {
-                let specs = Specs {
-                    differential: true,
-                    balances: vec![
-                        (ALICE, 1_000_000_000_000),
-                        (BOB, 1_000_000_000_000),
-                        (CHARLIE, 1_000_000_000_000),
-                    ],
-                    actions: vec![
-                        SpecsAction::Instantiate {
-                            origin: TestAddress::Alice,
-                            value: 0,
-                            gas_limit: Some(GAS_LIMIT),
-                            storage_deposit_limit: Some(DEPOSIT_LIMIT),
-                            code: Code::Solidity {
-                                path: Some(sol_path.to_path_buf()),
-                                solc_optimizer: Some(true),
-                                contract: contract_name.clone(),
-                                libraries: Default::default(),
-                            },
-                            data: vec![],
-                            salt: Default::default(),
-                        },
-                        SpecsAction::Call {
-                            origin: TestAddress::Alice,
-                            dest: TestAddress::Instantiated(0),
-                            value: 0,
-                            gas_limit: Some(GAS_LIMIT),
-                            storage_deposit_limit: Some(DEPOSIT_LIMIT),
-                            data: calldata.clone(),
-                        },
-                    ],
-                };
-                specs.run()
+    if cli.sequence_len <= 1 {
+        // Single-call path: boundary sweep + random inputs per function, each
+        // run starts from a fresh instance.
+        for func in &functions {
+            let inputs = generate_inputs(&func.input_types, cli.num_inputs, &mut rng);
+            for args in &inputs {
+                let calldata = encode_calldata(&func.selector, args);
+                report.calls += 1;
+
+                let result = std::panic::catch_unwind({
+                    let calldata = calldata.clone();
+                    let balances = balances.clone();
+                    let make_instantiate = &make_instantiate;
+                    let make_call = &make_call;
+                    move || {
+                        Specs {
+                            differential: true,
+                            balances,
+                            actions: vec![make_instantiate(), make_call(calldata)],
+                        }
+                        .run()
+                    }
+                });
+
+                if let Err(panic_info) = result {
+                    let detail = panic_message(&panic_info);
+                    report.divergences.push(Divergence {
+                        contract: contract_name.clone(),
+                        function: func.name.clone(),
+                        calldata_hex: hex::encode(&calldata),
+                        detail,
+                    });
+                    if report.divergences.len() >= MAX_DIVERGENCES_PER_WORKER {
+                        eprintln!("[{}] reached divergence cap, stopping", sol_path.display());
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        // Stateful sequence path: each run chains `sequence_len` randomly
+        // picked function calls against a single instance. Each Specs run
+        // counts as `sequence_len` calls. Divergences record the whole
+        // sequence (hex-concatenated with step separators).
+        let seq_len = cli.sequence_len;
+        for _ in 0..cli.num_inputs {
+            let mut actions = Vec::with_capacity(1 + seq_len);
+            actions.push(make_instantiate());
+            let mut step_calldatas: Vec<Vec<u8>> = Vec::with_capacity(seq_len);
+            let mut step_names: Vec<String> = Vec::with_capacity(seq_len);
+            for _ in 0..seq_len {
+                let func = &functions[rng.random_range(0..functions.len())];
+                let tuples = generate_inputs(&func.input_types, 1, &mut rng);
+                let args = tuples.last().cloned().unwrap_or_default();
+                let calldata = encode_calldata(&func.selector, &args);
+                step_names.push(func.name.clone());
+                step_calldatas.push(calldata.clone());
+                actions.push(make_call(calldata));
+            }
+            report.calls += seq_len as u64;
+
+            let result = std::panic::catch_unwind({
+                let balances = balances.clone();
+                move || {
+                    Specs {
+                        differential: true,
+                        balances,
+                        actions,
+                    }
+                    .run()
+                }
             });
 
             if let Err(panic_info) = result {
                 let detail = panic_message(&panic_info);
+                let seq_hex = step_calldatas
+                    .iter()
+                    .map(hex::encode)
+                    .collect::<Vec<_>>()
+                    .join(";");
                 report.divergences.push(Divergence {
                     contract: contract_name.clone(),
-                    function: func.name.clone(),
-                    calldata_hex: hex::encode(&calldata),
+                    function: step_names.join("->"),
+                    calldata_hex: seq_hex,
                     detail,
                 });
                 if report.divergences.len() >= MAX_DIVERGENCES_PER_WORKER {
@@ -802,6 +874,73 @@ fn is_simple_word_type(ty: &str) -> bool {
 // Input generation + calldata encoding
 // ---------------------------------------------------------------------------
 
+fn boundary_pool() -> Vec<U256> {
+    let one = U256::from(1u64);
+    vec![
+        // Small ints: most arithmetic / shift bugs hide near 0..=64.
+        U256::ZERO,
+        one,
+        U256::from(2u64),
+        U256::from(3u64),
+        U256::from(7u64),
+        U256::from(8u64),
+        U256::from(15u64),
+        U256::from(16u64),
+        U256::from(31u64),
+        U256::from(32u64),
+        U256::from(33u64),
+        U256::from(63u64),
+        U256::from(64u64),
+        U256::from(255u64),
+        U256::from(256u64),
+        // Power-of-two boundaries and neighbors (masking, truncation).
+        U256::from(0xFFu64),
+        U256::from(0xFFFFu64),
+        U256::from(0xFFFF_FFFFu64),
+        one << 32,
+        U256::from(0xFFFF_FFFF_FFFF_FFFFu64),
+        one << 64,
+        (one << 128) - one,
+        one << 128,
+        (one << 160) - one, // address max
+        one << 160,
+        // Signed boundaries (two's complement interpretation).
+        (one << 255) - one, // INT256_MAX
+        one << 255,         // INT256_MIN
+        U256::MAX - one,    // -2
+        U256::MAX,          // -1 / UINT256_MAX
+    ]
+}
+
+/// Pick one value for a single parameter slot. Mixes boundary hits with
+/// random samples biased toward a mix of common bit widths — uniform 256-bit
+/// randomness alone almost never produces arithmetically interesting values.
+fn pick_value(rng: &mut impl Rng, pool: &[U256]) -> U256 {
+    // 40% boundary, 60% bit-width-biased random.
+    if rng.random_range(0..10) < 4 {
+        return pool[rng.random_range(0..pool.len())];
+    }
+    let mut bytes = [0u8; 32];
+    rng.fill(&mut bytes);
+    let raw = U256::from_be_bytes(bytes);
+    let bits: u32 = match rng.random_range(0..8) {
+        0 => 8,
+        1 => 16,
+        2 => 32,
+        3 => 64,
+        4 => 128,
+        5 => 160,
+        6 => 192,
+        _ => 256,
+    };
+    if bits == 256 {
+        raw
+    } else {
+        let mask = (U256::from(1u64) << bits) - U256::from(1u64);
+        raw & mask
+    }
+}
+
 fn generate_inputs(
     types: &[SupportedType],
     num_random: usize,
@@ -810,32 +949,19 @@ fn generate_inputs(
     if types.is_empty() {
         return vec![vec![]];
     }
-    let boundary: [U256; 11] = [
-        U256::ZERO,
-        U256::from(1u64),
-        U256::from(2u64),
-        U256::from(31u64),
-        U256::from(32u64),
-        U256::from(0xFFu64),
-        U256::from(0xFFFF_FFFFu64),
-        U256::from(0xFFFF_FFFF_FFFF_FFFFu64),
-        U256::from(1u64) << 128,
-        U256::from(1u64) << 255,
-        U256::MAX,
-    ];
+    let pool = boundary_pool();
 
-    let mut inputs = Vec::with_capacity(boundary.len() + num_random);
-    // Boundary sweep: same boundary value across every parameter.
-    for v in &boundary {
+    let mut inputs = Vec::with_capacity(pool.len() + num_random);
+    // Uniform boundary sweep (same value across all parameters).
+    for v in &pool {
         inputs.push(vec![*v; types.len()]);
     }
-    // Random tuples.
+    // Mixed tuples: each parameter independently picks a boundary or a
+    // bit-width-biased random value.
     for _ in 0..num_random {
         let mut tuple = Vec::with_capacity(types.len());
         for _ in 0..types.len() {
-            let mut bytes = [0u8; 32];
-            rng.fill(&mut bytes);
-            tuple.push(U256::from_be_bytes(bytes));
+            tuple.push(pick_value(rng, &pool));
         }
         inputs.push(tuple);
     }

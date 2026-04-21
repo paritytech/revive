@@ -114,7 +114,13 @@ impl MemoryRegion {
         let addr_u64 = addr.to_u64_digits();
         if addr_u64.is_empty() || (addr_u64.len() == 1 && addr_u64[0] < 0x40) {
             MemoryRegion::Scratch
-        } else if addr_u64.len() == 1 && addr_u64[0] >= 0x40 && addr_u64[0] < 0x60 {
+        } else if addr_u64.len() == 1 && addr_u64[0] == 0x40 {
+            // Only offset 0x40 itself is the free-memory-pointer slot. Any other
+            // offset in 0x40..0x60 (e.g. 0x44 for ABI-encoded args to a custom
+            // error revert) stores ordinary data and must not be treated as an
+            // FMP store — otherwise the I64 narrowing for FMP values truncates
+            // i256 args. OZ `revert ERC20InsufficientBalance(..., 2^128-1)`
+            // dropped the upper 192 bits of `value` via this path.
             MemoryRegion::FreePointerSlot
         } else if addr_u64.len() == 1 && addr_u64[0] >= 0x80 {
             MemoryRegion::Dynamic

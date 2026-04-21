@@ -96,6 +96,7 @@ fn set_rustc_link_flags() {
         "LLVMVectorize",
         "LLVMSandboxIR",
         "LLVMExtensions",
+        "LLVMDTLTO",
     ] {
         println!("cargo:rustc-link-lib=static={lib}");
     }

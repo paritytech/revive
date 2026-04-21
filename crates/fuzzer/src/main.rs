@@ -515,48 +515,57 @@ fn run_worker(sol_path: &Path, cli: &Cli) -> Result<()> {
         emit_report(WorkerReport::default_with_version());
         return Ok(());
     }
-    let (contract_name, functions) = match abi_contracts
+    // Flattened multi-contract files (forge flatten of OZ imports, etc.) list
+    // the concrete target contract *after* all its abstract bases. Picking the
+    // first contract with a non-empty ABI lands on an abstract base whose EVM
+    // deploy reverts. Try candidates in reverse order so the concrete contract
+    // gets first shot at the pre-flight; fall back to earlier ones if it fails.
+    let candidates: Vec<(String, Vec<AbiFunction>)> = abi_contracts
         .into_iter()
-        .find(|(_, funcs)| !funcs.is_empty())
-    {
+        .filter(|(_, funcs)| !funcs.is_empty())
+        .rev()
+        .collect();
+    if candidates.is_empty() {
+        emit_report(WorkerReport::default_with_version());
+        return Ok(());
+    }
+    let mut picked: Option<(String, Vec<AbiFunction>)> = None;
+    for (name, funcs) in candidates {
+        let preflight = std::panic::catch_unwind(|| {
+            revive_differential::Evm::default()
+                .code_blob(
+                    hex::encode(resolc::test_utils::compile_evm_deploy_code(
+                        &name,
+                        &source,
+                        true,
+                        Default::default(),
+                    ))
+                    .as_bytes()
+                    .to_vec(),
+                )
+                .deploy(true)
+                .run()
+        });
+        let ok = matches!(
+            preflight,
+            Ok(log) if log.account_deployed.is_some() && log.output.error.is_none()
+        );
+        if ok {
+            picked = Some((name, funcs));
+            break;
+        }
+    }
+    let (contract_name, functions) = match picked {
         Some(x) => x,
         None => {
+            eprintln!(
+                "[{}] skipping: no contract in file had a no-arg EVM deploy that succeeded",
+                sol_path.display(),
+            );
             emit_report(WorkerReport::default_with_version());
             return Ok(());
         }
     };
-
-    // Pre-flight: try a no-arg deploy on EVM. If it reverts, the contract
-    // wants constructor args we don't know how to synthesize, so skip rather
-    // than producing a wall of bogus "deploy mismatch" divergences.
-    let preflight = std::panic::catch_unwind(|| {
-        revive_differential::Evm::default()
-            .code_blob(
-                hex::encode(resolc::test_utils::compile_evm_deploy_code(
-                    &contract_name,
-                    &source,
-                    true,
-                    Default::default(),
-                ))
-                .as_bytes()
-                .to_vec(),
-            )
-            .deploy(true)
-            .run()
-    });
-    let preflight_ok = match preflight {
-        Ok(log) => log.account_deployed.is_some() && log.output.error.is_none(),
-        Err(_) => false,
-    };
-    if !preflight_ok {
-        eprintln!(
-            "[{}] skipping {}: EVM deploy with empty calldata failed (needs ctor args?)",
-            sol_path.display(),
-            contract_name
-        );
-        emit_report(WorkerReport::default_with_version());
-        return Ok(());
-    }
 
     eprintln!(
         "[{}] fuzzing {} ({} functions)",
@@ -761,7 +770,12 @@ fn solc_extract_abi(path: &Path, source: &str) -> Result<Vec<(String, Vec<AbiFun
             }
         },
         "settings": {
-            "outputSelection": { "*": { "*": ["abi"] } }
+            // Also request evm.bytecode so we can tell whether a contract is
+            // deployable (concrete). Interfaces and abstract contracts have
+            // empty bytecode, and we want to filter those out — otherwise a
+            // flattened multi-contract file drives the fuzzer at an interface
+            // whose EVM "deploys" to empty runtime and every call diverges.
+            "outputSelection": { "*": { "*": ["abi", "evm.bytecode.object"] } }
         }
     });
 
@@ -797,6 +811,17 @@ fn solc_extract_abi(path: &Path, source: &str) -> Result<Vec<(String, Vec<AbiFun
             let Some(abi) = contract.get("abi").and_then(|a| a.as_array()) else {
                 continue;
             };
+            // Skip interfaces and abstract contracts — solc emits empty
+            // bytecode for them and deploying yields a contract with no code,
+            // so every call trivially "diverges" vs. PVM.
+            let bytecode_empty = contract
+                .pointer("/evm/bytecode/object")
+                .and_then(|b| b.as_str())
+                .map(|s| s.is_empty())
+                .unwrap_or(true);
+            if bytecode_empty {
+                continue;
+            }
             let funcs = parse_fuzzable_functions(abi);
             result.push((name.clone(), funcs));
         }

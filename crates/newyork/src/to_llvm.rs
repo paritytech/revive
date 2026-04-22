@@ -4102,15 +4102,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let scrut_type = scrut_val.get_type();
                 let join_block = context.append_basic_block("switch_join");
 
-                // Create case blocks with constants matching scrutinee width
+                // Create case blocks with constants matching scrutinee width.
+                // Case values can be up to 256 bits (e.g. switching on a keccak
+                // hash or extcodehash), so build them from BigUint limbs rather
+                // than assuming they fit in u64.
                 let mut case_blocks = Vec::new();
                 for (idx, case) in cases.iter().enumerate() {
                     let case_block = context.append_basic_block(&format!("switch_case_{}", idx));
-                    let case_u64 = case
-                        .value
-                        .to_u64()
-                        .unwrap_or_else(|| panic!("Case value too large"));
-                    let case_val = scrut_type.const_int(case_u64, false);
+                    let digits = case.value.to_u64_digits();
+                    let case_val = if digits.is_empty() {
+                        scrut_type.const_zero()
+                    } else {
+                        scrut_type.const_int_arbitrary_precision(&digits)
+                    };
                     case_blocks.push((case_val, case_block, &case.body));
                 }
 

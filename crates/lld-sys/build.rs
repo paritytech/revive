@@ -99,6 +99,8 @@ fn set_rustc_link_flags() {
         "LLVMSandboxIR",
         "LLVMExtensions",
         "LLVMDTLTO",
+        "LLVMPlugins",
+        "LLVMFrontendHLSL",
     ] {
         println!("cargo:rustc-link-lib=static={lib}");
     }

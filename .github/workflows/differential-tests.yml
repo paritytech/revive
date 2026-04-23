@@ -76,8 +76,49 @@ jobs:
           platform-label: ${{ matrix.platform }}
           upload-artifact-name: hashes-${{ matrix.platform }}
 
+  compile-and-export-hashes-wasm:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+        with:
+          path: revive
+          submodules: recursive
+
+      - name: Download Wasm Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: resolc.{js,wasm}
+          path: resolc-wasm
+          merge-multiple: true
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "lts/*"
+
+      - name: Compile Contracts
+        id: compile
+        uses: ./revive/revive-differential-tests/.github/actions/compile-contracts
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          resolc-path: resolc-wasm/resolc.js
+          solc-version: ${{ env.SOLC_VERSION }}
+          modes: ${{ env.MODES }}
+          upload-artifact-name: compilation-report-wasm
+
+      - name: Export Bytecode Hashes
+        uses: ./revive/revive-differential-tests/.github/actions/export-bytecode-hashes
+        with:
+          revive-differential-tests-path: revive/revive-differential-tests
+          report-path: ${{ steps.compile.outputs.report-path }}
+          remove-prefix: ${{ steps.compile.outputs.contracts-source-prefix }}
+          platform-label: wasm
+          upload-artifact-name: hashes-wasm
+
   compare-hashes:
-    needs: compile-and-export-hashes-native
+    needs: [compile-and-export-hashes-native, compile-and-export-hashes-wasm]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
@@ -90,7 +131,7 @@ jobs:
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-arm64, hashes-macos-x86_64, hashes-windows-x86_64"
+          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-arm64, hashes-macos-x86_64, hashes-windows-x86_64, hashes-wasm"
           modes: ${{ env.MODES }}
           upload-artifact-name: hash-comparison-result
 

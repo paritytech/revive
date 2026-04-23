@@ -9,6 +9,8 @@ fn set_rustc_link_flags() {
         llvm_lib_path.to_string_lossy()
     );
 
+    let llvm_built_with_libcxx = llvm_lib_path.join("libc++.a").exists();
+
     for lib in [
         // These are required by ld.lld
         "lldELF",
@@ -102,10 +104,14 @@ fn set_rustc_link_flags() {
     }
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     if target_os == "linux" {
-        if target_env == "musl" {
+        if llvm_built_with_libcxx {
+            // LLVM archives reference `std::__1::…` and unwinder symbols that
+            // `libstdc++` does not provide; pull them from the LLVM prefix.
             println!("cargo:rustc-link-lib=static=c++");
+            if llvm_lib_path.join("libunwind.a").exists() {
+                println!("cargo:rustc-link-lib=static=unwind");
+            }
         } else {
             println!("cargo:rustc-link-lib=dylib=stdc++");
         }

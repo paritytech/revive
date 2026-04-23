@@ -77,7 +77,6 @@ pub fn build(
         llvm_module_llvm.as_path(),
         llvm_build_final.as_path(),
         llvm_target_final.as_path(),
-        musl_target.as_path(),
         llvm_target_host.as_path(),
         enable_tests,
         enable_coverage,
@@ -269,7 +268,6 @@ fn build_target(
     source_directory: &Path,
     build_directory: &Path,
     target_directory: &Path,
-    musl_target_directory: &Path,
     host_target_directory: &Path,
     enable_tests: bool,
     enable_coverage: bool,
@@ -366,26 +364,21 @@ fn build_target(
 
     crate::utils::ninja(build_directory)?;
 
-    let mut musl_lib_directory = musl_target_directory.to_path_buf();
-    musl_lib_directory.push("lib/");
-
     let mut host_lib_directory = host_target_directory.to_path_buf();
     host_lib_directory.push("lib/aarch64-unknown-linux-musl/");
 
     let mut target_lib_directory = target_directory.to_path_buf();
     target_lib_directory.push("lib/");
 
+    // Stage libc++/libunwind alongside the LLVM archives so `LLVM_SYS_221_PREFIX`
+    // consumers can resolve the libc++ symbols they reference. The musl sysroot
+    // is not copied: it would shadow the host libc on the link search path.
     let copy_options = fs_extra::dir::CopyOptions {
         overwrite: true,
         copy_inside: true,
         content_only: true,
         ..Default::default()
     };
-    fs_extra::dir::copy(
-        musl_lib_directory,
-        target_lib_directory.as_path(),
-        &copy_options,
-    )?;
     fs_extra::dir::copy(
         host_lib_directory,
         target_lib_directory.as_path(),

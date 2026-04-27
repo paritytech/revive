@@ -88,9 +88,22 @@ runs:
             core.info(`  - ${r.tag_name} (published: ${r.published_at})`);
           });
 
-          let llvmRelease = allReleases.find(r => r.html_url && r.html_url.endsWith('/releases/tag/untagged-7b697020fcbbbca97a94'));
-          if (llvmRelease) {
-            core.info(`Selected pinned draft LLVM release: ${llvmRelease.html_url}`);
+          // Find the appropriate LLVM release
+          let llvmRelease;
+          if (versionPrefix) {
+            // Search for latest release matching the version prefix
+            llvmRelease = llvmReleases.find(release => {
+              return release.tag_name.startsWith(versionPrefix);
+            });
+            if (llvmRelease) {
+              core.info(`Selected LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
+            }
+          } else {
+            // Find latest LLVM release (first in sorted list)
+            llvmRelease = llvmReleases[0];
+            if (llvmRelease) {
+              core.info(`Selected latest LLVM version: ${llvmRelease.tag_name}`);
+            }
           }
 
           if (llvmRelease) {

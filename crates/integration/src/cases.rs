@@ -309,15 +309,7 @@ mod tests {
 
     #[test]
     fn codesize() {
-        // Use different file for newyork path to track optimizations separately
-        let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
-            .map(|v| v == "1")
-            .unwrap_or(false);
-        let path = if use_newyork {
-            "codesize_newyork.json"
-        } else {
-            "codesize.json"
-        };
+        let path = "codesize.json";
 
         let existing = File::open(path)
             .map(|file| {

@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Supported `polkadot-sdk` rev: `2603`
-- Updated `LLVM` from `21.1.8` to LLVM `22.1.3`
+- Updated `LLVM` from `21.1.8` to LLVM `22.1.4`
 
 ## v1.1.0
 

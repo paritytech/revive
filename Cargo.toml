@@ -80,7 +80,7 @@ polkadot-sdk = { version = "=2603.0.0" }
 [workspace.dependencies.inkwell]
 version = "0.9.0"
 default-features = false
-features = ["serde", "llvm21-1", "no-libffi-linking", "target-riscv"]
+features = ["serde", "llvm22-1", "no-libffi-linking", "target-riscv"]
 
 [profile.bench]
 inherits = "release"

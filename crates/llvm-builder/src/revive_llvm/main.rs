@@ -7,8 +7,13 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use clap::Parser;
+use revive_llvm_builder::target_env::TargetEnv;
 
 use self::arguments::{Arguments, Subcommand};
+
+/// RUSTFLAGS required when operating in a musl target environment so that the
+/// C runtime is linked dynamically rather than statically.
+const MUSL_RUSTFLAGS: &str = "-Ctarget-feature=-crt-static";
 
 fn main() {
     env_logger::init();
@@ -24,6 +29,10 @@ fn main() {
 
 fn main_inner() -> anyhow::Result<()> {
     let arguments = Arguments::parse();
+
+    if arguments.target_env == TargetEnv::MUSL {
+        std::env::set_var("RUSTFLAGS", MUSL_RUSTFLAGS);
+    }
 
     revive_llvm_builder::utils::directory_target_llvm(arguments.target_env);
 

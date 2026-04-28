@@ -819,3 +819,107 @@ fn safe_truncate_int_to_xlen_works() {
 
     assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
+
+/// Inline-source repros for ABI sub-type validation under the cycles
+/// optimizer preset, kept narrow on purpose (single uint8 parameter, no
+/// imports) so a regression points directly at calldata range-check
+/// codegen rather than at any of the larger fixtures.
+mod uint8_abi_validation {
+    use revive_runner::*;
+
+    fn compile_test_blob() -> Vec<u8> {
+        let source = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+contract Test {
+    function main(uint8 x) public pure returns (uint8) {
+        return x;
+    }
+}
+"#;
+        resolc::test_utils::compile_blob_with_options(
+            "Test",
+            source,
+            false,
+            revive_llvm_context::OptimizerSettings::cycles(),
+            Default::default(),
+        )
+    }
+
+    /// `main(uint8)` with `0x100000000` — a value that fits in i256 but not
+    /// in uint8. The ABI decoder must reject it.
+    #[test]
+    fn rejects_out_of_range_uint8() {
+        let calldata =
+            hex::decode("ebbee3910000000000000000000000000000000000000000000000000000000100000000")
+                .unwrap();
+
+        Specs {
+            differential: false,
+            balances: vec![(ALICE, 1_000_000_000_000)],
+            actions: vec![
+                SpecsAction::Instantiate {
+                    origin: TestAddress::Alice,
+                    value: 0,
+                    gas_limit: Some(GAS_LIMIT),
+                    storage_deposit_limit: Some(DEPOSIT_LIMIT),
+                    code: Code::Bytes(compile_test_blob()),
+                    data: vec![],
+                    salt: Default::default(),
+                },
+                SpecsAction::Call {
+                    origin: TestAddress::Alice,
+                    dest: TestAddress::Instantiated(0),
+                    value: 0,
+                    gas_limit: Some(GAS_LIMIT),
+                    storage_deposit_limit: Some(DEPOSIT_LIMIT),
+                    data: calldata,
+                },
+                SpecsAction::VerifyCall(VerifyCallExpectation {
+                    success: false,
+                    gas_consumed: None,
+                    output: Default::default(),
+                }),
+            ],
+        }
+        .run();
+    }
+
+    /// `main(uint8)` with `5` — an in-range value. Must succeed.
+    #[test]
+    fn accepts_in_range_uint8() {
+        let calldata =
+            hex::decode("ebbee3910000000000000000000000000000000000000000000000000000000000000005")
+                .unwrap();
+
+        Specs {
+            differential: false,
+            balances: vec![(ALICE, 1_000_000_000_000)],
+            actions: vec![
+                SpecsAction::Instantiate {
+                    origin: TestAddress::Alice,
+                    value: 0,
+                    gas_limit: Some(GAS_LIMIT),
+                    storage_deposit_limit: Some(DEPOSIT_LIMIT),
+                    code: Code::Bytes(compile_test_blob()),
+                    data: vec![],
+                    salt: Default::default(),
+                },
+                SpecsAction::Call {
+                    origin: TestAddress::Alice,
+                    dest: TestAddress::Instantiated(0),
+                    value: 0,
+                    gas_limit: Some(GAS_LIMIT),
+                    storage_deposit_limit: Some(DEPOSIT_LIMIT),
+                    data: calldata,
+                },
+                SpecsAction::VerifyCall(VerifyCallExpectation {
+                    success: true,
+                    gas_consumed: None,
+                    output: Default::default(),
+                }),
+            ],
+        }
+        .run();
+    }
+}

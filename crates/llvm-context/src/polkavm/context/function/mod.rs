@@ -105,7 +105,17 @@ impl<'ctx> Function<'ctx> {
     ) {
         for attribute_kind in attributes {
             match attribute_kind {
-                Attribute::Memory => unimplemented!("`memory` attributes are not implemented"),
+                // `Memory` is an integer attribute whose value encodes per-
+                // location read/write effects (Other / ArgMem / InaccessibleMem
+                // pairs of bits). The all-zero encoding is `memory(none)` —
+                // the only variant any caller in this crate currently wants —
+                // so we apply it with value 0 here. If a finer-grained
+                // memory effect is ever needed, this arm should grow a
+                // dedicated representation rather than accept arbitrary u64.
+                Attribute::Memory => declaration.value.add_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    llvm.create_enum_attribute(Attribute::Memory as u32, 0),
+                ),
                 attribute_kind @ Attribute::AlwaysInline if force => {
                     declaration.value.remove_enum_attribute(
                         inkwell::attributes::AttributeLoc::Function,

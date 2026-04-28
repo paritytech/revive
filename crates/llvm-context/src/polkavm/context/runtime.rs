@@ -26,11 +26,6 @@ pub trait RuntimeFunction {
 
     /// Declare the function with standard attributes.
     fn declare(&self, context: &mut Context) -> anyhow::Result<()> {
-        Self::default_declare(self, context)
-    }
-
-    /// Default declaration logic, callable from overrides.
-    fn default_declare(&self, context: &mut Context) -> anyhow::Result<()> {
         let function = context.add_function(
             Self::NAME,
             Self::r#type(context),
@@ -59,19 +54,6 @@ pub trait RuntimeFunction {
         function.as_global_value().set_comdat(comdat);
 
         Ok(())
-    }
-
-    /// Add `memory(none)` attribute to this function, marking it as having no
-    /// memory effects. This enables LLVM to eliminate dead calls and CSE duplicates.
-    fn add_memory_none(context: &Context) {
-        let declaration = Self::declaration(context);
-        // Memory attribute kind ID is 93 in LLVM 18+, value 0 means memory(none)
-        let attr = context
-            .llvm()
-            .create_enum_attribute(Attribute::Memory as u32, 0);
-        declaration
-            .function_value()
-            .add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
     }
 
     /// Get the function declaration.

@@ -30,15 +30,18 @@ impl Optimizer {
     ) -> Result<(), inkwell::support::LLVMString> {
         let opt = self.settings.middle_end_as_string();
         // Two-phase pipeline:
-        // 1. default<Oz>: initial size optimization
+        // 1. default<O{opt}>: initial optimization at the configured size level.
         // 2. IPSCCP + deadargelim: propagate inter-function constants through
-        //    outlined helpers and remove now-constant arguments
-        // 3. default<O1>: re-optimize with newly discovered constants.
-        //    O1 (not Oz) avoids aggressive LICM of i256 operations that hurts
-        //    loop-heavy contracts on the 32-bit PVM target.
+        //    outlined helpers and remove now-constant arguments.
+        // 3. default<O{opt}>: re-optimize with newly discovered constants.
+        //
+        // LICM promotion / machine LICM are disabled at the LLVM driver level
+        // (see `--disable-licm-promotion` / `--disable-machine-licm` in
+        // `initialize_llvm`), so the second pass cannot re-introduce the i256
+        // hoisting that hurts register pressure on rv64e.
         let pass_pipeline = format!(
             "default<O{opt}>,ipsccp,deadargelim,\
-             default<O1>"
+             default<O{opt}>"
         );
         target_machine.run_optimization_passes(module, &pass_pipeline)
     }

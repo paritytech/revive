@@ -52,13 +52,20 @@ jobs:
           make install-bin
           echo "RESOLC_BIN=$(pwd)/target/release/resolc" >> "$GITHUB_ENV"
 
-      # TODO: Could be removed once the next step replaces `--commit` with `--install`.
+      # TODO: Remove once the install step replaces `--commit` with `--install`.
       - name: Cache Foundry
         id: cache-foundry
         uses: actions/cache@v5
         with:
           path: ~/.foundry
           key: foundry-polkadot-${{ env.CI_FOUNDRY_POLKADOT_COMMIT }}
+
+      # TODO: Remove once the install step replaces `--commit` with `--install`.
+      - name: Install Build Dependencies
+        if: ${{ steps.cache-foundry.outputs.cache-hit != 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev build-essential protobuf-compiler
 
       - name: Install foundryup-polkadot and the Foundry Toolchain
         if: ${{ steps.cache-foundry.outputs.cache-hit != 'true' }}

@@ -1,0 +1,22 @@
+[profile.default]
+src = "src"
+test = "test"
+libs = ["lib"]
+solc = "0.8.34"
+remappings = ["forge-std/=lib/forge-std/src/"]
+extra_output = [
+    "abi",
+    "metadata",
+    "devdoc",
+    "userdoc",
+    "storageLayout",
+    "ir",
+    "irOptimized",
+    "evm.bytecode",
+    "evm.deployedBytecode",
+    "evm.assembly",
+    "evm.methodIdentifiers",
+]
+
+[profile.default.polkadot]
+resolc_compile = true

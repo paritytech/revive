@@ -61,13 +61,10 @@ jobs:
 
       - name: Install foundryup-polkadot and forge
         run: |
-          # TODO: Remove "--branch lj/fix-foundryup-script" once this is merged: https://github.com/paritytech/foundry-polkadot/pull/555
           # TODO: Replace "--commit" with "--install" once a release with this commit exists: https://github.com/paritytech/foundry-polkadot/commit/b3173d0584382687cc96b2af072d8cb2addf23d3
 
           curl -fsSL https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash
-          "$HOME/.foundry/bin/foundryup-polkadot" \
-            --branch lj/fix-foundryup-script \
-            --commit "$CI_FOUNDRY_POLKADOT_COMMIT"
+          "$HOME/.foundry/bin/foundryup-polkadot" --commit "$CI_FOUNDRY_POLKADOT_COMMIT"
           echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
       - name: Check Tool Versions

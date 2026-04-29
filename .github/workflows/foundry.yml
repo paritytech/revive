@@ -83,7 +83,7 @@ jobs:
             https://github.com/foundry-rs/forge-std.git "$CI_FOUNDRY_PROJECT_ROOT/lib/forge-std"
 
       - name: Build Project
-        run: forge build --root "$CI_FOUNDRY_PROJECT_ROOT" --use-resolc "$RESOLC_BIN"
+        run: forge build --root "$CI_FOUNDRY_PROJECT_ROOT" --use-resolc "$RESOLC_BIN" --optimize -Oz
 
       - name: Verify Output
         run: |
@@ -101,4 +101,4 @@ jobs:
           forge inspect Counter userdoc           --json | jq -e 'length > 0'             > /dev/null
 
       - name: Test Project
-        run: forge test --root "$CI_FOUNDRY_PROJECT_ROOT" --polkadot=pvm --use-resolc "$RESOLC_BIN" -vvvv
+        run: forge test --root "$CI_FOUNDRY_PROJECT_ROOT" --polkadot=pvm --use-resolc "$RESOLC_BIN" --optimize -Oz -vvvv

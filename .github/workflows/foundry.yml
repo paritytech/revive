@@ -52,20 +52,24 @@ jobs:
           make install-bin
           echo "RESOLC_BIN=$GITHUB_WORKSPACE/target/release/resolc" >> "$GITHUB_ENV"
 
-      # TODO: Remove once the next step replaces `--commit` with `--install`.
-      - name: Cache foundryup-polkadot
+      # TODO: Could be removed once the next step replaces `--commit` with `--install`.
+      - name: Cache Foundry
+        id: cache-foundry
         uses: actions/cache@v5
         with:
           path: ~/.foundry
-          key: foundryup-polkadot-${{ env.CI_FOUNDRY_POLKADOT_COMMIT }}
+          key: foundry-polkadot-${{ env.CI_FOUNDRY_POLKADOT_COMMIT }}
 
-      - name: Install foundryup-polkadot and forge
+      - name: Install foundryup-polkadot and the Foundry Toolchain
+        if: ${{ steps.cache-foundry.outputs.cache-hit != 'true' }}
         run: |
           # TODO: Replace "--commit" with "--install" once a release with this commit exists: https://github.com/paritytech/foundry-polkadot/commit/b3173d0584382687cc96b2af072d8cb2addf23d3
 
           curl -fsSL https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash
           "$HOME/.foundry/bin/foundryup-polkadot" --commit "$CI_FOUNDRY_POLKADOT_COMMIT"
-          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Add Foundry to PATH
+        run: echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
 
       - name: Check Tool Versions
         run: |
@@ -96,5 +100,5 @@ jobs:
           forge inspect Counter devdoc            --json | jq -e 'length > 0'             > /dev/null
           forge inspect Counter userdoc           --json | jq -e 'length > 0'             > /dev/null
 
-      - name: Test project
+      - name: Test Project
         run: forge test --root "$CI_FOUNDRY_PROJECT_ROOT" --polkadot=pvm --use-resolc "$RESOLC_BIN" -vvvv

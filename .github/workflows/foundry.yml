@@ -95,11 +95,12 @@ jobs:
           git clone --depth 1 --branch v1.15.0 \
             https://github.com/foundry-rs/forge-std.git "$CI_FOUNDRY_PROJECT_ROOT/lib/forge-std"
 
-      - name: Build Project
+      - name: Compile Project
         run: forge build --root "$CI_FOUNDRY_PROJECT_ROOT" --use-resolc "$RESOLC_BIN" --optimize -Oz
 
       - name: Verify Output
         run: |
+          set -x
           cd "$CI_FOUNDRY_PROJECT_ROOT"
           forge inspect Counter bytecode          | grep -q '^0x50564d'
           forge inspect Counter deployedBytecode  | grep -q '^0x50564d'

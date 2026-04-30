@@ -3,7 +3,10 @@ src = "src"
 test = "test"
 libs = ["lib"]
 solc = "0.8.34"
-remappings = ["forge-std/=lib/forge-std/src/"]
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+]
 extra_output = [
     "abi",
     "metadata",

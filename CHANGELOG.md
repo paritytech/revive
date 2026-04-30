@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Supported `polkadot-sdk` rev: `2603`
+- Supported `polkadot-sdk` rev: `2603`
+
+### Changed
+
+- Updated `LLVM` from `21.1.8` to LLVM `22.1.4`
 
 ### Added
 - Support for solc v0.8.35.

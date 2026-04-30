@@ -19,7 +19,7 @@ runs:
       shell: bash
       run: |
         mkdir -p solc
-        curl -sSL --output solc/solc https://github.com/argotorg/solidity/releases/download/v0.8.34/${SOLC_NAME}
+        curl -sSL --output solc/solc https://github.com/argotorg/solidity/releases/download/v0.8.35/${SOLC_NAME}
 
     - name: Make Solc Executable
       if: ${{ runner.os == 'Windows' }}

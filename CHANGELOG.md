@@ -4,6 +4,9 @@
 
 Supported `polkadot-sdk` rev: `2603`
 
+### Added
+- Support for solc v0.8.35.
+
 ## v1.1.0
 
 Supported `polkadot-sdk` rev: `2603`

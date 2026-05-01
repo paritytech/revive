@@ -8,6 +8,9 @@
 
 - Updated `LLVM` from `21.1.8` to LLVM `22.1.4`
 
+### Added
+- Support for solc v0.8.35.
+
 ## v1.1.0
 
 Supported `polkadot-sdk` rev: `2603`

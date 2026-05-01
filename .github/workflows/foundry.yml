@@ -90,18 +90,20 @@ jobs:
           forge --version
 
       - name: Fetch Project Dependencies
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: |
-          mkdir -p "$CI_FOUNDRY_PROJECT_ROOT/lib"
-          git clone --depth 1 --branch v1.15.0 https://github.com/foundry-rs/forge-std.git "$CI_FOUNDRY_PROJECT_ROOT/lib/forge-std"
-          git clone --depth 1 --branch v5.3.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git "$CI_FOUNDRY_PROJECT_ROOT/lib/openzeppelin-contracts"
+          mkdir -p lib
+          git clone --depth 1 --branch v1.15.0 https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git clone --depth 1 --branch v5.3.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
 
       - name: Compile Project
-        run: forge build --root "$CI_FOUNDRY_PROJECT_ROOT" --use-resolc "$RESOLC_BIN" --optimize -Oz
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge build --use-resolc "$RESOLC_BIN" --optimize -Oz
 
       - name: Verify Output
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: |
           set -x
-          cd "$CI_FOUNDRY_PROJECT_ROOT"
           forge inspect MyToken bytecode          | grep -q '^0x50564d'
           forge inspect MyToken deployedBytecode  | grep -q '^0x50564d'
           forge inspect MyToken irOptimized       | grep -q .
@@ -115,4 +117,5 @@ jobs:
           forge inspect MyToken userdoc           --json | jq -e 'length > 0'             > /dev/null
 
       - name: Test Project
-        run: forge test --root "$CI_FOUNDRY_PROJECT_ROOT" --polkadot=pvm --use-resolc "$RESOLC_BIN" --optimize -Oz -vvvv
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge test --polkadot=pvm --use-resolc "$RESOLC_BIN" --optimize -Oz -vvvv

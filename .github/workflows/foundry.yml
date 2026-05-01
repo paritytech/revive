@@ -57,22 +57,15 @@ jobs:
           echo "RESOLC_BIN=$(pwd)/target/release/resolc" >> "$GITHUB_ENV"
 
       # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
-      - name: Cache Foundry
-        id: cache-foundry
-        uses: actions/cache@v5
-        with:
-          path: ~/.foundry/bin
-          key: foundry-polkadot-bin-${{ env.CI_FOUNDRY_POLKADOT_COMMIT }}
-
-      # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
       - name: Install Build Dependencies
-        if: ${{ steps.cache-foundry.outputs.cache-hit != 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y clang libclang-dev build-essential protobuf-compiler
 
+      # NOTE: ~/.foundry/bin is not cached (which would be very useful when using `--commit`)
+      # due to forge sometimes crashing with `Illegal instruction` when using the cached
+      # binaries, seemingly due to the CPU being different when building forge vs running it.
       - name: Install foundryup-polkadot and the Foundry Toolchain
-        if: ${{ steps.cache-foundry.outputs.cache-hit != 'true' }}
         run: |
           # TODO: Replace `--commit` with `--install` once a release with this commit exists: https://github.com/paritytech/foundry-polkadot/commit/b3173d0584382687cc96b2af072d8cb2addf23d3
 

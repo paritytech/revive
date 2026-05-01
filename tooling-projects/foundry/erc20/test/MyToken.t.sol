@@ -45,7 +45,7 @@ contract MyTokenTest is Test {
 
     function test_Transfer() public {
         token.mint(owner, 1000);
-        token.transfer(alice, 100);
+        assertTrue(token.transfer(alice, 100));
         assertEq(token.balanceOf(alice), 100);
         assertEq(token.balanceOf(owner), 900);
     }
@@ -54,7 +54,7 @@ contract MyTokenTest is Test {
         token.mint(owner, 1000);
         token.approve(alice, 50);
         vm.prank(alice);
-        token.transferFrom(owner, bob, 50);
+        assertTrue(token.transferFrom(owner, bob, 50));
         assertEq(token.balanceOf(bob), 50);
         assertEq(token.allowance(owner, alice), 0);
     }

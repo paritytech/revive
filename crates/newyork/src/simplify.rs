@@ -821,25 +821,61 @@ impl Simplifier {
         self.constants.get(&resolved.0).cloned()
     }
 
-    /// Attempts strength reduction on a Let binding.
-    /// Returns Some(vec of statements) if the expression was transformed, None otherwise.
-    ///
-    /// Transforms:
-    /// - `let result = mul(x, 2^k)` → `let shift_k = k; let result = shl(shift_k, x)`
-    /// - `let result = mul(2^k, x)` → `let shift_k = k; let result = shl(shift_k, x)`
-    /// - `let result = div(x, 2^k)` → `let shift_k = k; let result = shr(shift_k, x)`
+    /// Emits the two-`Let` strength-reduction template:
+    ///   `let helper = const_value; let result = target_op(<lhs>, <rhs>)`
+    /// where one operand of `target_op` is the freshly-bound `helper` and the
+    /// other is `other_operand` (its position controlled by `helper_on_lhs`).
+    fn emit_strength_reduce(
+        &mut self,
+        bindings: &[ValueId],
+        target_op: BinOp,
+        const_value: BigUint,
+        helper_on_lhs: bool,
+        other_operand: Value,
+    ) -> Vec<Statement> {
+        let helper_id = self.fresh_id();
+        self.constants.insert(helper_id.0, const_value.clone());
+        self.stats.identities_simplified += 1;
+        let helper_val = Value::int(helper_id);
+        let (lhs, rhs) = if helper_on_lhs {
+            (helper_val, other_operand)
+        } else {
+            (other_operand, helper_val)
+        };
+        vec![
+            Statement::Let {
+                bindings: vec![helper_id],
+                value: Expr::Literal {
+                    value: const_value,
+                    ty: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: bindings.to_vec(),
+                value: Expr::Binary {
+                    op: target_op,
+                    lhs,
+                    rhs,
+                },
+            },
+        ]
+    }
+
+    /// Attempts strength reduction on a Let binding. Transforms:
+    /// - `mul(x, 2^k)` or `mul(2^k, x)` → `shl(k, x)`
+    /// - `div(x, 2^k)` → `shr(k, x)` (unsigned only)
+    /// - `mod(x, 2^k)` → `and(x, 2^k - 1)`
     fn try_strength_reduce(&mut self, bindings: &[ValueId], expr: &Expr) -> Option<Vec<Statement>> {
         let (op, lhs, rhs) = match expr {
             Expr::Binary { op, lhs, rhs } => (*op, *lhs, *rhs),
             _ => return None,
         };
-
         let lhs_val = self.try_get_const(&lhs);
         let rhs_val = self.try_get_const(&rhs);
+        let in_range = |k: u32| (1..256).contains(&k);
 
         match op {
             BinOp::Mul => {
-                // mul(x, 2^k) → shl(k, x) or mul(2^k, x) → shl(k, x)
                 let (k, value) = if let Some(k) = rhs_val.as_ref().and_then(log2_exact) {
                     (k, lhs)
                 } else if let Some(k) = lhs_val.as_ref().and_then(log2_exact) {
@@ -847,86 +883,22 @@ impl Simplifier {
                 } else {
                     return None;
                 };
-                if k == 0 || k >= 256 {
-                    return None;
-                }
-                let shift_id = self.fresh_id();
-                let shift_val = BigUint::from(k);
-                self.constants.insert(shift_id.0, shift_val.clone());
-                self.stats.identities_simplified += 1;
-                Some(vec![
-                    Statement::Let {
-                        bindings: vec![shift_id],
-                        value: Expr::Literal {
-                            value: shift_val,
-                            ty: Type::Int(BitWidth::I256),
-                        },
-                    },
-                    Statement::Let {
-                        bindings: bindings.to_vec(),
-                        value: Expr::Binary {
-                            op: BinOp::Shl,
-                            lhs: Value::int(shift_id),
-                            rhs: value,
-                        },
-                    },
-                ])
+                in_range(k).then(|| {
+                    self.emit_strength_reduce(bindings, BinOp::Shl, BigUint::from(k), true, value)
+                })
             }
             BinOp::Div => {
-                // div(x, 2^k) → shr(k, x) (unsigned only)
                 let k = rhs_val.as_ref().and_then(log2_exact)?;
-                if k == 0 || k >= 256 {
-                    return None;
-                }
-                let shift_id = self.fresh_id();
-                let shift_val = BigUint::from(k);
-                self.constants.insert(shift_id.0, shift_val.clone());
-                self.stats.identities_simplified += 1;
-                Some(vec![
-                    Statement::Let {
-                        bindings: vec![shift_id],
-                        value: Expr::Literal {
-                            value: shift_val,
-                            ty: Type::Int(BitWidth::I256),
-                        },
-                    },
-                    Statement::Let {
-                        bindings: bindings.to_vec(),
-                        value: Expr::Binary {
-                            op: BinOp::Shr,
-                            lhs: Value::int(shift_id),
-                            rhs: lhs,
-                        },
-                    },
-                ])
+                in_range(k).then(|| {
+                    self.emit_strength_reduce(bindings, BinOp::Shr, BigUint::from(k), true, lhs)
+                })
             }
             BinOp::Mod => {
-                // mod(x, 2^k) → and(x, 2^k - 1)
                 let k = rhs_val.as_ref().and_then(log2_exact)?;
-                if k == 0 || k >= 256 {
-                    return None;
-                }
-                let mask = (BigUint::one() << k) - BigUint::one();
-                let mask_id = self.fresh_id();
-                self.constants.insert(mask_id.0, mask.clone());
-                self.stats.identities_simplified += 1;
-                Some(vec![
-                    Statement::Let {
-                        bindings: vec![mask_id],
-                        value: Expr::Literal {
-                            value: mask,
-                            ty: Type::Int(BitWidth::I256),
-                        },
-                    },
-                    Statement::Let {
-                        bindings: bindings.to_vec(),
-                        value: Expr::Binary {
-                            op: BinOp::And,
-                            lhs,
-                            rhs: Value::int(mask_id),
-                        },
-                    },
-                ])
+                in_range(k).then(|| {
+                    let mask = (BigUint::one() << k) - BigUint::one();
+                    self.emit_strength_reduce(bindings, BinOp::And, mask, false, lhs)
+                })
             }
             _ => None,
         }

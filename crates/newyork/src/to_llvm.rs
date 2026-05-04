@@ -6404,43 +6404,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     context, lhs, rhs,
                 )?,
             ),
-            BinOp::Lt => {
-                // Return i1 directly - avoid i256 zero-extension.
-                // Downstream uses will extend via ensure_word_type when needed.
-                let cmp = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::ULT, lhs, rhs, "lt")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
-            }
-            BinOp::Gt => {
-                let cmp = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::UGT, lhs, rhs, "gt")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
-            }
-            BinOp::Slt => {
-                let cmp = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::SLT, lhs, rhs, "slt")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
-            }
-            BinOp::Sgt => {
-                let cmp = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::SGT, lhs, rhs, "sgt")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
-            }
-            BinOp::Eq => {
-                let cmp = context
-                    .builder()
-                    .build_int_compare(inkwell::IntPredicate::EQ, lhs, rhs, "eq")
-                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                Ok(cmp.as_basic_value_enum())
-            }
+            // Comparisons return i1 directly — downstream uses zero-extend via
+            // `ensure_word_type` when needed.
+            BinOp::Lt => build_cmp(context, inkwell::IntPredicate::ULT, lhs, rhs, "lt"),
+            BinOp::Gt => build_cmp(context, inkwell::IntPredicate::UGT, lhs, rhs, "gt"),
+            BinOp::Slt => build_cmp(context, inkwell::IntPredicate::SLT, lhs, rhs, "slt"),
+            BinOp::Sgt => build_cmp(context, inkwell::IntPredicate::SGT, lhs, rhs, "sgt"),
+            BinOp::Eq => build_cmp(context, inkwell::IntPredicate::EQ, lhs, rhs, "eq"),
             BinOp::Byte => Ok(revive_llvm_context::polkavm_evm_bitwise::byte(
                 context, lhs, rhs,
             )?),
@@ -6658,6 +6628,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
             ))
         }
     }
+}
+
+/// Emits an `icmp <pred> lhs, rhs` and returns the i1 result as a `BasicValueEnum`.
+fn build_cmp<'ctx>(
+    context: &mut PolkaVMContext<'ctx>,
+    pred: inkwell::IntPredicate,
+    lhs: IntValue<'ctx>,
+    rhs: IntValue<'ctx>,
+    name: &str,
+) -> Result<BasicValueEnum<'ctx>> {
+    let cmp = context
+        .builder()
+        .build_int_compare(pred, lhs, rhs, name)
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+    Ok(cmp.as_basic_value_enum())
 }
 
 impl Default for LlvmCodegen<'_> {

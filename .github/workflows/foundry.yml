@@ -1,0 +1,115 @@
+name: Foundry Integration
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize]
+    paths-ignore:
+      - "**.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Workflow-internal foundry envs are prefixed with `CI_` to not conflict with the
+  # `FOUNDRY_*` namespace, which foundry itself will interpret for its configuration.
+  CI_FOUNDRY_PROJECT_ROOT: tooling-projects/foundry/erc20
+  # This is currently the commit that adds support for resolc ">=0.6.0, <2.0.0".
+  # The latest release as of Apr. 28, 2026 supports ">=0.6.0, <0.7.0".
+  # Once a release includes the updated supported versions, this can be changed to a
+  # tag in order to download the prebuilt binary.
+  CI_FOUNDRY_POLKADOT_COMMIT: b3173d0584382687cc96b2af072d8cb2addf23d3
+
+jobs:
+  use-foundry:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # without this it will override our rust flags
+          rustflags: ""
+          # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
+          # Needed for building foundry-polkadot.
+          target: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM Environment Variables
+        run: echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+
+      - name: Build resolc
+        run: |
+          make install-bin
+          echo "RESOLC_PATH=$(pwd)/target/release/resolc" >> $GITHUB_ENV
+
+      # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev build-essential protobuf-compiler
+
+      # NOTE: ~/.foundry/bin is not cached (which would be very useful when using `--commit`)
+      # due to forge sometimes crashing with `Illegal instruction` when using the cached
+      # binaries, seemingly due to the CPU being different when building forge vs running it.
+      - name: Install foundryup-polkadot and the Foundry Toolchain
+        run: |
+          # TODO: Replace `--commit` with `--install` once a release with this commit exists: https://github.com/paritytech/foundry-polkadot/commit/b3173d0584382687cc96b2af072d8cb2addf23d3
+
+          # Pin install path with `FOUNDRY_DIR` to prevent the pre-existing `XDG_CONFIG_HOME` from being used.
+          export FOUNDRY_DIR="$HOME/.foundry"
+          curl -fsSL https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash
+          "$FOUNDRY_DIR/bin/foundryup-polkadot" --commit "$CI_FOUNDRY_POLKADOT_COMMIT"
+
+      - name: Add Foundry to PATH
+        run: echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Check Tool Versions
+        run: |
+          foundryup-polkadot --version
+          forge --version
+
+      - name: Fetch Project Dependencies
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: |
+          mkdir -p lib
+          git clone --depth 1 --branch v1.15.0 https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git clone --depth 1 --branch v5.3.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+
+      - name: Compile Project
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge build --use-resolc "$RESOLC_PATH" --optimize -Oz
+
+      - name: Verify Output
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: |
+          inspect() { forge inspect --use-resolc "$RESOLC_PATH" MyToken "$@"; }
+          set -x
+          inspect bytecode          | grep -q '^0x50564d'
+          inspect deployedBytecode  | grep -q '^0x50564d'
+          inspect irOptimized       | grep -q .
+          inspect ir                | grep -q .
+          inspect assembly          | grep -q .
+          inspect abi               --json | jq -e 'length > 0'             > /dev/null
+          inspect methodIdentifiers --json | jq -e 'length > 0'             > /dev/null
+          inspect storageLayout     --json | jq -e '.storage | length > 0'  > /dev/null
+          inspect metadata          --json | jq -e 'length > 0'             > /dev/null
+          inspect devdoc            --json | jq -e 'length > 0'             > /dev/null
+          inspect userdoc           --json | jq -e 'length > 0'             > /dev/null
+
+      - name: Test Project
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge test --polkadot=pvm --use-resolc "$RESOLC_PATH" --optimize -Oz -vvvv

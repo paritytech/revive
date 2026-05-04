@@ -1,0 +1,25 @@
+[profile.default]
+src = "src"
+test = "test"
+libs = ["lib"]
+solc = "0.8.35"
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+]
+extra_output = [
+    "abi",
+    "metadata",
+    "devdoc",
+    "userdoc",
+    "storageLayout",
+    "ir",
+    "irOptimized",
+    "evm.bytecode",
+    "evm.deployedBytecode",
+    "evm.assembly",
+    "evm.methodIdentifiers",
+]
+
+[profile.default.polkadot]
+resolc_compile = true

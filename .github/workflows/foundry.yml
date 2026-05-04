@@ -54,7 +54,7 @@ jobs:
       - name: Build resolc
         run: |
           make install-bin
-          echo "RESOLC_BIN=$(pwd)/target/release/resolc" >> "$GITHUB_ENV"
+          echo "RESOLC_PATH=$(pwd)/target/release/resolc" >> $GITHUB_ENV
 
       # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
       - name: Install Build Dependencies
@@ -91,24 +91,25 @@ jobs:
 
       - name: Compile Project
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
-        run: forge build --use-resolc "$RESOLC_BIN" --optimize -Oz
+        run: forge build --use-resolc "$RESOLC_PATH" --optimize -Oz
 
       - name: Verify Output
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: |
+          inspect() { forge inspect --use-resolc "$RESOLC_PATH" MyToken "$@"; }
           set -x
-          forge inspect MyToken bytecode          | grep -q '^0x50564d'
-          forge inspect MyToken deployedBytecode  | grep -q '^0x50564d'
-          forge inspect MyToken irOptimized       | grep -q .
-          forge inspect MyToken ir                | grep -q .
-          forge inspect MyToken assembly          | grep -q .
-          forge inspect MyToken abi               --json | jq -e 'length > 0'             > /dev/null
-          forge inspect MyToken methodIdentifiers --json | jq -e 'length > 0'             > /dev/null
-          forge inspect MyToken storageLayout     --json | jq -e '.storage | length > 0'  > /dev/null
-          forge inspect MyToken metadata          --json | jq -e 'length > 0'             > /dev/null
-          forge inspect MyToken devdoc            --json | jq -e 'length > 0'             > /dev/null
-          forge inspect MyToken userdoc           --json | jq -e 'length > 0'             > /dev/null
+          inspect bytecode          | grep -q '^0x50564d'
+          inspect deployedBytecode  | grep -q '^0x50564d'
+          inspect irOptimized       | grep -q .
+          inspect ir                | grep -q .
+          inspect assembly          | grep -q .
+          inspect abi               --json | jq -e 'length > 0'             > /dev/null
+          inspect methodIdentifiers --json | jq -e 'length > 0'             > /dev/null
+          inspect storageLayout     --json | jq -e '.storage | length > 0'  > /dev/null
+          inspect metadata          --json | jq -e 'length > 0'             > /dev/null
+          inspect devdoc            --json | jq -e 'length > 0'             > /dev/null
+          inspect userdoc           --json | jq -e 'length > 0'             > /dev/null
 
       - name: Test Project
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
-        run: forge test --polkadot=pvm --use-resolc "$RESOLC_BIN" --optimize -Oz -vvvv
+        run: forge test --polkadot=pvm --use-resolc "$RESOLC_PATH" --optimize -Oz -vvvv

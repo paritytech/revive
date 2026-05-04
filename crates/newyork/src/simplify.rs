@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    BinOp, BitWidth, Block, CallKind, Expr, FunctionId, MemoryRegion, Object, Region, Statement,
-    SwitchCase, Type, UnaryOp, Value, ValueId,
+    for_each_stmt_mut, BinOp, BitWidth, Block, CallKind, Expr, FunctionId, MemoryRegion, Object,
+    Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -289,33 +289,6 @@ impl Simplifier {
                 }]
             }
 
-            Statement::MCopy { dest, src, length } => vec![Statement::MCopy {
-                dest: self.resolve_value(dest),
-                src: self.resolve_value(src),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::SStore {
-                key,
-                value,
-                static_slot,
-            } => vec![Statement::SStore {
-                key: self.resolve_value(key),
-                value: self.resolve_value(value),
-                static_slot,
-            }],
-
-            Statement::TStore { key, value } => vec![Statement::TStore {
-                key: self.resolve_value(key),
-                value: self.resolve_value(value),
-            }],
-
-            Statement::MappingSStore { key, slot, value } => vec![Statement::MappingSStore {
-                key: self.resolve_value(key),
-                slot: self.resolve_value(slot),
-                value: self.resolve_value(value),
-            }],
-
             Statement::If {
                 condition,
                 inputs,
@@ -572,148 +545,44 @@ impl Simplifier {
 
             Statement::Block(region) => vec![Statement::Block(self.simplify_region(region))],
 
-            Statement::Revert { offset, length } => vec![Statement::Revert {
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::Return { offset, length } => vec![Statement::Return {
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::ExternalCall {
-                kind,
-                gas,
-                address,
-                value,
-                args_offset,
-                args_length,
-                ret_offset,
-                ret_length,
-                result,
-            } => vec![Statement::ExternalCall {
-                kind,
-                gas: self.resolve_value(gas),
-                address: self.resolve_value(address),
-                value: value.map(|v| self.resolve_value(v)),
-                args_offset: self.resolve_value(args_offset),
-                args_length: self.resolve_value(args_length),
-                ret_offset: self.resolve_value(ret_offset),
-                ret_length: self.resolve_value(ret_length),
-                result,
-            }],
-
-            Statement::Create {
-                kind,
-                value,
-                offset,
-                length,
-                salt,
-                result,
-            } => vec![Statement::Create {
-                kind,
-                value: self.resolve_value(value),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-                salt: salt.map(|v| self.resolve_value(v)),
-                result,
-            }],
-
-            Statement::Log {
-                offset,
-                length,
-                topics,
-            } => vec![Statement::Log {
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-                topics: topics.into_iter().map(|v| self.resolve_value(v)).collect(),
-            }],
-
-            Statement::CodeCopy {
-                dest,
-                offset,
-                length,
-            } => vec![Statement::CodeCopy {
-                dest: self.resolve_value(dest),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::ExtCodeCopy {
-                address,
-                dest,
-                offset,
-                length,
-            } => vec![Statement::ExtCodeCopy {
-                address: self.resolve_value(address),
-                dest: self.resolve_value(dest),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::ReturnDataCopy {
-                dest,
-                offset,
-                length,
-            } => vec![Statement::ReturnDataCopy {
-                dest: self.resolve_value(dest),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::DataCopy {
-                dest,
-                offset,
-                length,
-            } => vec![Statement::DataCopy {
-                dest: self.resolve_value(dest),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::CallDataCopy {
-                dest,
-                offset,
-                length,
-            } => vec![Statement::CallDataCopy {
-                dest: self.resolve_value(dest),
-                offset: self.resolve_value(offset),
-                length: self.resolve_value(length),
-            }],
-
-            Statement::SetImmutable { key, value } => vec![Statement::SetImmutable {
-                key,
-                value: self.resolve_value(value),
-            }],
-
-            Statement::Leave { return_values } => vec![Statement::Leave {
-                return_values: return_values
-                    .into_iter()
-                    .map(|v| self.resolve_value(v))
-                    .collect(),
-            }],
-
             Statement::Expr(expr) => vec![Statement::Expr(self.simplify_expr(expr))],
 
-            // Pass-through statements with no values to simplify
+            // Statements with no Value fields — copy through unchanged.
+            // CustomErrorRevert's args are pre-resolved when the outliner builds it,
+            // so it stays in the no-op group.
             Statement::Stop
             | Statement::Invalid
             | Statement::PanicRevert { .. }
             | Statement::ErrorStringRevert { .. }
             | Statement::CustomErrorRevert { .. } => vec![stmt],
 
-            Statement::Break { values } => vec![Statement::Break {
-                values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
-            }],
-
-            Statement::Continue { values } => vec![Statement::Continue {
-                values: values.into_iter().map(|v| self.resolve_value(v)).collect(),
-            }],
-
-            Statement::SelfDestruct { address } => vec![Statement::SelfDestruct {
-                address: self.resolve_value(address),
-            }],
+            // Pass-through statements: apply copy propagation to every used Value
+            // (defs like Let bindings, ExternalCall::result, Create::result are not
+            // visited by `for_each_value_id_mut`). MStore/MStore8 are handled above
+            // because they additionally re-resolve their `MemoryRegion` from the
+            // (possibly-now-constant) offset.
+            mut other @ (Statement::MCopy { .. }
+            | Statement::SStore { .. }
+            | Statement::TStore { .. }
+            | Statement::MappingSStore { .. }
+            | Statement::Revert { .. }
+            | Statement::Return { .. }
+            | Statement::ExternalCall { .. }
+            | Statement::Create { .. }
+            | Statement::Log { .. }
+            | Statement::CodeCopy { .. }
+            | Statement::ExtCodeCopy { .. }
+            | Statement::ReturnDataCopy { .. }
+            | Statement::DataCopy { .. }
+            | Statement::CallDataCopy { .. }
+            | Statement::SetImmutable { .. }
+            | Statement::Leave { .. }
+            | Statement::Break { .. }
+            | Statement::Continue { .. }
+            | Statement::SelfDestruct { .. }) => {
+                other.for_each_value_id_mut(&mut |id| *id = self.resolve_copy(*id));
+                vec![other]
+            }
         }
     }
 
@@ -1894,285 +1763,6 @@ fn expr_has_side_effects(expr: &Expr) -> bool {
     )
 }
 
-fn collect_used_in_value(val: &Value, used: &mut BTreeSet<u32>) {
-    used.insert(val.id.0);
-}
-
-fn collect_used_in_expr(expr: &Expr, used: &mut BTreeSet<u32>) {
-    match expr {
-        Expr::Literal { .. } => {}
-        Expr::Var(id) => {
-            used.insert(id.0);
-        }
-        Expr::Binary { lhs, rhs, .. } => {
-            collect_used_in_value(lhs, used);
-            collect_used_in_value(rhs, used);
-        }
-        Expr::Ternary { a, b, n, .. } => {
-            collect_used_in_value(a, used);
-            collect_used_in_value(b, used);
-            collect_used_in_value(n, used);
-        }
-        Expr::Unary { operand, .. } => collect_used_in_value(operand, used),
-        Expr::CallDataLoad { offset } => collect_used_in_value(offset, used),
-        Expr::ExtCodeSize { address } | Expr::ExtCodeHash { address } => {
-            collect_used_in_value(address, used)
-        }
-        Expr::BlockHash { number } => collect_used_in_value(number, used),
-        Expr::BlobHash { index } => collect_used_in_value(index, used),
-        Expr::Balance { address } => collect_used_in_value(address, used),
-        Expr::MLoad { offset, .. } => collect_used_in_value(offset, used),
-        Expr::SLoad { key, .. } => collect_used_in_value(key, used),
-        Expr::TLoad { key } => collect_used_in_value(key, used),
-        Expr::Call { args, .. } => {
-            for arg in args {
-                collect_used_in_value(arg, used);
-            }
-        }
-        Expr::Truncate { value, .. }
-        | Expr::ZeroExtend { value, .. }
-        | Expr::SignExtendTo { value, .. } => collect_used_in_value(value, used),
-        Expr::Keccak256 { offset, length } => {
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-        }
-        Expr::Keccak256Pair { word0, word1 } => {
-            collect_used_in_value(word0, used);
-            collect_used_in_value(word1, used);
-        }
-        Expr::Keccak256Single { word0 } => {
-            collect_used_in_value(word0, used);
-        }
-        Expr::MappingSLoad { key, slot } => {
-            collect_used_in_value(key, used);
-            collect_used_in_value(slot, used);
-        }
-        Expr::CallValue
-        | Expr::Caller
-        | Expr::Origin
-        | Expr::CallDataSize
-        | Expr::CodeSize
-        | Expr::GasPrice
-        | Expr::ReturnDataSize
-        | Expr::Coinbase
-        | Expr::Timestamp
-        | Expr::Number
-        | Expr::Difficulty
-        | Expr::GasLimit
-        | Expr::ChainId
-        | Expr::SelfBalance
-        | Expr::BaseFee
-        | Expr::BlobBaseFee
-        | Expr::Gas
-        | Expr::MSize
-        | Expr::Address
-        | Expr::DataOffset { .. }
-        | Expr::DataSize { .. }
-        | Expr::LoadImmutable { .. }
-        | Expr::LinkerSymbol { .. } => {}
-    }
-}
-
-fn collect_used_in_region(region: &Region, used: &mut BTreeSet<u32>) {
-    for stmt in &region.statements {
-        collect_used_in_stmt(stmt, used);
-    }
-    for y in &region.yields {
-        collect_used_in_value(y, used);
-    }
-}
-
-fn collect_used_in_stmt(stmt: &Statement, used: &mut BTreeSet<u32>) {
-    match stmt {
-        Statement::Let { value, .. } => {
-            // Don't mark bindings as used — they're *definitions*, not uses.
-            // The expr inside is used though.
-            collect_used_in_expr(value, used);
-        }
-        Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
-            collect_used_in_value(offset, used);
-            collect_used_in_value(value, used);
-        }
-        Statement::MCopy { dest, src, length } => {
-            collect_used_in_value(dest, used);
-            collect_used_in_value(src, used);
-            collect_used_in_value(length, used);
-        }
-        Statement::SStore { key, value, .. } => {
-            collect_used_in_value(key, used);
-            collect_used_in_value(value, used);
-        }
-        Statement::TStore { key, value } => {
-            collect_used_in_value(key, used);
-            collect_used_in_value(value, used);
-        }
-        Statement::MappingSStore { key, slot, value } => {
-            collect_used_in_value(key, used);
-            collect_used_in_value(slot, used);
-            collect_used_in_value(value, used);
-        }
-        Statement::If {
-            condition,
-            inputs,
-            then_region,
-            else_region,
-            outputs: _,
-        } => {
-            collect_used_in_value(condition, used);
-            for i in inputs {
-                collect_used_in_value(i, used);
-            }
-            collect_used_in_region(then_region, used);
-            if let Some(r) = else_region {
-                collect_used_in_region(r, used);
-            }
-        }
-        Statement::Switch {
-            scrutinee,
-            inputs,
-            cases,
-            default,
-            ..
-        } => {
-            collect_used_in_value(scrutinee, used);
-            for i in inputs {
-                collect_used_in_value(i, used);
-            }
-            for c in cases {
-                collect_used_in_region(&c.body, used);
-            }
-            if let Some(d) = default {
-                collect_used_in_region(d, used);
-            }
-        }
-        Statement::For {
-            init_values,
-            condition_stmts,
-            condition,
-            body,
-            post,
-            ..
-        } => {
-            for v in init_values {
-                collect_used_in_value(v, used);
-            }
-            for s in condition_stmts {
-                collect_used_in_stmt(s, used);
-            }
-            collect_used_in_expr(condition, used);
-            collect_used_in_region(body, used);
-            collect_used_in_region(post, used);
-        }
-        Statement::Block(region) => collect_used_in_region(region, used),
-        Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-        }
-        Statement::ExternalCall {
-            gas,
-            address,
-            value,
-            args_offset,
-            args_length,
-            ret_offset,
-            ret_length,
-            ..
-        } => {
-            collect_used_in_value(gas, used);
-            collect_used_in_value(address, used);
-            if let Some(v) = value {
-                collect_used_in_value(v, used);
-            }
-            collect_used_in_value(args_offset, used);
-            collect_used_in_value(args_length, used);
-            collect_used_in_value(ret_offset, used);
-            collect_used_in_value(ret_length, used);
-        }
-        Statement::Create {
-            value,
-            offset,
-            length,
-            salt,
-            ..
-        } => {
-            collect_used_in_value(value, used);
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-            if let Some(s) = salt {
-                collect_used_in_value(s, used);
-            }
-        }
-        Statement::Log {
-            offset,
-            length,
-            topics,
-        } => {
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-            for t in topics {
-                collect_used_in_value(t, used);
-            }
-        }
-        Statement::CodeCopy {
-            dest,
-            offset,
-            length,
-        }
-        | Statement::ReturnDataCopy {
-            dest,
-            offset,
-            length,
-        }
-        | Statement::DataCopy {
-            dest,
-            offset,
-            length,
-        }
-        | Statement::CallDataCopy {
-            dest,
-            offset,
-            length,
-        } => {
-            collect_used_in_value(dest, used);
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-        }
-        Statement::ExtCodeCopy {
-            address,
-            dest,
-            offset,
-            length,
-        } => {
-            collect_used_in_value(address, used);
-            collect_used_in_value(dest, used);
-            collect_used_in_value(offset, used);
-            collect_used_in_value(length, used);
-        }
-        Statement::SetImmutable { value, .. } => collect_used_in_value(value, used),
-        Statement::Leave { return_values } => {
-            for v in return_values {
-                collect_used_in_value(v, used);
-            }
-        }
-        Statement::Expr(expr) => collect_used_in_expr(expr, used),
-        Statement::SelfDestruct { address } => collect_used_in_value(address, used),
-        Statement::Stop
-        | Statement::Invalid
-        | Statement::PanicRevert { .. }
-        | Statement::ErrorStringRevert { .. } => {}
-        Statement::CustomErrorRevert { args, .. } => {
-            for arg in args {
-                collect_used_in_value(arg, used);
-            }
-        }
-        Statement::Break { values } | Statement::Continue { values } => {
-            for v in values {
-                collect_used_in_value(v, used);
-            }
-        }
-    }
-}
-
 /// Eliminates dead Let bindings from a list of statements.
 /// Uses bottom-up recursive DCE: first cleans nested regions, then this level.
 /// Iterates at each level until fixpoint (no more removals).
@@ -2200,7 +1790,9 @@ fn eliminate_dead_code_in_stmts(stmts: &mut Vec<Statement>, extra_used: &BTreeSe
     loop {
         let mut used = extra_used.clone();
         for stmt in stmts.iter() {
-            collect_used_in_stmt(stmt, &mut used);
+            stmt.for_each_value_id(&mut |id| {
+                used.insert(id.0);
+            });
         }
 
         let before = stmts.len();
@@ -3942,76 +3534,15 @@ fn rewrite_region_with_extra_args(
 
 /// Redirects function calls in a block, replacing old function IDs with new ones.
 fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, FunctionId>) {
-    for stmt in &mut block.statements {
-        redirect_calls_in_stmt(stmt, redirects);
-    }
-}
-
-fn redirect_calls_in_expr(expr: &mut Expr, redirects: &BTreeMap<FunctionId, FunctionId>) {
-    match expr {
-        Expr::Call { function, args } => {
-            if let Some(&new_id) = redirects.get(function) {
-                *function = new_id;
+    for_each_stmt_mut(&mut block.statements, &mut |stmt| {
+        stmt.for_each_expr_mut(&mut |expr| {
+            if let Expr::Call { function, .. } = expr {
+                if let Some(&new_id) = redirects.get(function) {
+                    *function = new_id;
+                }
             }
-            for arg in args {
-                // Values don't contain expressions, no recursion needed
-                let _ = arg;
-            }
-        }
-        Expr::Binary { .. }
-        | Expr::Ternary { .. }
-        | Expr::Unary { .. }
-        | Expr::Literal { .. }
-        | Expr::Var(_) => {}
-        // All other expressions don't contain function calls
-        _ => {}
-    }
-}
-
-fn redirect_calls_in_region(region: &mut Region, redirects: &BTreeMap<FunctionId, FunctionId>) {
-    for stmt in &mut region.statements {
-        redirect_calls_in_stmt(stmt, redirects);
-    }
-}
-
-fn redirect_calls_in_stmt(stmt: &mut Statement, redirects: &BTreeMap<FunctionId, FunctionId>) {
-    match stmt {
-        Statement::Let { value, .. } => redirect_calls_in_expr(value, redirects),
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            redirect_calls_in_region(then_region, redirects);
-            if let Some(r) = else_region {
-                redirect_calls_in_region(r, redirects);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for c in cases {
-                redirect_calls_in_region(&mut c.body, redirects);
-            }
-            if let Some(d) = default {
-                redirect_calls_in_region(d, redirects);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            for s in condition_stmts {
-                redirect_calls_in_stmt(s, redirects);
-            }
-            redirect_calls_in_region(body, redirects);
-            redirect_calls_in_region(post, redirects);
-        }
-        Statement::Block(region) => redirect_calls_in_region(region, redirects),
-        Statement::Expr(expr) => redirect_calls_in_expr(expr, redirects),
-        // All other statements don't contain expressions with function calls
-        _ => {}
-    }
+        });
+    });
 }
 
 /// Folds constant `Keccak256Single` and `Keccak256Pair` expressions in an object.

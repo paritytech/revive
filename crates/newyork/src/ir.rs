@@ -819,301 +819,32 @@ impl Object {
     /// Finds the maximum ValueId used anywhere in this object (code + functions).
     /// Does NOT recurse into subobjects.
     pub fn find_max_value_id(&self) -> u32 {
-        let mut max_id: u32 = 0;
-
-        fn update(id: u32, max: &mut u32) {
-            *max = (*max).max(id);
-        }
-
-        fn scan_expr(expr: &Expr, m: &mut u32) {
-            match expr {
-                Expr::Var(id) => update(id.0, m),
-                Expr::Binary { lhs, rhs, .. } => {
-                    update(lhs.id.0, m);
-                    update(rhs.id.0, m);
-                }
-                Expr::Ternary { a, b, n, .. } => {
-                    update(a.id.0, m);
-                    update(b.id.0, m);
-                    update(n.id.0, m);
-                }
-                Expr::Unary { operand, .. } => update(operand.id.0, m),
-                Expr::CallDataLoad { offset } => update(offset.id.0, m),
-                Expr::ExtCodeSize { address }
-                | Expr::ExtCodeHash { address }
-                | Expr::Balance { address } => update(address.id.0, m),
-                Expr::BlockHash { number } => update(number.id.0, m),
-                Expr::BlobHash { index } => update(index.id.0, m),
-                Expr::MLoad { offset, .. } => update(offset.id.0, m),
-                Expr::SLoad { key, .. } | Expr::TLoad { key } => update(key.id.0, m),
-                Expr::Call { args, .. } => {
-                    for a in args {
-                        update(a.id.0, m);
-                    }
-                }
-                Expr::Truncate { value, .. }
-                | Expr::ZeroExtend { value, .. }
-                | Expr::SignExtendTo { value, .. } => update(value.id.0, m),
-                Expr::Keccak256 { offset, length } => {
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                }
-                Expr::Keccak256Pair { word0, word1 }
-                | Expr::MappingSLoad {
-                    key: word0,
-                    slot: word1,
-                } => {
-                    update(word0.id.0, m);
-                    update(word1.id.0, m);
-                }
-                Expr::Keccak256Single { word0 } => update(word0.id.0, m),
-                _ => {}
-            }
-        }
-
-        fn scan_stmt(stmt: &Statement, m: &mut u32) {
-            match stmt {
-                Statement::Let { bindings, value } => {
-                    for b in bindings {
-                        update(b.0, m);
-                    }
-                    scan_expr(value, m);
-                }
-                Statement::MStore { offset, value, .. }
-                | Statement::MStore8 { offset, value, .. } => {
-                    update(offset.id.0, m);
-                    update(value.id.0, m);
-                }
-                Statement::MCopy { dest, src, length } => {
-                    update(dest.id.0, m);
-                    update(src.id.0, m);
-                    update(length.id.0, m);
-                }
-                Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
-                    update(key.id.0, m);
-                    update(value.id.0, m);
-                }
-                Statement::MappingSStore { key, slot, value } => {
-                    update(key.id.0, m);
-                    update(slot.id.0, m);
-                    update(value.id.0, m);
-                }
-                Statement::If {
-                    condition,
-                    inputs,
-                    then_region,
-                    else_region,
-                    outputs,
-                } => {
-                    update(condition.id.0, m);
-                    for v in inputs {
-                        update(v.id.0, m);
-                    }
-                    scan_region(then_region, m);
-                    if let Some(r) = else_region {
-                        scan_region(r, m);
-                    }
-                    for o in outputs {
-                        update(o.0, m);
-                    }
-                }
-                Statement::Switch {
-                    scrutinee,
-                    inputs,
-                    cases,
-                    default,
-                    outputs,
-                } => {
-                    update(scrutinee.id.0, m);
-                    for v in inputs {
-                        update(v.id.0, m);
-                    }
-                    for c in cases {
-                        scan_region(&c.body, m);
-                    }
-                    if let Some(r) = default {
-                        scan_region(r, m);
-                    }
-                    for o in outputs {
-                        update(o.0, m);
-                    }
-                }
-                Statement::For {
-                    init_values,
-                    loop_vars,
-                    condition_stmts,
-                    condition,
-                    body,
-                    post_input_vars,
-                    post,
-                    outputs,
-                } => {
-                    for v in init_values {
-                        update(v.id.0, m);
-                    }
-                    for v in loop_vars {
-                        update(v.0, m);
-                    }
-                    for s in condition_stmts {
-                        scan_stmt(s, m);
-                    }
-                    scan_expr(condition, m);
-                    scan_region(body, m);
-                    for v in post_input_vars {
-                        update(v.0, m);
-                    }
-                    scan_region(post, m);
-                    for o in outputs {
-                        update(o.0, m);
-                    }
-                }
-                Statement::Leave { return_values }
-                | Statement::Break {
-                    values: return_values,
-                }
-                | Statement::Continue {
-                    values: return_values,
-                } => {
-                    for v in return_values {
-                        update(v.id.0, m);
-                    }
-                }
-                Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                }
-                Statement::SelfDestruct { address } => update(address.id.0, m),
-                Statement::ExternalCall {
-                    gas,
-                    address,
-                    value,
-                    args_offset,
-                    args_length,
-                    ret_offset,
-                    ret_length,
-                    result,
-                    ..
-                } => {
-                    update(gas.id.0, m);
-                    update(address.id.0, m);
-                    if let Some(v) = value {
-                        update(v.id.0, m);
-                    }
-                    update(args_offset.id.0, m);
-                    update(args_length.id.0, m);
-                    update(ret_offset.id.0, m);
-                    update(ret_length.id.0, m);
-                    update(result.0, m);
-                }
-                Statement::Create {
-                    value,
-                    offset,
-                    length,
-                    salt,
-                    result,
-                    ..
-                } => {
-                    update(value.id.0, m);
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                    if let Some(s) = salt {
-                        update(s.id.0, m);
-                    }
-                    update(result.0, m);
-                }
-                Statement::Log {
-                    offset,
-                    length,
-                    topics,
-                } => {
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                    for t in topics {
-                        update(t.id.0, m);
-                    }
-                }
-                Statement::CodeCopy {
-                    dest,
-                    offset,
-                    length,
-                }
-                | Statement::ReturnDataCopy {
-                    dest,
-                    offset,
-                    length,
-                }
-                | Statement::DataCopy {
-                    dest,
-                    offset,
-                    length,
-                }
-                | Statement::CallDataCopy {
-                    dest,
-                    offset,
-                    length,
-                } => {
-                    update(dest.id.0, m);
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                }
-                Statement::ExtCodeCopy {
-                    address,
-                    dest,
-                    offset,
-                    length,
-                } => {
-                    update(address.id.0, m);
-                    update(dest.id.0, m);
-                    update(offset.id.0, m);
-                    update(length.id.0, m);
-                }
-                Statement::Block(region) => scan_region(region, m),
-                Statement::Expr(expr) => scan_expr(expr, m),
-                Statement::SetImmutable { value, .. } => update(value.id.0, m),
-                Statement::CustomErrorRevert { args, .. } => {
-                    for a in args {
-                        update(a.id.0, m);
-                    }
-                }
-                Statement::Stop
-                | Statement::Invalid
-                | Statement::PanicRevert { .. }
-                | Statement::ErrorStringRevert { .. } => {}
-            }
-        }
-
-        fn scan_region(region: &Region, m: &mut u32) {
-            for stmt in &region.statements {
-                scan_stmt(stmt, m);
-            }
-            for v in &region.yields {
-                update(v.id.0, m);
-            }
-        }
-
-        fn scan_block(block: &Block, m: &mut u32) {
+        fn scan_block(block: &Block, max_id: &mut u32) {
             for stmt in &block.statements {
-                scan_stmt(stmt, m);
+                stmt.for_each_value_id(&mut |id| *max_id = (*max_id).max(id.0));
             }
+            for_each_stmt(&block.statements, &mut |stmt| {
+                stmt.for_each_value_id_def(&mut |id| *max_id = (*max_id).max(id.0));
+            });
         }
 
+        let mut max_id: u32 = 0;
         scan_block(&self.code, &mut max_id);
         for function in self.functions.values() {
             for (param_id, _) in &function.params {
-                update(param_id.0, &mut max_id);
+                max_id = max_id.max(param_id.0);
             }
             for id in &function.return_values_initial {
-                update(id.0, &mut max_id);
+                max_id = max_id.max(id.0);
             }
             for id in &function.return_values {
-                update(id.0, &mut max_id);
+                max_id = max_id.max(id.0);
             }
             scan_block(&function.body, &mut max_id);
         }
         for sub in &self.subobjects {
             max_id = max_id.max(sub.find_max_value_id());
         }
-
         max_id
     }
 }
@@ -1156,6 +887,646 @@ impl Object {
             counts += subobject.count_syscall_sites();
         }
         counts
+    }
+}
+
+impl Statement {
+    /// Visits every immediate `Expr` in this statement (NOT recursing into
+    /// nested regions, and NOT into `For::condition_stmts`). Pair with
+    /// [`for_each_stmt`] to walk all `Expr`s reachable from a statement list:
+    ///
+    /// ```ignore
+    /// for_each_stmt(&block.statements, &mut |stmt| {
+    ///     stmt.for_each_expr(&mut |expr| { /* ... */ });
+    /// });
+    /// ```
+    pub fn for_each_expr(&self, f: &mut dyn FnMut(&Expr)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expr(value) => f(value),
+            Statement::For { condition, .. } => f(condition),
+            _ => {}
+        }
+    }
+
+    /// Mutating variant of [`Statement::for_each_expr`].
+    pub fn for_each_expr_mut(&mut self, f: &mut dyn FnMut(&mut Expr)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expr(value) => f(value),
+            Statement::For { condition, .. } => f(condition),
+            _ => {}
+        }
+    }
+
+    /// Visits every `ValueId` *used* by this statement, recursing through
+    /// nested regions, `For::condition_stmts`, and region yields. Does NOT
+    /// visit defining `ValueId`s (Let bindings, If/Switch/For outputs,
+    /// loop_vars, post_input_vars, ExternalCall/Create result). Use
+    /// [`Statement::for_each_value_id_def`] for those.
+    pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expr(value) => value.for_each_value_id(f),
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                f(offset.id);
+                f(value.id);
+            }
+            Statement::MCopy { dest, src, length } => {
+                f(dest.id);
+                f(src.id);
+                f(length.id);
+            }
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                f(key.id);
+                f(value.id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                f(key.id);
+                f(slot.id);
+                f(value.id);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                ..
+            } => {
+                f(condition.id);
+                for v in inputs {
+                    f(v.id);
+                }
+                walk_region_uses(then_region, f);
+                if let Some(r) = else_region {
+                    walk_region_uses(r, f);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                ..
+            } => {
+                f(scrutinee.id);
+                for v in inputs {
+                    f(v.id);
+                }
+                for c in cases {
+                    walk_region_uses(&c.body, f);
+                }
+                if let Some(r) = default {
+                    walk_region_uses(r, f);
+                }
+            }
+            Statement::For {
+                init_values,
+                condition_stmts,
+                condition,
+                body,
+                post,
+                ..
+            } => {
+                for v in init_values {
+                    f(v.id);
+                }
+                for s in condition_stmts {
+                    s.for_each_value_id(f);
+                }
+                condition.for_each_value_id(f);
+                walk_region_uses(body, f);
+                walk_region_uses(post, f);
+            }
+            Statement::Block(region) => walk_region_uses(region, f),
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                f(offset.id);
+                f(length.id);
+            }
+            Statement::SelfDestruct { address } => f(address.id),
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                ..
+            } => {
+                f(gas.id);
+                f(address.id);
+                if let Some(v) = value {
+                    f(v.id);
+                }
+                f(args_offset.id);
+                f(args_length.id);
+                f(ret_offset.id);
+                f(ret_length.id);
+            }
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                ..
+            } => {
+                f(value.id);
+                f(offset.id);
+                f(length.id);
+                if let Some(s) = salt {
+                    f(s.id);
+                }
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                f(offset.id);
+                f(length.id);
+                for t in topics {
+                    f(t.id);
+                }
+            }
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                f(dest.id);
+                f(offset.id);
+                f(length.id);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                dest,
+                offset,
+                length,
+            } => {
+                f(address.id);
+                f(dest.id);
+                f(offset.id);
+                f(length.id);
+            }
+            Statement::SetImmutable { value, .. } => f(value.id),
+            Statement::Leave { return_values }
+            | Statement::Break {
+                values: return_values,
+            }
+            | Statement::Continue {
+                values: return_values,
+            } => {
+                for v in return_values {
+                    f(v.id);
+                }
+            }
+            Statement::CustomErrorRevert { args, .. } => {
+                for a in args {
+                    f(a.id);
+                }
+            }
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. } => {}
+        }
+    }
+
+    /// Mutating variant of [`Statement::for_each_value_id`]. Same traversal
+    /// rules — visits use sites, recurses into nested regions, skips defs.
+    pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expr(value) => value.for_each_value_id_mut(f),
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                f(&mut offset.id);
+                f(&mut value.id);
+            }
+            Statement::MCopy { dest, src, length } => {
+                f(&mut dest.id);
+                f(&mut src.id);
+                f(&mut length.id);
+            }
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                f(&mut key.id);
+                f(&mut value.id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                f(&mut key.id);
+                f(&mut slot.id);
+                f(&mut value.id);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                ..
+            } => {
+                f(&mut condition.id);
+                for v in inputs {
+                    f(&mut v.id);
+                }
+                walk_region_uses_mut(then_region, f);
+                if let Some(r) = else_region {
+                    walk_region_uses_mut(r, f);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                ..
+            } => {
+                f(&mut scrutinee.id);
+                for v in inputs {
+                    f(&mut v.id);
+                }
+                for c in cases {
+                    walk_region_uses_mut(&mut c.body, f);
+                }
+                if let Some(r) = default {
+                    walk_region_uses_mut(r, f);
+                }
+            }
+            Statement::For {
+                init_values,
+                condition_stmts,
+                condition,
+                body,
+                post,
+                ..
+            } => {
+                for v in init_values {
+                    f(&mut v.id);
+                }
+                for s in condition_stmts {
+                    s.for_each_value_id_mut(f);
+                }
+                condition.for_each_value_id_mut(f);
+                walk_region_uses_mut(body, f);
+                walk_region_uses_mut(post, f);
+            }
+            Statement::Block(region) => walk_region_uses_mut(region, f),
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                f(&mut offset.id);
+                f(&mut length.id);
+            }
+            Statement::SelfDestruct { address } => f(&mut address.id),
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                ..
+            } => {
+                f(&mut gas.id);
+                f(&mut address.id);
+                if let Some(v) = value {
+                    f(&mut v.id);
+                }
+                f(&mut args_offset.id);
+                f(&mut args_length.id);
+                f(&mut ret_offset.id);
+                f(&mut ret_length.id);
+            }
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                ..
+            } => {
+                f(&mut value.id);
+                f(&mut offset.id);
+                f(&mut length.id);
+                if let Some(s) = salt {
+                    f(&mut s.id);
+                }
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                f(&mut offset.id);
+                f(&mut length.id);
+                for t in topics {
+                    f(&mut t.id);
+                }
+            }
+            Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::ReturnDataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                dest,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                f(&mut dest.id);
+                f(&mut offset.id);
+                f(&mut length.id);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                dest,
+                offset,
+                length,
+            } => {
+                f(&mut address.id);
+                f(&mut dest.id);
+                f(&mut offset.id);
+                f(&mut length.id);
+            }
+            Statement::SetImmutable { value, .. } => f(&mut value.id),
+            Statement::Leave { return_values }
+            | Statement::Break {
+                values: return_values,
+            }
+            | Statement::Continue {
+                values: return_values,
+            } => {
+                for v in return_values {
+                    f(&mut v.id);
+                }
+            }
+            Statement::CustomErrorRevert { args, .. } => {
+                for a in args {
+                    f(&mut a.id);
+                }
+            }
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. } => {}
+        }
+    }
+
+    /// Visits every `ValueId` *defined* by this statement (NOT used by it).
+    /// This is the dual of [`Statement::for_each_value_id`]. Does not recurse
+    /// into nested regions — for that, use [`for_each_stmt`] to walk and call
+    /// this on each statement.
+    pub fn for_each_value_id_def(&self, f: &mut dyn FnMut(ValueId)) {
+        match self {
+            Statement::Let { bindings, .. } => {
+                for b in bindings {
+                    f(*b);
+                }
+            }
+            Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
+                for o in outputs {
+                    f(*o);
+                }
+            }
+            Statement::For {
+                loop_vars,
+                post_input_vars,
+                outputs,
+                ..
+            } => {
+                for v in loop_vars {
+                    f(*v);
+                }
+                for v in post_input_vars {
+                    f(*v);
+                }
+                for o in outputs {
+                    f(*o);
+                }
+            }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => f(*result),
+            _ => {}
+        }
+    }
+}
+
+fn walk_region_uses(region: &Region, f: &mut dyn FnMut(ValueId)) {
+    for s in &region.statements {
+        s.for_each_value_id(f);
+    }
+    for v in &region.yields {
+        f(v.id);
+    }
+}
+
+fn walk_region_uses_mut(region: &mut Region, f: &mut dyn FnMut(&mut ValueId)) {
+    for s in &mut region.statements {
+        s.for_each_value_id_mut(f);
+    }
+    for v in &mut region.yields {
+        f(&mut v.id);
+    }
+}
+
+impl Expr {
+    /// Visits every `ValueId` *used* by this expression. Includes the
+    /// `ValueId` of `Expr::Var` and the `id` of every `Value` operand.
+    pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
+        match self {
+            Expr::Var(id) => f(*id),
+            Expr::Binary { lhs, rhs, .. } => {
+                f(lhs.id);
+                f(rhs.id);
+            }
+            Expr::Ternary { a, b, n, .. } => {
+                f(a.id);
+                f(b.id);
+                f(n.id);
+            }
+            Expr::Unary { operand, .. } => f(operand.id),
+            Expr::CallDataLoad { offset } | Expr::MLoad { offset, .. } => f(offset.id),
+            Expr::ExtCodeSize { address }
+            | Expr::ExtCodeHash { address }
+            | Expr::Balance { address } => f(address.id),
+            Expr::BlockHash { number } => f(number.id),
+            Expr::BlobHash { index } => f(index.id),
+            Expr::SLoad { key, .. } | Expr::TLoad { key } => f(key.id),
+            Expr::Call { args, .. } => {
+                for a in args {
+                    f(a.id);
+                }
+            }
+            Expr::Truncate { value, .. }
+            | Expr::ZeroExtend { value, .. }
+            | Expr::SignExtendTo { value, .. } => f(value.id),
+            Expr::Keccak256 { offset, length } => {
+                f(offset.id);
+                f(length.id);
+            }
+            Expr::Keccak256Pair { word0, word1 } => {
+                f(word0.id);
+                f(word1.id);
+            }
+            Expr::MappingSLoad { key, slot } => {
+                f(key.id);
+                f(slot.id);
+            }
+            Expr::Keccak256Single { word0 } => f(word0.id),
+            Expr::Literal { .. }
+            | Expr::CallValue
+            | Expr::Caller
+            | Expr::Origin
+            | Expr::CallDataSize
+            | Expr::CodeSize
+            | Expr::GasPrice
+            | Expr::ReturnDataSize
+            | Expr::Coinbase
+            | Expr::Timestamp
+            | Expr::Number
+            | Expr::Difficulty
+            | Expr::GasLimit
+            | Expr::ChainId
+            | Expr::SelfBalance
+            | Expr::BaseFee
+            | Expr::BlobBaseFee
+            | Expr::Gas
+            | Expr::MSize
+            | Expr::Address
+            | Expr::DataOffset { .. }
+            | Expr::DataSize { .. }
+            | Expr::LoadImmutable { .. }
+            | Expr::LinkerSymbol { .. } => {}
+        }
+    }
+
+    /// Mutating variant of [`Expr::for_each_value_id`].
+    pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Expr::Var(id) => f(id),
+            Expr::Binary { lhs, rhs, .. } => {
+                f(&mut lhs.id);
+                f(&mut rhs.id);
+            }
+            Expr::Ternary { a, b, n, .. } => {
+                f(&mut a.id);
+                f(&mut b.id);
+                f(&mut n.id);
+            }
+            Expr::Unary { operand, .. } => f(&mut operand.id),
+            Expr::CallDataLoad { offset } | Expr::MLoad { offset, .. } => f(&mut offset.id),
+            Expr::ExtCodeSize { address }
+            | Expr::ExtCodeHash { address }
+            | Expr::Balance { address } => f(&mut address.id),
+            Expr::BlockHash { number } => f(&mut number.id),
+            Expr::BlobHash { index } => f(&mut index.id),
+            Expr::SLoad { key, .. } | Expr::TLoad { key } => f(&mut key.id),
+            Expr::Call { args, .. } => {
+                for a in args {
+                    f(&mut a.id);
+                }
+            }
+            Expr::Truncate { value, .. }
+            | Expr::ZeroExtend { value, .. }
+            | Expr::SignExtendTo { value, .. } => f(&mut value.id),
+            Expr::Keccak256 { offset, length } => {
+                f(&mut offset.id);
+                f(&mut length.id);
+            }
+            Expr::Keccak256Pair { word0, word1 } => {
+                f(&mut word0.id);
+                f(&mut word1.id);
+            }
+            Expr::MappingSLoad { key, slot } => {
+                f(&mut key.id);
+                f(&mut slot.id);
+            }
+            Expr::Keccak256Single { word0 } => f(&mut word0.id),
+            Expr::Literal { .. }
+            | Expr::CallValue
+            | Expr::Caller
+            | Expr::Origin
+            | Expr::CallDataSize
+            | Expr::CodeSize
+            | Expr::GasPrice
+            | Expr::ReturnDataSize
+            | Expr::Coinbase
+            | Expr::Timestamp
+            | Expr::Number
+            | Expr::Difficulty
+            | Expr::GasLimit
+            | Expr::ChainId
+            | Expr::SelfBalance
+            | Expr::BaseFee
+            | Expr::BlobBaseFee
+            | Expr::Gas
+            | Expr::MSize
+            | Expr::Address
+            | Expr::DataOffset { .. }
+            | Expr::DataSize { .. }
+            | Expr::LoadImmutable { .. }
+            | Expr::LinkerSymbol { .. } => {}
+        }
+    }
+}
+
+/// Mutating variant of [`for_each_stmt`]. Visits every statement in a slice
+/// recursively. `f` is called on each statement *before* recursion into its
+/// nested regions, so a callback that swaps a statement's variant will not
+/// have its new nested regions re-visited. For our use cases the callback
+/// only mutates inner fields, never changes the variant.
+pub fn for_each_stmt_mut(stmts: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
+    for stmt in stmts.iter_mut() {
+        f(stmt);
+        match stmt {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                for_each_stmt_mut(&mut then_region.statements, f);
+                if let Some(r) = else_region {
+                    for_each_stmt_mut(&mut r.statements, f);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    for_each_stmt_mut(&mut case.body.statements, f);
+                }
+                if let Some(r) = default {
+                    for_each_stmt_mut(&mut r.statements, f);
+                }
+            }
+            Statement::For {
+                condition_stmts,
+                body,
+                post,
+                ..
+            } => {
+                for_each_stmt_mut(condition_stmts, f);
+                for_each_stmt_mut(&mut body.statements, f);
+                for_each_stmt_mut(&mut post.statements, f);
+            }
+            Statement::Block(region) => for_each_stmt_mut(&mut region.statements, f),
+            _ => {}
+        }
     }
 }
 

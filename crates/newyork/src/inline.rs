@@ -22,8 +22,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{
-    BitWidth, Block, Expr, Function, FunctionId, Object, Region, Statement, SwitchCase, Type,
-    UnaryOp, Value, ValueId,
+    for_each_stmt, BitWidth, Block, Expr, Function, FunctionId, Object, Region, Statement,
+    SwitchCase, Type, UnaryOp, Value, ValueId,
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
@@ -128,86 +128,14 @@ fn count_calls_in_block(
     call_counts: &mut BTreeMap<FunctionId, usize>,
     callees: &mut BTreeSet<FunctionId>,
 ) {
-    for stmt in &block.statements {
-        count_calls_in_statement(stmt, call_counts, callees);
-    }
-}
-
-/// Counts call sites in a statement.
-fn count_calls_in_statement(
-    stmt: &Statement,
-    call_counts: &mut BTreeMap<FunctionId, usize>,
-    callees: &mut BTreeSet<FunctionId>,
-) {
-    match stmt {
-        Statement::Let { value, .. } => {
-            count_calls_in_expr(value, call_counts, callees);
-        }
-        Statement::Expr(expr) => {
-            count_calls_in_expr(expr, call_counts, callees);
-        }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            count_calls_in_region(then_region, call_counts, callees);
-            if let Some(else_region) = else_region {
-                count_calls_in_region(else_region, call_counts, callees);
+    for_each_stmt(&block.statements, &mut |stmt| {
+        stmt.for_each_expr(&mut |expr| {
+            if let Expr::Call { function, .. } = expr {
+                *call_counts.entry(*function).or_insert(0) += 1;
+                callees.insert(*function);
             }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for case in cases {
-                count_calls_in_region(&case.body, call_counts, callees);
-            }
-            if let Some(default) = default {
-                count_calls_in_region(default, call_counts, callees);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            condition,
-            body,
-            post,
-            ..
-        } => {
-            for cond_stmt in condition_stmts {
-                count_calls_in_statement(cond_stmt, call_counts, callees);
-            }
-            count_calls_in_expr(condition, call_counts, callees);
-            count_calls_in_region(body, call_counts, callees);
-            count_calls_in_region(post, call_counts, callees);
-        }
-        Statement::Block(region) => {
-            count_calls_in_region(region, call_counts, callees);
-        }
-        _ => {}
-    }
-}
-
-/// Counts call sites in a region.
-fn count_calls_in_region(
-    region: &Region,
-    call_counts: &mut BTreeMap<FunctionId, usize>,
-    callees: &mut BTreeSet<FunctionId>,
-) {
-    for stmt in &region.statements {
-        count_calls_in_statement(stmt, call_counts, callees);
-    }
-}
-
-/// Counts call sites in an expression.
-fn count_calls_in_expr(
-    expr: &Expr,
-    call_counts: &mut BTreeMap<FunctionId, usize>,
-    callees: &mut BTreeSet<FunctionId>,
-) {
-    if let Expr::Call { function, .. } = expr {
-        *call_counts.entry(*function).or_insert(0) += 1;
-        callees.insert(*function);
-    }
-    // Other expression variants don't contain nested calls
-    // (arguments are Value references, not expressions)
+        });
+    });
 }
 
 /// Finds recursive functions using iterative SCC detection.
@@ -269,49 +197,16 @@ fn find_recursive_functions(
 /// produce O(N^2) nesting as each guard re-wraps the remaining guarded code).
 const LEAVE_OVERHEAD_PER_SITE: usize = 6;
 
-/// Counts the number of Leave statements in a block (non-recursive into functions).
+/// Counts the number of Leave statements in a block (recursing into nested
+/// regions and `For::condition_stmts`, but not into other functions).
 fn count_leaves(block: &Block) -> usize {
-    block.statements.iter().map(count_leaves_in_stmt).sum()
-}
-
-fn count_leaves_in_stmt(stmt: &Statement) -> usize {
-    match stmt {
-        Statement::Leave { .. } => 1,
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            count_leaves_in_region(then_region)
-                + else_region.as_ref().map_or(0, count_leaves_in_region)
+    let mut count = 0;
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if matches!(stmt, Statement::Leave { .. }) {
+            count += 1;
         }
-        Statement::Switch { cases, default, .. } => {
-            cases
-                .iter()
-                .map(|c| count_leaves_in_region(&c.body))
-                .sum::<usize>()
-                + default.as_ref().map_or(0, count_leaves_in_region)
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            condition_stmts
-                .iter()
-                .map(count_leaves_in_stmt)
-                .sum::<usize>()
-                + count_leaves_in_region(body)
-                + count_leaves_in_region(post)
-        }
-        Statement::Block(region) => count_leaves_in_region(region),
-        _ => 0,
-    }
-}
-
-fn count_leaves_in_region(region: &Region) -> usize {
-    region.statements.iter().map(count_leaves_in_stmt).sum()
+    });
+    count
 }
 
 /// Decides which functions should be inlined.
@@ -817,84 +712,42 @@ fn can_inline(function: &Function) -> bool {
     !has_top_level_break_continue(&function.body)
 }
 
-/// Checks if a function has Leave statements inside a For loop body.
-/// Leave inside For is not supported by our IR-level inliner.
+/// Checks if a function has Leave statements inside any For loop (at any
+/// nesting level). Leave inside For is not handled by our IR-level inliner.
 fn has_leave_in_for(block: &Block) -> bool {
-    fn check_stmt(stmt: &Statement) -> bool {
-        match stmt {
-            Statement::For {
-                body,
-                post,
-                condition_stmts,
-                ..
-            } => {
-                // Leave inside a For loop is not handled by our inliner
-                stmts_have_leave(&body.statements)
-                    || stmts_have_leave(&post.statements)
-                    || stmts_have_leave(condition_stmts)
+    let mut found = false;
+    for_each_stmt(&block.statements, &mut |stmt| {
+        if let Statement::For {
+            body,
+            post,
+            condition_stmts,
+            ..
+        } = stmt
+        {
+            if stmts_have_leave(&body.statements)
+                || stmts_have_leave(&post.statements)
+                || stmts_have_leave(condition_stmts)
+            {
+                found = true;
             }
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                then_region.statements.iter().any(check_stmt)
-                    || else_region
-                        .as_ref()
-                        .is_some_and(|r| r.statements.iter().any(check_stmt))
-            }
-            Statement::Switch { cases, default, .. } => {
-                cases
-                    .iter()
-                    .any(|c| c.body.statements.iter().any(check_stmt))
-                    || default
-                        .as_ref()
-                        .is_some_and(|r| r.statements.iter().any(check_stmt))
-            }
-            Statement::Block(region) => region.statements.iter().any(check_stmt),
-            _ => false,
         }
-    }
-    block.statements.iter().any(check_stmt)
+    });
+    found
 }
 
 /// Checks if a slice of statements contains any Leave at any nesting level.
 fn stmts_have_leave(stmts: &[Statement]) -> bool {
-    stmts.iter().any(stmt_has_leave_recursive)
+    let mut found = false;
+    for_each_stmt(stmts, &mut |s| {
+        if matches!(s, Statement::Leave { .. }) {
+            found = true;
+        }
+    });
+    found
 }
 
 fn stmt_has_leave_recursive(stmt: &Statement) -> bool {
-    match stmt {
-        Statement::Leave { .. } => true,
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            stmts_have_leave(&then_region.statements)
-                || else_region
-                    .as_ref()
-                    .is_some_and(|r| stmts_have_leave(&r.statements))
-        }
-        Statement::Switch { cases, default, .. } => {
-            cases.iter().any(|c| stmts_have_leave(&c.body.statements))
-                || default
-                    .as_ref()
-                    .is_some_and(|r| stmts_have_leave(&r.statements))
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            stmts_have_leave(condition_stmts)
-                || stmts_have_leave(&body.statements)
-                || stmts_have_leave(&post.statements)
-        }
-        Statement::Block(region) => stmts_have_leave(&region.statements),
-        _ => false,
-    }
+    stmts_have_leave(std::slice::from_ref(stmt))
 }
 
 /// Allocates a fresh ValueId.

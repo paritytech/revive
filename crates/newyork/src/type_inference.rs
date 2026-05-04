@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::ToPrimitive;
 
 use crate::ir::{
-    BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement, Type, UnaryOp,
-    ValueId,
+    for_each_stmt, BinOp, BitWidth, Block, Expr, Function, MemoryRegion, Object, Region, Statement,
+    Type, UnaryOp, ValueId,
 };
 
 /// Type constraint representing the width bounds for a value.
@@ -465,64 +465,16 @@ impl TypeInference {
 
     fn propagate_demands_block(&mut self, block: &Block) -> bool {
         let mut changed = false;
-        for stmt in &block.statements {
-            changed |= self.propagate_demands_statement(stmt);
-        }
-        changed
-    }
-
-    fn propagate_demands_region(&mut self, region: &Region) -> bool {
-        let mut changed = false;
-        for stmt in &region.statements {
-            changed |= self.propagate_demands_statement(stmt);
-        }
-        changed
-    }
-
-    fn propagate_demands_statement(&mut self, stmt: &Statement) -> bool {
-        let mut changed = false;
-        match stmt {
-            Statement::Let { bindings, value } if bindings.len() == 1 => {
-                let result_id = bindings[0];
-                if let Some(result_uses) = self.uses.get(&result_id.0).cloned() {
-                    changed |= self.propagate_demand_to_expr(value, &result_uses);
+        for_each_stmt(&block.statements, &mut |stmt| {
+            if let Statement::Let { bindings, value } = stmt {
+                if bindings.len() == 1 {
+                    let result_id = bindings[0];
+                    if let Some(result_uses) = self.uses.get(&result_id.0).cloned() {
+                        changed |= self.propagate_demand_to_expr(value, &result_uses);
+                    }
                 }
             }
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                changed |= self.propagate_demands_region(then_region);
-                if let Some(else_region) = else_region {
-                    changed |= self.propagate_demands_region(else_region);
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    changed |= self.propagate_demands_region(&case.body);
-                }
-                if let Some(default) = default {
-                    changed |= self.propagate_demands_region(default);
-                }
-            }
-            Statement::For {
-                condition_stmts,
-                body,
-                post,
-                ..
-            } => {
-                for stmt in condition_stmts {
-                    changed |= self.propagate_demands_statement(stmt);
-                }
-                changed |= self.propagate_demands_region(body);
-                changed |= self.propagate_demands_region(post);
-            }
-            Statement::Block(region) => {
-                changed |= self.propagate_demands_region(region);
-            }
-            _ => {}
-        }
+        });
         changed
     }
 
@@ -700,111 +652,35 @@ impl TypeInference {
         changed
     }
 
-    /// Helper: walk a block collecting argument min_widths at call sites.
+    /// Walks a block (and all nested regions) collecting argument min_widths
+    /// at call sites. For each call to a function, records the widest argument
+    /// seen across all callers — caller-driven narrowing uses the maximum.
     fn collect_arg_widths_block(
         &self,
         block: &Block,
         arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
         called_funcs: &mut BTreeSet<u32>,
     ) {
-        for stmt in &block.statements {
-            self.collect_arg_widths_stmt(stmt, arg_widths, called_funcs);
-        }
-    }
-
-    /// Helper: walk a statement collecting argument min_widths at call sites.
-    fn collect_arg_widths_stmt(
-        &self,
-        stmt: &Statement,
-        arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
-        called_funcs: &mut BTreeSet<u32>,
-    ) {
-        // Check if this statement contains a call expression.
-        if let Statement::Let {
-            value:
-                Expr::Call {
-                    function: ref fid,
-                    ref args,
-                },
-            ..
-        } = stmt
-        {
-            called_funcs.insert(fid.0);
-            for (i, arg) in args.iter().enumerate() {
-                let arg_width = self.get(arg.id).min_width;
-                let entry = arg_widths.entry((fid.0, i)).or_insert(arg_width);
-                // Take the MAX across all callers (widest argument wins).
-                if arg_width > *entry {
-                    *entry = arg_width;
+        for_each_stmt(&block.statements, &mut |stmt| {
+            let call = match stmt {
+                Statement::Let {
+                    value: Expr::Call { function, args },
+                    ..
+                }
+                | Statement::Expr(Expr::Call { function, args }) => Some((function, args)),
+                _ => None,
+            };
+            if let Some((fid, args)) = call {
+                called_funcs.insert(fid.0);
+                for (i, arg) in args.iter().enumerate() {
+                    let arg_width = self.get(arg.id).min_width;
+                    let entry = arg_widths.entry((fid.0, i)).or_insert(arg_width);
+                    if arg_width > *entry {
+                        *entry = arg_width;
+                    }
                 }
             }
-        }
-
-        // Also handle Expr in Statement::Expr(Expr::Call { .. })
-        if let Statement::Expr(Expr::Call {
-            function: ref fid,
-            ref args,
-        }) = stmt
-        {
-            called_funcs.insert(fid.0);
-            for (i, arg) in args.iter().enumerate() {
-                let arg_width = self.get(arg.id).min_width;
-                let entry = arg_widths.entry((fid.0, i)).or_insert(arg_width);
-                if arg_width > *entry {
-                    *entry = arg_width;
-                }
-            }
-        }
-
-        // Recurse into nested regions.
-        match stmt {
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                self.collect_arg_widths_region(then_region, arg_widths, called_funcs);
-                if let Some(r) = else_region {
-                    self.collect_arg_widths_region(r, arg_widths, called_funcs);
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    self.collect_arg_widths_region(&case.body, arg_widths, called_funcs);
-                }
-                if let Some(d) = default {
-                    self.collect_arg_widths_region(d, arg_widths, called_funcs);
-                }
-            }
-            Statement::For {
-                condition_stmts,
-                body,
-                post,
-                ..
-            } => {
-                for s in condition_stmts {
-                    self.collect_arg_widths_stmt(s, arg_widths, called_funcs);
-                }
-                self.collect_arg_widths_region(body, arg_widths, called_funcs);
-                self.collect_arg_widths_region(post, arg_widths, called_funcs);
-            }
-            Statement::Block(region) => {
-                self.collect_arg_widths_region(region, arg_widths, called_funcs);
-            }
-            _ => {}
-        }
-    }
-
-    /// Helper: walk a region collecting argument min_widths.
-    fn collect_arg_widths_region(
-        &self,
-        region: &Region,
-        arg_widths: &mut BTreeMap<(u32, usize), BitWidth>,
-        called_funcs: &mut BTreeSet<u32>,
-    ) {
-        for stmt in &region.statements {
-            self.collect_arg_widths_stmt(stmt, arg_widths, called_funcs);
-        }
+        });
     }
 
     /// Narrows function return types based on forward min_width analysis.
@@ -920,86 +796,30 @@ impl TypeInference {
         changed
     }
 
-    /// Walks a block collecting return demands from Expr::Call in Let statements.
+    /// Walks a block (and all nested regions) collecting return demands from
+    /// `Expr::Call` in `Let` statements. For each call binding, records the
+    /// widest use-demand across all call sites — narrowing uses the maximum.
     fn collect_return_demands_block(
         &self,
         block: &Block,
         demands: &mut BTreeMap<u32, Vec<BitWidth>>,
     ) {
-        for stmt in &block.statements {
-            self.collect_return_demands_stmt(stmt, demands);
-        }
-    }
-
-    /// Walks a statement collecting return demands.
-    fn collect_return_demands_stmt(
-        &self,
-        stmt: &Statement,
-        demands: &mut BTreeMap<u32, Vec<BitWidth>>,
-    ) {
-        match stmt {
-            Statement::Let {
+        for_each_stmt(&block.statements, &mut |stmt| {
+            if let Statement::Let {
                 bindings,
                 value: Expr::Call { function, .. },
-            } => {
-                // Each binding corresponds to a return value position
+            } = stmt
+            {
                 for (i, binding_id) in bindings.iter().enumerate() {
                     let demand = self.use_demand_width(*binding_id);
                     let entry = demands.entry(function.0).or_default();
-                    // Ensure the vec is long enough
                     while entry.len() <= i {
                         entry.push(BitWidth::I1);
                     }
-                    // Take the widest demand across all call sites
                     entry[i] = entry[i].max(demand);
                 }
             }
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                self.collect_return_demands_region(then_region, demands);
-                if let Some(else_r) = else_region {
-                    self.collect_return_demands_region(else_r, demands);
-                }
-            }
-            Statement::For {
-                condition_stmts,
-                body,
-                post,
-                ..
-            } => {
-                for cond_stmt in condition_stmts {
-                    self.collect_return_demands_stmt(cond_stmt, demands);
-                }
-                self.collect_return_demands_region(body, demands);
-                self.collect_return_demands_region(post, demands);
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    self.collect_return_demands_region(&case.body, demands);
-                }
-                if let Some(default_region) = default {
-                    self.collect_return_demands_region(default_region, demands);
-                }
-            }
-            Statement::Block(region) => {
-                self.collect_return_demands_region(region, demands);
-            }
-            _ => {}
-        }
-    }
-
-    /// Walks a region collecting return demands.
-    fn collect_return_demands_region(
-        &self,
-        region: &Region,
-        demands: &mut BTreeMap<u32, Vec<BitWidth>>,
-    ) {
-        for stmt in &region.statements {
-            self.collect_return_demands_stmt(stmt, demands);
-        }
+        });
     }
 
     /// Refines demand widths based on narrowed function parameter types.
@@ -1049,76 +869,18 @@ impl TypeInference {
         }
     }
 
-    /// Walks a block looking for Call expressions and updates argument demands.
+    /// Walks a block (and all nested regions) looking for Call expressions and
+    /// updates argument demands based on the now-narrowed parameter widths.
     fn refine_demands_in_block(
         &mut self,
         block: &Block,
         param_widths: &BTreeMap<u32, Vec<BitWidth>>,
     ) {
-        for stmt in &block.statements {
-            self.refine_demands_in_statement(stmt, param_widths);
-        }
-    }
-
-    /// Walks a region looking for Call expressions and updates argument demands.
-    fn refine_demands_in_region(
-        &mut self,
-        region: &Region,
-        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
-    ) {
-        for stmt in &region.statements {
-            self.refine_demands_in_statement(stmt, param_widths);
-        }
-    }
-
-    /// Walks a statement looking for Call expressions and updates argument demands.
-    fn refine_demands_in_statement(
-        &mut self,
-        stmt: &Statement,
-        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
-    ) {
-        match stmt {
-            Statement::Let { value, .. } => {
-                self.refine_demands_in_expr(value, param_widths);
-            }
-            Statement::Expr(expr) => {
+        for_each_stmt(&block.statements, &mut |stmt| {
+            stmt.for_each_expr(&mut |expr| {
                 self.refine_demands_in_expr(expr, param_widths);
-            }
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                self.refine_demands_in_region(then_region, param_widths);
-                if let Some(r) = else_region {
-                    self.refine_demands_in_region(r, param_widths);
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for c in cases {
-                    self.refine_demands_in_region(&c.body, param_widths);
-                }
-                if let Some(d) = default {
-                    self.refine_demands_in_region(d, param_widths);
-                }
-            }
-            Statement::For {
-                condition_stmts,
-                body,
-                post,
-                ..
-            } => {
-                for s in condition_stmts {
-                    self.refine_demands_in_statement(s, param_widths);
-                }
-                self.refine_demands_in_region(body, param_widths);
-                self.refine_demands_in_region(post, param_widths);
-            }
-            Statement::Block(region) => {
-                self.refine_demands_in_region(region, param_widths);
-            }
-            _ => {}
-        }
+            });
+        });
     }
 
     /// Checks an expression for Call and updates argument demands.
@@ -1166,21 +928,16 @@ impl TypeInference {
         }
     }
 
-    /// Collects uses from a block for backward propagation.
+    /// Collects uses from a block (recursing through nested regions and
+    /// `For::condition_stmts`) for backward propagation.
     fn collect_uses_block(&mut self, block: &Block) {
-        for stmt in &block.statements {
+        for_each_stmt(&block.statements, &mut |stmt| {
             self.collect_uses_statement(stmt);
-        }
+        });
     }
 
-    /// Collects uses from a region for backward propagation.
-    fn collect_uses_region(&mut self, region: &Region) {
-        for stmt in &region.statements {
-            self.collect_uses_statement(stmt);
-        }
-    }
-
-    /// Collects uses from a statement for backward propagation.
+    /// Collects uses from a single statement (no recursion — caller is
+    /// responsible for walking nested regions, e.g. via `for_each_stmt`).
     fn collect_uses_statement(&mut self, stmt: &Statement) {
         match stmt {
             Statement::MStore {
@@ -1218,50 +975,20 @@ impl TypeInference {
                 self.record_use(value.id, UseContext::StorageAccess);
             }
 
-            Statement::If {
-                condition,
-                then_region,
-                else_region,
-                ..
-            } => {
-                // Condition only needs to be non-zero, can stay narrow
+            Statement::If { condition, .. } => {
+                // Condition only needs to be non-zero, can stay narrow.
+                // Nested regions are walked by `collect_uses_block`'s `for_each_stmt`.
                 self.record_use(condition.id, UseContext::Comparison);
-                self.collect_uses_region(then_region);
-                if let Some(else_region) = else_region {
-                    self.collect_uses_region(else_region);
-                }
             }
 
-            Statement::Switch {
-                scrutinee,
-                cases,
-                default,
-                ..
-            } => {
+            Statement::Switch { scrutinee, .. } => {
                 self.record_use(scrutinee.id, UseContext::Comparison);
-                for case in cases {
-                    self.collect_uses_region(&case.body);
-                }
-                if let Some(default) = default {
-                    self.collect_uses_region(default);
-                }
             }
 
-            Statement::For {
-                init_values,
-                condition_stmts,
-                body,
-                post,
-                ..
-            } => {
+            Statement::For { init_values, .. } => {
                 for val in init_values {
                     self.record_use(val.id, UseContext::Arithmetic);
                 }
-                for stmt in condition_stmts {
-                    self.collect_uses_statement(stmt);
-                }
-                self.collect_uses_region(body);
-                self.collect_uses_region(post);
             }
 
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
@@ -1364,9 +1091,8 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            Statement::Block(region) => {
-                self.collect_uses_region(region);
-            }
+            // `Statement::Block`'s region is walked by `for_each_stmt` recursion.
+            Statement::Block(_) => {}
 
             Statement::Let { value, .. } => {
                 self.collect_uses_expr(value);

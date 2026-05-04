@@ -1,0 +1,83 @@
+name: Hardhat Integration
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize]
+    paths-ignore:
+      - "**.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Workflow-internal hardhat envs are prefixed with `CI_` to not conflict with the
+  # `HARDHAT_*` namespace, which hardhat itself will interpret for its configuration.
+  CI_HARDHAT_PROJECT_ROOT: tooling-projects/hardhat/erc20
+
+jobs:
+  use-hardhat:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # without this it will override our rust flags
+          rustflags: ""
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM Environment Variables
+        run: echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+
+      - name: Build resolc
+        run: |
+          make install-bin
+          # This env is used by `hardhat.config.js`.
+          echo "RESOLC_PATH=$(pwd)/target/release/resolc" >> $GITHUB_ENV
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install Project Dependencies
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: npm ci
+
+      - name: Compile Project
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: npx hardhat compile
+
+      - name: Verify Output
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: |
+          set -x
+          shopt -s nullglob
+          build_info_files=(artifacts/build-info/*.json)
+          test "${#build_info_files[@]}" -eq 1
+
+          BUILD_INFO="${build_info_files[0]}"
+          CONTRACT='.output.contracts["contracts/MyToken.sol"].MyToken'
+          SOURCE='.output.sources["contracts/MyToken.sol"]'
+
+          jq -er "$CONTRACT.evm.bytecode.object"          "$BUILD_INFO" | grep -q '^50564d'
+          jq -er "$CONTRACT.evm.deployedBytecode.object"  "$BUILD_INFO" | grep -q '^50564d'
+          jq -e  "$CONTRACT.evm.methodIdentifiers         | length > 0"  "$BUILD_INFO" > /dev/null
+          jq -e  "$CONTRACT.abi                           | length > 0"  "$BUILD_INFO" > /dev/null
+          jq -e  "$CONTRACT.storageLayout.storage         | length > 0"  "$BUILD_INFO" > /dev/null
+          jq -e  "$CONTRACT.metadata                      | length > 0"  "$BUILD_INFO" > /dev/null
+          jq -e  "$SOURCE.ast                             | length > 0"  "$BUILD_INFO" > /dev/null
+          jq -e  '.output.sources                         | length > 1'  "$BUILD_INFO" > /dev/null

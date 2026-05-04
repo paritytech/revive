@@ -2,7 +2,7 @@
 src = "src"
 test = "test"
 libs = ["lib"]
-solc = "0.8.34"
+solc = "0.8.35"
 remappings = [
     "forge-std/=lib/forge-std/src/",
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",

@@ -20,6 +20,8 @@ env:
   # Workflow-internal hardhat envs are prefixed with `CI_` to not conflict with the
   # `HARDHAT_*` namespace, which hardhat itself will interpret for its configuration.
   CI_HARDHAT_PROJECT_ROOT: tooling-projects/hardhat/erc20
+  # This env is used by `hardhat.config.js`.
+  SOLC_VERSION: "0.8.35"
 
 jobs:
   use-hardhat:

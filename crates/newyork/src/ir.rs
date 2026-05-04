@@ -1326,6 +1326,42 @@ impl Statement {
             _ => {}
         }
     }
+
+    /// Mutating variant of [`Statement::for_each_value_id_def`]. Same per-stmt
+    /// scope (no recursion into nested regions). Used by the inliner to
+    /// allocate fresh IDs for definitions in a cloned function body.
+    pub fn for_each_value_id_def_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Statement::Let { bindings, .. } => {
+                for b in bindings {
+                    f(b);
+                }
+            }
+            Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
+                for o in outputs {
+                    f(o);
+                }
+            }
+            Statement::For {
+                loop_vars,
+                post_input_vars,
+                outputs,
+                ..
+            } => {
+                for v in loop_vars {
+                    f(v);
+                }
+                for v in post_input_vars {
+                    f(v);
+                }
+                for o in outputs {
+                    f(o);
+                }
+            }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => f(result),
+            _ => {}
+        }
+    }
 }
 
 fn walk_region_uses(region: &Region, f: &mut dyn FnMut(ValueId)) {

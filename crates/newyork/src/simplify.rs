@@ -1445,196 +1445,78 @@ fn simplify_binary(
     lhs_val: &Option<BigUint>,
     rhs_val: &Option<BigUint>,
 ) -> Option<Expr> {
+    let i256 = Type::Int(BitWidth::I256);
+    let lit = |value: BigUint| Expr::Literal { value, ty: i256 };
+    let var_l = || Expr::Var(lhs.id);
+    let var_r = || Expr::Var(rhs.id);
+    let same = lhs.id == rhs.id;
+    let l_is = |v: &BigUint| lhs_val.as_ref() == Some(v);
+    let r_is = |v: &BigUint| rhs_val.as_ref() == Some(v);
     let zero = BigUint::zero();
     let one = BigUint::one();
 
     match op {
         // add(x, 0) = add(0, x) = x
         BinOp::Add => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(lhs.id));
+            if r_is(&zero) {
+                Some(var_l())
+            } else if l_is(&zero) {
+                Some(var_r())
+            } else {
+                None
             }
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(rhs.id));
-            }
-            None
         }
 
-        // sub(x, 0) = x
-        BinOp::Sub => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(lhs.id));
-            }
-            // sub(x, x) = 0 (same ValueId)
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        // sub(x, 0) = x; sub(x, x) = 0
+        BinOp::Sub if r_is(&zero) => Some(var_l()),
+        BinOp::Sub if same => Some(lit(zero)),
+        BinOp::Sub => None,
 
-        // mul(x, 0) = mul(0, x) = 0
-        // mul(x, 1) = mul(1, x) = x
-        BinOp::Mul => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero())
-                || lhs_val.as_ref().is_some_and(|v| v.is_zero())
-            {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            if rhs_val.as_ref().is_some_and(|v| *v == one) {
-                return Some(Expr::Var(lhs.id));
-            }
-            if lhs_val.as_ref().is_some_and(|v| *v == one) {
-                return Some(Expr::Var(rhs.id));
-            }
-            None
-        }
+        // mul(x, 0) = mul(0, x) = 0; mul(x, 1) = mul(1, x) = x
+        BinOp::Mul if r_is(&zero) || l_is(&zero) => Some(lit(zero)),
+        BinOp::Mul if r_is(&one) => Some(var_l()),
+        BinOp::Mul if l_is(&one) => Some(var_r()),
+        BinOp::Mul => None,
 
-        // div(x, 1) = x, div(0, x) = 0
-        BinOp::Div | BinOp::SDiv => {
-            if rhs_val.as_ref().is_some_and(|v| *v == one) {
-                return Some(Expr::Var(lhs.id));
-            }
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            // div(x, x) = 1 when x != 0 (same ValueId means definitely equal)
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: one,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        // div(x, 1) = x; div(0, x) = 0; div(x, x) = 1 (when x != 0; same id is definitely equal)
+        BinOp::Div | BinOp::SDiv if r_is(&one) => Some(var_l()),
+        BinOp::Div | BinOp::SDiv if l_is(&zero) => Some(lit(zero)),
+        BinOp::Div | BinOp::SDiv if same => Some(lit(one)),
+        BinOp::Div | BinOp::SDiv => None,
 
-        // mod(x, 1) = 0, mod(0, x) = 0
-        BinOp::Mod | BinOp::SMod => {
-            if rhs_val.as_ref().is_some_and(|v| *v == one) {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            // mod(x, x) = 0
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        // mod(x, 1) = 0; mod(0, x) = 0; mod(x, x) = 0
+        BinOp::Mod | BinOp::SMod if r_is(&one) || l_is(&zero) || same => Some(lit(zero)),
+        BinOp::Mod | BinOp::SMod => None,
 
-        // and(x, 0) = 0, and(x, MAX) = x
-        BinOp::And => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero())
-                || lhs_val.as_ref().is_some_and(|v| v.is_zero())
-            {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            let max = max_u256();
-            if rhs_val.as_ref().is_some_and(|v| *v == max) {
-                return Some(Expr::Var(lhs.id));
-            }
-            if lhs_val.as_ref().is_some_and(|v| *v == max) {
-                return Some(Expr::Var(rhs.id));
-            }
-            // and(x, x) = x
-            if lhs.id == rhs.id {
-                return Some(Expr::Var(lhs.id));
-            }
-            None
-        }
+        // and(_, 0) = 0; and(x, MAX) = x; and(x, x) = x
+        BinOp::And if r_is(&zero) || l_is(&zero) => Some(lit(zero)),
+        BinOp::And if r_is(&max_u256()) || same => Some(var_l()),
+        BinOp::And if l_is(&max_u256()) => Some(var_r()),
+        BinOp::And => None,
 
-        // or(x, 0) = x, or(x, MAX) = MAX
-        BinOp::Or => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(lhs.id));
-            }
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(rhs.id));
-            }
-            let max = max_u256();
-            if rhs_val.as_ref().is_some_and(|v| *v == max)
-                || lhs_val.as_ref().is_some_and(|v| *v == max)
-            {
-                return Some(Expr::Literal {
-                    value: max,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            // or(x, x) = x
-            if lhs.id == rhs.id {
-                return Some(Expr::Var(lhs.id));
-            }
-            None
-        }
+        // or(x, 0) = x; or(_, MAX) = MAX; or(x, x) = x
+        BinOp::Or if r_is(&zero) || same => Some(var_l()),
+        BinOp::Or if l_is(&zero) => Some(var_r()),
+        BinOp::Or if r_is(&max_u256()) || l_is(&max_u256()) => Some(lit(max_u256())),
+        BinOp::Or => None,
 
-        // xor(x, 0) = x, xor(x, x) = 0
-        BinOp::Xor => {
-            if rhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(lhs.id));
-            }
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(rhs.id));
-            }
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        // xor(x, 0) = x; xor(x, x) = 0
+        BinOp::Xor if r_is(&zero) => Some(var_l()),
+        BinOp::Xor if l_is(&zero) => Some(var_r()),
+        BinOp::Xor if same => Some(lit(zero)),
+        BinOp::Xor => None,
 
-        // shl(0, x) = x (shift by 0 returns value unchanged)
-        // IR convention: lhs = shift_amount, rhs = value
-        BinOp::Shl | BinOp::Shr | BinOp::Sar => {
-            if lhs_val.as_ref().is_some_and(|v| v.is_zero()) {
-                return Some(Expr::Var(rhs.id));
-            }
-            None
-        }
+        // shl/shr/sar(0, x) = x (IR convention: lhs = shift_amount, rhs = value)
+        BinOp::Shl | BinOp::Shr | BinOp::Sar if l_is(&zero) => Some(var_r()),
+        BinOp::Shl | BinOp::Shr | BinOp::Sar => None,
 
         // eq(x, x) = 1
-        BinOp::Eq => {
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: one,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        BinOp::Eq if same => Some(lit(one)),
+        BinOp::Eq => None,
 
-        // lt(x, x) = gt(x, x) = slt(x, x) = sgt(x, x) = 0
-        BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt => {
-            if lhs.id == rhs.id {
-                return Some(Expr::Literal {
-                    value: zero,
-                    ty: Type::Int(BitWidth::I256),
-                });
-            }
-            None
-        }
+        // lt/gt/slt/sgt(x, x) = 0
+        BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt if same => Some(lit(zero)),
+        BinOp::Lt | BinOp::Gt | BinOp::Slt | BinOp::Sgt => None,
 
         _ => None,
     }
@@ -3197,203 +3079,150 @@ fn fuzzy_encode_region(
     }
 }
 
-/// Collects all literal values from a function in order of appearance.
-/// The ordering must match the fuzzy canonicalization's lit_counter.
+/// Collects all literal values from a function in walk order. Both this and
+/// [`replace_literals_with_params`] must use the **identical** traversal so
+/// position indices align — keep them in sync if either changes.
+///
+/// Counted positions: `Expr::Literal` value, `Expr::SLoad::static_slot`,
+/// `Statement::SStore::static_slot`, and each `Switch` case value.
 fn collect_literals_ordered(func: &crate::ir::Function) -> Vec<BigUint> {
-    let mut lits = Vec::new();
-    for stmt in &func.body.statements {
-        collect_literals_in_stmt(stmt, &mut lits);
+    fn from_expr(expr: &Expr, lits: &mut Vec<BigUint>) {
+        match expr {
+            Expr::Literal { value, .. } => lits.push(value.clone()),
+            Expr::SLoad {
+                static_slot: Some(slot),
+                ..
+            } => lits.push(slot.clone()),
+            _ => {}
+        }
     }
+    fn walk(stmts: &[Statement], lits: &mut Vec<BigUint>) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Let { value, .. } | Statement::Expr(value) => from_expr(value, lits),
+                Statement::SStore {
+                    static_slot: Some(slot),
+                    ..
+                } => lits.push(slot.clone()),
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    walk(&then_region.statements, lits);
+                    if let Some(r) = else_region {
+                        walk(&r.statements, lits);
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for c in cases {
+                        lits.push(c.value.clone());
+                        walk(&c.body.statements, lits);
+                    }
+                    if let Some(d) = default {
+                        walk(&d.statements, lits);
+                    }
+                }
+                Statement::For {
+                    condition_stmts,
+                    condition,
+                    body,
+                    post,
+                    ..
+                } => {
+                    walk(condition_stmts, lits);
+                    from_expr(condition, lits);
+                    walk(&body.statements, lits);
+                    walk(&post.statements, lits);
+                }
+                Statement::Block(region) => walk(&region.statements, lits),
+                _ => {}
+            }
+        }
+    }
+    let mut lits = Vec::new();
+    walk(&func.body.statements, &mut lits);
     lits
 }
 
-fn collect_literals_in_expr(expr: &Expr, lits: &mut Vec<BigUint>) {
-    match expr {
-        Expr::Literal { value, .. } => {
-            lits.push(value.clone());
-        }
-        Expr::SLoad {
-            static_slot: Some(slot),
-            ..
-        } => {
-            lits.push(slot.clone());
-        }
-        _ => {}
-    }
-}
-
-fn collect_literals_in_stmt(stmt: &Statement, lits: &mut Vec<BigUint>) {
-    match stmt {
-        Statement::Let { value, .. } => {
-            collect_literals_in_expr(value, lits);
-        }
-        Statement::SStore {
-            static_slot: Some(slot),
-            ..
-        } => {
-            lits.push(slot.clone());
-        }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            collect_literals_in_region(then_region, lits);
-            if let Some(r) = else_region {
-                collect_literals_in_region(r, lits);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for c in cases {
-                lits.push(c.value.clone());
-                collect_literals_in_region(&c.body, lits);
-            }
-            if let Some(d) = default {
-                collect_literals_in_region(d, lits);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            condition,
-            body,
-            post,
-            ..
-        } => {
-            for s in condition_stmts {
-                collect_literals_in_stmt(s, lits);
-            }
-            collect_literals_in_expr(condition, lits);
-            collect_literals_in_region(body, lits);
-            collect_literals_in_region(post, lits);
-        }
-        Statement::Block(region) => {
-            collect_literals_in_region(region, lits);
-        }
-        Statement::Expr(expr) => {
-            collect_literals_in_expr(expr, lits);
-        }
-        _ => {}
-    }
-}
-
-fn collect_literals_in_region(region: &Region, lits: &mut Vec<BigUint>) {
-    for stmt in &region.statements {
-        collect_literals_in_stmt(stmt, lits);
-    }
-}
-
-/// Replaces literal values at differing positions with Var references to new parameters.
-///
-/// `position_param_ids` maps each differing position to its corresponding parameter ValueId.
-/// Multiple positions can map to the same parameter (when they share the same value pattern).
+/// Replaces literal values at differing positions with `Var` references to new
+/// parameters. Walk order **must** match [`collect_literals_ordered`] so the
+/// position indices align.
 fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize, ValueId)]) {
-    let mut lit_counter = 0usize;
-    let position_set: BTreeMap<usize, ValueId> = position_param_ids
-        .iter()
-        .map(|&(pos, vid)| (pos, vid))
-        .collect();
-
-    for stmt in &mut block.statements {
-        replace_literals_in_stmt(stmt, &position_set, &mut lit_counter);
+    fn from_expr(expr: &mut Expr, positions: &BTreeMap<usize, ValueId>, counter: &mut usize) {
+        match expr {
+            Expr::Literal { .. } => {
+                if let Some(&param_vid) = positions.get(counter) {
+                    *expr = Expr::Var(param_vid);
+                }
+                *counter += 1;
+            }
+            Expr::SLoad {
+                static_slot: slot @ Some(_),
+                ..
+            } => {
+                if positions.contains_key(counter) {
+                    *slot = None;
+                }
+                *counter += 1;
+            }
+            _ => {}
+        }
     }
-}
-
-fn replace_literals_in_expr(
-    expr: &mut Expr,
-    positions: &BTreeMap<usize, ValueId>,
-    counter: &mut usize,
-) {
-    match expr {
-        Expr::Literal { .. } => {
-            if let Some(&param_vid) = positions.get(counter) {
-                *expr = Expr::Var(param_vid);
+    fn walk(stmts: &mut [Statement], positions: &BTreeMap<usize, ValueId>, counter: &mut usize) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Let { value, .. } | Statement::Expr(value) => {
+                    from_expr(value, positions, counter)
+                }
+                Statement::SStore {
+                    static_slot: slot @ Some(_),
+                    ..
+                } => {
+                    if positions.contains_key(counter) {
+                        *slot = None;
+                    }
+                    *counter += 1;
+                }
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    walk(&mut then_region.statements, positions, counter);
+                    if let Some(r) = else_region {
+                        walk(&mut r.statements, positions, counter);
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for c in cases {
+                        *counter += 1; // case value position
+                        walk(&mut c.body.statements, positions, counter);
+                    }
+                    if let Some(d) = default {
+                        walk(&mut d.statements, positions, counter);
+                    }
+                }
+                Statement::For {
+                    condition_stmts,
+                    condition,
+                    body,
+                    post,
+                    ..
+                } => {
+                    walk(condition_stmts, positions, counter);
+                    from_expr(condition, positions, counter);
+                    walk(&mut body.statements, positions, counter);
+                    walk(&mut post.statements, positions, counter);
+                }
+                Statement::Block(region) => walk(&mut region.statements, positions, counter),
+                _ => {}
             }
-            *counter += 1;
         }
-        Expr::SLoad {
-            static_slot: slot @ Some(_),
-            ..
-        } => {
-            // static_slot counts as a literal position; clear it if parameterized
-            if positions.contains_key(counter) {
-                *slot = None;
-            }
-            *counter += 1;
-        }
-        _ => {}
     }
-}
-
-fn replace_literals_in_stmt(
-    stmt: &mut Statement,
-    positions: &BTreeMap<usize, ValueId>,
-    counter: &mut usize,
-) {
-    match stmt {
-        Statement::Let { value, .. } => {
-            replace_literals_in_expr(value, positions, counter);
-        }
-        Statement::SStore {
-            static_slot: slot @ Some(_),
-            ..
-        } => {
-            // static_slot counts as a literal position; clear it if parameterized
-            if positions.contains_key(counter) {
-                *slot = None;
-            }
-            *counter += 1;
-        }
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            replace_literals_in_region(then_region, positions, counter);
-            if let Some(r) = else_region {
-                replace_literals_in_region(r, positions, counter);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for c in cases {
-                *counter += 1; // case value
-                replace_literals_in_region(&mut c.body, positions, counter);
-            }
-            if let Some(d) = default {
-                replace_literals_in_region(d, positions, counter);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            condition,
-            body,
-            post,
-            ..
-        } => {
-            for s in condition_stmts {
-                replace_literals_in_stmt(s, positions, counter);
-            }
-            replace_literals_in_expr(condition, positions, counter);
-            replace_literals_in_region(body, positions, counter);
-            replace_literals_in_region(post, positions, counter);
-        }
-        Statement::Block(region) => {
-            replace_literals_in_region(region, positions, counter);
-        }
-        Statement::Expr(expr) => {
-            replace_literals_in_expr(expr, positions, counter);
-        }
-        _ => {}
-    }
-}
-
-fn replace_literals_in_region(
-    region: &mut Region,
-    positions: &BTreeMap<usize, ValueId>,
-    counter: &mut usize,
-) {
-    for stmt in &mut region.statements {
-        replace_literals_in_stmt(stmt, positions, counter);
-    }
+    let positions: BTreeMap<usize, ValueId> = position_param_ids.iter().copied().collect();
+    let mut counter = 0usize;
+    walk(&mut block.statements, &positions, &mut counter);
 }
 
 /// Updates call sites in a block, changing calls to old_id into calls to new_id

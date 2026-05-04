@@ -22,8 +22,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{
-    for_each_stmt, BitWidth, Block, Expr, Function, FunctionId, Object, Region, Statement,
-    SwitchCase, Type, UnaryOp, Value, ValueId,
+    for_each_stmt, for_each_stmt_mut, BitWidth, Block, Expr, Function, FunctionId, Object, Region,
+    Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
@@ -304,370 +304,18 @@ impl InlineRemapper {
         }
     }
 
-    /// Remaps a Value (id + type).
-    fn remap_value(&mut self, value: &Value) -> Value {
-        Value {
-            id: self.remap_value_id(value.id),
-            ty: value.ty,
+    /// Clones the source statements and rewrites every `ValueId` (defs and
+    /// uses) through `remap_value_id`. Used to inline a function body at a
+    /// call site with a fresh SSA namespace.
+    fn remap_statements(&mut self, source: &[Statement]) -> Vec<Statement> {
+        let mut stmts = source.to_vec();
+        for_each_stmt_mut(&mut stmts, &mut |stmt| {
+            stmt.for_each_value_id_def_mut(&mut |id| *id = self.remap_value_id(*id));
+        });
+        for stmt in &mut stmts {
+            stmt.for_each_value_id_mut(&mut |id| *id = self.remap_value_id(*id));
         }
-    }
-
-    /// Remaps an expression, creating fresh value IDs for all references.
-    fn remap_expr(&mut self, expr: &Expr) -> Expr {
-        match expr {
-            Expr::Literal { value, ty } => Expr::Literal {
-                value: value.clone(),
-                ty: *ty,
-            },
-            Expr::Var(id) => Expr::Var(self.remap_value_id(*id)),
-            Expr::Binary { op, lhs, rhs } => Expr::Binary {
-                op: *op,
-                lhs: self.remap_value(lhs),
-                rhs: self.remap_value(rhs),
-            },
-            Expr::Ternary { op, a, b, n } => Expr::Ternary {
-                op: *op,
-                a: self.remap_value(a),
-                b: self.remap_value(b),
-                n: self.remap_value(n),
-            },
-            Expr::Unary { op, operand } => Expr::Unary {
-                op: *op,
-                operand: self.remap_value(operand),
-            },
-            Expr::CallDataLoad { offset } => Expr::CallDataLoad {
-                offset: self.remap_value(offset),
-            },
-            Expr::CallValue => Expr::CallValue,
-            Expr::Caller => Expr::Caller,
-            Expr::Origin => Expr::Origin,
-            Expr::CallDataSize => Expr::CallDataSize,
-            Expr::CodeSize => Expr::CodeSize,
-            Expr::GasPrice => Expr::GasPrice,
-            Expr::ExtCodeSize { address } => Expr::ExtCodeSize {
-                address: self.remap_value(address),
-            },
-            Expr::ReturnDataSize => Expr::ReturnDataSize,
-            Expr::ExtCodeHash { address } => Expr::ExtCodeHash {
-                address: self.remap_value(address),
-            },
-            Expr::BlockHash { number } => Expr::BlockHash {
-                number: self.remap_value(number),
-            },
-            Expr::Coinbase => Expr::Coinbase,
-            Expr::Timestamp => Expr::Timestamp,
-            Expr::Number => Expr::Number,
-            Expr::Difficulty => Expr::Difficulty,
-            Expr::GasLimit => Expr::GasLimit,
-            Expr::ChainId => Expr::ChainId,
-            Expr::SelfBalance => Expr::SelfBalance,
-            Expr::BaseFee => Expr::BaseFee,
-            Expr::BlobHash { index } => Expr::BlobHash {
-                index: self.remap_value(index),
-            },
-            Expr::BlobBaseFee => Expr::BlobBaseFee,
-            Expr::Gas => Expr::Gas,
-            Expr::MSize => Expr::MSize,
-            Expr::Address => Expr::Address,
-            Expr::Balance { address } => Expr::Balance {
-                address: self.remap_value(address),
-            },
-            Expr::MLoad { offset, region } => Expr::MLoad {
-                offset: self.remap_value(offset),
-                region: *region,
-            },
-            Expr::SLoad { key, static_slot } => Expr::SLoad {
-                key: self.remap_value(key),
-                static_slot: static_slot.clone(),
-            },
-            Expr::TLoad { key } => Expr::TLoad {
-                key: self.remap_value(key),
-            },
-            Expr::Call { function, args } => Expr::Call {
-                function: *function,
-                args: args.iter().map(|a| self.remap_value(a)).collect(),
-            },
-            Expr::Truncate { value, to } => Expr::Truncate {
-                value: self.remap_value(value),
-                to: *to,
-            },
-            Expr::ZeroExtend { value, to } => Expr::ZeroExtend {
-                value: self.remap_value(value),
-                to: *to,
-            },
-            Expr::SignExtendTo { value, to } => Expr::SignExtendTo {
-                value: self.remap_value(value),
-                to: *to,
-            },
-            Expr::Keccak256 { offset, length } => Expr::Keccak256 {
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Expr::Keccak256Pair { word0, word1 } => Expr::Keccak256Pair {
-                word0: self.remap_value(word0),
-                word1: self.remap_value(word1),
-            },
-            Expr::Keccak256Single { word0 } => Expr::Keccak256Single {
-                word0: self.remap_value(word0),
-            },
-            Expr::MappingSLoad { key, slot } => Expr::MappingSLoad {
-                key: self.remap_value(key),
-                slot: self.remap_value(slot),
-            },
-            Expr::DataOffset { id } => Expr::DataOffset { id: id.clone() },
-            Expr::DataSize { id } => Expr::DataSize { id: id.clone() },
-            Expr::LoadImmutable { key } => Expr::LoadImmutable { key: key.clone() },
-            Expr::LinkerSymbol { path } => Expr::LinkerSymbol { path: path.clone() },
-        }
-    }
-
-    /// Remaps a statement.
-    fn remap_statement(&mut self, stmt: &Statement) -> Statement {
-        match stmt {
-            Statement::Let { bindings, value } => Statement::Let {
-                bindings: bindings.iter().map(|b| self.remap_value_id(*b)).collect(),
-                value: self.remap_expr(value),
-            },
-            Statement::MStore {
-                offset,
-                value,
-                region,
-            } => Statement::MStore {
-                offset: self.remap_value(offset),
-                value: self.remap_value(value),
-                region: *region,
-            },
-            Statement::MStore8 {
-                offset,
-                value,
-                region,
-            } => Statement::MStore8 {
-                offset: self.remap_value(offset),
-                value: self.remap_value(value),
-                region: *region,
-            },
-            Statement::MCopy { dest, src, length } => Statement::MCopy {
-                dest: self.remap_value(dest),
-                src: self.remap_value(src),
-                length: self.remap_value(length),
-            },
-            Statement::SStore {
-                key,
-                value,
-                static_slot,
-            } => Statement::SStore {
-                key: self.remap_value(key),
-                value: self.remap_value(value),
-                static_slot: static_slot.clone(),
-            },
-            Statement::TStore { key, value } => Statement::TStore {
-                key: self.remap_value(key),
-                value: self.remap_value(value),
-            },
-            Statement::MappingSStore { key, slot, value } => Statement::MappingSStore {
-                key: self.remap_value(key),
-                slot: self.remap_value(slot),
-                value: self.remap_value(value),
-            },
-            Statement::If {
-                condition,
-                inputs,
-                then_region,
-                else_region,
-                outputs,
-            } => Statement::If {
-                condition: self.remap_value(condition),
-                inputs: inputs.iter().map(|v| self.remap_value(v)).collect(),
-                then_region: self.remap_region(then_region),
-                else_region: else_region.as_ref().map(|r| self.remap_region(r)),
-                outputs: outputs.iter().map(|o| self.remap_value_id(*o)).collect(),
-            },
-            Statement::Switch {
-                scrutinee,
-                inputs,
-                cases,
-                default,
-                outputs,
-            } => Statement::Switch {
-                scrutinee: self.remap_value(scrutinee),
-                inputs: inputs.iter().map(|v| self.remap_value(v)).collect(),
-                cases: cases
-                    .iter()
-                    .map(|c| SwitchCase {
-                        value: c.value.clone(),
-                        body: self.remap_region(&c.body),
-                    })
-                    .collect(),
-                default: default.as_ref().map(|r| self.remap_region(r)),
-                outputs: outputs.iter().map(|o| self.remap_value_id(*o)).collect(),
-            },
-            Statement::For {
-                init_values,
-                loop_vars,
-                condition_stmts,
-                condition,
-                body,
-                post_input_vars,
-                post,
-                outputs,
-            } => Statement::For {
-                init_values: init_values.iter().map(|v| self.remap_value(v)).collect(),
-                loop_vars: loop_vars.iter().map(|v| self.remap_value_id(*v)).collect(),
-                condition_stmts: condition_stmts
-                    .iter()
-                    .map(|s| self.remap_statement(s))
-                    .collect(),
-                condition: self.remap_expr(condition),
-                body: self.remap_region(body),
-                post_input_vars: post_input_vars
-                    .iter()
-                    .map(|v| self.remap_value_id(*v))
-                    .collect(),
-                post: self.remap_region(post),
-                outputs: outputs.iter().map(|o| self.remap_value_id(*o)).collect(),
-            },
-            Statement::Break { values } => Statement::Break {
-                values: values.iter().map(|v| self.remap_value(v)).collect(),
-            },
-            Statement::Continue { values } => Statement::Continue {
-                values: values.iter().map(|v| self.remap_value(v)).collect(),
-            },
-            Statement::Leave { return_values } => Statement::Leave {
-                return_values: return_values.iter().map(|v| self.remap_value(v)).collect(),
-            },
-            Statement::Revert { offset, length } => Statement::Revert {
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::Return { offset, length } => Statement::Return {
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::Stop => Statement::Stop,
-            Statement::Invalid => Statement::Invalid,
-            Statement::PanicRevert { code } => Statement::PanicRevert { code: *code },
-            Statement::ErrorStringRevert { length, data } => Statement::ErrorStringRevert {
-                length: *length,
-                data: data.clone(),
-            },
-            Statement::CustomErrorRevert { selector, args } => Statement::CustomErrorRevert {
-                selector: selector.clone(),
-                args: args.iter().map(|v| self.remap_value(v)).collect(),
-            },
-            Statement::SelfDestruct { address } => Statement::SelfDestruct {
-                address: self.remap_value(address),
-            },
-            Statement::ExternalCall {
-                kind,
-                gas,
-                address,
-                value,
-                args_offset,
-                args_length,
-                ret_offset,
-                ret_length,
-                result,
-            } => Statement::ExternalCall {
-                kind: *kind,
-                gas: self.remap_value(gas),
-                address: self.remap_value(address),
-                value: value.as_ref().map(|v| self.remap_value(v)),
-                args_offset: self.remap_value(args_offset),
-                args_length: self.remap_value(args_length),
-                ret_offset: self.remap_value(ret_offset),
-                ret_length: self.remap_value(ret_length),
-                result: self.remap_value_id(*result),
-            },
-            Statement::Create {
-                kind,
-                value,
-                offset,
-                length,
-                salt,
-                result,
-            } => Statement::Create {
-                kind: *kind,
-                value: self.remap_value(value),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-                salt: salt.as_ref().map(|v| self.remap_value(v)),
-                result: self.remap_value_id(*result),
-            },
-            Statement::Log {
-                offset,
-                length,
-                topics,
-            } => Statement::Log {
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-                topics: topics.iter().map(|t| self.remap_value(t)).collect(),
-            },
-            Statement::CodeCopy {
-                dest,
-                offset,
-                length,
-            } => Statement::CodeCopy {
-                dest: self.remap_value(dest),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::ExtCodeCopy {
-                address,
-                dest,
-                offset,
-                length,
-            } => Statement::ExtCodeCopy {
-                address: self.remap_value(address),
-                dest: self.remap_value(dest),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::ReturnDataCopy {
-                dest,
-                offset,
-                length,
-            } => Statement::ReturnDataCopy {
-                dest: self.remap_value(dest),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::DataCopy {
-                dest,
-                offset,
-                length,
-            } => Statement::DataCopy {
-                dest: self.remap_value(dest),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::CallDataCopy {
-                dest,
-                offset,
-                length,
-            } => Statement::CallDataCopy {
-                dest: self.remap_value(dest),
-                offset: self.remap_value(offset),
-                length: self.remap_value(length),
-            },
-            Statement::Block(region) => Statement::Block(self.remap_region(region)),
-            Statement::Expr(expr) => Statement::Expr(self.remap_expr(expr)),
-            Statement::SetImmutable { key, value } => Statement::SetImmutable {
-                key: key.clone(),
-                value: self.remap_value(value),
-            },
-        }
-    }
-
-    /// Remaps a region.
-    fn remap_region(&mut self, region: &Region) -> Region {
-        Region {
-            statements: region
-                .statements
-                .iter()
-                .map(|s| self.remap_statement(s))
-                .collect(),
-            yields: region.yields.iter().map(|v| self.remap_value(v)).collect(),
-        }
+        stmts
     }
 }
 
@@ -1659,12 +1307,7 @@ fn inline_call_with_results(
     }
 
     // Remap the body
-    let remapped_body: Vec<Statement> = function
-        .body
-        .statements
-        .iter()
-        .map(|s| remapper.remap_statement(s))
-        .collect();
+    let remapped_body = remapper.remap_statements(&function.body.statements);
     *next_value_id = remapper.next_value_id;
 
     // Get remapped accumulator and fallthrough IDs
@@ -1738,12 +1381,7 @@ fn inline_call_void(
     }
 
     // Remap the body
-    let remapped_body: Vec<Statement> = function
-        .body
-        .statements
-        .iter()
-        .map(|s| remapper.remap_statement(s))
-        .collect();
+    let remapped_body = remapper.remap_statements(&function.body.statements);
     *next_value_id = remapper.next_value_id;
 
     // If body has Leave, handle it (even for void functions, Leave skips remaining code)

@@ -465,12 +465,23 @@ impl TypeInference {
 
     fn propagate_demands_block(&mut self, block: &Block) -> bool {
         let mut changed = false;
+        let mut snapshot: Vec<UseContext> = Vec::new();
         for_each_stmt(&block.statements, &mut |stmt| {
             if let Statement::Let { bindings, value } = stmt {
                 if bindings.len() == 1 {
                     let result_id = bindings[0];
-                    if let Some(result_uses) = self.uses.get(&result_id.0).cloned() {
-                        changed |= self.propagate_demand_to_expr(value, &result_uses);
+                    snapshot.clear();
+                    if let Some(uses) = self.uses.get(&result_id.0) {
+                        snapshot.extend(uses.iter().copied());
+                    }
+                    if !snapshot.is_empty() {
+                        // `record_use_if_new` mutates `self.uses`, which can
+                        // reallocate tree nodes and invalidate any reference
+                        // into `self.uses[&result_id.0]`; the snapshot
+                        // (reused across iterations) keeps the read borrow
+                        // disjoint from those writes without per-iteration
+                        // BTreeSet clones.
+                        changed |= self.propagate_demand_to_expr(value, &snapshot);
                     }
                 }
             }
@@ -479,11 +490,7 @@ impl TypeInference {
     }
 
     /// Propagates result uses to operands of transparent expressions.
-    fn propagate_demand_to_expr(
-        &mut self,
-        expr: &Expr,
-        result_uses: &BTreeSet<UseContext>,
-    ) -> bool {
+    fn propagate_demand_to_expr(&mut self, expr: &Expr, result_uses: &[UseContext]) -> bool {
         match expr {
             Expr::Binary {
                 lhs,

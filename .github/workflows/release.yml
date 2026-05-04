@@ -133,9 +133,9 @@ jobs:
           merge-multiple: true
 
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - run: npm ci -w js/resolc
 

@@ -2,7 +2,6 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@parity/hardhat-polkadot");
 
 const RESOLC_PATH_ENV_NAME = "RESOLC_PATH";
-const SOLC_VERSION_ENV_NAME = "SOLC_VERSION";
 
 function getEnv(name) {
     const value = process.env[name];
@@ -15,7 +14,7 @@ function getEnv(name) {
 
 /** @type {import('hardhat/config').HardhatUserConfig} */
 module.exports = {
-    solidity: getEnv(SOLC_VERSION_ENV_NAME),
+    solidity: "0.8.35",
     resolc: {
         compilerSource: "binary",
         settings: {

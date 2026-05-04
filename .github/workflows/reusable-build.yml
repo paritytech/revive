@@ -297,7 +297,7 @@ jobs:
       - name: Basic Sanity Check
         run: |
           mkdir -p solc
-          curl -sSLo solc/soljson.js https://github.com/argotorg/solidity/releases/download/v0.8.34/soljson.js
+          curl -sSLo solc/soljson.js https://github.com/argotorg/solidity/releases/download/v0.8.35/soljson.js
           node -e "
           // Make sure to require './solc/soljson' and not 'solc/soljson' in order to use
           // the explicitly downloaded solc, rather than resolving an npm package potentially

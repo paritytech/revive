@@ -876,49 +876,16 @@ impl FmpPropagation {
         writers
     }
 
-    /// Collects all function IDs called in a statement list.
+    /// Collects all function IDs called in a statement list, recursing through
+    /// nested regions and `For::condition_stmts`.
     fn collect_callees(stmts: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
-        for stmt in stmts {
-            match stmt {
-                Statement::Let { value, .. } | Statement::Expr(value) => {
-                    if let Expr::Call { function, .. } = value {
-                        cb(*function);
-                    }
+        for_each_stmt(stmts, &mut |stmt| {
+            if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
+                if let Expr::Call { function, .. } = value {
+                    cb(*function);
                 }
-                Statement::If {
-                    then_region,
-                    else_region,
-                    ..
-                } => {
-                    Self::collect_callees(&then_region.statements, cb);
-                    if let Some(er) = else_region {
-                        Self::collect_callees(&er.statements, cb);
-                    }
-                }
-                Statement::Switch { cases, default, .. } => {
-                    for case in cases {
-                        Self::collect_callees(&case.body.statements, cb);
-                    }
-                    if let Some(d) = default {
-                        Self::collect_callees(&d.statements, cb);
-                    }
-                }
-                Statement::For {
-                    condition_stmts,
-                    body,
-                    post,
-                    ..
-                } => {
-                    Self::collect_callees(condition_stmts, cb);
-                    Self::collect_callees(&body.statements, cb);
-                    Self::collect_callees(&post.statements, cb);
-                }
-                Statement::Block(region) => {
-                    Self::collect_callees(&region.statements, cb);
-                }
-                _ => {}
             }
-        }
+        });
     }
 
     /// Propagates FMP through a block.

@@ -3225,9 +3225,10 @@ fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize,
     walk(&mut block.statements, &positions, &mut counter);
 }
 
-/// Updates call sites in a block, changing calls to old_id into calls to new_id
-/// with extra literal arguments appended.
-/// Returns the number of new ValueIds allocated (caller must track next_value_id).
+/// Updates call sites in a block, changing calls to `old_id` into calls to
+/// `new_id` with extra literal arguments appended. For each matching call,
+/// emits one `Let` binding per extra arg immediately before the call site
+/// (allocating fresh `ValueId`s through `next_value_id`).
 fn update_call_sites_with_extra_args(
     block: &mut Block,
     old_id: FunctionId,
@@ -3235,129 +3236,105 @@ fn update_call_sites_with_extra_args(
     extra_args: &[BigUint],
     next_value_id: &mut u32,
 ) {
-    block.statements = rewrite_stmts_with_extra_args(
-        std::mem::take(&mut block.statements),
-        old_id,
-        new_id,
-        extra_args,
-        next_value_id,
-    );
-}
-
-/// Rewrites a list of statements, inserting Let bindings before calls that need
-/// extra literal arguments.
-fn rewrite_stmts_with_extra_args(
-    stmts: Vec<Statement>,
-    old_id: FunctionId,
-    new_id: FunctionId,
-    extra_args: &[BigUint],
-    next_id: &mut u32,
-) -> Vec<Statement> {
-    let mut result = Vec::with_capacity(stmts.len());
-    for mut stmt in stmts {
-        // Check if this statement contains a call to old_id
-        match &mut stmt {
-            Statement::Let {
-                value: Expr::Call { function, args },
-                ..
+    fn rewrite(
+        stmts: &mut Vec<Statement>,
+        old_id: FunctionId,
+        new_id: FunctionId,
+        extra_args: &[BigUint],
+        next_id: &mut u32,
+    ) {
+        let mut i = 0;
+        while i < stmts.len() {
+            // Recurse into nested regions first.
+            match &mut stmts[i] {
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    rewrite(
+                        &mut then_region.statements,
+                        old_id,
+                        new_id,
+                        extra_args,
+                        next_id,
+                    );
+                    if let Some(r) = else_region {
+                        rewrite(&mut r.statements, old_id, new_id, extra_args, next_id);
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for c in cases.iter_mut() {
+                        rewrite(&mut c.body.statements, old_id, new_id, extra_args, next_id);
+                    }
+                    if let Some(d) = default {
+                        rewrite(&mut d.statements, old_id, new_id, extra_args, next_id);
+                    }
+                }
+                Statement::For {
+                    condition_stmts,
+                    body,
+                    post,
+                    ..
+                } => {
+                    rewrite(condition_stmts, old_id, new_id, extra_args, next_id);
+                    rewrite(&mut body.statements, old_id, new_id, extra_args, next_id);
+                    rewrite(&mut post.statements, old_id, new_id, extra_args, next_id);
+                }
+                Statement::Block(region) => {
+                    rewrite(&mut region.statements, old_id, new_id, extra_args, next_id);
+                }
+                _ => {}
             }
-            | Statement::Expr(Expr::Call { function, args })
-                if *function == old_id =>
-            {
-                // Emit Let bindings for extra args, then modify the call
-                let mut extra_values = Vec::new();
+            // Then check if this stmt is a target call.
+            let is_target = matches!(&stmts[i],
+                Statement::Let { value: Expr::Call { function, .. }, .. }
+                | Statement::Expr(Expr::Call { function, .. })
+                if *function == old_id);
+            if is_target {
+                // Insert one Let-literal per extra arg before the call.
+                let mut extra_values = Vec::with_capacity(extra_args.len());
                 for arg_val in extra_args {
                     let vid = ValueId(*next_id);
                     *next_id += 1;
-                    result.push(Statement::Let {
-                        bindings: vec![vid],
-                        value: Expr::Literal {
-                            value: arg_val.clone(),
-                            ty: Type::Int(BitWidth::I256),
+                    stmts.insert(
+                        i,
+                        Statement::Let {
+                            bindings: vec![vid],
+                            value: Expr::Literal {
+                                value: arg_val.clone(),
+                                ty: Type::Int(BitWidth::I256),
+                            },
                         },
-                    });
+                    );
+                    i += 1; // skip past the inserted Let
                     extra_values.push(Value {
                         id: vid,
                         ty: Type::Int(BitWidth::I256),
                     });
                 }
-                *function = new_id;
-                args.extend(extra_values);
-                result.push(stmt);
+                // Then patch the call (now at position `i`).
+                match &mut stmts[i] {
+                    Statement::Let {
+                        value: Expr::Call { function, args },
+                        ..
+                    }
+                    | Statement::Expr(Expr::Call { function, args }) => {
+                        *function = new_id;
+                        args.extend(extra_values);
+                    }
+                    _ => unreachable!("is_target check above just matched a Call"),
+                }
             }
-            _ => {
-                // Recurse into nested regions
-                rewrite_stmt_regions(&mut stmt, old_id, new_id, extra_args, next_id);
-                result.push(stmt);
-            }
+            i += 1;
         }
     }
-    result
-}
-
-fn rewrite_stmt_regions(
-    stmt: &mut Statement,
-    old_id: FunctionId,
-    new_id: FunctionId,
-    extra_args: &[BigUint],
-    next_id: &mut u32,
-) {
-    match stmt {
-        Statement::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            rewrite_region_with_extra_args(then_region, old_id, new_id, extra_args, next_id);
-            if let Some(r) = else_region {
-                rewrite_region_with_extra_args(r, old_id, new_id, extra_args, next_id);
-            }
-        }
-        Statement::Switch { cases, default, .. } => {
-            for c in cases {
-                rewrite_region_with_extra_args(&mut c.body, old_id, new_id, extra_args, next_id);
-            }
-            if let Some(d) = default {
-                rewrite_region_with_extra_args(d, old_id, new_id, extra_args, next_id);
-            }
-        }
-        Statement::For {
-            condition_stmts,
-            body,
-            post,
-            ..
-        } => {
-            *condition_stmts = rewrite_stmts_with_extra_args(
-                std::mem::take(condition_stmts),
-                old_id,
-                new_id,
-                extra_args,
-                next_id,
-            );
-            rewrite_region_with_extra_args(body, old_id, new_id, extra_args, next_id);
-            rewrite_region_with_extra_args(post, old_id, new_id, extra_args, next_id);
-        }
-        Statement::Block(region) => {
-            rewrite_region_with_extra_args(region, old_id, new_id, extra_args, next_id);
-        }
-        // Let and Expr with non-Call expressions don't need rewriting
-        _ => {}
-    }
-}
-
-fn rewrite_region_with_extra_args(
-    region: &mut Region,
-    old_id: FunctionId,
-    new_id: FunctionId,
-    extra_args: &[BigUint],
-    next_id: &mut u32,
-) {
-    region.statements = rewrite_stmts_with_extra_args(
-        std::mem::take(&mut region.statements),
+    rewrite(
+        &mut block.statements,
         old_id,
         new_id,
         extra_args,
-        next_id,
+        next_value_id,
     );
 }
 
@@ -3439,22 +3416,26 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                     }
                 }
             }
+            // Nested regions get their own scope (cloned constants) so that
+            // Let bindings introduced inside don't leak to sibling branches.
+            // `For::condition_stmts` is intentionally not scoped — it's part
+            // of the loop header and shares the outer scope.
             Statement::If {
                 then_region,
                 else_region,
                 ..
             } => {
-                fold_keccak_in_region(then_region, constants);
-                if let Some(else_region) = else_region {
-                    fold_keccak_in_region(else_region, constants);
+                fold_keccak_in_stmts(&mut then_region.statements, &mut constants.clone());
+                if let Some(r) = else_region {
+                    fold_keccak_in_stmts(&mut r.statements, &mut constants.clone());
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases.iter_mut() {
-                    fold_keccak_in_region(&mut case.body, constants);
+                    fold_keccak_in_stmts(&mut case.body.statements, &mut constants.clone());
                 }
-                if let Some(default) = default {
-                    fold_keccak_in_region(default, constants);
+                if let Some(d) = default {
+                    fold_keccak_in_stmts(&mut d.statements, &mut constants.clone());
                 }
             }
             Statement::For {
@@ -3464,21 +3445,15 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                 ..
             } => {
                 fold_keccak_in_stmts(condition_stmts, constants);
-                fold_keccak_in_region(body, constants);
-                fold_keccak_in_region(post, constants);
+                fold_keccak_in_stmts(&mut body.statements, &mut constants.clone());
+                fold_keccak_in_stmts(&mut post.statements, &mut constants.clone());
             }
             Statement::Block(region) => {
-                fold_keccak_in_region(region, constants);
+                fold_keccak_in_stmts(&mut region.statements, &mut constants.clone());
             }
             _ => {}
         }
     }
-}
-
-/// Processes a region's statements for keccak folding.
-fn fold_keccak_in_region(region: &mut Region, constants: &mut BTreeMap<u32, BigUint>) {
-    let mut local_constants = constants.clone();
-    fold_keccak_in_stmts(&mut region.statements, &mut local_constants);
 }
 
 #[cfg(test)]

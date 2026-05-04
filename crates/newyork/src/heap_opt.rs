@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::{Block, Expr, MemoryRegion, Object, Region, Statement, Value};
+use crate::ir::{for_each_stmt, Block, Expr, MemoryRegion, Object, Statement, Value};
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -179,21 +179,17 @@ impl HeapAnalysis {
         self.compute_tainted_regions();
     }
 
-    /// Analyzes a block for memory access patterns.
+    /// Analyzes a block for memory access patterns. Recursion through nested
+    /// regions is handled by `for_each_stmt`; `analyze_statement` only handles
+    /// the per-stmt analysis (no longer recursing internally).
     fn analyze_block(&mut self, block: &Block, in_function: bool) {
-        for stmt in &block.statements {
+        for_each_stmt(&block.statements, &mut |stmt| {
             self.analyze_statement(stmt, in_function);
-        }
+        });
     }
 
-    /// Analyzes a region for memory access patterns.
-    fn analyze_region(&mut self, region: &Region, in_function: bool) {
-        for stmt in &region.statements {
-            self.analyze_statement(stmt, in_function);
-        }
-    }
-
-    /// Analyzes a statement for memory access patterns.
+    /// Analyzes a single statement for memory access patterns. The caller is
+    /// responsible for walking nested regions (use `for_each_stmt`).
     fn analyze_statement(&mut self, stmt: &Statement, in_function: bool) {
         match stmt {
             Statement::Let { bindings, value } => {
@@ -315,61 +311,30 @@ impl HeapAnalysis {
                 self.mark_escaping_range(offset, length);
             }
 
-            // Recurse into control flow
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                self.analyze_region(then_region, in_function);
-                if let Some(else_region) = else_region {
-                    self.analyze_region(else_region, in_function);
-                }
-            }
-
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    self.analyze_region(&case.body, in_function);
-                }
-                if let Some(default) = default {
-                    self.analyze_region(default, in_function);
-                }
-            }
+            // Control flow: nested regions (and `For::condition_stmts`) are
+            // walked by `analyze_block`'s `for_each_stmt`. We only need the
+            // per-stmt setup here — propagating offset info from init_values
+            // to loop_vars/outputs in `For` (those become PHI nodes in LLVM).
+            Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
             Statement::For {
                 init_values,
                 loop_vars,
-                condition_stmts,
-                body,
-                post,
                 outputs,
                 ..
             } => {
-                // Loop-carried variables become PHI nodes in LLVM, so they are
-                // never constants even if the initial value is a literal.
-                // Propagate offset info from init_values but mark as non-literal.
                 for (init_val, loop_var) in init_values.iter().zip(loop_vars.iter()) {
                     if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
                         info.from_literal = false;
                         self.offset_values.insert(loop_var.0, info);
                     }
                 }
-                // Output variables are also PHI nodes (loop exit values).
                 for (init_val, output) in init_values.iter().zip(outputs.iter()) {
                     if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
                         info.from_literal = false;
                         self.offset_values.insert(output.0, info);
                     }
                 }
-                for stmt in condition_stmts {
-                    self.analyze_statement(stmt, in_function);
-                }
-                self.analyze_region(body, in_function);
-                self.analyze_region(post, in_function);
-            }
-
-            Statement::Block(region) => {
-                self.analyze_region(region, in_function);
             }
 
             Statement::Expr(expr) => {

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-33d72552.js";
+            window.path_to_searchindex_js = "searchindex-a73cb00e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-196b9d9b.js"></script>
@@ -713,10 +713,10 @@ Yul AST ──────────► │                  newyork IR       
 <h3 id="type-narrowing"><a class="header" href="#type-narrowing">Type narrowing</a></h3>
 <p>EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:</p>
 <ul>
-<li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>)</li>
-<li><strong>Backward</strong>: constrains width from use-site contexts via 9 context types (<code>MemoryOffset</code> demands <code>I64</code>, <code>StorageAccess</code> demands <code>I256</code>, etc.)</li>
-<li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code></li>
-<li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types by analyzing callers and call sites, running up to 4 refinement rounds until a fixed point is reached. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
+<li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>).</li>
+<li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorisation is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
+<li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code>.</li>
+<li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
 </ul>
 <p>This allows LLVM to emit native 32/64-bit instructions instead of software-emulated 256-bit arithmetic, and eliminates expensive multi-instruction comparison sequences (16-20 RISC-V instructions for i256 comparisons reduced to 1-2 for i64).</p>
 <h3 id="guard-narrowing"><a class="header" href="#guard-narrowing">Guard narrowing</a></h3>
@@ -763,50 +763,53 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Calldataload</strong>: <code>__revive_calldataload</code> (outlined when &gt;= 20 call sites)</li>
 <li><strong>Memory</strong>: <code>__revive_store_bswap</code>, <code>__revive_exit_checked</code>, <code>__revive_return_word</code></li>
 <li><strong>Errors</strong>: <code>__revive_error_string_revert_N</code>, <code>__revive_custom_error_N</code> (per data-word count)</li>
-<li><strong>Keccak wrappers</strong>: <code>__revive_keccak256_slot_wrapper_*</code> (per constant slot)</li>
+<li><strong>Keccak wrappers</strong>: <code>__keccak256_slot_N</code> (one <code>noinline</code> wrapper per constant slot, internally dispatching to <code>__revive_keccak256_two_words</code>)</li>
 </ul>
 <p>Additionally, common exit patterns (revert with constant length, zero-value returns) are deduplicated into shared LLVM basic blocks, saving hundreds of instruction copies in large contracts.</p>
 <h2 id="codesize-results"><a class="header" href="#codesize-results">Codesize results</a></h2>
 <h3 id="integration-test-contracts"><a class="header" href="#integration-test-contracts">Integration test contracts</a></h3>
-<p>Measured against the main branch baseline:</p>
+<p>Reproducible with <code>cargo test --package revive-integration -- codesize</code>. The <code>main</code> column is the value committed to <code>crates/integration/codesize.json</code> on <code>main</code>; the <code>newyork</code> column is the value produced by the same test with <code>RESOLC_USE_NEWYORK=1</code> set, currently committed on this branch.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Contract</th><th>main (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
 </thead>
 <tbody>
-<tr><td>Baseline</td><td>870</td><td>649</td><td>-25.4%</td></tr>
-<tr><td>Computation</td><td>2,418</td><td>1,591</td><td>-34.2%</td></tr>
-<tr><td>DivisionArithmetics</td><td>9,327</td><td>7,681</td><td>-17.6%</td></tr>
-<tr><td>ERC20</td><td>17,160</td><td>11,849</td><td>-30.9%</td></tr>
-<tr><td>Events</td><td>1,662</td><td>1,434</td><td>-13.7%</td></tr>
-<tr><td>FibonacciIterative</td><td>1,427</td><td>1,201</td><td>-15.8%</td></tr>
-<tr><td>Flipper</td><td>2,240</td><td>1,536</td><td>-31.4%</td></tr>
-<tr><td>SHA1</td><td>8,009</td><td>5,958</td><td>-25.6%</td></tr>
+<tr><td>Baseline</td><td>870</td><td>479</td><td>−44.9%</td></tr>
+<tr><td>Computation</td><td>2,418</td><td>1,376</td><td>−43.1%</td></tr>
+<tr><td>DivisionArithmetics</td><td>9,327</td><td>7,192</td><td>−22.9%</td></tr>
+<tr><td>ERC20</td><td>17,160</td><td>10,138</td><td>−40.9%</td></tr>
+<tr><td>Events</td><td>1,662</td><td>1,279</td><td>−23.0%</td></tr>
+<tr><td>FibonacciIterative</td><td>1,427</td><td>949</td><td>−33.5%</td></tr>
+<tr><td>Flipper</td><td>2,240</td><td>1,123</td><td>−49.9%</td></tr>
+<tr><td>SHA1</td><td>8,009</td><td>6,286</td><td>−21.5%</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="openzeppelin-contracts"><a class="header" href="#openzeppelin-contracts">OpenZeppelin contracts</a></h3>
-<p>Measured on real-world contracts generated with the OpenZeppelin Wizard:</p>
+<p>Measured by running <code>oz-tests/oz.sh</code> against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot — there is no committed measurement file in the repo, so these may drift as the optimizer evolves; rerun the script for fresh figures.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Contract</th><th>Baseline (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
+<tr><th>Contract</th><th>newyork (bytes)</th></tr>
 </thead>
 <tbody>
-<tr><td>Governor (oz_gov.sol)</td><td>147,712</td><td>105,448</td><td>-28.6%</td></tr>
-<tr><td>RWA Token (oz_rwa.sol)</td><td>79,991</td><td>56,936</td><td>-28.8%</td></tr>
-<tr><td>Stablecoin (oz_stable.sol)</td><td>82,660</td><td>61,801</td><td>-25.2%</td></tr>
-<tr><td>ERC-721</td><td>92,738</td><td>64,946</td><td>-30.0%</td></tr>
-<tr><td>ERC-1155</td><td>59,931</td><td>43,376</td><td>-27.6%</td></tr>
-<tr><td>ERC-20</td><td>83,863</td><td>59,724</td><td>-28.8%</td></tr>
-<tr><td>TimelockController</td><td>47,032</td><td>32,709</td><td>-30.5%</td></tr>
+<tr><td>oz_gov</td><td>81,840</td></tr>
+<tr><td>erc721</td><td>52,634</td></tr>
+<tr><td>erc20</td><td>45,703</td></tr>
+<tr><td>oz_stable</td><td>45,052</td></tr>
+<tr><td>oz_rwa</td><td>41,581</td></tr>
+<tr><td>erc1155</td><td>33,087</td></tr>
+<tr><td>oz_simple_erc20</td><td>17,024</td></tr>
+<tr><td>proxy</td><td>3,748</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>320,669</strong></td></tr>
 </tbody>
 </table>
 </div>
-<p>The optimizer consistently achieves <strong>25-34% codesize reduction</strong> across both small test contracts and large real-world contracts.</p>
+<p>For comparison, building the same contracts without the newyork optimizer at the equivalent snapshot produced <strong>563,526</strong> bytes total — a reduction of about <strong>−43%</strong> across the corpus.</p>
+<p>Per-contract reductions in the integration suite range from roughly <strong>−21%</strong> (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimise) to nearly <strong>−50%</strong> (Flipper, where the optimiser strips away most of Solidity’s dispatch and storage-access scaffolding).</p>
 <h2 id="development-history-and-challenges"><a class="header" href="#development-history-and-challenges">Development history and challenges</a></h2>
-<p>The newyork optimizer was developed over approximately three weeks in February 2026, largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:</p>
+<p>The newyork optimizer was developed over roughly three months — from early February 2026 through early May 2026 — largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:</p>
 <p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
 <p><strong>Phase 2 – Optimization passes</strong>: Once the baseline was stable, optimization passes were added iteratively: inlining, simplification, memory optimization, function deduplication, keccak256 fusion, and type inference. Each pass was validated against differential tests comparing EVM and PVM execution.</p>
 <p><strong>Phase 3 – Soundness hardening</strong>: Several type inference and narrowing approaches turned out to be unsound and had to be reworked:</p>

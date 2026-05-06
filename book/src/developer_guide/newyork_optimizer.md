@@ -72,10 +72,10 @@ The newyork IR is an SSA form with structured control flow, inspired by MLIR's S
 
 EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:
 
-- **Forward**: computes minimum width from literal values and operation semantics (e.g., `add(I64, I8)` produces `I65`, rounded up to `I128`)
-- **Backward**: constrains width from use-site contexts via 9 context types (`MemoryOffset` demands `I64`, `StorageAccess` demands `I256`, etc.)
-- **Transparent demand propagation**: for modular-arithmetic operations (`Add`, `Sub`, `Mul`, `And`, `Or`, `Xor`), propagates narrow demands backward through operands, exploiting the property that `trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))`
-- **Interprocedural**: iteratively narrows function parameter and return types by analyzing callers and call sites, running up to 4 refinement rounds until a fixed point is reached. Parameters are clamped to at least `I32` (XLEN on PolkaVM).
+- **Forward**: computes minimum width from literal values and operation semantics (e.g., `add(I64, I8)` produces `I65`, rounded up to `I128`).
+- **Backward use tracking**: classifies each value's uses into 9 context categories (`MemoryOffset`, `MemoryValue`, `StorageAccess`, `Comparison`, `Arithmetic`, `FunctionArg`, `FunctionReturn`, `ExternalCall`, `General`). All categories conservatively demand the full `I256` width by default; the categorisation is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — `mload(2^128)` aliased to `mload(0)` because the bounds check ran on an already-truncated value (commit `ccca38df`).
+- **Transparent demand propagation**: for modular-arithmetic operations (`Add`, `Sub`, `Mul`, `And`, `Or`, `Xor`), propagates narrow demands backward through operands, exploiting the property that `trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))`.
+- **Interprocedural**: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least `I32` (XLEN on PolkaVM).
 
 This allows LLVM to emit native 32/64-bit instructions instead of software-emulated 256-bit arithmetic, and eliminates expensive multi-instruction comparison sequences (16-20 RISC-V instructions for i256 comparisons reduced to 1-2 for i64).
 
@@ -137,7 +137,7 @@ The LLVM codegen backend generates approximately 15 types of outlined helper fun
 - **Calldataload**: `__revive_calldataload` (outlined when >= 20 call sites)
 - **Memory**: `__revive_store_bswap`, `__revive_exit_checked`, `__revive_return_word`
 - **Errors**: `__revive_error_string_revert_N`, `__revive_custom_error_N` (per data-word count)
-- **Keccak wrappers**: `__revive_keccak256_slot_wrapper_*` (per constant slot)
+- **Keccak wrappers**: `__keccak256_slot_N` (one `noinline` wrapper per constant slot, internally dispatching to `__revive_keccak256_two_words`)
 
 Additionally, common exit patterns (revert with constant length, zero-value returns) are deduplicated into shared LLVM basic blocks, saving hundreds of instruction copies in large contracts.
 
@@ -145,38 +145,42 @@ Additionally, common exit patterns (revert with constant length, zero-value retu
 
 ### Integration test contracts
 
-Measured against the main branch baseline:
+Reproducible with `cargo test --package revive-integration -- codesize`. The `main` column is the value committed to `crates/integration/codesize.json` on `main`; the `newyork` column is the value produced by the same test with `RESOLC_USE_NEWYORK=1` set, currently committed on this branch.
 
 | Contract | main (bytes) | newyork (bytes) | Reduction |
 |---|---|---|---|
-| Baseline | 870 | 649 | -25.4% |
-| Computation | 2,418 | 1,591 | -34.2% |
-| DivisionArithmetics | 9,327 | 7,681 | -17.6% |
-| ERC20 | 17,160 | 11,849 | -30.9% |
-| Events | 1,662 | 1,434 | -13.7% |
-| FibonacciIterative | 1,427 | 1,201 | -15.8% |
-| Flipper | 2,240 | 1,536 | -31.4% |
-| SHA1 | 8,009 | 5,958 | -25.6% |
+| Baseline | 870 | 479 | −44.9% |
+| Computation | 2,418 | 1,376 | −43.1% |
+| DivisionArithmetics | 9,327 | 7,192 | −22.9% |
+| ERC20 | 17,160 | 10,138 | −40.9% |
+| Events | 1,662 | 1,279 | −23.0% |
+| FibonacciIterative | 1,427 | 949 | −33.5% |
+| Flipper | 2,240 | 1,123 | −49.9% |
+| SHA1 | 8,009 | 6,286 | −21.5% |
 
 ### OpenZeppelin contracts
 
-Measured on real-world contracts generated with the OpenZeppelin Wizard:
+Measured by running `oz-tests/oz.sh` against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot — there is no committed measurement file in the repo, so these may drift as the optimizer evolves; rerun the script for fresh figures.
 
-| Contract | Baseline (bytes) | newyork (bytes) | Reduction |
-|---|---|---|---|
-| Governor (oz_gov.sol) | 147,712 | 105,448 | -28.6% |
-| RWA Token (oz_rwa.sol) | 79,991 | 56,936 | -28.8% |
-| Stablecoin (oz_stable.sol) | 82,660 | 61,801 | -25.2% |
-| ERC-721 | 92,738 | 64,946 | -30.0% |
-| ERC-1155 | 59,931 | 43,376 | -27.6% |
-| ERC-20 | 83,863 | 59,724 | -28.8% |
-| TimelockController | 47,032 | 32,709 | -30.5% |
+| Contract | newyork (bytes) |
+|---|---|
+| oz_gov | 81,840 |
+| erc721 | 52,634 |
+| erc20 | 45,703 |
+| oz_stable | 45,052 |
+| oz_rwa | 41,581 |
+| erc1155 | 33,087 |
+| oz_simple_erc20 | 17,024 |
+| proxy | 3,748 |
+| **Total** | **320,669** |
 
-The optimizer consistently achieves **25-34% codesize reduction** across both small test contracts and large real-world contracts.
+For comparison, building the same contracts without the newyork optimizer at the equivalent snapshot produced **563,526** bytes total — a reduction of about **−43%** across the corpus.
+
+Per-contract reductions in the integration suite range from roughly **−21%** (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimise) to nearly **−50%** (Flipper, where the optimiser strips away most of Solidity's dispatch and storage-access scaffolding).
 
 ## Development history and challenges
 
-The newyork optimizer was developed over approximately three weeks in February 2026, largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:
+The newyork optimizer was developed over roughly three months — from early February 2026 through early May 2026 — largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:
 
 **Phase 1 -- Initial scaffolding**: The first draft established the core IR data structures, Yul-to-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.
 

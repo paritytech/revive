@@ -32,16 +32,36 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
     let mut stats = GuardNarrowStats::default();
 
+    // Pre-scan: detect functions that always terminate (panic helpers, etc.).
+    // The narrower needs to recognize `if guard { panic_call() }` as a guard
+    // pattern just like `if guard { revert(0,0) }`. Without this, the
+    // canonical Solidity finalize_allocation overflow check —
+    // `if or(gt(sum, UINT64_MAX), lt(sum, addend)) { panic_error_0x41() }` —
+    // never narrows the addition result.
+    let noreturn = detect_noreturn_functions(object);
+
     // Pre-scan: detect validator functions (void, single param, contains
     // eq-based guard pattern like `if iszero(eq(param, and(param, MASK))) { revert }`).
     // These prove their parameter fits in MASK bits, but the proof doesn't
     // propagate to callers. We record (function_id → mask) so that call sites
     // can insert narrowing ANDs.
-    let validators = detect_validator_functions(object);
+    let validators = detect_validator_functions(object, &noreturn);
 
-    let _ = narrow_block(&mut object.code, &mut next_id, &mut stats, &validators);
+    let _ = narrow_block(
+        &mut object.code,
+        &mut next_id,
+        &mut stats,
+        &validators,
+        &noreturn,
+    );
     for func in object.functions.values_mut() {
-        let replacements = narrow_block(&mut func.body, &mut next_id, &mut stats, &validators);
+        let replacements = narrow_block(
+            &mut func.body,
+            &mut next_id,
+            &mut stats,
+            &validators,
+            &noreturn,
+        );
         // Apply replacements to function return values. Without this, functions
         // like abi_decode_address return the unmasked value (i256) instead of
         // the AND-masked value (i160), blocking return type narrowing.
@@ -63,6 +83,55 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     stats
 }
 
+/// Detects functions that always terminate (no fall-through). A function
+/// is noreturn if its body has a single statement that is a known terminator
+/// (Revert, PanicRevert, etc.) — the typical compiler-generated panic helper
+/// like `function panic_error_0x41() { panic_revert(0x41) }`.
+///
+/// Calls to noreturn functions are equivalent to inlining the terminator at
+/// the call site; `region_terminates` accepts them so guard narrowing can
+/// recognize patterns like `if check { panic_error_0x41() }`.
+///
+/// The set is conservative: only single-statement direct terminators count,
+/// not nested or conditional terminators. This rules out functions whose
+/// termination depends on dynamic checks the analysis can't prove always
+/// fire.
+fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32> {
+    let mut noreturn = std::collections::BTreeSet::new();
+    // Iterate to a fixed point so we can recognise transitive helpers like
+    // `function trampoline() { panic_error_0x41() }` once the leaf
+    // `panic_error_0x41` is itself in the set.
+    loop {
+        let before = noreturn.len();
+        for (func_id, function) in &object.functions {
+            if noreturn.contains(&func_id.0) || function.body.statements.len() != 1 {
+                continue;
+            }
+            let terminates = match &function.body.statements[0] {
+                Statement::Revert { .. }
+                | Statement::Return { .. }
+                | Statement::Invalid
+                | Statement::Stop
+                | Statement::SelfDestruct { .. }
+                | Statement::PanicRevert { .. }
+                | Statement::ErrorStringRevert { .. }
+                | Statement::CustomErrorRevert { .. } => true,
+                Statement::Expr(Expr::Call {
+                    function: callee, ..
+                }) => noreturn.contains(&callee.0),
+                _ => false,
+            };
+            if terminates {
+                noreturn.insert(func_id.0);
+            }
+        }
+        if noreturn.len() == before {
+            break;
+        }
+    }
+    noreturn
+}
+
 /// Detects "validator" functions that prove their parameter fits in a mask.
 ///
 /// Pattern: void function with one parameter whose body contains:
@@ -74,7 +143,10 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 /// ```
 ///
 /// Returns a map from FunctionId to the boundary mask (BigUint).
-fn detect_validator_functions(object: &Object) -> BTreeMap<u32, BigUint> {
+fn detect_validator_functions(
+    object: &Object,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> BTreeMap<u32, BigUint> {
     let mut validators = BTreeMap::new();
 
     for (func_id, function) in &object.functions {
@@ -84,7 +156,7 @@ fn detect_validator_functions(object: &Object) -> BTreeMap<u32, BigUint> {
         }
 
         let param_id = function.params[0].0;
-        if let Some(mask) = detect_validator_mask(&function.body, param_id) {
+        if let Some(mask) = detect_validator_mask(&function.body, param_id, noreturn) {
             validators.insert(func_id.0, mask);
         }
     }
@@ -94,7 +166,11 @@ fn detect_validator_functions(object: &Object) -> BTreeMap<u32, BigUint> {
 
 /// Checks if a block contains the eq-based validator pattern for the given param.
 /// Returns the boundary mask if found.
-fn detect_validator_mask(block: &Block, param_id: ValueId) -> Option<BigUint> {
+fn detect_validator_mask(
+    block: &Block,
+    param_id: ValueId,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> Option<BigUint> {
     let stmts = &block.statements;
 
     // Track definitions to resolve the pattern
@@ -183,7 +259,10 @@ fn detect_validator_mask(block: &Block, param_id: ValueId) -> Option<BigUint> {
             ..
         } = stmt
         {
-            if else_region.is_none() && outputs.is_empty() && region_terminates(then_region) {
+            if else_region.is_none()
+                && outputs.is_empty()
+                && region_terminates(then_region, noreturn)
+            {
                 if let Some(mask) = iszero_eq_defs.get(&condition.id.0) {
                     return Some(mask.clone());
                 }
@@ -202,10 +281,11 @@ fn narrow_block(
     next_id: &mut u32,
     stats: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
+    noreturn: &std::collections::BTreeSet<u32>,
 ) -> BTreeMap<u32, ValueId> {
     // First, recurse into nested regions within each statement.
     for stmt in &mut block.statements {
-        narrow_stmt_regions(stmt, next_id, stats, validators);
+        narrow_stmt_regions(stmt, next_id, stats, validators, noreturn);
     }
 
     // Now process this block's top-level statements for guard patterns.
@@ -225,6 +305,10 @@ fn narrow_block(
     // Track iszero(eq_check) definitions:
     // iszero_result_id -> (original_value_id, and_result_id)
     let mut iszero_eq_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    // Track or(a, b) definitions for combined-check guards like
+    // `if or(gt(val, MAX), lt(sum, addend)) { panic }` in finalize_allocation.
+    // or_result_id -> (lhs_id, rhs_id)
+    let mut or_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     // Accumulated replacements: old_value_id -> new_value_id
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
@@ -327,6 +411,21 @@ fn narrow_block(
                         iszero_eq_defs.insert(bid, (orig_id, and_val_id));
                     }
                 }
+
+                // Track or(a, b) definitions so combined-check guards can
+                // pull narrowing facts from any operand that is itself a gt
+                // boundary check (the typical finalize_allocation pattern is
+                // `if or(gt(sum, UINT64_MAX), lt(sum, addend)) { panic }`).
+                if let Expr::Binary {
+                    op: BinOp::Or,
+                    ref lhs,
+                    ref rhs,
+                } = value
+                {
+                    let lhs_id = resolve_id(lhs.id, &replacements);
+                    let rhs_id = resolve_id(rhs.id, &replacements);
+                    or_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                }
             }
         }
 
@@ -340,62 +439,75 @@ fn narrow_block(
         } = stmt
         {
             let cond_id = resolve_id(condition.id, &replacements);
-            if else_region.is_none() && outputs.is_empty() && region_terminates(then_region) {
-                if let Some((guarded_val, mask)) = gt_defs.get(&cond_id.0).cloned() {
-                    // Found: if gt(val, MASK) { <terminates> }
-                    // After this if, val <= MASK.
-                    // Insert: let val_narrow = and(val, MASK)
-                    // Replace subsequent uses of val with val_narrow.
-
-                    let mask_id = ValueId(*next_id);
-                    *next_id += 1;
-                    let narrow_id = ValueId(*next_id);
-                    *next_id += 1;
-
-                    // Push the if statement first.
-                    new_stmts.push(stmt);
-
-                    // Emit: let mask_id = MASK
-                    new_stmts.push(Statement::Let {
-                        bindings: vec![mask_id],
-                        value: Expr::Literal {
-                            value: mask,
-                            ty: Type::Int(BitWidth::I256),
-                        },
-                    });
-
-                    // Emit: let narrow_id = and(val, mask_id)
-                    new_stmts.push(Statement::Let {
-                        bindings: vec![narrow_id],
-                        value: Expr::Binary {
-                            op: BinOp::And,
-                            lhs: guarded_val,
-                            rhs: Value::int(mask_id),
-                        },
-                    });
-
-                    // Replace subsequent uses of the guarded value.
-                    replacements.insert(guarded_val.id.0, narrow_id);
-                    stats.guards_narrowed += 1;
-                    continue;
+            if else_region.is_none()
+                && outputs.is_empty()
+                && region_terminates(then_region, noreturn)
+            {
+                // Resolve the condition through any or-chains to find guard
+                // checks. `if or(or(a, b), c) { panic }` implies all of a, b, c
+                // are false on the fall-through; collect every gt boundary
+                // check reachable through the or operands.
+                let mut gt_guards: Vec<(Value, BigUint)> = Vec::new();
+                let mut iszero_eq_guards: Vec<(u32, ValueId)> = Vec::new();
+                let mut visit = vec![cond_id.0];
+                let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+                while let Some(id) = visit.pop() {
+                    if !seen.insert(id) {
+                        continue;
+                    }
+                    if let Some((guarded, mask)) = gt_defs.get(&id) {
+                        gt_guards.push((*guarded, mask.clone()));
+                    } else if let Some(&(orig_id, and_val_id)) = iszero_eq_defs.get(&id) {
+                        iszero_eq_guards.push((orig_id, and_val_id));
+                    } else if let Some(&(lhs_id, rhs_id)) = or_defs.get(&id) {
+                        visit.push(lhs_id);
+                        visit.push(rhs_id);
+                    }
                 }
 
-                // Check for eq-based guard pattern:
-                // let masked = and(val, MASK)
-                // let eq_check = eq(val, masked)
-                // let not_check = iszero(eq_check)
-                // if not_check { <terminates> }
-                // After: val == masked, so val fits in MASK bits.
-                // Replace subsequent uses of val with masked.
-                if let Some(&(orig_id, and_val_id)) = iszero_eq_defs.get(&cond_id.0) {
-                    // Push the if statement first.
+                // Apply gt-mask narrowing for each guarded value reachable
+                // through the (possibly nested) or-chain. This catches the
+                // `or(gt, lt)` pattern in finalize_allocation where the gt
+                // operand bounds the sum to UINT64_MAX.
+                if !gt_guards.is_empty() || !iszero_eq_guards.is_empty() {
                     new_stmts.push(stmt);
 
-                    // Replace subsequent uses of the original value with the
-                    // AND-masked value. No new instructions needed since the
-                    // and(val, MASK) already exists.
-                    replacements.insert(orig_id, and_val_id);
-                    stats.guards_narrowed += 1;
+                    for (guarded_val, mask) in gt_guards {
+                        // Skip if this value was already narrowed by an
+                        // earlier (more specific) guard in this block.
+                        if replacements.contains_key(&guarded_val.id.0) {
+                            continue;
+                        }
+                        let mask_id = ValueId(*next_id);
+                        *next_id += 1;
+                        let narrow_id = ValueId(*next_id);
+                        *next_id += 1;
+
+                        new_stmts.push(Statement::Let {
+                            bindings: vec![mask_id],
+                            value: Expr::Literal {
+                                value: mask,
+                                ty: Type::Int(BitWidth::I256),
+                            },
+                        });
+                        new_stmts.push(Statement::Let {
+                            bindings: vec![narrow_id],
+                            value: Expr::Binary {
+                                op: BinOp::And,
+                                lhs: guarded_val,
+                                rhs: Value::int(mask_id),
+                            },
+                        });
+
+                        replacements.insert(guarded_val.id.0, narrow_id);
+                        stats.guards_narrowed += 1;
+                    }
+
+                    for (orig_id, and_val_id) in iszero_eq_guards {
+                        replacements.entry(orig_id).or_insert(and_val_id);
+                        stats.guards_narrowed += 1;
+                    }
+
                     continue;
                 }
             }
@@ -468,6 +580,7 @@ fn narrow_stmt_regions(
     next_id: &mut u32,
     stats: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
+    noreturn: &std::collections::BTreeSet<u32>,
 ) {
     match stmt {
         Statement::If {
@@ -475,17 +588,17 @@ fn narrow_stmt_regions(
             else_region,
             ..
         } => {
-            narrow_region(then_region, next_id, stats, validators);
+            narrow_region(then_region, next_id, stats, validators, noreturn);
             if let Some(r) = else_region {
-                narrow_region(r, next_id, stats, validators);
+                narrow_region(r, next_id, stats, validators, noreturn);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for case in cases {
-                narrow_region(&mut case.body, next_id, stats, validators);
+                narrow_region(&mut case.body, next_id, stats, validators, noreturn);
             }
             if let Some(d) = default {
-                narrow_region(d, next_id, stats, validators);
+                narrow_region(d, next_id, stats, validators, noreturn);
             }
         }
         Statement::For {
@@ -497,14 +610,14 @@ fn narrow_stmt_regions(
             let mut cond_block = Block {
                 statements: std::mem::take(condition_stmts),
             };
-            narrow_block(&mut cond_block, next_id, stats, validators);
+            narrow_block(&mut cond_block, next_id, stats, validators, noreturn);
             *condition_stmts = cond_block.statements;
 
-            narrow_region(body, next_id, stats, validators);
-            narrow_region(post, next_id, stats, validators);
+            narrow_region(body, next_id, stats, validators, noreturn);
+            narrow_region(post, next_id, stats, validators, noreturn);
         }
         Statement::Block(region) => {
-            narrow_region(region, next_id, stats, validators);
+            narrow_region(region, next_id, stats, validators, noreturn);
         }
         _ => {}
     }
@@ -516,11 +629,12 @@ fn narrow_region(
     next_id: &mut u32,
     stats: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
+    noreturn: &std::collections::BTreeSet<u32>,
 ) {
     let mut block = Block {
         statements: std::mem::take(&mut region.statements),
     };
-    narrow_block(&mut block, next_id, stats, validators);
+    narrow_block(&mut block, next_id, stats, validators, noreturn);
     region.statements = block.statements;
 }
 
@@ -568,9 +682,9 @@ fn is_wide_boundary_mask(val: &BigUint) -> bool {
 /// which indicates a call to a never-returning function (like panic helpers).
 /// After the simplifier's DCE pass, dead code after unreachable calls has
 /// been eliminated, so a trailing call with no yields is a reliable indicator.
-fn region_terminates(region: &Region) -> bool {
+fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -> bool {
     region.statements.iter().any(|s| {
-        matches!(
+        if matches!(
             s,
             Statement::Revert { .. }
                 | Statement::Return { .. }
@@ -581,7 +695,19 @@ fn region_terminates(region: &Region) -> bool {
                 | Statement::PanicRevert { .. }
                 | Statement::ErrorStringRevert { .. }
                 | Statement::CustomErrorRevert { .. }
-        )
+        ) {
+            return true;
+        }
+        // A call to a known noreturn function (e.g., panic_error_0xNN) acts
+        // as a terminator at this site. Without recognizing this, the OZ
+        // canonical `if check { panic_error_0x41() }` pattern in
+        // finalize_allocation never narrows.
+        if let Statement::Expr(Expr::Call { function, .. }) = s {
+            if noreturn.contains(&function.0) {
+                return true;
+            }
+        }
+        false
     })
 }
 

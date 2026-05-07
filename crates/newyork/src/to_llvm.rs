@@ -149,6 +149,16 @@ pub struct LlvmCodegen<'ctx> {
     /// Whether to use the outlined `__revive_caller()` runtime function.
     /// True when the contract has enough caller sites for outlining to pay off.
     use_outlined_caller: bool,
+    /// Whether to use the outlined `__revive_store_low_word_checked()`
+    /// helper. True only when the contract has enough constant-value
+    /// MStore sites whose value fits in i64 to amortise the helper's
+    /// body overhead — the per-call savings are ~3 PVM instructions and
+    /// the body costs ~25 bytes, so the break-even is around 8 sites.
+    use_outlined_store_low_word: bool,
+    /// Whether to use the outlined `__revive_store_high_word_checked()`
+    /// helper for `shl(224, sel)` ABI selector patterns. Same break-even
+    /// logic as low-word.
+    use_outlined_store_high_word: bool,
     /// Set of ValueIds that are bound to `Expr::CallValue`.
     /// When these are used as If conditions, we emit `__revive_callvalue_nonzero()`
     /// returning i1 instead of the full i256 value + comparison.
@@ -269,6 +279,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_callvalue: false,
             use_outlined_calldataload: false,
             use_outlined_caller: false,
+            use_outlined_store_low_word: false,
+            use_outlined_store_high_word: false,
             callvalue_value_ids: BTreeSet::new(),
             dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
@@ -322,6 +334,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             use_outlined_callvalue: false,
             use_outlined_calldataload: false,
             use_outlined_caller: false,
+            use_outlined_store_low_word: false,
+            use_outlined_store_high_word: false,
             callvalue_value_ids: BTreeSet::new(),
             dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
@@ -3130,6 +3144,72 @@ impl<'ctx> LlvmCodegen<'ctx> {
         (total_sloads, total_sstores)
     }
 
+    /// Counts MStore sites whose value is a compile-time constant matching
+    /// the low-word or high-word patterns recognised by the specialised
+    /// store helpers. Returns `(low_word_count, high_word_count)`. Used to
+    /// gate the introduction of those helpers — each helper costs ~25
+    /// bytes in body overhead, so we only emit it when there are enough
+    /// call sites to amortise that cost (per-site savings are ~3 inst).
+    fn count_constant_mstore_patterns(object: &Object) -> (usize, usize) {
+        use crate::ir::for_each_stmt;
+        use num::Zero;
+
+        // Build a map of ValueId -> literal constant in one pass over the
+        // whole object (top-level + every function body).
+        let mut literals: BTreeMap<u32, num::BigUint> = BTreeMap::new();
+        let mut record = |s: &Statement| {
+            if let Statement::Let { bindings, value } = s {
+                if bindings.len() == 1 {
+                    if let Expr::Literal { value: lit_val, .. } = value {
+                        literals.insert(bindings[0].0, lit_val.clone());
+                    }
+                }
+            }
+        };
+        for_each_stmt(&object.code.statements, &mut record);
+        for func in object.functions.values() {
+            for_each_stmt(&func.body.statements, &mut record);
+        }
+
+        let classify = |value: &Value| -> Option<bool> {
+            let lit_val = literals.get(&value.id.0)?;
+            if lit_val.is_zero() {
+                return None;
+            }
+            // Low-word: fits in u64 (high 192 bits zero).
+            if lit_val.bits() <= 64 {
+                return Some(true);
+            }
+            // High-word: low 224 bits zero, top 32 bits non-zero, fits in u32.
+            let low_mask: num::BigUint = (num::BigUint::from(1u32) << 224) - 1u32;
+            if (lit_val & &low_mask).is_zero() {
+                let top: num::BigUint = lit_val >> 224u32;
+                let digits = top.to_u64_digits();
+                if digits.len() == 1 && digits[0] <= u32::MAX as u64 {
+                    return Some(false);
+                }
+            }
+            None
+        };
+
+        let mut low_total = 0usize;
+        let mut high_total = 0usize;
+        let mut count = |s: &Statement| {
+            if let Statement::MStore { value, .. } = s {
+                match classify(value) {
+                    Some(true) => low_total += 1,
+                    Some(false) => high_total += 1,
+                    None => {}
+                }
+            }
+        };
+        for_each_stmt(&object.code.statements, &mut count);
+        for func in object.functions.values() {
+            for_each_stmt(&func.body.statements, &mut count);
+        }
+        (low_total, high_total)
+    }
+
     /// Generates LLVM IR for a complete object.
     pub fn generate_object(
         &mut self,
@@ -3155,6 +3235,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.use_outlined_calldataload =
             syscall_counts.calldataload >= CALLDATALOAD_OUTLINE_THRESHOLD;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
+        // Specialised constant-value MStore helpers: each helper body is
+        // ~25 bytes and per-call savings are ~3 PVM inst (~6 bytes), so
+        // the break-even is around 4-5 call sites. Choose 5 to give a
+        // small margin and avoid the small-contract regression observed
+        // when the body cost is paid for too few sites.
+        const CONST_STORE_PATTERN_THRESHOLD: usize = 5;
+        let (low_word_sites, high_word_sites) = Self::count_constant_mstore_patterns(object);
+        self.use_outlined_store_low_word = low_word_sites >= CONST_STORE_PATTERN_THRESHOLD;
+        self.use_outlined_store_high_word = high_word_sites >= CONST_STORE_PATTERN_THRESHOLD;
         // Count mapping operations to decide if combined mapping functions are worth it.
         // Each compound function body is ~250 bytes. Each call site saves ~12 bytes
         // (one fewer function call). When ALL keccak256_pair usages are compound,
@@ -4051,23 +4140,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     .builder()
                                     .build_call(func, &[offset_xlen.into()], "")
                                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                            } else if let Some(low) = Self::value_fits_in_i64(value_val) {
+                            } else if self.use_outlined_store_low_word
+                                && Self::value_fits_in_i64(value_val).is_some()
+                            {
                                 // Compile-time constant whose high 192 bits are
                                 // zero — call the specialized low-word variant.
                                 // Saves 2 register pairs at the call site and
                                 // ~10 instructions in the shared body vs the
-                                // generic store_bswap_checked.
+                                // generic store_bswap_checked. Only enabled
+                                // when there are enough such sites in this
+                                // object to amortise the helper's body cost.
+                                let low = Self::value_fits_in_i64(value_val).unwrap();
                                 let func = self.get_or_create_store_low_word_checked_fn(context)?;
                                 let low_const = context.llvm().i64_type().const_int(low, false);
                                 context
                                     .builder()
                                     .build_call(func, &[offset_xlen.into(), low_const.into()], "")
                                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                            } else if let Some(sel) = Self::value_is_selector_shl_224(value_val) {
+                            } else if self.use_outlined_store_high_word
+                                && Self::value_is_selector_shl_224(value_val).is_some()
+                            {
                                 // Compile-time `shl(224, sel)` selector pattern
                                 // — pass the i32 selector and let the helper
                                 // bswap+store it in the top 4 bytes after a
                                 // 32-byte zero clear.
+                                let sel = Self::value_is_selector_shl_224(value_val).unwrap();
                                 let func =
                                     self.get_or_create_store_high_word_checked_fn(context)?;
                                 let sel_const =

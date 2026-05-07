@@ -84,7 +84,7 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     // at call sites is sound because the function's own overflow check
     // would have trapped on any caller that passed a wide value, and the
     // truncation happens in the caller's frame.
-    narrow_allocator_param_types(object);
+    narrow_allocator_param_types(object, &noreturn);
 
     for sub in &mut object.subobjects {
         let sub_stats = narrow_guards_in_object(sub);
@@ -95,35 +95,141 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     stats
 }
 
-/// Narrows `(i256, i256) -> ()` functions that match the canonical
-/// Solidity `finalize_allocation` shape — an add overflow check on the
-/// two parameters followed by `mstore(0x40, sum)` — to `(i64, i64)`.
-fn narrow_allocator_param_types(object: &mut Object) {
-    let mut to_narrow = Vec::new();
+/// Narrows function parameters that are provably bounded by UINT64_MAX
+/// at every reachable path in the function body. Two patterns matter
+/// for OZ contracts:
+///
+/// 1. `(i256, i256) -> ()` with the `finalize_allocation` shape — an
+///    add overflow check followed by `mstore(0x40, sum)`.
+/// 2. Any param whose first reachable use path is `if gt(p, UINT64_MAX)
+///    { <terminates> }` (Solidity's `array_allocation_size_bytes`-shape
+///    validator at function entry).
+///
+/// In both cases, plain truncation at the call site is sound because the
+/// function's own guard would have trapped a wide value before the
+/// param's first non-validation use.
+fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections::BTreeSet<u32>) {
+    let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
+
     for (func_id, function) in &object.functions {
-        if function.params.len() != 2 || !function.returns.is_empty() {
+        if function.params.is_empty() {
             continue;
         }
-        if !function
-            .params
-            .iter()
-            .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
+
+        // Pattern 1: 2-param finalize_allocation shape.
+        if function.params.len() == 2
+            && function.returns.is_empty()
+            && function
+                .params
+                .iter()
+                .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
         {
-            continue;
+            let p0 = function.params[0].0;
+            let p1 = function.params[1].0;
+            if has_allocator_shape(&function.body, p0, p1) {
+                narrow_params.insert(func_id.0, vec![0, 1]);
+                continue;
+            }
         }
-        let p0 = function.params[0].0;
-        let p1 = function.params[1].0;
-        if has_allocator_shape(&function.body, p0, p1) {
-            to_narrow.push(func_id.0);
+
+        // Pattern 2: any I256 param whose first guard is
+        // `if gt(p, UINT64_MAX) { <terminates> }`.
+        let mut to_narrow_indices = Vec::new();
+        for (i, (param_id, ty)) in function.params.iter().enumerate() {
+            if !matches!(ty, Type::Int(BitWidth::I256)) {
+                continue;
+            }
+            if has_uint64_guard_at_entry(&function.body, *param_id, noreturn) {
+                to_narrow_indices.push(i);
+            }
+        }
+        if !to_narrow_indices.is_empty() {
+            narrow_params.insert(func_id.0, to_narrow_indices);
         }
     }
-    for func_id in to_narrow {
+
+    for (func_id, indices) in narrow_params {
         if let Some(function) = object.functions.get_mut(&FunctionId(func_id)) {
-            for (_, ty) in &mut function.params {
-                *ty = Type::Int(BitWidth::I64);
+            for i in indices {
+                if let Some((_, ty)) = function.params.get_mut(i) {
+                    *ty = Type::Int(BitWidth::I64);
+                }
             }
         }
     }
+}
+
+/// Returns true if the block contains an early guard
+/// `let check = gt(param, UINT64_MAX); if check { <terminates> }` before
+/// any non-trivial use of `param`. The block-level check matches the
+/// emitted shape of Solidity's array-size validators.
+fn has_uint64_guard_at_entry(
+    block: &Block,
+    param_id: ValueId,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> bool {
+    use num::Zero;
+
+    let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
+    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut gt_param_check: Option<u32> = None;
+
+    for stmt in &block.statements {
+        if let Statement::Let { bindings, value } = stmt {
+            if bindings.len() == 1 {
+                let bid = bindings[0].0;
+                if let Expr::Literal { value: lit_val, .. } = value {
+                    constants.insert(bid, lit_val.clone());
+                }
+                if let Expr::Binary {
+                    op: BinOp::Gt,
+                    lhs,
+                    rhs,
+                } = value
+                {
+                    if lhs.id == param_id {
+                        if let Some(c) = constants.get(&rhs.id.0) {
+                            if !c.is_zero() && *c == uint64_max {
+                                gt_param_check = Some(bid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Statement::If {
+            condition,
+            then_region,
+            else_region,
+            outputs,
+            ..
+        } = stmt
+        {
+            if else_region.is_none()
+                && outputs.is_empty()
+                && Some(condition.id.0) == gt_param_check
+                && region_terminates(then_region, noreturn)
+            {
+                // The gt(param, UINT64_MAX) check is the if condition and
+                // panics on the wide branch — exactly the early-validation
+                // shape we look for.
+                return true;
+            }
+            // First If statement that doesn't match — fall through to the
+            // structural check failing for this block.
+            return false;
+        }
+        // We accept arbitrary `let` definitions before the if (constant
+        // setup and the gt itself). Any other statement that uses param
+        // (mstore, sstore, etc.) would mean we've already passed the
+        // validation site.
+        if let Statement::MStore { offset, value, .. } = stmt {
+            if offset.id == param_id || value.id == param_id {
+                return false;
+            }
+        }
+    }
+    false
 }
 
 /// Detects the canonical allocator pattern in a block:

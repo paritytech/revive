@@ -317,6 +317,16 @@ fn narrow_block(
     // Track lt(sum, addend) definitions for overflow checks.
     // lt_result_id -> (sum_id, addend_id)
     let mut lt_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    // Track lt(val, K) where K is a power-of-two constant. After
+    // `if iszero(lt(val, K)) { panic }` falls through, val < K so val
+    // fits in `log2(K)` bits and can be narrowed by `and(val, K-1)`.
+    // Solidity emits this for enum range checks (`if val >= 8 panic`)
+    // and bounded-integer guards.
+    // lt_result_id -> (val_value, mask = K-1)
+    let mut lt_const_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
+    // Track iszero(lt_const) so the if-guard can find the original value.
+    // iszero_result_id -> (val_value, mask)
+    let mut iszero_lt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
     // Accumulated replacements: old_value_id -> new_value_id
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
@@ -459,6 +469,48 @@ fn narrow_block(
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
                     lt_defs.insert(bid, (lhs_id.0, rhs_id.0));
+
+                    // Additionally: if rhs is a constant K = 2^N (power of
+                    // two), record lt(val, K) so a downstream
+                    // `if iszero(this_lt) { panic }` can narrow val to N
+                    // bits via `and(val, K-1)`. This is the canonical enum
+                    // range check `if uint(val) >= EnumLen { panic }` Solidity
+                    // emits as `if iszero(lt(val, EnumLen)) { panic }`.
+                    if let Some(k) = constants.get(&rhs_id.0) {
+                        let k_minus_one = if k.is_zero() { BigUint::ZERO } else { k - 1u32 };
+                        if !k.is_zero() && (k & &k_minus_one) == BigUint::ZERO {
+                            lt_const_defs.insert(
+                                bid,
+                                (
+                                    Value {
+                                        id: lhs_id,
+                                        ty: lhs.ty,
+                                    },
+                                    k_minus_one,
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+
+            // After tracking all binary defs, propagate into iszero's so the
+            // guard handler can recognise `if iszero(lt_const) { panic }`.
+            if let Statement::Let {
+                ref bindings,
+                value:
+                    Expr::Unary {
+                        op: UnaryOp::IsZero,
+                        ref operand,
+                    },
+            } = stmt
+            {
+                if bindings.len() == 1 {
+                    let bid = bindings[0].0;
+                    let op_id = resolve_id(operand.id, &replacements);
+                    if let Some((val, mask)) = lt_const_defs.get(&op_id.0) {
+                        iszero_lt_defs.insert(bid, (*val, mask.clone()));
+                    }
                 }
             }
         }
@@ -501,6 +553,11 @@ fn narrow_block(
                         iszero_eq_guards.push((orig_id, and_val_id));
                     } else if let Some(&(sum_id, addend_id)) = lt_defs.get(&id) {
                         lt_overflows.push((sum_id, addend_id));
+                    } else if let Some((val, mask)) = iszero_lt_defs.get(&id) {
+                        // `if iszero(lt(val, K)) { panic }` falls through with
+                        // `lt(val, K)` true, i.e., val < K. Treat the same as
+                        // a gt-mask narrowing of val.
+                        gt_guards.push((*val, mask.clone()));
                     } else if let Some(&(lhs_id, rhs_id)) = or_defs.get(&id) {
                         visit.push(lhs_id);
                         visit.push(rhs_id);

@@ -74,6 +74,17 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
         }
     }
 
+    // Body-level rewrite for the canonical Solidity allocator: insert an
+    // explicit `if gt(p1, UINT64_MAX) { panic_0x41 }` at the top of every
+    // `finalize_allocation`-shaped function and replace subsequent uses of
+    // `p1` with `and(p1, UINT64_MAX)`. The function signature stays at
+    // `(i64, i256)` so caller IR is unchanged, but the body now exposes
+    // an explicit i64 bound on `p1` to the rest of the pipeline. The
+    // existing `or(gt(sum, UINT64_MAX), lt(sum, p0))` overflow check
+    // becomes structurally redundant in the i64 regime — LLVM/IPSCCP can
+    // recognise that and shrink the body without changing semantics.
+    rewrite_allocator_p1_with_early_check(object, &mut next_id, &noreturn);
+
     // Pattern-based parameter narrowing for the canonical Solidity
     // allocator. After guard_narrow has applied addend narrowing inside
     // `finalize_allocation`-shaped functions (`add(p0, p1)` followed by an
@@ -108,6 +119,106 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 /// In both cases, plain truncation at the call site is sound because the
 /// function's own guard would have trapped a wide value before the
 /// param's first non-validation use.
+/// Inserts an explicit `if gt(p1, UINT64_MAX) { panic_0x41 }` early
+/// guard plus a downstream `and(p1, UINT64_MAX)` rewrite at the top of
+/// each `finalize_allocation`-shaped function. Subsequent uses of `p1`
+/// in the body are redirected to the AND-masked value.
+///
+/// Soundness: the inserted gt/panic pair is *redundant* with the body's
+/// existing `or(gt(sum, UINT64_MAX), lt(sum, p0)) { panic_0x41 }` check
+/// — any caller that would have failed the early check would also have
+/// failed the existing late check, so semantics are preserved. The
+/// purpose is to expose the `p1 <= UINT64_MAX` invariant at the *top*
+/// of the function so type-inference / LLVM IPSCCP can fold the rest of
+/// the body's i256 arithmetic to i64.
+///
+/// Why this avoids the iter34 regression: the function signature is
+/// untouched, so caller-side IR sees the exact same `(i64, i256)`
+/// declaration as iter33. Only the *body* changes, and only by adding
+/// an early check that any compliant caller already satisfies.
+fn rewrite_allocator_p1_with_early_check(
+    object: &mut Object,
+    next_id: &mut u32,
+    _noreturn: &std::collections::BTreeSet<u32>,
+) {
+    let mut to_rewrite: Vec<u32> = Vec::new();
+    for (func_id, function) in &object.functions {
+        if function.params.len() != 2 || !function.returns.is_empty() {
+            continue;
+        }
+        if !function
+            .params
+            .iter()
+            .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
+        {
+            continue;
+        }
+        let p0 = function.params[0].0;
+        let p1 = function.params[1].0;
+        if has_allocator_shape(&function.body, p0, p1) {
+            to_rewrite.push(func_id.0);
+        }
+    }
+
+    let uint64_max: BigUint = (BigUint::from(1u32) << 64) - BigUint::from(1u32);
+    for func_id in to_rewrite {
+        let Some(function) = object.functions.get_mut(&FunctionId(func_id)) else {
+            continue;
+        };
+        let p1 = function.params[1].0;
+        let max_const = ValueId(*next_id);
+        *next_id += 1;
+        let gt_check = ValueId(*next_id);
+        *next_id += 1;
+        let p1_narrow = ValueId(*next_id);
+        *next_id += 1;
+
+        let original_stmts = std::mem::take(&mut function.body.statements);
+
+        let mut new_stmts: Vec<Statement> = Vec::with_capacity(original_stmts.len() + 4);
+        new_stmts.push(Statement::Let {
+            bindings: vec![max_const],
+            value: Expr::Literal {
+                value: uint64_max.clone(),
+                ty: Type::Int(BitWidth::I256),
+            },
+        });
+        new_stmts.push(Statement::Let {
+            bindings: vec![gt_check],
+            value: Expr::Binary {
+                op: BinOp::Gt,
+                lhs: Value::int(p1),
+                rhs: Value::int(max_const),
+            },
+        });
+        new_stmts.push(Statement::If {
+            condition: Value::new(gt_check, Type::Int(BitWidth::I1)),
+            inputs: Vec::new(),
+            then_region: Region {
+                statements: vec![Statement::PanicRevert { code: 0x41 }],
+                yields: Vec::new(),
+            },
+            else_region: None,
+            outputs: Vec::new(),
+        });
+        new_stmts.push(Statement::Let {
+            bindings: vec![p1_narrow],
+            value: Expr::Binary {
+                op: BinOp::And,
+                lhs: Value::int(p1),
+                rhs: Value::int(max_const),
+            },
+        });
+
+        let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
+        replacements.insert(p1.0, p1_narrow);
+        for stmt in original_stmts {
+            new_stmts.push(replace_value_ids_in_stmt(stmt, &replacements));
+        }
+        function.body.statements = new_stmts;
+    }
+}
+
 fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 

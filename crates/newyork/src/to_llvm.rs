@@ -223,6 +223,15 @@ pub struct LlvmCodegen<'ctx> {
     /// Stores 32 zero bytes at heap+offset. Used for constant-zero MStore
     /// in ByteSwap mode to avoid passing an i256 zero parameter.
     store_zero_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined low-word store with bounds check:
+    /// `void(i32 offset, i64 value)`. Stores zero in the high 24 bytes of
+    /// the slot and `bswap(value)` in the last 8 bytes (BE encoding of a
+    /// value that fits in i64). Used for ByteSwap MStore with a
+    /// compile-time constant whose high 192 bits are zero — avoids passing
+    /// an i256 (4 register pairs) when an i64 (2 register pairs) suffices,
+    /// and shrinks the function body from 4× shift+trunc+bswap+store down
+    /// to 3 zero stores + one bswap+store.
+    store_low_word_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
     /// Cached outlined return word: noreturn void(i32 offset, i256 value).
     /// Combines store_bswap_checked + exit_checked for single-word returns.
     /// Bswap-stores value at offset, then seal_returns 32 bytes.
@@ -271,6 +280,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             sload_word_fn: None,
             sstore_word_fn: None,
             store_zero_checked_fn: None,
+            store_low_word_checked_fn: None,
             return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
@@ -322,6 +332,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             sload_word_fn: None,
             sstore_word_fn: None,
             store_zero_checked_fn: None,
+            store_low_word_checked_fn: None,
             return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
@@ -401,6 +412,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Checks if an LLVM IntValue is a constant zero, handling all bit widths including i256.
     fn is_const_zero(value: IntValue<'ctx>) -> bool {
         Self::try_extract_const_u64(value) == Some(0)
+    }
+
+    /// If `value` is a compile-time constant whose representation fits in
+    /// u64 (i.e., the high 192 bits of an i256 are all zero), returns the
+    /// low 64 bits. Returns `None` for non-constant values, oversized
+    /// constants, or zero (zero is handled by the dedicated zero-store
+    /// path which avoids the i64 argument entirely).
+    fn value_fits_in_i64(value: IntValue<'ctx>) -> Option<u64> {
+        let low = Self::try_extract_const_u64(value)?;
+        if low == 0 {
+            return None;
+        }
+        Some(low)
     }
 
     /// Checks if an MLoad is loading the free memory pointer (offset 0x40).
@@ -1612,6 +1636,144 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.set_basic_block(saved_block);
         self.store_zero_checked_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined low-word store with bounds check:
+    /// `void(i32 offset, i64 value)`.
+    /// Stores 24 zero bytes at heap+offset and `bswap(value)` at the last
+    /// 8 bytes of the 32-byte slot. Used by `MStore` in ByteSwap mode when
+    /// the value is a compile-time constant whose high 192 bits are zero.
+    /// vs `__revive_store_bswap_checked(i32, i256)`:
+    ///   * call site passes 1 i64 (2 register pairs) instead of 1 i256
+    ///     (4 register pairs) — saves ~3 PVM instructions per call site
+    ///   * function body collapses 4× shift+trunc+bswap+store down to
+    ///     3 zero stores + 1 bswap+store — saves ~10 PVM instructions in
+    ///     the shared body.
+    fn get_or_create_store_low_word_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.store_low_word_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let i64_type = context.llvm().i64_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into(), i64_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_store_low_word_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let store_block = context.llvm().append_basic_block(func, "store");
+
+        // Entry: bounds check, same shape as store_zero_checked / store_bswap_checked.
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let value_param = func.get_nth_param(1).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, store_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        // Trap block.
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Store block: zero high 24 bytes via a single i256 zero store, then
+        // overwrite the last 8 bytes with the bswapped low word. LLVM's
+        // backend will lower the i256 zero into 4×i64 zero stores; merging
+        // the writes lets it fold three of them into a single wider store
+        // (or memset) when alignment permits.
+        context.set_basic_block(store_block);
+        let pointer = context.build_heap_gep_unchecked(offset_param)?;
+        let word_type = context.word_type();
+        let zero = word_type.const_zero();
+        context
+            .builder()
+            .build_store(pointer.value, zero)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+        // bswap the i64 input via the LLVM intrinsic (no i64 wrapper exists
+        // in PolkaVMIntrinsicFunction; only word-width and eth-address-width
+        // wrappers do).
+        let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")
+            .expect("llvm.bswap.i64 intrinsic exists");
+        let bswap64_decl = bswap64
+            .get_declaration(context.module(), &[i64_type.into()])
+            .expect("bswap.i64 declaration");
+        let swapped_param = context
+            .builder()
+            .build_call(bswap64_decl, &[value_param.into()], "swapped_low")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .try_as_basic_value()
+            .unwrap_basic()
+            .into_int_value();
+        let last_word_offset = xlen_type.const_int(
+            (revive_common::BYTE_LENGTH_WORD - revive_common::BYTE_LENGTH_X64) as u64,
+            false,
+        );
+        let last_word_ptr = unsafe {
+            context
+                .builder()
+                .build_gep(
+                    context.llvm().i8_type(),
+                    pointer.value,
+                    &[last_word_offset],
+                    "last_word_ptr",
+                )
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?
+        };
+        context
+            .builder()
+            .build_store(last_word_ptr, swapped_param)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.store_low_word_checked_fn = Some(func);
         Ok(func)
     }
 
@@ -3738,6 +3900,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 context
                                     .builder()
                                     .build_call(func, &[offset_xlen.into()], "")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            } else if let Some(low) = Self::value_fits_in_i64(value_val) {
+                                // Compile-time constant whose high 192 bits are
+                                // zero — call the specialized low-word variant.
+                                // Saves 2 register pairs at the call site and
+                                // ~10 instructions in the shared body vs the
+                                // generic store_bswap_checked.
+                                let func = self.get_or_create_store_low_word_checked_fn(context)?;
+                                let low_const = context.llvm().i64_type().const_int(low, false);
+                                context
+                                    .builder()
+                                    .build_call(func, &[offset_xlen.into(), low_const.into()], "")
                                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                             } else {
                                 let func = self.get_or_create_store_bswap_checked_fn(context)?;

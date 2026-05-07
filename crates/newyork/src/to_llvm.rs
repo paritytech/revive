@@ -6373,7 +6373,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .heap_size()
                         .get_zero_extended_constant()
                         .unwrap_or(131072);
-                    let raw_bits = 64 - heap_size.leading_zeros();
+                    // FMP values are heap offsets in [0, heap_size). The max
+                    // value is `heap_size - 1`, not `heap_size` itself, so the
+                    // range bound is `bits(heap_size - 1)`. For a power-of-two
+                    // heap (e.g. 131072 = 2^17), this is 1 bit tighter than
+                    // bits(heap_size) and lets LLVM use a single `and` with
+                    // the heap_size-1 mask instead of `heap_size*2-1`.
+                    let max_fmp = heap_size.saturating_sub(1).max(1);
+                    let raw_bits = 64 - max_fmp.leading_zeros();
                     let range_bits = raw_bits.clamp(8, 31);
                     Self::apply_range_proof(context, loaded, range_bits, "fmp")
                 } else {

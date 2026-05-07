@@ -6283,11 +6283,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expr::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                // Only apply FMP range proof when the heap analysis confirms 0x40
-                // is native-safe (i.e., only used as FMP, not user data in inline asm).
-                let is_free_pointer = (matches!(region, MemoryRegion::FreePointerSlot)
-                    || Self::is_free_pointer_load(offset_val))
-                    && (self.heap_opt.can_use_native(0x40) || self.heap_opt.fmp_native_safe());
+                // Range proof on FMP loads. FMP is bounded by `heap_size`
+                // regardless of whether the contract is native-safe — sbrk
+                // enforces the bound on every store. The native-safe check
+                // is about byte ORDER (so InlineNative/ByteSwap don't mix);
+                // the range bound itself is independent. Even contracts that
+                // can't use native mode still have FMP < heap_size, so the
+                // range proof is sound here.
+                let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
+                    || Self::is_free_pointer_load(offset_val);
 
                 let loaded = match self.native_memory_mode(offset_val) {
                     NativeMemoryMode::AllNative => {

@@ -232,6 +232,12 @@ pub struct LlvmCodegen<'ctx> {
     /// and shrinks the function body from 4× shift+trunc+bswap+store down
     /// to 3 zero stores + one bswap+store.
     store_low_word_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
+    /// Cached outlined high-word store with bounds check:
+    /// `void(i32 offset, i32 selector)`. Used for the canonical Solidity
+    /// ABI mstore pattern `shl(224, sel)` — value's low 224 bits are zero,
+    /// only the top 4 bytes carry the selector. Body stores 32 zero bytes
+    /// then overwrites the first 4 bytes with the bswapped selector.
+    store_high_word_checked_fn: Option<inkwell::values::FunctionValue<'ctx>>,
     /// Cached outlined return word: noreturn void(i32 offset, i256 value).
     /// Combines store_bswap_checked + exit_checked for single-word returns.
     /// Bswap-stores value at offset, then seal_returns 32 bytes.
@@ -281,6 +287,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             sstore_word_fn: None,
             store_zero_checked_fn: None,
             store_low_word_checked_fn: None,
+            store_high_word_checked_fn: None,
             return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
@@ -333,6 +340,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             sstore_word_fn: None,
             store_zero_checked_fn: None,
             store_low_word_checked_fn: None,
+            store_high_word_checked_fn: None,
             return_word_fn: None,
             mapping_sload_fn: None,
             mapping_sstore_fn: None,
@@ -425,6 +433,38 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return None;
         }
         Some(low)
+    }
+
+    /// If `value` is a compile-time i256 constant of the form
+    /// `selector << 224` (low 224 bits zero, top 32 bits set), returns the
+    /// selector. This is the canonical Solidity ABI selector mstore
+    /// pattern (`mstore(p, shl(224, 0xf92ee8a9))`).
+    fn value_is_selector_shl_224(value: IntValue<'ctx>) -> Option<u32> {
+        if !value.is_const() {
+            return None;
+        }
+        // Inkwell doesn't expose >u64 constant inspection; fall back to the
+        // printed representation. Format: `i256 <decimal>`.
+        let s = value.print_to_string().to_string();
+        let val_str = s.strip_prefix("i256 ")?.trim();
+        let big = val_str.parse::<num::BigUint>().ok()?;
+        if big.is_zero() {
+            return None;
+        }
+        // Selector pattern: bottom 224 bits clear, top 32 bits non-zero.
+        let low_mask = (num::BigUint::from(1u32) << 224) - 1u32;
+        if (&big & &low_mask) != num::BigUint::ZERO {
+            return None;
+        }
+        let selector_big: num::BigUint = big >> 224u32;
+        let digits = selector_big.to_u64_digits();
+        if digits.is_empty() {
+            return None;
+        }
+        if digits.len() > 1 || digits[0] > u32::MAX as u64 {
+            return None;
+        }
+        Some(digits[0] as u32)
     }
 
     /// Checks if an MLoad is loading the free memory pointer (offset 0x40).
@@ -1774,6 +1814,116 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.set_basic_block(saved_block);
         self.store_low_word_checked_fn = Some(func);
+        Ok(func)
+    }
+
+    /// Gets or creates an outlined high-word store with bounds check:
+    /// `void(i32 offset, i32 selector)`. Stores 32 zero bytes at
+    /// heap+offset and `bswap(selector)` in the FIRST 4 bytes of the
+    /// slot (BE encoding of `selector << 224`). This is the canonical
+    /// `mstore(p, shl(224, sel))` pattern Solidity uses for ABI selectors.
+    fn get_or_create_store_high_word_checked_fn(
+        &mut self,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>> {
+        if let Some(func) = self.store_high_word_checked_fn {
+            return Ok(func);
+        }
+
+        let xlen_type = context.xlen_type();
+        let i32_type = context.llvm().i32_type();
+        let fn_type = context
+            .llvm()
+            .void_type()
+            .fn_type(&[xlen_type.into(), i32_type.into()], false);
+        let func = context.module().add_function(
+            "__revive_store_high_word_checked",
+            fn_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
+
+        let noinline_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+        let minsize_attr = context
+            .llvm()
+            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+        func.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+
+        let saved_block = context.basic_block();
+        let entry_block = context.llvm().append_basic_block(func, "entry");
+        let trap_block = context.llvm().append_basic_block(func, "trap");
+        let store_block = context.llvm().append_basic_block(func, "store");
+
+        context.set_basic_block(entry_block);
+        let offset_param = func.get_nth_param(0).unwrap().into_int_value();
+        let selector_param = func.get_nth_param(1).unwrap().into_int_value();
+        let heap_size = context.heap_size();
+        let max_offset = context
+            .builder()
+            .build_int_sub(
+                heap_size,
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+                "max_offset",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let out_of_bounds = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::UGT,
+                offset_param,
+                max_offset,
+                "out_of_bounds",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_conditional_branch(out_of_bounds, trap_block, store_block)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(trap_block);
+        context.build_call(context.intrinsics().trap, &[], "heap_trap");
+        context.build_unreachable();
+
+        // Store block: zero the full 32 bytes, then overwrite the top 4
+        // bytes with bswap(selector).
+        context.set_basic_block(store_block);
+        let pointer = context.build_heap_gep_unchecked(offset_param)?;
+        let word_type = context.word_type();
+        let zero = word_type.const_zero();
+        context
+            .builder()
+            .build_store(pointer.value, zero)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+
+        let bswap32 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i32")
+            .expect("llvm.bswap.i32 intrinsic exists");
+        let bswap32_decl = bswap32
+            .get_declaration(context.module(), &[i32_type.into()])
+            .expect("bswap.i32 declaration");
+        let swapped_selector = context
+            .builder()
+            .build_call(bswap32_decl, &[selector_param.into()], "swapped_sel")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .try_as_basic_value()
+            .unwrap_basic()
+            .into_int_value();
+        context
+            .builder()
+            .build_store(pointer.value, swapped_selector)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("Alignment is valid");
+        context
+            .builder()
+            .build_return(None)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+
+        context.set_basic_block(saved_block);
+        self.store_high_word_checked_fn = Some(func);
         Ok(func)
     }
 
@@ -3912,6 +4062,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 context
                                     .builder()
                                     .build_call(func, &[offset_xlen.into(), low_const.into()], "")
+                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                            } else if let Some(sel) = Self::value_is_selector_shl_224(value_val) {
+                                // Compile-time `shl(224, sel)` selector pattern
+                                // — pass the i32 selector and let the helper
+                                // bswap+store it in the top 4 bytes after a
+                                // 32-byte zero clear.
+                                let func =
+                                    self.get_or_create_store_high_word_checked_fn(context)?;
+                                let sel_const =
+                                    context.llvm().i32_type().const_int(sel as u64, false);
+                                context
+                                    .builder()
+                                    .build_call(func, &[offset_xlen.into(), sel_const.into()], "")
                                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                             } else {
                                 let func = self.get_or_create_store_bswap_checked_fn(context)?;

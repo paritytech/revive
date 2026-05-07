@@ -108,7 +108,7 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 /// In both cases, plain truncation at the call site is sound because the
 /// function's own guard would have trapped a wide value before the
 /// param's first non-validation use.
-fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections::BTreeSet<u32>) {
+fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
     for (func_id, function) in &object.functions {
@@ -116,7 +116,14 @@ fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections
             continue;
         }
 
-        // Pattern 1: 2-param finalize_allocation shape.
+        // Pattern 1: 2-param finalize_allocation shape. Narrow ONLY p0
+        // (the FMP-typed addend that's also the lt rhs in the overflow
+        // check). The other param can be a user-controlled allocation
+        // size — `new uint[](2 << 100)` is a valid Solidity expression
+        // that *intentionally* triggers the overflow check; truncating
+        // it at the call site would silently make the panic disappear.
+        // p0 is always sourced from `mload(0x40)` in OZ contracts and
+        // bounded by heap_size, so plain truncation is sound.
         if function.params.len() == 2
             && function.returns.is_empty()
             && function
@@ -127,25 +134,22 @@ fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections
             let p0 = function.params[0].0;
             let p1 = function.params[1].0;
             if has_allocator_shape(&function.body, p0, p1) {
-                narrow_params.insert(func_id.0, vec![0, 1]);
+                narrow_params.insert(func_id.0, vec![0]);
                 continue;
             }
         }
 
-        // Pattern 2: any I256 param whose first guard is
-        // `if gt(p, UINT64_MAX) { <terminates> }`.
-        let mut to_narrow_indices = Vec::new();
-        for (i, (param_id, ty)) in function.params.iter().enumerate() {
-            if !matches!(ty, Type::Int(BitWidth::I256)) {
-                continue;
-            }
-            if has_uint64_guard_at_entry(&function.body, *param_id, noreturn) {
-                to_narrow_indices.push(i);
-            }
-        }
-        if !to_narrow_indices.is_empty() {
-            narrow_params.insert(func_id.0, to_narrow_indices);
-        }
+        // Pattern 2 (`if gt(p, UINT64_MAX) { panic }` entry guard) is
+        // intentionally NOT applied here: callers pass user-controlled
+        // sizes such as `new uint[](2 << 100)`, and the panic the guard
+        // is *supposed* to trigger would be silently lost if we plain-
+        // truncated the i256 to i64 at the call site. The
+        // try_catch/call/panic and try_catch/create/panic differential
+        // tests (cases 7 / 16, panic code 0x41) exercise exactly this
+        // path. The body-internal guard_narrow AND-mask (iter25/26) is
+        // still inserted, so the function body itself still benefits
+        // from narrowed downstream arithmetic — just not via a narrowed
+        // signature.
     }
 
     for (func_id, indices) in narrow_params {
@@ -157,79 +161,6 @@ fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections
             }
         }
     }
-}
-
-/// Returns true if the block contains an early guard
-/// `let check = gt(param, UINT64_MAX); if check { <terminates> }` before
-/// any non-trivial use of `param`. The block-level check matches the
-/// emitted shape of Solidity's array-size validators.
-fn has_uint64_guard_at_entry(
-    block: &Block,
-    param_id: ValueId,
-    noreturn: &std::collections::BTreeSet<u32>,
-) -> bool {
-    use num::Zero;
-
-    let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
-    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    let mut gt_param_check: Option<u32> = None;
-
-    for stmt in &block.statements {
-        if let Statement::Let { bindings, value } = stmt {
-            if bindings.len() == 1 {
-                let bid = bindings[0].0;
-                if let Expr::Literal { value: lit_val, .. } = value {
-                    constants.insert(bid, lit_val.clone());
-                }
-                if let Expr::Binary {
-                    op: BinOp::Gt,
-                    lhs,
-                    rhs,
-                } = value
-                {
-                    if lhs.id == param_id {
-                        if let Some(c) = constants.get(&rhs.id.0) {
-                            if !c.is_zero() && *c == uint64_max {
-                                gt_param_check = Some(bid);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if let Statement::If {
-            condition,
-            then_region,
-            else_region,
-            outputs,
-            ..
-        } = stmt
-        {
-            if else_region.is_none()
-                && outputs.is_empty()
-                && Some(condition.id.0) == gt_param_check
-                && region_terminates(then_region, noreturn)
-            {
-                // The gt(param, UINT64_MAX) check is the if condition and
-                // panics on the wide branch — exactly the early-validation
-                // shape we look for.
-                return true;
-            }
-            // First If statement that doesn't match — fall through to the
-            // structural check failing for this block.
-            return false;
-        }
-        // We accept arbitrary `let` definitions before the if (constant
-        // setup and the gt itself). Any other statement that uses param
-        // (mstore, sstore, etc.) would mean we've already passed the
-        // validation site.
-        if let Statement::MStore { offset, value, .. } = stmt {
-            if offset.id == param_id || value.id == param_id {
-                return false;
-            }
-        }
-    }
-    false
 }
 
 /// Detects the canonical allocator pattern in a block:

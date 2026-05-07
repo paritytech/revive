@@ -309,6 +309,14 @@ fn narrow_block(
     // `if or(gt(val, MAX), lt(sum, addend)) { panic }` in finalize_allocation.
     // or_result_id -> (lhs_id, rhs_id)
     let mut or_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    // Track add(a, b) definitions so we can recognise the canonical
+    // overflow check pattern `sum = add(a, b); if lt(sum, a) { panic }`
+    // and narrow both addends when the sum is bounded.
+    // add_result_id -> (lhs_id, rhs_id)
+    let mut add_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    // Track lt(sum, addend) definitions for overflow checks.
+    // lt_result_id -> (sum_id, addend_id)
+    let mut lt_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     // Accumulated replacements: old_value_id -> new_value_id
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
@@ -426,6 +434,32 @@ fn narrow_block(
                     let rhs_id = resolve_id(rhs.id, &replacements);
                     or_defs.insert(bid, (lhs_id.0, rhs_id.0));
                 }
+
+                // Track add(a, b) definitions for overflow-aware addend
+                // narrowing.
+                if let Expr::Binary {
+                    op: BinOp::Add,
+                    ref lhs,
+                    ref rhs,
+                } = value
+                {
+                    let lhs_id = resolve_id(lhs.id, &replacements);
+                    let rhs_id = resolve_id(rhs.id, &replacements);
+                    add_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                }
+
+                // Track lt(sum, addend) definitions — the canonical Solidity
+                // unsigned-add-overflow check.
+                if let Expr::Binary {
+                    op: BinOp::Lt,
+                    ref lhs,
+                    ref rhs,
+                } = value
+                {
+                    let lhs_id = resolve_id(lhs.id, &replacements);
+                    let rhs_id = resolve_id(rhs.id, &replacements);
+                    lt_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                }
             }
         }
 
@@ -449,6 +483,12 @@ fn narrow_block(
                 // check reachable through the or operands.
                 let mut gt_guards: Vec<(Value, BigUint)> = Vec::new();
                 let mut iszero_eq_guards: Vec<(u32, ValueId)> = Vec::new();
+                // Track lt(sum, addend) operands inside the OR-chain. These
+                // alone don't narrow anything, but combined with a gt(sum, MASK)
+                // for the SAME sum where sum = add(a, b) and addend == a or b,
+                // they prove no wraparound and we can narrow BOTH addends to
+                // MASK bits as well.
+                let mut lt_overflows: Vec<(u32, u32)> = Vec::new();
                 let mut visit = vec![cond_id.0];
                 let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
                 while let Some(id) = visit.pop() {
@@ -459,11 +499,54 @@ fn narrow_block(
                         gt_guards.push((*guarded, mask.clone()));
                     } else if let Some(&(orig_id, and_val_id)) = iszero_eq_defs.get(&id) {
                         iszero_eq_guards.push((orig_id, and_val_id));
+                    } else if let Some(&(sum_id, addend_id)) = lt_defs.get(&id) {
+                        lt_overflows.push((sum_id, addend_id));
                     } else if let Some(&(lhs_id, rhs_id)) = or_defs.get(&id) {
                         visit.push(lhs_id);
                         visit.push(rhs_id);
                     }
                 }
+
+                // Overflow-aware addend narrowing: when the OR chain proves
+                // both `sum < MASK` (gt guard) and `sum >= addend` (lt
+                // overflow check), the addition didn't wrap, so BOTH addends
+                // individually fit in MASK bits. Solidity emits this combined
+                // check for every checked addition (finalize_allocation,
+                // array_allocation_size_bytes, copy_byte_array_to_storage,
+                // ABI offset arithmetic, ...).
+                let mut extra_gt_guards: Vec<(Value, BigUint)> = Vec::new();
+                for (sum_id, addend_id) in &lt_overflows {
+                    let Some(&(add_lhs, add_rhs)) = add_defs.get(sum_id) else {
+                        continue;
+                    };
+                    // Match a gt guard on the same sum to obtain the bound.
+                    let Some((_, mask)) = gt_guards.iter().find(|(g, _)| g.id.0 == *sum_id) else {
+                        continue;
+                    };
+                    // Solidity's overflow check uses one of the addends as
+                    // the lt rhs (`if lt(sum, a)`), so confirm the structural
+                    // match before propagating narrowness to the OTHER addend
+                    // too.
+                    if *addend_id != add_lhs && *addend_id != add_rhs {
+                        continue;
+                    }
+                    let i256_ty = Type::Int(BitWidth::I256);
+                    extra_gt_guards.push((
+                        Value {
+                            id: ValueId(add_lhs),
+                            ty: i256_ty,
+                        },
+                        mask.clone(),
+                    ));
+                    extra_gt_guards.push((
+                        Value {
+                            id: ValueId(add_rhs),
+                            ty: i256_ty,
+                        },
+                        mask.clone(),
+                    ));
+                }
+                gt_guards.extend(extra_gt_guards);
 
                 // Apply gt-mask narrowing for each guarded value reachable
                 // through the (possibly nested) or-chain. This catches the

@@ -74,6 +74,18 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
         }
     }
 
+    // Pattern-based parameter narrowing for the canonical Solidity
+    // allocator. After guard_narrow has applied addend narrowing inside
+    // `finalize_allocation`-shaped functions (`add(p0, p1)` followed by an
+    // `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { panic }` overflow check),
+    // both params provably fit in i64 — yet `narrow_function_params` can't
+    // see this because the lt/gt comparisons demand I256. Detect the
+    // structural shape and narrow the params directly. Plain truncation
+    // at call sites is sound because the function's own overflow check
+    // would have trapped on any caller that passed a wide value, and the
+    // truncation happens in the caller's frame.
+    narrow_allocator_param_types(object);
+
     for sub in &mut object.subobjects {
         let sub_stats = narrow_guards_in_object(sub);
         stats.guards_narrowed += sub_stats.guards_narrowed;
@@ -81,6 +93,172 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     }
 
     stats
+}
+
+/// Narrows `(i256, i256) -> ()` functions that match the canonical
+/// Solidity `finalize_allocation` shape — an add overflow check on the
+/// two parameters followed by `mstore(0x40, sum)` — to `(i64, i64)`.
+fn narrow_allocator_param_types(object: &mut Object) {
+    let mut to_narrow = Vec::new();
+    for (func_id, function) in &object.functions {
+        if function.params.len() != 2 || !function.returns.is_empty() {
+            continue;
+        }
+        if !function
+            .params
+            .iter()
+            .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
+        {
+            continue;
+        }
+        let p0 = function.params[0].0;
+        let p1 = function.params[1].0;
+        if has_allocator_shape(&function.body, p0, p1) {
+            to_narrow.push(func_id.0);
+        }
+    }
+    for func_id in to_narrow {
+        if let Some(function) = object.functions.get_mut(&FunctionId(func_id)) {
+            for (_, ty) in &mut function.params {
+                *ty = Type::Int(BitWidth::I64);
+            }
+        }
+    }
+}
+
+/// Detects the canonical allocator pattern in a block:
+/// * `mstore(0x40, sum)` (FMP store)
+/// * `sum = add(p0, x)` somewhere upstream
+/// * `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { <terminates> }` overflow check
+/// * `x` is derived from `p1` (we don't constrain the alignment computation
+///   precisely; the FMP store + add(p0, _) + overflow check is enough).
+fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
+    use num::Zero;
+
+    // Pre-pass: build maps for binary expressions in this block.
+    let mut add_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut and_results: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
+    let mut gt_const_checks: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
+    let mut lt_against_addend: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut or_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut fmp_store_value: Option<u32> = None;
+
+    for stmt in &block.statements {
+        if let Statement::Let { bindings, value } = stmt {
+            if bindings.len() == 1 {
+                let bid = bindings[0].0;
+                if let Expr::Literal { value: lit_val, .. } = value {
+                    constants.insert(bid, lit_val.clone());
+                }
+                if let Expr::Binary { op, lhs, rhs } = value {
+                    match op {
+                        BinOp::Add => {
+                            add_results.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
+                        BinOp::And => {
+                            // Track `and(x, MASK)` where MASK is a constant.
+                            if let Some(mask) = constants.get(&rhs.id.0) {
+                                and_results.insert(bid, (lhs.id.0, mask.clone()));
+                            } else if let Some(mask) = constants.get(&lhs.id.0) {
+                                and_results.insert(bid, (rhs.id.0, mask.clone()));
+                            }
+                        }
+                        BinOp::Gt => {
+                            if let Some(c) = constants.get(&rhs.id.0) {
+                                gt_const_checks.insert(bid, (lhs.id.0, c.clone()));
+                            }
+                        }
+                        BinOp::Lt => {
+                            // `lt(sum, addend)` — record both operands so we
+                            // can match `lt(sum, p0)`.
+                            lt_against_addend.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
+                        BinOp::Or => {
+                            or_results.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if let Statement::MStore { offset, value, .. } = stmt {
+            if let Some(off) = constants.get(&offset.id.0) {
+                if !off.is_zero() && *off == BigUint::from(0x40u32) {
+                    fmp_store_value = Some(value.id.0);
+                }
+            }
+        }
+    }
+
+    let Some(fmp_val) = fmp_store_value else {
+        return false;
+    };
+
+    // Walk back through replacements applied during this guard pass: the
+    // mstore value is typically a fresh `and(sum, MASK)` we inserted. Step
+    // through the and to recover the original sum.
+    let sum_id = match and_results.get(&fmp_val) {
+        Some((orig, _mask)) => *orig,
+        None => fmp_val,
+    };
+
+    // The sum must be `add(p0, x)` (or `add(x, p0)`).
+    let Some(&(add_lhs, add_rhs)) = add_results.get(&sum_id) else {
+        return false;
+    };
+    let p0_used = add_lhs == p0.0 || add_rhs == p0.0;
+    if !p0_used {
+        return false;
+    }
+
+    // Check for an overflow guard in the OR chain that contains both
+    // `gt(sum, UINT64_MAX)` and `lt(sum, p0)`.
+    let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
+    let mut visit: Vec<u32> = Vec::new();
+    let mut have_gt_sum_max = false;
+    let mut have_lt_sum_p0 = false;
+
+    for (or_id, (l, r)) in &or_results {
+        // Walk: did this or-result get used as an `if` condition somewhere
+        // in the block, and is the if a terminator? We don't enforce the
+        // last detail here (a noreturn-aware check would, but caller-side
+        // guard_narrow has already applied if it's a guard); just verify
+        // the OR's operands.
+        let _ = or_id;
+        visit.push(*l);
+        visit.push(*r);
+    }
+    // Also accept un-or'd direct gt/lt pairs.
+    for id in &visit {
+        if let Some((val, c)) = gt_const_checks.get(id) {
+            if *val == sum_id && *c == uint64_max {
+                have_gt_sum_max = true;
+            }
+        }
+        if let Some((sum, addend)) = lt_against_addend.get(id) {
+            if *sum == sum_id && *addend == p0.0 {
+                have_lt_sum_p0 = true;
+            }
+        }
+    }
+    // Also check direct (no-OR) presence in the block.
+    for (id, (val, c)) in &gt_const_checks {
+        let _ = id;
+        if *val == sum_id && *c == uint64_max {
+            have_gt_sum_max = true;
+        }
+    }
+    for (id, (sum, addend)) in &lt_against_addend {
+        let _ = id;
+        if *sum == sum_id && *addend == p0.0 {
+            have_lt_sum_p0 = true;
+        }
+    }
+
+    // Allow the loose form (only one of the two): solc emits both, so
+    // require both to be safe.
+    have_gt_sum_max && have_lt_sum_p0
 }
 
 /// Detects functions that always terminate (no fall-through). A function

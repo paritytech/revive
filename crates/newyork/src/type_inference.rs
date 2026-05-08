@@ -210,12 +210,13 @@ impl TypeInference {
     /// `narrow_from_use` before all uses are collected), this method correctly
     /// examines ALL recorded use contexts and returns the WIDEST needed width.
     ///
-    /// Returns I256 (conservative) if:
-    /// - No uses are recorded (dead code or untracked pattern)
-    /// - Any use requires full width (comparisons, storage, external calls, etc.)
-    ///
-    /// Only returns < I256 when ALL recorded uses allow narrowing (e.g., all are
-    /// MemoryOffset which needs only I64).
+    /// Every `UseContext` variant returns I256 from `max_width_needed`, so the
+    /// only path that yields a result below I256 is `UseContext::FunctionArg`
+    /// when `fn_arg_demand` carries a refined width for the value (populated
+    /// by `refine_demands_from_params` after parameter narrowing). In
+    /// particular, `MemoryOffset` deliberately stays at I256 — see the
+    /// `MemoryOffset` arm of `max_width_needed` for why narrowing offsets
+    /// here would bypass the use-site bounds check.
     pub fn use_demand_width(&self, id: ValueId) -> BitWidth {
         if let Some(uses) = self.uses.get(&id.0) {
             if uses.is_empty() {

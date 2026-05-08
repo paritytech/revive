@@ -1227,10 +1227,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let panic_block = context.append_basic_block(&block_name);
         context.set_basic_block(panic_block);
 
-        // Emit: mstore(0, 0x4e487b71...) using inline bswap for constant folding
         let zero_xlen = context.xlen_type().const_int(0, false);
-        let panic_selector = context
-            .word_const_str_hex("4e487b7100000000000000000000000000000000000000000000000000000000");
+        let panic_selector =
+            context.word_const_str_hex(revive_common::PANIC_UINT256_SELECTOR_WORD_HEX);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
             context,
             zero_xlen,
@@ -1325,9 +1324,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
             .into_int_value();
 
-        // mstore(fmp, Error(string) selector)
-        let error_selector = context
-            .word_const_str_hex("08c379a000000000000000000000000000000000000000000000000000000000");
+        let error_selector =
+            context.word_const_str_hex(revive_common::ERROR_STRING_SELECTOR_WORD_HEX);
         revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_selector)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
@@ -5305,9 +5303,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?
                         .into_int_value();
 
-                    let error_sel = context.word_const_str_hex(
-                        "08c379a000000000000000000000000000000000000000000000000000000000",
-                    );
+                    let error_sel =
+                        context.word_const_str_hex(revive_common::ERROR_STRING_SELECTOR_WORD_HEX);
                     revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_sel)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 

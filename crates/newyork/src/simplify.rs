@@ -938,9 +938,6 @@ impl Simplifier {
     }
 }
 
-/// The Solidity Panic(uint256) ABI selector: `keccak256("Panic(uint256)")` left-padded.
-const PANIC_SELECTOR_HEX: &str = "4e487b7100000000000000000000000000000000000000000000000000000000";
-
 /// Detects and replaces the Solidity panic revert pattern in a statement list.
 ///
 /// The pattern is a sequence of statements ending with:
@@ -1062,7 +1059,7 @@ fn find_panic_pattern_backwards(
                 if is_const_value(offset.id, 0, constants) {
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
-                        if sel_hex == PANIC_SELECTOR_HEX {
+                        if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX {
                             // Verify that between j and the end there are only mstores, let
                             // bindings, and dead expressions (no side effects we'd be removing)
                             let only_safe = statements[j..].iter().all(|s| {

@@ -698,6 +698,44 @@ fn invalid_opcode_works() {
     assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
 
+/// Guard: `sdiv` of AND-masked i256 operands must agree with EVM. Today this
+/// works only because LLVM gets there first — `__revive_signed_division`
+/// holds the only `sdiv i256` we emit, and InstCombine rewrites it to
+/// `udiv i256` (then to `udiv i64`) once it sees the AND-masks prove the
+/// operands non-negative. The latent risk: revive's
+/// `narrow_divrem_instructions` (crates/llvm-context/src/polkavm/context/mod.rs)
+/// would, given a surviving `sdiv i256 (and a, M), (and b, M)`, rewrite it
+/// to `sext (sdiv i64 (trunc..), (trunc..))`, which flips sign for any
+/// operand whose bit (n-1) is set. If LLVM ever stops folding sdiv → udiv
+/// before that pass, this differential test fails on `(high_bit, 1)` etc.
+#[test]
+fn sdiv_narrow_masked() {
+    let mut actions = instantiate("contracts/SDivNarrowBug.sol", "SDivNarrowBug");
+
+    let u64_max = U256::from(u64::MAX);
+    let one = U256::from(1u64);
+    let two = U256::from(2u64);
+    let high_bit = U256::from(1u64) << 63;
+
+    for (a, b) in [
+        (u64_max, one),
+        (high_bit, one),
+        (high_bit + one, one),
+        (u64_max, two),
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::sdiv_narrow_bug_masked(a, b).calldata,
+        });
+    }
+
+    run_differential(actions);
+}
+
 /// Regression: `mload(huge_offset)` must trap, not silently return zero.
 ///
 /// With the newyork backend, the calldata-loaded `_offset` was demand-narrowed

@@ -187,6 +187,13 @@ case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmet
 case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
 
 sol!(
+    contract SDivNarrowBug {
+        function sdiv_masked(uint256 a, uint256 b) external pure returns (int256 q);
+    }
+);
+case!("SDivNarrowBug.sol", SDivNarrowBug, sdiv_maskedCall, sdiv_narrow_bug_masked, a: U256, b: U256);
+
+sol!(
     contract Send {
         function transfer_self(uint _amount) public payable;
     }

@@ -1724,8 +1724,19 @@ impl<'ctx> Context<'ctx> {
                         let rhs_width = Self::provable_bit_width(rhs);
 
                         if let (Some(lw), Some(rw)) = (lhs_width, rhs_width) {
-                            let narrow_width = Self::round_up_bit_width(lw.max(rw));
-                            if narrow_width < 256 {
+                            let max_operand_width = lw.max(rw);
+                            let narrow_width = Self::round_up_bit_width(max_operand_width);
+                            // Signed div/rem narrowing is sound only when bit (narrow_width - 1) of every operand is provably zero — otherwise the
+                            // narrow signed division treats a non-negative i256 operand as negative and the sign-extended result diverges from the
+                            // i256 sdiv. The proof sources accepted here (constants, AND-masks, ZExt) all pin the upper bits to zero strictly above
+                            // the operand width, so this holds iff the operand fits with at least one bit of headroom in the narrow type.
+                            let is_signed = matches!(
+                                inst.get_opcode(),
+                                InstructionOpcode::SDiv | InstructionOpcode::SRem
+                            );
+                            let signed_sign_bit_safe =
+                                !is_signed || narrow_width > max_operand_width;
+                            if narrow_width < 256 && signed_sign_bit_safe {
                                 to_narrow.push((inst, narrow_width));
                             }
                         }

@@ -101,7 +101,42 @@ The codegen backend supports four memory access modes: `AllNative` (all accesses
 
 ### Free memory pointer range proof
 
-The Solidity free memory pointer (`mload(0x40)`) always fits in 32 bits at the IR level. By encoding this fact via a truncate-extend pair, LLVM's range propagation eliminates overflow checks across the entire call graph. Despite only affecting a few direct sites, this produced a disproportionately large codesize reduction (see results below) due to LLVM's multiplicative propagation effect.
+The Solidity free memory pointer (`mload(0x40)`) always fits in 32 bits — sbrk enforces `FMP < heap_size` on every store, regardless of which memory mode the contract uses. After every literal `mload(0x40)`, codegen emits a `trunc N → zext 256` chain (where N is `bits(heap_size - 1)`, e.g. 17 for the 131,072-byte default heap). The trunc-extend round-trip is a no-op semantically, but exposes the bound to LLVM's IPSCCP range analysis, which then propagates it through every `add(fmp, K)` and eliminates the trailing `safe_truncate_int_to_xlen` overflow checks at every FMP-derived offset use. Despite only affecting a single codegen site, this is the single largest contributor to the optimizer's code-size reduction.
+
+A subtle gating issue: the byte-order mode (`InlineNative` / `ByteSwap`) and the value bound on FMP are *independent* invariants. `fmp_native_safe()` and `can_use_native(0x40)` protect against mixing little-endian writers with big-endian readers on the FMP slot, which would corrupt the stored offset; the value bound is unrelated and holds in every mode. Earlier versions of the codegen gated the load-side range proof on the byte-order checks, which suppressed the optimization for any contract with dynamic memory accesses. Decoupling the two reasonings — keeping the byte-order gate on the *store* side, dropping it from the load-side range proof — is what makes the multiplicative IPSCCP effect available to OZ-class contracts.
+
+### Soundness traps for FMP optimizations
+
+The FMP slot is small but easy to mis-optimize. The codebase carries several
+regression tests for previously-found soundness bugs; new FMP-related changes
+should be verified against them:
+
+- **`mload_at_fmp_slot`** (`crates/integration/src/tests.rs`, fixed in
+  `1fd6063c`): tests `mload(0x40)` and offsets near it (`0x21`, `0x3f`, `0x42`)
+  on a contract that also performs dynamic mloads. Catches byte-order mismatches
+  when one access goes native (LE) and another goes byte-swap (BE). The fix
+  blocks native mode for FMP whenever `has_dynamic_accesses` is true.
+- **`mload_huge_offset_traps`** (fixed in `ccca38df`): tests that
+  `mload(2^128)` and `mload(2^255)` correctly trap via the gas-exhaustion
+  path. Catches `UseContext::MemoryOffset` narrowing bypassing the
+  `safe_truncate_int_to_xlen` overflow check at the use site —
+  `mload(2^128)` aliasing to `mload(0)` and returning the zero-initialized
+  scratch slot. The fix classifies `MemoryOffset` as `I256` so it doesn't
+  drive narrowing; the bounds check at the use site catches out-of-range.
+- **FMP i32 shortcut removal** (`dbcfc921`): an earlier optimization stored
+  only 4 bytes at offset 0x40 instead of the full 32-byte EVM word, breaking
+  any inline assembly using `mstore(0x40, ...)` for non-FMP purposes.
+  Caused a cascade of 249/251 retester failures via allocator corruption.
+  No dedicated regression test was added — the retester corpus was sufficient
+  coverage — but the lesson generalizes: writes to 0x40 must store the full
+  word, even when the high bits are provably zero, because the slot is part
+  of the same 32-byte memory region read by other code.
+
+When adding an optimization that touches FMP, distinguish carefully between:
+the **byte-order encoding** at the slot (must be consistent between writers
+and readers), the **value bound** (FMP < heap_size, always true), and the
+**stored width** (must be 32 bytes for `mstore(0x40, ...)`, even though only
+the low N bits are non-zero).
 
 ### Keccak256 fusion and folding
 

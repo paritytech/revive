@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a73cb00e.js";
+            window.path_to_searchindex_js = "searchindex-081600da.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-196b9d9b.js"></script>
@@ -736,7 +736,39 @@ Yul AST ──────────► │                  newyork IR       
 </ul>
 <p>The codegen backend supports four memory access modes: <code>AllNative</code> (all accesses skip byte-swap), <code>InlineNative</code> (constant-offset accesses use native layout), <code>InlineByteSwap</code> (constant-offset accesses use inline byte-swap), and <code>ByteSwap</code> (standard byte-swap through helper functions).</p>
 <h3 id="free-memory-pointer-range-proof"><a class="header" href="#free-memory-pointer-range-proof">Free memory pointer range proof</a></h3>
-<p>The Solidity free memory pointer (<code>mload(0x40)</code>) always fits in 32 bits at the IR level. By encoding this fact via a truncate-extend pair, LLVM’s range propagation eliminates overflow checks across the entire call graph. Despite only affecting a few direct sites, this produced a disproportionately large codesize reduction (see results below) due to LLVM’s multiplicative propagation effect.</p>
+<p>The Solidity free memory pointer (<code>mload(0x40)</code>) always fits in 32 bits — sbrk enforces <code>FMP &lt; heap_size</code> on every store, regardless of which memory mode the contract uses. After every literal <code>mload(0x40)</code>, codegen emits a <code>trunc N → zext 256</code> chain (where N is <code>bits(heap_size - 1)</code>, e.g. 17 for the 131,072-byte default heap). The trunc-extend round-trip is a no-op semantically, but exposes the bound to LLVM’s IPSCCP range analysis, which then propagates it through every <code>add(fmp, K)</code> and eliminates the trailing <code>safe_truncate_int_to_xlen</code> overflow checks at every FMP-derived offset use. Despite only affecting a single codegen site, this is the single largest contributor to the optimizer’s code-size reduction.</p>
+<p>A subtle gating issue: the byte-order mode (<code>InlineNative</code> / <code>ByteSwap</code>) and the value bound on FMP are <em>independent</em> invariants. <code>fmp_native_safe()</code> and <code>can_use_native(0x40)</code> protect against mixing little-endian writers with big-endian readers on the FMP slot, which would corrupt the stored offset; the value bound is unrelated and holds in every mode. Earlier versions of the codegen gated the load-side range proof on the byte-order checks, which suppressed the optimization for any contract with dynamic memory accesses. Decoupling the two reasonings — keeping the byte-order gate on the <em>store</em> side, dropping it from the load-side range proof — is what makes the multiplicative IPSCCP effect available to OZ-class contracts.</p>
+<h3 id="soundness-traps-for-fmp-optimizations"><a class="header" href="#soundness-traps-for-fmp-optimizations">Soundness traps for FMP optimizations</a></h3>
+<p>The FMP slot is small but easy to mis-optimize. The codebase carries several
+regression tests for previously-found soundness bugs; new FMP-related changes
+should be verified against them:</p>
+<ul>
+<li><strong><code>mload_at_fmp_slot</code></strong> (<code>crates/integration/src/tests.rs</code>, fixed in
+<code>1fd6063c</code>): tests <code>mload(0x40)</code> and offsets near it (<code>0x21</code>, <code>0x3f</code>, <code>0x42</code>)
+on a contract that also performs dynamic mloads. Catches byte-order mismatches
+when one access goes native (LE) and another goes byte-swap (BE). The fix
+blocks native mode for FMP whenever <code>has_dynamic_accesses</code> is true.</li>
+<li><strong><code>mload_huge_offset_traps</code></strong> (fixed in <code>ccca38df</code>): tests that
+<code>mload(2^128)</code> and <code>mload(2^255)</code> correctly trap via the gas-exhaustion
+path. Catches <code>UseContext::MemoryOffset</code> narrowing bypassing the
+<code>safe_truncate_int_to_xlen</code> overflow check at the use site —
+<code>mload(2^128)</code> aliasing to <code>mload(0)</code> and returning the zero-initialized
+scratch slot. The fix classifies <code>MemoryOffset</code> as <code>I256</code> so it doesn’t
+drive narrowing; the bounds check at the use site catches out-of-range.</li>
+<li><strong>FMP i32 shortcut removal</strong> (<code>dbcfc921</code>): an earlier optimization stored
+only 4 bytes at offset 0x40 instead of the full 32-byte EVM word, breaking
+any inline assembly using <code>mstore(0x40, ...)</code> for non-FMP purposes.
+Caused a cascade of 249/251 retester failures via allocator corruption.
+No dedicated regression test was added — the retester corpus was sufficient
+coverage — but the lesson generalizes: writes to 0x40 must store the full
+word, even when the high bits are provably zero, because the slot is part
+of the same 32-byte memory region read by other code.</li>
+</ul>
+<p>When adding an optimization that touches FMP, distinguish carefully between:
+the <strong>byte-order encoding</strong> at the slot (must be consistent between writers
+and readers), the <strong>value bound</strong> (FMP &lt; heap_size, always true), and the
+<strong>stored width</strong> (must be 32 bytes for <code>mstore(0x40, ...)</code>, even though only
+the low N bits are non-zero).</p>
 <h3 id="keccak256-fusion-and-folding"><a class="header" href="#keccak256-fusion-and-folding">Keccak256 fusion and folding</a></h3>
 <p>Two complementary optimizations target the common Solidity pattern of hashing values for storage slot computation:</p>
 <ul>
@@ -1010,22 +1042,6 @@ make test-wasm
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

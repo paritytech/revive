@@ -5977,7 +5977,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // For i128 tier: if both operands fit in i64, the result of
                         // add/sub fits in i65 (< i128). For mul, if both operands fit
                         // in i64, the product fits in i128.
-                        let result_fits_i128 = max_operand.bits() <= 64;
+                        //
+                        // Sub is excluded from this fast-path because demand_bits is
+                        // None (or > 128) here — the result will be widened back to
+                        // i256 via `ensure_word_type` (zero-extension). For an
+                        // underflowed sub the i128 result has its high bit set
+                        // (e.g. `sub i128 0, 1` = 2^128 - 1) and zero-extending
+                        // drops the EVM-required all-1 upper bits, returning
+                        // `0x...0000FFFF...` instead of `2^256 - 1`. Doing the sub
+                        // at i256 directly preserves modular wrap semantics.
+                        let result_fits_i128 =
+                            max_operand.bits() <= 64 && !matches!(op, BinaryOperation::Sub);
 
                         if result_fits_i64 {
                             // Result fits in i64 — use narrow arithmetic.

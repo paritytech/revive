@@ -86,6 +86,11 @@ test_spec!(
     "Uint128Arithmetic",
     "Uint128Arithmetic.sol"
 );
+test_spec!(
+    sub_underflow_zext,
+    "SubUnderflowZext",
+    "SubUnderflowZext.sol"
+);
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

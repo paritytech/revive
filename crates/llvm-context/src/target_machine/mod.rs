@@ -71,6 +71,15 @@ impl TargetMachine {
     }
 
     /// Runs the optimization passes on `module`.
+    ///
+    /// `MergeFunctions` is disabled because it can collapse `@deploy` and `@call` into a single
+    /// function body when their lowered control flow becomes equivalent (e.g. a bare `invalid()`
+    /// in both code sections). The resulting ELF has two exports pointing at the same block,
+    /// which triggers a non-determinism bug in polkavm-linker's reachability consistency check
+    /// (the exports are stored as `Vec<usize>` and compared by order, so equal-but-differently-
+    /// ordered vectors are rejected as inconsistent). Disabling the pass keeps the export
+    /// targets distinct and sidesteps the issue. The size cost is negligible for production
+    /// contracts — their `@deploy`/`@call` bodies diverge well before any merging opportunity.
     pub fn run_optimization_passes(
         &self,
         module: &inkwell::module::Module,
@@ -79,21 +88,9 @@ impl TargetMachine {
         let pass_builder_options = inkwell::passes::PassBuilderOptions::create();
         pass_builder_options.set_verify_each(self.optimizer_settings.is_verify_each_enabled);
         pass_builder_options.set_debug_logging(self.optimizer_settings.is_debug_logging_enabled);
-
         pass_builder_options.set_loop_unrolling(
             self.optimizer_settings.level_middle_end_size == OptimizerSettingsSizeLevel::Zero,
         );
-        // MergeFunctions can collapse `@deploy` and `@call` into a single
-        // function body when their lowered control flow becomes equivalent
-        // (e.g. a bare `invalid()` in both code sections). The resulting ELF
-        // has two exports pointing at the same block, which triggers a
-        // non-determinism bug in polkavm-linker's reachability consistency
-        // check (the exports are stored as `Vec<usize>` and compared by
-        // order, so equal-but-differently-ordered vectors are rejected as
-        // inconsistent). Disabling the pass keeps the export targets
-        // distinct and sidesteps the issue. The size cost is negligible
-        // for production contracts — their `@deploy`/`@call` bodies diverge
-        // well before any merging opportunity.
         pass_builder_options.set_merge_functions(false);
 
         module.run_passes(passes, &self.target_machine, pass_builder_options)

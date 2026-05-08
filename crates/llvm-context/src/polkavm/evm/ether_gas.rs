@@ -43,10 +43,10 @@ pub fn value_outlined<'ctx>(
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
         .get_function(CallValue::NAME, false)
-        .expect("__revive_callvalue should be declared");
+        .expect("ICE: __revive_callvalue should be declared");
     let result = context
         .build_call(function.borrow().declaration(), &[], "callvalue_result")
-        .expect("__revive_callvalue should return a value");
+        .expect("ICE: __revive_callvalue should return a value");
     Ok(result)
 }
 
@@ -63,10 +63,10 @@ pub fn value_nonzero_outlined<'ctx>(
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
         .get_function(CallValueNonzero::NAME, false)
-        .expect("__revive_callvalue_nonzero should be declared");
+        .expect("ICE: __revive_callvalue_nonzero should be declared");
     let result = context
         .build_call(function.borrow().declaration(), &[], "callvalue_nonzero")
-        .expect("__revive_callvalue_nonzero should return a value");
+        .expect("ICE: __revive_callvalue_nonzero should return a value");
     Ok(result)
 }
 

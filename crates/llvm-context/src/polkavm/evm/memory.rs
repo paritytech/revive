@@ -1,13 +1,15 @@
 //! Translates the heap memory operations.
 
 use inkwell::values::BasicValue;
+use inkwell::values::BasicValueEnum;
 use revive_common::BYTE_LENGTH_BYTE;
 
 use crate::polkavm::context::address_space::AddressSpace;
+use crate::polkavm::context::pointer::heap::{
+    build_efficient_load_swap, build_efficient_store_swap,
+};
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
-
-pub use crate::polkavm::context::pointer::heap::{load_bswap_unchecked, store_bswap_unchecked};
 
 /// Translates the `msize` instruction.
 pub fn msize<'ctx>(
@@ -83,27 +85,31 @@ pub fn store_byte<'ctx>(
         .builder()
         .build_store(pointer, value)?
         .set_alignment(BYTE_LENGTH_BYTE as u32)
-        .expect("Alignment is valid");
+        .expect("ICE: alignment is valid");
     Ok(())
 }
 
-/// Translates the `mload` instruction without byte-swapping.
-/// Used for internal memory operations that don't escape to external code.
-pub fn load_native<'ctx>(
-    context: &mut Context<'ctx>,
-    offset: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
-    context.build_load_native(offset)
-}
-
-/// Translates the `mstore` instruction without byte-swapping.
-/// Used for internal memory operations that don't escape to external code.
-pub fn store_native<'ctx>(
-    context: &mut Context<'ctx>,
+/// Builds an efficient 256-bit store with byte-swap at a pointer obtained via unchecked GEP
+/// (no sbrk bounds check). For use by the newyork InlineByteSwap mode on constant offsets
+/// within the static heap.
+pub fn store_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
-    context.build_store_native(offset, value)
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_store_swap(context, pointer.value, value)
+}
+
+/// Builds an efficient 256-bit load with byte-swap at a pointer obtained via unchecked GEP
+/// (no sbrk bounds check). For use by the newyork InlineByteSwap mode on constant offsets
+/// within the static heap.
+pub fn load_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_load_swap(context, pointer.value)
 }
 
 /// Translates the `mload` instruction without byte-swapping, inlined.
@@ -124,9 +130,9 @@ pub fn load_native_inline<'ctx>(
     context
         .basic_block()
         .get_last_instruction()
-        .expect("Always exists")
+        .expect("ICE: load instruction always exists")
         .set_alignment(BYTE_LENGTH_BYTE as u32)
-        .expect("Alignment is valid");
+        .expect("ICE: alignment is valid");
     Ok(value)
 }
 
@@ -147,6 +153,6 @@ pub fn store_native_inline<'ctx>(
         .builder()
         .build_store(pointer.value, value)?
         .set_alignment(BYTE_LENGTH_BYTE as u32)
-        .expect("Alignment is valid");
+        .expect("ICE: alignment is valid");
     Ok(())
 }

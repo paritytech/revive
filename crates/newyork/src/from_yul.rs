@@ -24,29 +24,30 @@ use revive_yul::parser::statement::variable_declaration::VariableDeclaration;
 use revive_yul::parser::statement::Statement as YulStatement;
 
 use crate::ir::{
-    BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId, MemoryRegion, Object,
-    Region, Statement, SwitchCase, Type, UnaryOp, Value,
+    BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function, FunctionId,
+    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
 };
 use crate::ssa::SsaBuilder;
 
 /// Error type for Yul to IR translation.
 #[derive(Debug, thiserror::Error)]
 pub enum TranslationError {
+    /// A variable name was referenced before being declared.
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
 
+    /// A function name was referenced before any matching definition was discovered.
     #[error("Undefined function: {0}")]
     UndefinedFunction(String),
 
+    /// A literal could not be parsed (malformed integer, hex, or escape sequence).
     #[error("Invalid literal: {0}")]
     InvalidLiteral(String),
 
+    /// A Yul construct was encountered that this translator does not lower.
     #[error("Unsupported construct: {0}")]
     Unsupported(String),
 }
-
-/// Result type for translations.
-pub type Result<T> = std::result::Result<T, TranslationError>;
 
 /// Translator from Yul AST to newyork IR.
 pub struct YulTranslator {
@@ -62,10 +63,10 @@ pub struct YulTranslator {
     factory_dependencies: HashSet<String>,
     /// Return variable names for the current function being translated.
     /// Used to look up current SSA values when translating `leave` statements.
-    current_return_var_names: Vec<String>,
+    current_return_variable_names: Vec<String>,
     /// Stack of loop-carried variable names for the enclosing for loops.
     /// Used to collect current values when translating `break` and `continue`.
-    loop_var_names_stack: Vec<Vec<String>>,
+    loop_variable_names_stack: Vec<Vec<String>>,
 }
 
 impl Default for YulTranslator {
@@ -83,31 +84,25 @@ impl YulTranslator {
             next_function_id: 0,
             functions: BTreeMap::new(),
             factory_dependencies: HashSet::new(),
-            current_return_var_names: Vec::new(),
-            loop_var_names_stack: Vec::new(),
+            current_return_variable_names: Vec::new(),
+            loop_variable_names_stack: Vec::new(),
         }
     }
 
     /// Translates a Yul object to IR.
-    pub fn translate_object(&mut self, yul_object: &YulObject) -> Result<Object> {
-        // Store factory dependencies
+    pub fn translate_object(
+        &mut self,
+        yul_object: &YulObject,
+    ) -> std::result::Result<Object, TranslationError> {
         self.factory_dependencies = yul_object.factory_dependencies.clone();
-
-        // First pass: collect all function definitions
         self.collect_functions(&yul_object.code.block)?;
-
-        // Translate the main code block
         let code = self.translate_block(&yul_object.code.block)?;
-
-        // Build the functions map
         let functions = std::mem::take(&mut self.functions);
 
-        // Translate subobjects (inner_object for deployed code)
         let mut subobjects = Vec::new();
-        if let Some(inner) = &yul_object.inner_object {
+        if let Some(inner_object) = &yul_object.inner_object {
             let mut inner_translator = YulTranslator::new();
-            let inner_obj = inner_translator.translate_object(inner)?;
-            subobjects.push(inner_obj);
+            subobjects.push(inner_translator.translate_object(inner_object)?);
         }
 
         Ok(Object {
@@ -119,31 +114,34 @@ impl YulTranslator {
         })
     }
 
-    /// Collects all function definitions from a block (first pass).
-    fn collect_functions(&mut self, block: &YulBlock) -> Result<()> {
-        for stmt in &block.statements {
-            if let YulStatement::FunctionDefinition(func_def) = stmt {
-                let id = self.allocate_function_id(&func_def.identifier);
-                let mut function = Function::new(id, func_def.identifier.clone());
+    /// First pass: walk the AST and pre-allocate `FunctionId`s and parameter `ValueId`s for
+    /// every Yul function definition (including those nested inside blocks, if/for/switch).
+    /// This lets later passes resolve forward references and reuse parameter IDs across
+    /// recursive translation calls.
+    fn collect_functions(&mut self, block: &YulBlock) -> std::result::Result<(), TranslationError> {
+        for statement in &block.statements {
+            if let YulStatement::FunctionDefinition(function_definition) = statement {
+                let id = self.allocate_function_id(&function_definition.identifier);
+                let mut function = Function::new(id, function_definition.identifier.clone());
 
-                // Set up parameters
-                for _param in &func_def.arguments {
-                    let param_id = self.ssa.fresh_value();
-                    function.params.push((param_id, Type::Int(BitWidth::I256)));
+                for _parameter in &function_definition.arguments {
+                    let parameter_id = self.ssa.fresh_value();
+                    function
+                        .parameters
+                        .push((parameter_id, Type::Int(BitWidth::I256)));
                 }
-
-                // Set up return types
-                for _ in &func_def.result {
+                for _ in &function_definition.result {
                     function.returns.push(Type::Int(BitWidth::I256));
                 }
 
                 self.functions.insert(id, function);
             }
 
-            // Recursively collect from nested blocks
-            match stmt {
+            match statement {
                 YulStatement::Block(inner) => self.collect_functions(inner)?,
-                YulStatement::IfConditional(if_cond) => self.collect_functions(&if_cond.block)?,
+                YulStatement::IfConditional(if_conditional) => {
+                    self.collect_functions(&if_conditional.block)?
+                }
                 YulStatement::ForLoop(for_loop) => {
                     self.collect_functions(&for_loop.initializer)?;
                     self.collect_functions(&for_loop.body)?;
@@ -180,13 +178,16 @@ impl YulTranslator {
     }
 
     /// Translates a Yul block to an IR block.
-    fn translate_block(&mut self, block: &YulBlock) -> Result<Block> {
+    fn translate_block(
+        &mut self,
+        block: &YulBlock,
+    ) -> std::result::Result<Block, TranslationError> {
         let mut ir_block = Block::new();
 
-        for stmt in &block.statements {
-            let ir_stmts = self.translate_statement(stmt)?;
-            for s in ir_stmts {
-                ir_block.push(s);
+        for statement in &block.statements {
+            let ir_statements = self.translate_statement(statement)?;
+            for ir_statement in ir_statements {
+                ir_block.push(ir_statement);
             }
         }
 
@@ -194,13 +195,16 @@ impl YulTranslator {
     }
 
     /// Translates a Yul block to an IR region.
-    fn translate_region(&mut self, block: &YulBlock) -> Result<Region> {
+    fn translate_region(
+        &mut self,
+        block: &YulBlock,
+    ) -> std::result::Result<Region, TranslationError> {
         let mut region = Region::new();
 
-        for stmt in &block.statements {
-            let ir_stmts = self.translate_statement(stmt)?;
-            for s in ir_stmts {
-                region.push(s);
+        for statement in &block.statements {
+            let ir_statements = self.translate_statement(statement)?;
+            for ir_statement in ir_statements {
+                region.push(ir_statement);
             }
         }
 
@@ -208,109 +212,107 @@ impl YulTranslator {
     }
 
     /// Translates a Yul statement to IR statements.
-    fn translate_statement(&mut self, stmt: &YulStatement) -> Result<Vec<Statement>> {
-        match stmt {
-            YulStatement::VariableDeclaration(var_decl) => {
-                self.translate_variable_declaration(var_decl)
+    fn translate_statement(
+        &mut self,
+        statement: &YulStatement,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        match statement {
+            YulStatement::VariableDeclaration(variable_declaration) => {
+                self.translate_variable_declaration(variable_declaration)
             }
-            YulStatement::Assignment(assign) => self.translate_assignment(assign),
-            YulStatement::Expression(expr) => self.translate_expression_statement(expr),
+            YulStatement::Assignment(assignment) => self.translate_assignment(assignment),
+            YulStatement::Expression(expression) => self.translate_expression_statement(expression),
             YulStatement::Block(block) => {
                 let parent_scope = self.ssa.current_scope().clone();
                 self.ssa.enter_scope();
                 let region = self.translate_region(block)?;
                 let block_scope = self.ssa.exit_scope();
 
-                // Propagate modifications of parent-scope variables back to parent
-                // This ensures assignments inside blocks affect outer-scope variables
+                // Propagate modifications of parent-scope variables back to the parent scope so
+                // that assignments inside the block remain visible to enclosing code.
                 for (name, value) in &block_scope {
                     if parent_scope.contains_key(name) {
-                        // Variable from outer scope was modified in the block
                         self.ssa.define(name, *value);
                     }
                 }
 
                 Ok(vec![Statement::Block(region)])
             }
-            YulStatement::IfConditional(if_cond) => self.translate_if(if_cond),
+            YulStatement::IfConditional(if_conditional) => self.translate_if(if_conditional),
             YulStatement::Switch(switch) => self.translate_switch(switch),
             YulStatement::ForLoop(for_loop) => self.translate_for_loop(for_loop),
-            YulStatement::FunctionDefinition(func_def) => {
-                self.translate_function_definition(func_def)
+            YulStatement::FunctionDefinition(function_definition) => {
+                self.translate_function_definition(function_definition)
             }
             YulStatement::Continue(_) => {
-                let values = self.collect_loop_var_values();
+                let values = self.collect_loop_variable_values();
                 Ok(vec![Statement::Continue { values }])
             }
             YulStatement::Break(_) => {
-                let values = self.collect_loop_var_values();
+                let values = self.collect_loop_variable_values();
                 Ok(vec![Statement::Break { values }])
             }
             YulStatement::Leave(_) => {
-                // Collect current values of return variables
                 let mut return_values = Vec::new();
-                for name in &self.current_return_var_names {
+                for name in &self.current_return_variable_names {
                     if let Some(value) = self.ssa.lookup(name) {
                         return_values.push(value);
                     }
                 }
                 Ok(vec![Statement::Leave { return_values }])
             }
-            YulStatement::Object(_) | YulStatement::Code(_) => {
-                // Objects and Code are handled at the top level
-                Ok(vec![])
-            }
+            // Objects and Code are handled at the top level by `translate_object`.
+            YulStatement::Object(_) | YulStatement::Code(_) => Ok(vec![]),
         }
     }
 
-    /// Translates a variable declaration.
+    /// Translates a variable declaration. Tuple destructuring (multiple bindings) requires the
+    /// initializer to be a function call that returns the matching number of values; the absence
+    /// of an initializer yields zero-initialized i256 bindings.
     fn translate_variable_declaration(
         &mut self,
-        var_decl: &VariableDeclaration,
-    ) -> Result<Vec<Statement>> {
-        let mut stmts = Vec::new();
+        variable_declaration: &VariableDeclaration,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let mut statements = Vec::new();
 
-        if let Some(expr) = &var_decl.expression {
-            // Translate the initializer expression
-            let (init_stmts, init_value) = self.translate_expression(expr)?;
-            stmts.extend(init_stmts);
+        if let Some(expression) = &variable_declaration.expression {
+            let (initializer_statements, initializer_value) =
+                self.translate_expression(expression)?;
+            statements.extend(initializer_statements);
 
-            // Handle multiple bindings (tuple unpacking)
-            if var_decl.bindings.len() == 1 {
-                let binding = &var_decl.bindings[0];
+            if variable_declaration.bindings.len() == 1 {
+                let binding = &variable_declaration.bindings[0];
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.define(&binding.inner, value);
 
-                stmts.push(Statement::Let {
+                statements.push(Statement::Let {
                     bindings: vec![value_id],
-                    value: init_value,
+                    value: initializer_value,
                 });
             } else {
-                // Multiple bindings - the expression must be a function call returning multiple values
                 let mut bindings = Vec::new();
-                for binding in &var_decl.bindings {
+                for binding in &variable_declaration.bindings {
                     let value_id = self.ssa.fresh_value();
                     let value = Value::new(value_id, Type::Int(BitWidth::I256));
                     self.ssa.define(&binding.inner, value);
                     bindings.push(value_id);
                 }
 
-                stmts.push(Statement::Let {
+                statements.push(Statement::Let {
                     bindings,
-                    value: init_value,
+                    value: initializer_value,
                 });
             }
         } else {
-            // No initializer - create zero-initialized variables
-            for binding in &var_decl.bindings {
+            for binding in &variable_declaration.bindings {
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.define(&binding.inner, value);
 
-                stmts.push(Statement::Let {
+                statements.push(Statement::Let {
                     bindings: vec![value_id],
-                    value: Expr::Literal {
+                    value: Expression::Literal {
                         value: BigUint::from(0u32),
                         ty: Type::Int(BitWidth::I256),
                     },
@@ -318,189 +320,191 @@ impl YulTranslator {
             }
         }
 
-        Ok(stmts)
+        Ok(statements)
     }
 
-    /// Translates an assignment.
-    fn translate_assignment(&mut self, assign: &Assignment) -> Result<Vec<Statement>> {
-        let mut stmts = Vec::new();
+    /// Translates an assignment. Multiple bindings imply tuple destructuring of a function call.
+    fn translate_assignment(
+        &mut self,
+        assignment: &Assignment,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let mut statements = Vec::new();
 
-        // Translate the initializer expression
-        let (init_stmts, init_value) = self.translate_expression(&assign.initializer)?;
-        stmts.extend(init_stmts);
+        let (initializer_statements, initializer_value) =
+            self.translate_expression(&assignment.initializer)?;
+        statements.extend(initializer_statements);
 
-        // Handle multiple bindings (tuple unpacking)
-        if assign.bindings.len() == 1 {
-            let binding = &assign.bindings[0];
+        if assignment.bindings.len() == 1 {
+            let binding = &assignment.bindings[0];
             let value_id = self.ssa.fresh_value();
             let value = Value::new(value_id, Type::Int(BitWidth::I256));
             self.ssa.define(&binding.inner, value);
 
-            stmts.push(Statement::Let {
+            statements.push(Statement::Let {
                 bindings: vec![value_id],
-                value: init_value,
+                value: initializer_value,
             });
         } else {
-            // Multiple bindings
             let mut bindings = Vec::new();
-            for binding in &assign.bindings {
+            for binding in &assignment.bindings {
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.define(&binding.inner, value);
                 bindings.push(value_id);
             }
 
-            stmts.push(Statement::Let {
+            statements.push(Statement::Let {
                 bindings,
-                value: init_value,
+                value: initializer_value,
             });
         }
 
-        Ok(stmts)
+        Ok(statements)
     }
 
-    /// Translates an expression used as a statement.
-    fn translate_expression_statement(&mut self, expr: &YulExpression) -> Result<Vec<Statement>> {
-        // The expression result is discarded
-        let (mut stmts, ir_expr) = self.translate_expression(expr)?;
-        stmts.push(Statement::Expr(ir_expr));
-        Ok(stmts)
+    /// Translates an expression used as a statement; the expression result is discarded.
+    fn translate_expression_statement(
+        &mut self,
+        expression: &YulExpression,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let (mut statements, ir_expression) = self.translate_expression(expression)?;
+        statements.push(Statement::Expression(ir_expression));
+        Ok(statements)
     }
 
     /// Translates an expression, returning any required setup statements and the expression.
-    fn translate_expression(&mut self, expr: &YulExpression) -> Result<(Vec<Statement>, Expr)> {
-        match expr {
-            YulExpression::Literal(lit) => {
-                let value = self.parse_literal(lit)?;
+    fn translate_expression(
+        &mut self,
+        expression: &YulExpression,
+    ) -> std::result::Result<(Vec<Statement>, Expression), TranslationError> {
+        match expression {
+            YulExpression::Literal(literal) => {
+                let value = self.parse_literal(literal)?;
                 Ok((
                     vec![],
-                    Expr::Literal {
+                    Expression::Literal {
                         value,
                         ty: Type::Int(BitWidth::I256),
                     },
                 ))
             }
-            YulExpression::Identifier(ident) => {
+            YulExpression::Identifier(identifier) => {
                 let value = self
                     .ssa
-                    .lookup(&ident.inner)
-                    .ok_or_else(|| TranslationError::UndefinedVariable(ident.inner.clone()))?;
-                Ok((vec![], Expr::Var(value.id)))
+                    .lookup(&identifier.inner)
+                    .ok_or_else(|| TranslationError::UndefinedVariable(identifier.inner.clone()))?;
+                Ok((vec![], Expression::Var(value.id)))
             }
             YulExpression::FunctionCall(call) => self.translate_function_call(call),
         }
     }
 
-    /// Translates a function call.
-    fn translate_function_call(&mut self, call: &FunctionCall) -> Result<(Vec<Statement>, Expr)> {
-        // Handle special cases that need access to the original arguments first
+    /// Translates a function call. The `DataSize`, `DataOffset`, `LoadImmutable`, `SetImmutable`,
+    /// and `LinkerSymbol` builtins receive a string literal argument that cannot be evaluated as
+    /// an expression, so they are extracted before the generic argument-translation loop runs.
+    fn translate_function_call(
+        &mut self,
+        call: &FunctionCall,
+    ) -> std::result::Result<(Vec<Statement>, Expression), TranslationError> {
         match &call.name {
             FunctionName::DataSize => {
-                // DataSize takes a string literal argument
                 let id = self.extract_string_literal(&call.arguments)?;
-                return Ok((vec![], Expr::DataSize { id }));
+                return Ok((vec![], Expression::DataSize { id }));
             }
             FunctionName::DataOffset => {
-                // DataOffset takes a string literal argument
                 let id = self.extract_string_literal(&call.arguments)?;
-                return Ok((vec![], Expr::DataOffset { id }));
+                return Ok((vec![], Expression::DataOffset { id }));
             }
             FunctionName::LoadImmutable => {
-                // LoadImmutable takes a string literal key
                 let key = self.extract_string_literal(&call.arguments)?;
-                return Ok((vec![], Expr::LoadImmutable { key }));
+                return Ok((vec![], Expression::LoadImmutable { key }));
             }
             FunctionName::SetImmutable => {
-                // SetImmutable(base_ptr, key, value) - need the key as string and value
                 let key = self.extract_string_literal_at(&call.arguments, 1)?;
-                let (value_stmts, value_expr) = self.translate_expression(&call.arguments[2])?;
-                let mut stmts = value_stmts;
-                let value = match value_expr {
-                    Expr::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
+                let (mut statements, value_expression) =
+                    self.translate_expression(&call.arguments[2])?;
+                let value = match value_expression {
+                    Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
                     _ => {
-                        let temp_id = self.ssa.fresh_value();
-                        stmts.push(Statement::Let {
-                            bindings: vec![temp_id],
-                            value: value_expr,
+                        let temporary_id = self.ssa.fresh_value();
+                        statements.push(Statement::Let {
+                            bindings: vec![temporary_id],
+                            value: value_expression,
                         });
-                        Value::new(temp_id, Type::Int(BitWidth::I256))
+                        Value::new(temporary_id, Type::Int(BitWidth::I256))
                     }
                 };
-                stmts.push(Statement::SetImmutable { key, value });
+                statements.push(Statement::SetImmutable { key, value });
                 return Ok((
-                    stmts,
-                    Expr::Literal {
+                    statements,
+                    Expression::Literal {
                         value: BigUint::from(0u32),
                         ty: Type::Void,
                     },
                 ));
             }
             FunctionName::LinkerSymbol => {
-                // LinkerSymbol takes a string literal path argument
                 let path = self.extract_string_literal(&call.arguments)?;
-                return Ok((vec![], Expr::LinkerSymbol { path }));
+                return Ok((vec![], Expression::LinkerSymbol { path }));
             }
             _ => {}
         }
 
         // Translate arguments in RIGHT-TO-LEFT order per the Yul/EVM spec,
         // then reverse to restore left-to-right order for the call.
-        let mut stmts = Vec::new();
-        let mut args = Vec::new();
+        let mut statements = Vec::new();
+        let mut arguments = Vec::new();
 
-        for arg_expr in call.arguments.iter().rev() {
-            let (arg_stmts, arg_expr) = self.translate_expression(arg_expr)?;
-            stmts.extend(arg_stmts);
+        for outer_argument_expression in call.arguments.iter().rev() {
+            let (argument_statements, argument_expression) =
+                self.translate_expression(outer_argument_expression)?;
+            statements.extend(argument_statements);
 
-            // Create a temporary for the argument if it's not already a variable reference
-            let arg_value = match arg_expr {
-                Expr::Var(id) => {
-                    // Look up the value in our SSA context to get its type
-                    Value::new(id, Type::Int(BitWidth::I256))
-                }
+            let argument_value = match argument_expression {
+                Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
                 _ => {
-                    let temp_id = self.ssa.fresh_value();
-                    stmts.push(Statement::Let {
-                        bindings: vec![temp_id],
-                        value: arg_expr,
+                    let temporary_id = self.ssa.fresh_value();
+                    statements.push(Statement::Let {
+                        bindings: vec![temporary_id],
+                        value: argument_expression,
                     });
-                    Value::new(temp_id, Type::Int(BitWidth::I256))
+                    Value::new(temporary_id, Type::Int(BitWidth::I256))
                 }
             };
-            args.push(arg_value);
+            arguments.push(argument_value);
         }
-        args.reverse();
+        arguments.reverse();
 
-        // Translate the function call based on its name
-        let expr = self.translate_builtin_or_call(&call.name, args, &mut stmts)?;
-        Ok((stmts, expr))
+        let expression = self.translate_builtin_or_call(&call.name, arguments, &mut statements)?;
+        Ok((statements, expression))
     }
 
     /// Extracts a string literal from the first argument.
-    fn extract_string_literal(&self, args: &[YulExpression]) -> Result<String> {
-        self.extract_string_literal_at(args, 0)
+    fn extract_string_literal(
+        &self,
+        arguments: &[YulExpression],
+    ) -> std::result::Result<String, TranslationError> {
+        self.extract_string_literal_at(arguments, 0)
     }
 
     /// Extracts a string literal from an argument at a specific index.
-    fn extract_string_literal_at(&self, args: &[YulExpression], index: usize) -> Result<String> {
-        if args.len() <= index {
+    fn extract_string_literal_at(
+        &self,
+        arguments: &[YulExpression],
+        index: usize,
+    ) -> std::result::Result<String, TranslationError> {
+        if arguments.len() <= index {
             return Err(TranslationError::Unsupported(
                 "Missing string literal argument".to_string(),
             ));
         }
 
-        match &args[index] {
-            YulExpression::Literal(lit) => {
-                // The literal's inner value may be a string
-                match &lit.inner {
-                    LexicalLiteral::String(s) => Ok(s.inner.clone()),
-                    _ => {
-                        // For non-string literals, convert to string representation
-                        let value = self.parse_literal(lit)?;
-                        Ok(value.to_string())
-                    }
-                }
-            }
+        match &arguments[index] {
+            YulExpression::Literal(literal) => match &literal.inner {
+                LexicalLiteral::String(string) => Ok(string.inner.clone()),
+                // Non-string literals are formatted as their decimal string representation.
+                _ => Ok(self.parse_literal(literal)?.to_string()),
+            },
             _ => Err(TranslationError::Unsupported(
                 "Expected literal argument".to_string(),
             )),
@@ -511,324 +515,338 @@ impl YulTranslator {
     fn translate_builtin_or_call(
         &mut self,
         name: &FunctionName,
-        args: Vec<Value>,
-        stmts: &mut Vec<Statement>,
-    ) -> Result<Expr> {
+        arguments: Vec<Value>,
+        statements: &mut Vec<Statement>,
+    ) -> std::result::Result<Expression, TranslationError> {
         match name {
             // Arithmetic operations
-            FunctionName::Add => Ok(binary_op(BinOp::Add, &args)),
-            FunctionName::Sub => Ok(binary_op(BinOp::Sub, &args)),
-            FunctionName::Mul => Ok(binary_op(BinOp::Mul, &args)),
-            FunctionName::Div => Ok(binary_op(BinOp::Div, &args)),
-            FunctionName::Sdiv => Ok(binary_op(BinOp::SDiv, &args)),
-            FunctionName::Mod => Ok(binary_op(BinOp::Mod, &args)),
-            FunctionName::Smod => Ok(binary_op(BinOp::SMod, &args)),
-            FunctionName::Exp => Ok(binary_op(BinOp::Exp, &args)),
-            FunctionName::AddMod => Ok(ternary_op(BinOp::AddMod, &args)),
-            FunctionName::MulMod => Ok(ternary_op(BinOp::MulMod, &args)),
+            FunctionName::Add => Ok(binary_op(BinaryOperation::Add, &arguments)),
+            FunctionName::Sub => Ok(binary_op(BinaryOperation::Sub, &arguments)),
+            FunctionName::Mul => Ok(binary_op(BinaryOperation::Mul, &arguments)),
+            FunctionName::Div => Ok(binary_op(BinaryOperation::Div, &arguments)),
+            FunctionName::Sdiv => Ok(binary_op(BinaryOperation::SDiv, &arguments)),
+            FunctionName::Mod => Ok(binary_op(BinaryOperation::Mod, &arguments)),
+            FunctionName::Smod => Ok(binary_op(BinaryOperation::SMod, &arguments)),
+            FunctionName::Exp => Ok(binary_op(BinaryOperation::Exp, &arguments)),
+            FunctionName::AddMod => Ok(ternary_op(BinaryOperation::AddMod, &arguments)),
+            FunctionName::MulMod => Ok(ternary_op(BinaryOperation::MulMod, &arguments)),
 
             // Comparison operations
-            FunctionName::Lt => Ok(binary_op(BinOp::Lt, &args)),
-            FunctionName::Gt => Ok(binary_op(BinOp::Gt, &args)),
-            FunctionName::Slt => Ok(binary_op(BinOp::Slt, &args)),
-            FunctionName::Sgt => Ok(binary_op(BinOp::Sgt, &args)),
-            FunctionName::Eq => Ok(binary_op(BinOp::Eq, &args)),
-            FunctionName::IsZero => Ok(unary_op(UnaryOp::IsZero, &args)),
+            FunctionName::Lt => Ok(binary_op(BinaryOperation::Lt, &arguments)),
+            FunctionName::Gt => Ok(binary_op(BinaryOperation::Gt, &arguments)),
+            FunctionName::Slt => Ok(binary_op(BinaryOperation::Slt, &arguments)),
+            FunctionName::Sgt => Ok(binary_op(BinaryOperation::Sgt, &arguments)),
+            FunctionName::Eq => Ok(binary_op(BinaryOperation::Eq, &arguments)),
+            FunctionName::IsZero => Ok(unary_op(UnaryOperation::IsZero, &arguments)),
 
             // Bitwise operations
-            FunctionName::And => Ok(binary_op(BinOp::And, &args)),
-            FunctionName::Or => Ok(binary_op(BinOp::Or, &args)),
-            FunctionName::Xor => Ok(binary_op(BinOp::Xor, &args)),
-            FunctionName::Not => Ok(unary_op(UnaryOp::Not, &args)),
-            FunctionName::Shl => Ok(binary_op(BinOp::Shl, &args)),
-            FunctionName::Shr => Ok(binary_op(BinOp::Shr, &args)),
-            FunctionName::Sar => Ok(binary_op(BinOp::Sar, &args)),
-            FunctionName::Byte => Ok(binary_op(BinOp::Byte, &args)),
-            FunctionName::SignExtend => Ok(binary_op(BinOp::SignExtend, &args)),
+            FunctionName::And => Ok(binary_op(BinaryOperation::And, &arguments)),
+            FunctionName::Or => Ok(binary_op(BinaryOperation::Or, &arguments)),
+            FunctionName::Xor => Ok(binary_op(BinaryOperation::Xor, &arguments)),
+            FunctionName::Not => Ok(unary_op(UnaryOperation::Not, &arguments)),
+            FunctionName::Shl => Ok(binary_op(BinaryOperation::Shl, &arguments)),
+            FunctionName::Shr => Ok(binary_op(BinaryOperation::Shr, &arguments)),
+            FunctionName::Sar => Ok(binary_op(BinaryOperation::Sar, &arguments)),
+            FunctionName::Byte => Ok(binary_op(BinaryOperation::Byte, &arguments)),
+            FunctionName::SignExtend => Ok(binary_op(BinaryOperation::SignExtend, &arguments)),
 
             // Memory operations
-            FunctionName::MLoad => Ok(Expr::MLoad {
-                offset: args[0],
+            FunctionName::MLoad => Ok(Expression::MLoad {
+                offset: arguments[0],
                 region: MemoryRegion::Unknown,
             }),
             FunctionName::MStore => {
-                stmts.push(Statement::MStore {
-                    offset: args[0],
-                    value: args[1],
+                statements.push(Statement::MStore {
+                    offset: arguments[0],
+                    value: arguments[1],
                     region: MemoryRegion::Unknown,
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::MStore8 => {
-                stmts.push(Statement::MStore8 {
-                    offset: args[0],
-                    value: args[1],
+                statements.push(Statement::MStore8 {
+                    offset: arguments[0],
+                    value: arguments[1],
                     region: MemoryRegion::Unknown,
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::MCopy => {
-                stmts.push(Statement::MCopy {
-                    dest: args[0],
-                    src: args[1],
-                    length: args[2],
+                statements.push(Statement::MCopy {
+                    dest: arguments[0],
+                    src: arguments[1],
+                    length: arguments[2],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
 
             // Storage operations
-            FunctionName::SLoad => Ok(Expr::SLoad {
-                key: args[0],
+            FunctionName::SLoad => Ok(Expression::SLoad {
+                key: arguments[0],
                 static_slot: None,
             }),
             FunctionName::SStore => {
-                stmts.push(Statement::SStore {
-                    key: args[0],
-                    value: args[1],
+                statements.push(Statement::SStore {
+                    key: arguments[0],
+                    value: arguments[1],
                     static_slot: None,
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
-            FunctionName::TLoad => Ok(Expr::TLoad { key: args[0] }),
+            FunctionName::TLoad => Ok(Expression::TLoad { key: arguments[0] }),
             FunctionName::TStore => {
-                stmts.push(Statement::TStore {
-                    key: args[0],
-                    value: args[1],
+                statements.push(Statement::TStore {
+                    key: arguments[0],
+                    value: arguments[1],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
 
             // Context getters
-            FunctionName::CallDataLoad => Ok(Expr::CallDataLoad { offset: args[0] }),
-            FunctionName::CallDataSize => Ok(Expr::CallDataSize),
-            FunctionName::CallValue => Ok(Expr::CallValue),
-            FunctionName::Caller => Ok(Expr::Caller),
-            FunctionName::Origin => Ok(Expr::Origin),
-            FunctionName::Address => Ok(Expr::Address),
-            FunctionName::Balance => Ok(Expr::Balance { address: args[0] }),
-            FunctionName::SelfBalance => Ok(Expr::SelfBalance),
-            FunctionName::Gas => Ok(Expr::Gas),
-            FunctionName::GasLimit => Ok(Expr::GasLimit),
-            FunctionName::GasPrice => Ok(Expr::GasPrice),
-            FunctionName::ChainId => Ok(Expr::ChainId),
-            FunctionName::Number => Ok(Expr::Number),
-            FunctionName::Timestamp => Ok(Expr::Timestamp),
-            FunctionName::BlockHash => Ok(Expr::BlockHash { number: args[0] }),
-            FunctionName::CoinBase => Ok(Expr::Coinbase),
-            FunctionName::Difficulty | FunctionName::Prevrandao => Ok(Expr::Difficulty),
-            FunctionName::BaseFee => Ok(Expr::BaseFee),
-            FunctionName::BlobBaseFee => Ok(Expr::BlobBaseFee),
-            FunctionName::BlobHash => Ok(Expr::BlobHash { index: args[0] }),
-            FunctionName::MSize => Ok(Expr::MSize),
-            FunctionName::CodeSize => Ok(Expr::CodeSize),
-            FunctionName::ExtCodeSize => Ok(Expr::ExtCodeSize { address: args[0] }),
-            FunctionName::ExtCodeHash => Ok(Expr::ExtCodeHash { address: args[0] }),
-            FunctionName::ReturnDataSize => Ok(Expr::ReturnDataSize),
+            FunctionName::CallDataLoad => Ok(Expression::CallDataLoad {
+                offset: arguments[0],
+            }),
+            FunctionName::CallDataSize => Ok(Expression::CallDataSize),
+            FunctionName::CallValue => Ok(Expression::CallValue),
+            FunctionName::Caller => Ok(Expression::Caller),
+            FunctionName::Origin => Ok(Expression::Origin),
+            FunctionName::Address => Ok(Expression::Address),
+            FunctionName::Balance => Ok(Expression::Balance {
+                address: arguments[0],
+            }),
+            FunctionName::SelfBalance => Ok(Expression::SelfBalance),
+            FunctionName::Gas => Ok(Expression::Gas),
+            FunctionName::GasLimit => Ok(Expression::GasLimit),
+            FunctionName::GasPrice => Ok(Expression::GasPrice),
+            FunctionName::ChainId => Ok(Expression::ChainId),
+            FunctionName::Number => Ok(Expression::Number),
+            FunctionName::Timestamp => Ok(Expression::Timestamp),
+            FunctionName::BlockHash => Ok(Expression::BlockHash {
+                number: arguments[0],
+            }),
+            FunctionName::CoinBase => Ok(Expression::Coinbase),
+            FunctionName::Difficulty | FunctionName::Prevrandao => Ok(Expression::Difficulty),
+            FunctionName::BaseFee => Ok(Expression::BaseFee),
+            FunctionName::BlobBaseFee => Ok(Expression::BlobBaseFee),
+            FunctionName::BlobHash => Ok(Expression::BlobHash {
+                index: arguments[0],
+            }),
+            FunctionName::MSize => Ok(Expression::MSize),
+            FunctionName::CodeSize => Ok(Expression::CodeSize),
+            FunctionName::ExtCodeSize => Ok(Expression::ExtCodeSize {
+                address: arguments[0],
+            }),
+            FunctionName::ExtCodeHash => Ok(Expression::ExtCodeHash {
+                address: arguments[0],
+            }),
+            FunctionName::ReturnDataSize => Ok(Expression::ReturnDataSize),
 
             // Control flow / termination
             FunctionName::Return => {
-                stmts.push(Statement::Return {
-                    offset: args[0],
-                    length: args[1],
+                statements.push(Statement::Return {
+                    offset: arguments[0],
+                    length: arguments[1],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Revert => {
-                stmts.push(Statement::Revert {
-                    offset: args[0],
-                    length: args[1],
+                statements.push(Statement::Revert {
+                    offset: arguments[0],
+                    length: arguments[1],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Stop => {
-                stmts.push(Statement::Stop);
-                Ok(Expr::Literal {
+                statements.push(Statement::Stop);
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Invalid => {
-                stmts.push(Statement::Invalid);
-                Ok(Expr::Literal {
+                statements.push(Statement::Invalid);
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::SelfDestruct => {
-                stmts.push(Statement::SelfDestruct { address: args[0] });
-                Ok(Expr::Literal {
+                statements.push(Statement::SelfDestruct {
+                    address: arguments[0],
+                });
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
 
             // Hashing
-            FunctionName::Keccak256 => Ok(Expr::Keccak256 {
-                offset: args[0],
-                length: args[1],
+            FunctionName::Keccak256 => Ok(Expression::Keccak256 {
+                offset: arguments[0],
+                length: arguments[1],
             }),
 
             // External calls
             FunctionName::Call => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::ExternalCall {
+                statements.push(Statement::ExternalCall {
                     kind: CallKind::Call,
-                    gas: args[0],
-                    address: args[1],
-                    value: Some(args[2]),
-                    args_offset: args[3],
-                    args_length: args[4],
-                    ret_offset: args[5],
-                    ret_length: args[6],
+                    gas: arguments[0],
+                    address: arguments[1],
+                    value: Some(arguments[2]),
+                    args_offset: arguments[3],
+                    args_length: arguments[4],
+                    ret_offset: arguments[5],
+                    ret_length: arguments[6],
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
             FunctionName::CallCode => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::ExternalCall {
+                statements.push(Statement::ExternalCall {
                     kind: CallKind::CallCode,
-                    gas: args[0],
-                    address: args[1],
-                    value: Some(args[2]),
-                    args_offset: args[3],
-                    args_length: args[4],
-                    ret_offset: args[5],
-                    ret_length: args[6],
+                    gas: arguments[0],
+                    address: arguments[1],
+                    value: Some(arguments[2]),
+                    args_offset: arguments[3],
+                    args_length: arguments[4],
+                    ret_offset: arguments[5],
+                    ret_length: arguments[6],
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
             FunctionName::DelegateCall => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::ExternalCall {
+                statements.push(Statement::ExternalCall {
                     kind: CallKind::DelegateCall,
-                    gas: args[0],
-                    address: args[1],
+                    gas: arguments[0],
+                    address: arguments[1],
                     value: None,
-                    args_offset: args[2],
-                    args_length: args[3],
-                    ret_offset: args[4],
-                    ret_length: args[5],
+                    args_offset: arguments[2],
+                    args_length: arguments[3],
+                    ret_offset: arguments[4],
+                    ret_length: arguments[5],
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
             FunctionName::StaticCall => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::ExternalCall {
+                statements.push(Statement::ExternalCall {
                     kind: CallKind::StaticCall,
-                    gas: args[0],
-                    address: args[1],
+                    gas: arguments[0],
+                    address: arguments[1],
                     value: None,
-                    args_offset: args[2],
-                    args_length: args[3],
-                    ret_offset: args[4],
-                    ret_length: args[5],
+                    args_offset: arguments[2],
+                    args_length: arguments[3],
+                    ret_offset: arguments[4],
+                    ret_length: arguments[5],
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
 
             // Contract creation
             FunctionName::Create => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::Create {
+                statements.push(Statement::Create {
                     kind: CreateKind::Create,
-                    value: args[0],
-                    offset: args[1],
-                    length: args[2],
+                    value: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
                     salt: None,
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
             FunctionName::Create2 => {
                 let result_id = self.ssa.fresh_value();
-                stmts.push(Statement::Create {
+                statements.push(Statement::Create {
                     kind: CreateKind::Create2,
-                    value: args[0],
-                    offset: args[1],
-                    length: args[2],
-                    salt: Some(args[3]),
+                    value: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
+                    salt: Some(arguments[3]),
                     result: result_id,
                 });
-                Ok(Expr::Var(result_id))
+                Ok(Expression::Var(result_id))
             }
 
             // Logging
             FunctionName::Log0 => {
-                stmts.push(Statement::Log {
-                    offset: args[0],
-                    length: args[1],
+                statements.push(Statement::Log {
+                    offset: arguments[0],
+                    length: arguments[1],
                     topics: vec![],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Log1 => {
-                stmts.push(Statement::Log {
-                    offset: args[0],
-                    length: args[1],
-                    topics: vec![args[2]],
+                statements.push(Statement::Log {
+                    offset: arguments[0],
+                    length: arguments[1],
+                    topics: vec![arguments[2]],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Log2 => {
-                stmts.push(Statement::Log {
-                    offset: args[0],
-                    length: args[1],
-                    topics: vec![args[2], args[3]],
+                statements.push(Statement::Log {
+                    offset: arguments[0],
+                    length: arguments[1],
+                    topics: vec![arguments[2], arguments[3]],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Log3 => {
-                stmts.push(Statement::Log {
-                    offset: args[0],
-                    length: args[1],
-                    topics: vec![args[2], args[3], args[4]],
+                statements.push(Statement::Log {
+                    offset: arguments[0],
+                    length: arguments[1],
+                    topics: vec![arguments[2], arguments[3], arguments[4]],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::Log4 => {
-                stmts.push(Statement::Log {
-                    offset: args[0],
-                    length: args[1],
-                    topics: vec![args[2], args[3], args[4], args[5]],
+                statements.push(Statement::Log {
+                    offset: arguments[0],
+                    length: arguments[1],
+                    topics: vec![arguments[2], arguments[3], arguments[4], arguments[5]],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
@@ -836,57 +854,57 @@ impl YulTranslator {
 
             // Data operations
             FunctionName::CodeCopy => {
-                stmts.push(Statement::CodeCopy {
-                    dest: args[0],
-                    offset: args[1],
-                    length: args[2],
+                statements.push(Statement::CodeCopy {
+                    dest: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::ExtCodeCopy => {
-                stmts.push(Statement::ExtCodeCopy {
-                    address: args[0],
-                    dest: args[1],
-                    offset: args[2],
-                    length: args[3],
+                statements.push(Statement::ExtCodeCopy {
+                    address: arguments[0],
+                    dest: arguments[1],
+                    offset: arguments[2],
+                    length: arguments[3],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::ReturnDataCopy => {
-                stmts.push(Statement::ReturnDataCopy {
-                    dest: args[0],
-                    offset: args[1],
-                    length: args[2],
+                statements.push(Statement::ReturnDataCopy {
+                    dest: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::CallDataCopy => {
-                stmts.push(Statement::CallDataCopy {
-                    dest: args[0],
-                    offset: args[1],
-                    length: args[2],
+                statements.push(Statement::CallDataCopy {
+                    dest: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::DataCopy => {
-                stmts.push(Statement::DataCopy {
-                    dest: args[0],
-                    offset: args[1],
-                    length: args[2],
+                statements.push(Statement::DataCopy {
+                    dest: arguments[0],
+                    offset: arguments[1],
+                    length: arguments[2],
                 });
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
@@ -900,17 +918,17 @@ impl YulTranslator {
             // Special builtins
             FunctionName::Pop => {
                 // Pop just discards the value, return a void literal
-                Ok(Expr::Literal {
+                Ok(Expression::Literal {
                     value: BigUint::from(0u32),
                     ty: Type::Void,
                 })
             }
             FunctionName::MemoryGuard => {
                 // MemoryGuard is an optimization hint, pass through the argument
-                if !args.is_empty() {
-                    Ok(Expr::Var(args[0].id))
+                if !arguments.is_empty() {
+                    Ok(Expression::Var(arguments[0].id))
                 } else {
-                    Ok(Expr::Literal {
+                    Ok(Expression::Literal {
                         value: BigUint::from(0x80u32),
                         ty: Type::Int(BitWidth::I256),
                     })
@@ -925,7 +943,7 @@ impl YulTranslator {
             FunctionName::Pc => Err(TranslationError::Unsupported("pc".to_string())),
 
             // CLZ (count leading zeros)
-            FunctionName::Clz => Ok(unary_op(UnaryOp::Clz, &args)),
+            FunctionName::Clz => Ok(unary_op(UnaryOperation::Clz, &arguments)),
 
             // Immutables are handled in translate_function_call
             FunctionName::LoadImmutable | FunctionName::SetImmutable => {
@@ -939,35 +957,39 @@ impl YulTranslator {
 
             // User-defined function call
             FunctionName::UserDefined(name) => {
-                let func_id = self
+                let function_id = self
                     .lookup_function(name)
                     .ok_or_else(|| TranslationError::UndefinedFunction(name.clone()))?;
-                Ok(Expr::Call {
-                    function: func_id,
-                    args,
+                Ok(Expression::Call {
+                    function: function_id,
+                    arguments,
                 })
             }
         }
     }
 
     /// Translates an if statement.
-    fn translate_if(&mut self, if_cond: &IfConditional) -> Result<Vec<Statement>> {
-        let mut stmts = Vec::new();
+    fn translate_if(
+        &mut self,
+        if_conditional: &IfConditional,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let mut statements = Vec::new();
 
         // Translate condition
-        let (cond_stmts, cond_expr) = self.translate_expression(&if_cond.condition)?;
-        stmts.extend(cond_stmts);
+        let (condition_statements, condition_expression) =
+            self.translate_expression(&if_conditional.condition)?;
+        statements.extend(condition_statements);
 
         // Create a temporary for the condition if needed
-        let cond_value = match cond_expr {
-            Expr::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
+        let condition_value = match condition_expression {
+            Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
-                let temp_id = self.ssa.fresh_value();
-                stmts.push(Statement::Let {
-                    bindings: vec![temp_id],
-                    value: cond_expr,
+                let temporary_id = self.ssa.fresh_value();
+                statements.push(Statement::Let {
+                    bindings: vec![temporary_id],
+                    value: condition_expression,
                 });
-                Value::new(temp_id, Type::Int(BitWidth::I256))
+                Value::new(temporary_id, Type::Int(BitWidth::I256))
             }
         };
 
@@ -976,7 +998,7 @@ impl YulTranslator {
 
         // Translate then branch
         self.ssa.enter_scope();
-        let then_region = self.translate_region(&if_cond.block)?;
+        let then_region = self.translate_region(&if_conditional.block)?;
         let then_scope = self.ssa.exit_scope();
 
         // Yul has no else branch, but we need to handle SSA properly
@@ -1019,35 +1041,39 @@ impl YulTranslator {
             Some(else_region)
         };
 
-        stmts.push(Statement::If {
-            condition: cond_value,
+        statements.push(Statement::If {
+            condition: condition_value,
             inputs,
             then_region: then_with_yields,
             else_region,
             outputs,
         });
 
-        Ok(stmts)
+        Ok(statements)
     }
 
     /// Translates a switch statement.
-    fn translate_switch(&mut self, switch: &Switch) -> Result<Vec<Statement>> {
-        let mut stmts = Vec::new();
+    fn translate_switch(
+        &mut self,
+        switch: &Switch,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let mut statements = Vec::new();
 
         // Translate scrutinee
-        let (scrut_stmts, scrut_expr) = self.translate_expression(&switch.expression)?;
-        stmts.extend(scrut_stmts);
+        let (scrutinee_statements, scrutinee_expression) =
+            self.translate_expression(&switch.expression)?;
+        statements.extend(scrutinee_statements);
 
         // Create a temporary for the scrutinee if needed
-        let scrut_value = match scrut_expr {
-            Expr::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
+        let scrutinee_value = match scrutinee_expression {
+            Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
-                let temp_id = self.ssa.fresh_value();
-                stmts.push(Statement::Let {
-                    bindings: vec![temp_id],
-                    value: scrut_expr,
+                let temporary_id = self.ssa.fresh_value();
+                statements.push(Statement::Let {
+                    bindings: vec![temporary_id],
+                    value: scrutinee_expression,
                 });
-                Value::new(temp_id, Type::Int(BitWidth::I256))
+                Value::new(temporary_id, Type::Int(BitWidth::I256))
             }
         };
 
@@ -1124,8 +1150,8 @@ impl YulTranslator {
 
         // Add yields to already-translated cases (no re-translation needed)
         let mut cases_with_yields = Vec::new();
-        for (idx, (case_value, mut case_region)) in cases.into_iter().enumerate() {
-            let case_scope = &all_scopes[idx];
+        for (index, (case_value, mut case_region)) in cases.into_iter().enumerate() {
+            let case_scope = &all_scopes[index];
             // Add yields for modified variables
             for name in &modified_names {
                 let before_value = modified_vars.get(name).copied().unwrap();
@@ -1166,70 +1192,81 @@ impl YulTranslator {
             self.ssa.define(&name, value);
         }
 
-        stmts.push(Statement::Switch {
-            scrutinee: scrut_value,
+        statements.push(Statement::Switch {
+            scrutinee: scrutinee_value,
             inputs,
             cases: cases_with_yields,
             default: default_with_yields,
             outputs,
         });
 
-        Ok(stmts)
+        Ok(statements)
     }
 
     /// Translates a for loop.
-    fn translate_for_loop(&mut self, for_loop: &ForLoop) -> Result<Vec<Statement>> {
-        let mut stmts = Vec::new();
+    fn translate_for_loop(
+        &mut self,
+        for_loop: &ForLoop,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let mut statements = Vec::new();
 
         // Translate initializer
         self.ssa.enter_scope();
-        for stmt in &for_loop.initializer.statements {
-            let init_stmts = self.translate_statement(stmt)?;
-            stmts.extend(init_stmts);
+        for statement in &for_loop.initializer.statements {
+            let initializer_statements = self.translate_statement(statement)?;
+            statements.extend(initializer_statements);
         }
 
         // Identify loop-carried variables (variables defined in initializer)
-        let init_scope = self.ssa.current_scope().clone();
-        let mut loop_vars = Vec::new();
-        let mut init_values = Vec::new();
+        let initializer_scope = self.ssa.current_scope().clone();
+        let mut loop_variables = Vec::new();
+        let mut initializer_values = Vec::new();
 
-        for (name, &value) in &init_scope {
-            loop_vars.push((name.clone(), self.ssa.fresh_value()));
-            init_values.push(value);
+        for (name, &value) in &initializer_scope {
+            loop_variables.push((name.clone(), self.ssa.fresh_value()));
+            initializer_values.push(value);
         }
 
         // Create new SSA values for loop variables
-        for (name, var_id) in &loop_vars {
-            let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
+        for (name, var_id) in &loop_variables {
+            let ty = initializer_scope
+                .get(name)
+                .map(|v| v.ty)
+                .unwrap_or_default();
             self.ssa.define(name, Value::new(*var_id, ty));
         }
 
-        // Translate condition - condition_stmts will be executed inside the loop header,
-        // not before the loop, because they may reference loop_vars
-        let (condition_stmts, cond_expr) = self.translate_expression(&for_loop.condition)?;
+        // Translate condition - condition_statements will be executed inside the loop header,
+        // not before the loop, because they may reference loop_variables
+        let (condition_statements, condition_expression) =
+            self.translate_expression(&for_loop.condition)?;
 
         // Translate body in its own scope. The body may modify loop-carried variables.
         // Body yields the current values of ALL loop-carried variables at end of body.
         // These yields are used by the LLVM codegen to create phi nodes at the post-block
         // entry, merging body-end values with continue-site values.
         //
-        // Push loop var names so break/continue can collect current values.
-        let loop_var_names: Vec<String> = loop_vars.iter().map(|(n, _)| n.clone()).collect();
-        self.loop_var_names_stack.push(loop_var_names);
+        // Push loop variable names so break/continue can collect current values.
+        let loop_variable_names: Vec<String> =
+            loop_variables.iter().map(|(n, _)| n.clone()).collect();
+        self.loop_variable_names_stack.push(loop_variable_names);
 
         self.ssa.enter_scope();
         let mut body_region = self.translate_region(&for_loop.body)?;
         let body_scope = self.ssa.exit_scope();
 
-        self.loop_var_names_stack.pop();
+        self.loop_variable_names_stack.pop();
 
         // Body yields: for each loop-carried variable, yield the body's final value.
-        for (name, loop_var_id) in &loop_vars {
+        for (name, loop_variable_id) in &loop_variables {
             if let Some(&value) = body_scope.get(name) {
                 body_region.yields.push(value);
             } else {
-                let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
-                body_region.yields.push(Value::new(*loop_var_id, ty));
+                let ty = initializer_scope
+                    .get(name)
+                    .map(|v| v.ty)
+                    .unwrap_or_default();
+                body_region.yields.push(Value::new(*loop_variable_id, ty));
             }
         }
 
@@ -1237,10 +1274,13 @@ impl YulTranslator {
         // ValueIds (mapped to landing phi values by the LLVM codegen).
         self.ssa.enter_scope();
         let mut post_input_var_ids = Vec::new();
-        for (name, _) in loop_vars.iter() {
+        for (name, _) in loop_variables.iter() {
             let post_var_id = self.ssa.fresh_value();
             post_input_var_ids.push(post_var_id);
-            let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
+            let ty = initializer_scope
+                .get(name)
+                .map(|v| v.ty)
+                .unwrap_or_default();
             self.ssa.define(name, Value::new(post_var_id, ty));
         }
 
@@ -1248,7 +1288,7 @@ impl YulTranslator {
         let post_scope = self.ssa.exit_scope();
 
         // Post yields: the final values of loop-carried variables after the post runs.
-        for (name, _) in &loop_vars {
+        for (name, _) in &loop_variables {
             if let Some(&value) = post_scope.get(name) {
                 post_region.yields.push(value);
             }
@@ -1257,10 +1297,13 @@ impl YulTranslator {
         // Create output bindings
         let mut outputs = Vec::new();
         let mut output_values = Vec::new();
-        for (name, _) in &loop_vars {
+        for (name, _) in &loop_variables {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
-            let ty = init_scope.get(name).map(|v| v.ty).unwrap_or_default();
+            let ty = initializer_scope
+                .get(name)
+                .map(|v| v.ty)
+                .unwrap_or_default();
             output_values.push((name.clone(), Value::new(output_id, ty)));
         }
 
@@ -1272,96 +1315,96 @@ impl YulTranslator {
             self.ssa.define(&name, value);
         }
 
-        stmts.push(Statement::For {
-            init_values,
-            loop_vars: loop_vars.into_iter().map(|(_, id)| id).collect(),
-            condition_stmts,
-            condition: cond_expr,
+        statements.push(Statement::For {
+            initial_values: initializer_values,
+            loop_variables: loop_variables.into_iter().map(|(_, id)| id).collect(),
+            condition_statements,
+            condition: condition_expression,
             body: body_region,
-            post_input_vars: post_input_var_ids,
+            post_input_variables: post_input_var_ids,
             post: post_region,
             outputs,
         });
 
-        Ok(stmts)
+        Ok(statements)
     }
 
-    /// Translates a function definition.
+    /// Translates a function definition. The function definition does not produce statements in
+    /// the containing block — its body is attached to the pre-allocated `Function` entry.
+    ///
+    /// We save the current scope but keep the SSA counter advanced to ensure globally unique
+    /// `ValueId`s. Creating a fresh `SsaBuilder` would restart at ID 0 and collide with the
+    /// parameter IDs already allocated by [`Self::collect_functions`].
     fn translate_function_definition(
         &mut self,
-        func_def: &FunctionDefinition,
-    ) -> Result<Vec<Statement>> {
-        // Get the function ID
-        let func_id = self
-            .lookup_function(&func_def.identifier)
-            .ok_or_else(|| TranslationError::UndefinedFunction(func_def.identifier.clone()))?;
+        function_definition: &FunctionDefinition,
+    ) -> std::result::Result<Vec<Statement>, TranslationError> {
+        let function_id = self
+            .lookup_function(&function_definition.identifier)
+            .ok_or_else(|| {
+                TranslationError::UndefinedFunction(function_definition.identifier.clone())
+            })?;
 
-        // Save the current scope but keep the SSA counter to ensure globally unique IDs.
-        // This is critical: if we create a fresh SsaBuilder, it starts from ID 0 which
-        // conflicts with parameter IDs that were allocated in collect_functions.
         let saved_scope = self.ssa.current_scope().clone();
         self.ssa.restore_scope(BTreeMap::new());
 
-        // Define parameters in the function scope
-        let func = self.functions.get(&func_id).cloned();
-        if let Some(func) = &func {
-            for ((param_id, _ty), param_ident) in func.params.iter().zip(&func_def.arguments) {
+        let function = self.functions.get(&function_id).cloned();
+        if let Some(function) = &function {
+            for ((parameter_id, _), parameter_identifier) in function
+                .parameters
+                .iter()
+                .zip(&function_definition.arguments)
+            {
                 self.ssa.define(
-                    &param_ident.inner,
-                    Value::new(*param_id, Type::Int(BitWidth::I256)),
+                    &parameter_identifier.inner,
+                    Value::new(*parameter_id, Type::Int(BitWidth::I256)),
                 );
             }
         }
 
-        // Define return variables and track their IDs and names
         let mut return_value_ids = Vec::new();
-        let saved_return_var_names = std::mem::take(&mut self.current_return_var_names);
-        for ret_ident in &func_def.result {
-            let ret_id = self.ssa.fresh_value();
+        let saved_return_variable_names = std::mem::take(&mut self.current_return_variable_names);
+        for return_identifier in &function_definition.result {
+            let return_id = self.ssa.fresh_value();
             self.ssa.define(
-                &ret_ident.inner,
-                Value::new(ret_id, Type::Int(BitWidth::I256)),
+                &return_identifier.inner,
+                Value::new(return_id, Type::Int(BitWidth::I256)),
             );
-            return_value_ids.push(ret_id);
-            self.current_return_var_names.push(ret_ident.inner.clone());
+            return_value_ids.push(return_id);
+            self.current_return_variable_names
+                .push(return_identifier.inner.clone());
         }
 
-        // Translate the function body
-        let body = self.translate_block(&func_def.body)?;
+        let body = self.translate_block(&function_definition.body)?;
 
-        // Restore the return var names for outer function (if nested)
-        self.current_return_var_names = saved_return_var_names;
+        self.current_return_variable_names = saved_return_variable_names;
 
-        // Collect final values of return variables after body execution
         let mut final_return_values = Vec::new();
-        for ret_ident in &func_def.result {
-            if let Some(value) = self.ssa.lookup(&ret_ident.inner) {
+        for return_identifier in &function_definition.result {
+            if let Some(value) = self.ssa.lookup(&return_identifier.inner) {
                 final_return_values.push(value.id);
             }
         }
 
-        // Update the function with its body and return value IDs
-        if let Some(func) = self.functions.get_mut(&func_id) {
-            func.body = body;
-            func.return_values_initial = return_value_ids;
-            func.return_values = final_return_values;
-            func.size_estimate = estimate_function_size(&func.body);
+        if let Some(function) = self.functions.get_mut(&function_id) {
+            function.body = body;
+            function.return_values_initial = return_value_ids;
+            function.return_values = final_return_values;
+            function.size_estimate = estimate_function_size(&function.body);
         }
 
-        // Restore the original scope (keeps the counter advanced)
         self.ssa.restore_scope(saved_scope);
 
-        // Function definitions don't produce statements in the containing block
         Ok(vec![])
     }
 
     /// Collects the current SSA values of the innermost loop's carried variables.
     /// Used by break/continue to carry the right values to the loop's join/post blocks.
-    fn collect_loop_var_values(&self) -> Vec<Value> {
-        let Some(var_names) = self.loop_var_names_stack.last() else {
+    fn collect_loop_variable_values(&self) -> Vec<Value> {
+        let Some(variable_names) = self.loop_variable_names_stack.last() else {
             return Vec::new();
         };
-        var_names
+        variable_names
             .iter()
             .map(|name| {
                 self.ssa
@@ -1372,36 +1415,34 @@ impl YulTranslator {
     }
 
     /// Parses a Yul literal to a BigUint.
-    fn parse_literal(&self, lit: &YulLiteral) -> Result<BigUint> {
-        let inner = &lit.inner;
+    fn parse_literal(
+        &self,
+        literal: &YulLiteral,
+    ) -> std::result::Result<BigUint, TranslationError> {
+        let inner = &literal.inner;
 
-        // Handle different literal types
         match inner {
-            LexicalLiteral::Boolean(b) => Ok(match b {
+            LexicalLiteral::Boolean(boolean) => Ok(match boolean {
                 BooleanLiteral::True => BigUint::from(1u32),
                 BooleanLiteral::False => BigUint::from(0u32),
             }),
-            LexicalLiteral::Integer(int_lit) => {
-                // Parse the integer literal
-                match int_lit {
-                    IntegerLiteral::Decimal { inner } => BigUint::parse_bytes(inner.as_bytes(), 10)
-                        .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone())),
-                    IntegerLiteral::Hexadecimal { inner } => {
-                        let hex = inner
-                            .strip_prefix("0x")
-                            .or_else(|| inner.strip_prefix("0X"))
-                            .unwrap_or(inner);
-                        BigUint::parse_bytes(hex.as_bytes(), 16)
-                            .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone()))
-                    }
+            LexicalLiteral::Integer(integer_literal) => match integer_literal {
+                IntegerLiteral::Decimal { inner } => BigUint::parse_bytes(inner.as_bytes(), 10)
+                    .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone())),
+                IntegerLiteral::Hexadecimal { inner } => {
+                    let hex = inner
+                        .strip_prefix("0x")
+                        .or_else(|| inner.strip_prefix("0X"))
+                        .unwrap_or(inner);
+                    BigUint::parse_bytes(hex.as_bytes(), 16)
+                        .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone()))
                 }
-            }
-            LexicalLiteral::String(str_lit) => {
-                // String/hex literals are converted to their byte representation,
-                // right-padded to 32 bytes. Escape sequences are processed for
-                // regular strings (not hex strings).
-                let string = &str_lit.inner;
-                let mut hex_string = if str_lit.is_hexadecimal {
+            },
+            // String and hex literals are converted to their byte representation, right-padded
+            // to 32 bytes. Escape sequences are processed for regular strings (not hex strings).
+            LexicalLiteral::String(string_literal) => {
+                let string = &string_literal.inner;
+                let mut hex_string = if string_literal.is_hexadecimal {
                     string.clone()
                 } else {
                     let mut hex = std::string::String::with_capacity(64);
@@ -1425,8 +1466,10 @@ impl YulTranslator {
                                 b'u' => {
                                     // \uNNNN - unicode escape
                                     if index + 4 < bytes.len() {
-                                        let cp_str = &string[index + 1..index + 5];
-                                        if let Ok(codepoint) = u32::from_str_radix(cp_str, 16) {
+                                        let code_point_string = &string[index + 1..index + 5];
+                                        if let Ok(codepoint) =
+                                            u32::from_str_radix(code_point_string, 16)
+                                        {
                                             if let Some(ch) = char::from_u32(codepoint) {
                                                 let mut buf = [0u8; 4];
                                                 let encoded = ch.encode_utf8(&mut buf);
@@ -1483,44 +1526,44 @@ impl YulTranslator {
 }
 
 /// Creates a binary operation expression.
-fn binary_op(op: BinOp, args: &[Value]) -> Expr {
-    Expr::Binary {
+fn binary_op(op: BinaryOperation, arguments: &[Value]) -> Expression {
+    Expression::Binary {
         op,
-        lhs: args[0],
-        rhs: args[1],
+        lhs: arguments[0],
+        rhs: arguments[1],
     }
 }
 
 /// Creates a ternary operation expression.
-fn ternary_op(op: BinOp, args: &[Value]) -> Expr {
-    Expr::Ternary {
+fn ternary_op(op: BinaryOperation, arguments: &[Value]) -> Expression {
+    Expression::Ternary {
         op,
-        a: args[0],
-        b: args[1],
-        n: args[2],
+        a: arguments[0],
+        b: arguments[1],
+        n: arguments[2],
     }
 }
 
 /// Creates a unary operation expression.
-fn unary_op(op: UnaryOp, args: &[Value]) -> Expr {
-    Expr::Unary {
+fn unary_op(op: UnaryOperation, arguments: &[Value]) -> Expression {
+    Expression::Unary {
         op,
-        operand: args[0],
+        operand: arguments[0],
     }
 }
 
 /// Estimates the size of a function body for inlining decisions.
 fn estimate_function_size(block: &Block) -> usize {
     let mut size = 0;
-    for stmt in &block.statements {
-        size += estimate_statement_size(stmt);
+    for statement in &block.statements {
+        size += estimate_statement_size(statement);
     }
     size
 }
 
 /// Estimates the size of a statement.
-fn estimate_statement_size(stmt: &Statement) -> usize {
-    match stmt {
+fn estimate_statement_size(statement: &Statement) -> usize {
+    match statement {
         Statement::Let { .. } => 1,
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => 1,
         Statement::SStore { .. } | Statement::TStore { .. } => 1,
@@ -1543,7 +1586,7 @@ fn estimate_statement_size(stmt: &Statement) -> usize {
             1 + estimate_region_size(body) + estimate_region_size(post)
         }
         Statement::Block(region) => estimate_region_size(region),
-        Statement::Expr(_) => 1,
+        Statement::Expression(_) => 1,
         _ => 1,
     }
 }

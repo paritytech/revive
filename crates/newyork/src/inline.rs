@@ -22,8 +22,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{
-    for_each_stmt, for_each_stmt_mut, BitWidth, Block, Expr, Function, FunctionId, Object, Region,
-    Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
+    for_each_stmt, for_each_stmt_mut, BitWidth, Block, Expression, Function, FunctionId, Object,
+    Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
@@ -128,9 +128,9 @@ fn count_calls_in_block(
     call_counts: &mut BTreeMap<FunctionId, usize>,
     callees: &mut BTreeSet<FunctionId>,
 ) {
-    for_each_stmt(&block.statements, &mut |stmt| {
-        stmt.for_each_expr(&mut |expr| {
-            if let Expr::Call { function, .. } = expr {
+    for_each_stmt(&block.statements, &mut |statement| {
+        statement.for_each_expr(&mut |expression| {
+            if let Expression::Call { function, .. } = expression {
                 *call_counts.entry(*function).or_insert(0) += 1;
                 callees.insert(*function);
             }
@@ -198,11 +198,11 @@ fn find_recursive_functions(
 const LEAVE_OVERHEAD_PER_SITE: usize = 6;
 
 /// Counts the number of Leave statements in a block (recursing into nested
-/// regions and `For::condition_stmts`, but not into other functions).
+/// regions and `For::condition_statements`, but not into other functions).
 fn count_leaves(block: &Block) -> usize {
     let mut count = 0;
-    for_each_stmt(&block.statements, &mut |stmt| {
-        if matches!(stmt, Statement::Leave { .. }) {
+    for_each_stmt(&block.statements, &mut |statement| {
+        if matches!(statement, Statement::Leave { .. }) {
             count += 1;
         }
     });
@@ -304,18 +304,18 @@ impl InlineRemapper {
         }
     }
 
-    /// Clones the source statements and rewrites every `ValueId` (defs and
+    /// Clones the source statements and rewrites every `ValueId` (definitions and
     /// uses) through `remap_value_id`. Used to inline a function body at a
     /// call site with a fresh SSA namespace.
     fn remap_statements(&mut self, source: &[Statement]) -> Vec<Statement> {
-        let mut stmts = source.to_vec();
-        for_each_stmt_mut(&mut stmts, &mut |stmt| {
-            stmt.for_each_value_id_def_mut(&mut |id| *id = self.remap_value_id(*id));
+        let mut statements = source.to_vec();
+        for_each_stmt_mut(&mut statements, &mut |statement| {
+            statement.for_each_value_id_def_mut(&mut |id| *id = self.remap_value_id(*id));
         });
-        for stmt in &mut stmts {
-            stmt.for_each_value_id_mut(&mut |id| *id = self.remap_value_id(*id));
+        for statement in &mut statements {
+            statement.for_each_value_id_mut(&mut |id| *id = self.remap_value_id(*id));
         }
-        stmts
+        statements
     }
 }
 
@@ -330,8 +330,8 @@ fn can_inline(function: &Function) -> bool {
         block.statements.iter().any(check_stmt_for_break_continue)
     }
 
-    fn check_stmt_for_break_continue(stmt: &Statement) -> bool {
-        match stmt {
+    fn check_stmt_for_break_continue(statement: &Statement) -> bool {
+        match statement {
             Statement::Break { .. } | Statement::Continue { .. } => true,
             // Recurse into non-loop control flow (break/continue in a For is fine)
             Statement::If {
@@ -364,17 +364,17 @@ fn can_inline(function: &Function) -> bool {
 /// nesting level). Leave inside For is not handled by our IR-level inliner.
 fn has_leave_in_for(block: &Block) -> bool {
     let mut found = false;
-    for_each_stmt(&block.statements, &mut |stmt| {
+    for_each_stmt(&block.statements, &mut |statement| {
         if let Statement::For {
             body,
             post,
-            condition_stmts,
+            condition_statements,
             ..
-        } = stmt
+        } = statement
         {
             if stmts_have_leave(&body.statements)
                 || stmts_have_leave(&post.statements)
-                || stmts_have_leave(condition_stmts)
+                || stmts_have_leave(condition_statements)
             {
                 found = true;
             }
@@ -384,9 +384,9 @@ fn has_leave_in_for(block: &Block) -> bool {
 }
 
 /// Checks if a slice of statements contains any Leave at any nesting level.
-fn stmts_have_leave(stmts: &[Statement]) -> bool {
+fn stmts_have_leave(statements: &[Statement]) -> bool {
     let mut found = false;
-    for_each_stmt(stmts, &mut |s| {
+    for_each_stmt(statements, &mut |s| {
         if matches!(s, Statement::Leave { .. }) {
             found = true;
         }
@@ -394,8 +394,8 @@ fn stmts_have_leave(stmts: &[Statement]) -> bool {
     found
 }
 
-fn stmt_has_leave_recursive(stmt: &Statement) -> bool {
-    stmts_have_leave(std::slice::from_ref(stmt))
+fn stmt_has_leave_recursive(statement: &Statement) -> bool {
+    stmts_have_leave(std::slice::from_ref(statement))
 }
 
 /// Allocates a fresh ValueId.
@@ -407,7 +407,7 @@ fn fresh_id(next_id: &mut u32) -> ValueId {
 
 /// Result of Leave elimination on a statement list.
 struct LeaveElimResult {
-    stmts: Vec<Statement>,
+    statements: Vec<Statement>,
     accum_ids: Vec<ValueId>,
     done_id: Option<ValueId>,
 }
@@ -418,7 +418,7 @@ struct LeaveElimResult {
 /// stored in accumulator variables and a "done" flag is set. Subsequent statements
 /// are guarded by `if !done`, using the If statement's inputs/outputs as phi nodes.
 fn eliminate_leaves(
-    stmts: &[Statement],
+    statements: &[Statement],
     accum_ids: &[ValueId],
     next_id: &mut u32,
 ) -> LeaveElimResult {
@@ -426,15 +426,15 @@ fn eliminate_leaves(
     let mut current_accums = accum_ids.to_vec();
     let mut done_id: Option<ValueId> = None;
 
-    for (idx, stmt) in stmts.iter().enumerate() {
+    for (index, statement) in statements.iter().enumerate() {
         // Once done flag is set, guard all remaining statements
         if let Some(done) = done_id {
-            let remaining = &stmts[idx..];
+            let remaining = &statements[index..];
             if !remaining.is_empty() {
                 let guarded = wrap_remaining_in_guard(remaining, &current_accums, done, next_id);
-                result_stmts.extend(guarded.stmts);
+                result_stmts.extend(guarded.statements);
                 return LeaveElimResult {
-                    stmts: result_stmts,
+                    statements: result_stmts,
                     accum_ids: guarded.accum_ids,
                     done_id: guarded.done_id,
                 };
@@ -442,7 +442,7 @@ fn eliminate_leaves(
             break;
         }
 
-        match stmt {
+        match statement {
             // Direct Leave: copy values to accumulators, skip remaining
             Statement::Leave { return_values } => {
                 let new_accums: Vec<ValueId> = return_values
@@ -451,7 +451,7 @@ fn eliminate_leaves(
                         let id = fresh_id(next_id);
                         result_stmts.push(Statement::Let {
                             bindings: vec![id],
-                            value: Expr::Var(v.id),
+                            value: Expression::Var(v.id),
                         });
                         id
                     })
@@ -459,7 +459,7 @@ fn eliminate_leaves(
                 let done = fresh_id(next_id);
                 result_stmts.push(Statement::Let {
                     bindings: vec![done],
-                    value: Expr::Literal {
+                    value: Expression::Literal {
                         value: num::BigUint::from(1u32),
                         ty: Type::Int(BitWidth::I256),
                     },
@@ -472,22 +472,22 @@ fn eliminate_leaves(
             }
 
             // Statement contains Leave in sub-structure
-            _ if stmt_has_leave_recursive(stmt) => {
-                let sub = transform_leave_stmt(stmt, &current_accums, next_id);
-                result_stmts.extend(sub.stmts);
+            _ if stmt_has_leave_recursive(statement) => {
+                let sub = transform_leave_stmt(statement, &current_accums, next_id);
+                result_stmts.extend(sub.statements);
                 current_accums = sub.accum_ids;
                 done_id = sub.done_id;
             }
 
             // Normal statement
             _ => {
-                result_stmts.push(stmt.clone());
+                result_stmts.push(statement.clone());
             }
         }
     }
 
     LeaveElimResult {
-        stmts: result_stmts,
+        statements: result_stmts,
         accum_ids: current_accums,
         done_id,
     }
@@ -497,7 +497,7 @@ fn eliminate_leaves(
 /// When done=true (Leave was taken), inputs flow to outputs unchanged.
 /// When done=false, the then_region executes and its yields flow to outputs.
 fn wrap_remaining_in_guard(
-    stmts: &[Statement],
+    statements: &[Statement],
     accum_ids: &[ValueId],
     done_id: ValueId,
     next_id: &mut u32,
@@ -507,8 +507,8 @@ fn wrap_remaining_in_guard(
     let not_done = fresh_id(next_id);
     pre_stmts.push(Statement::Let {
         bindings: vec![not_done],
-        value: Expr::Unary {
-            op: UnaryOp::IsZero,
+        value: Expression::Unary {
+            op: UnaryOperation::IsZero,
             operand: Value {
                 id: done_id,
                 ty: Type::Int(BitWidth::I256),
@@ -517,7 +517,7 @@ fn wrap_remaining_in_guard(
     });
 
     // Recursively process remaining statements
-    let inner = eliminate_leaves(stmts, accum_ids, next_id);
+    let inner = eliminate_leaves(statements, accum_ids, next_id);
 
     let new_accums: Vec<ValueId> = accum_ids.iter().map(|_| fresh_id(next_id)).collect();
 
@@ -544,7 +544,7 @@ fn wrap_remaining_in_guard(
         },
         inputs,
         then_region: Region {
-            statements: inner.stmts,
+            statements: inner.statements,
             yields: then_yields,
         },
         else_region: None,
@@ -552,7 +552,7 @@ fn wrap_remaining_in_guard(
     });
 
     LeaveElimResult {
-        stmts: pre_stmts,
+        statements: pre_stmts,
         accum_ids: new_accums,
         done_id: Some(done_id),
     }
@@ -560,29 +560,29 @@ fn wrap_remaining_in_guard(
 
 /// Collects all ValueIds defined at the top scope of a statement list.
 /// This includes Let bindings, If/Switch outputs, but NOT values inside nested regions.
-fn collect_top_scope_defs(stmts: &[Statement]) -> Vec<ValueId> {
-    let mut defs = Vec::new();
-    for stmt in stmts {
-        match stmt {
+fn collect_top_scope_defs(statements: &[Statement]) -> Vec<ValueId> {
+    let mut definitions = Vec::new();
+    for statement in statements {
+        match statement {
             Statement::Let { bindings, .. } => {
-                defs.extend_from_slice(bindings);
+                definitions.extend_from_slice(bindings);
             }
             Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
-                defs.extend_from_slice(outputs);
+                definitions.extend_from_slice(outputs);
             }
             Statement::For { outputs, .. } => {
-                defs.extend_from_slice(outputs);
+                definitions.extend_from_slice(outputs);
             }
             _ => {}
         }
     }
-    defs
+    definitions
 }
 
 /// Checks if a ValueId is defined anywhere within a region (recursively).
 fn region_defines_value(region: &Region, target: ValueId) -> bool {
-    for stmt in &region.statements {
-        match stmt {
+    for statement in &region.statements {
+        match statement {
             Statement::Let { bindings, .. } => {
                 if bindings.contains(&target) {
                     return true;
@@ -628,7 +628,7 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
             }
             Statement::For {
                 outputs,
-                condition_stmts,
+                condition_statements,
                 body,
                 post,
                 ..
@@ -636,7 +636,7 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
                 if outputs.contains(&target) {
                     return true;
                 }
-                for s in condition_stmts {
+                for s in condition_statements {
                     if let Statement::Let { bindings, .. } = s {
                         if bindings.contains(&target) {
                             return true;
@@ -665,7 +665,7 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
 /// (created by `wrap_remaining_in_guard`). This function promotes those values
 /// to be additional outputs of the guard If, so they're accessible at the outer scope.
 fn promote_yields_from_guards(
-    stmts: &mut [Statement],
+    statements: &mut [Statement],
     yields: &mut [Value],
     top_defs: &[ValueId],
     next_id: &mut u32,
@@ -675,13 +675,13 @@ fn promote_yields_from_guards(
             continue; // Already in scope
         }
         // Find the guard If that contains this value and promote it
-        for stmt in stmts.iter_mut() {
+        for statement in statements.iter_mut() {
             if let Statement::If {
                 ref mut then_region,
                 ref mut inputs,
                 ref mut outputs,
                 ..
-            } = stmt
+            } = statement
             {
                 if region_defines_value(then_region, yield_val.id) {
                     // Add the value as an additional yield of the then_region
@@ -704,11 +704,11 @@ fn promote_yields_from_guards(
 
 /// Transforms a statement that contains Leave in its sub-structure.
 fn transform_leave_stmt(
-    stmt: &Statement,
+    statement: &Statement,
     accum_ids: &[ValueId],
     next_id: &mut u32,
 ) -> LeaveElimResult {
-    match stmt {
+    match statement {
         Statement::If {
             condition,
             inputs: orig_inputs,
@@ -721,7 +721,7 @@ fn transform_leave_stmt(
             let done_false_id = fresh_id(next_id);
             pre_stmts.push(Statement::Let {
                 bindings: vec![done_false_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: num::BigUint::from(0u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -732,7 +732,7 @@ fn transform_leave_stmt(
                 eliminate_leaves(&then_region.statements, accum_ids, next_id)
             } else {
                 LeaveElimResult {
-                    stmts: then_region.statements.clone(),
+                    statements: then_region.statements.clone(),
                     accum_ids: accum_ids.to_vec(),
                     done_id: None,
                 }
@@ -740,7 +740,7 @@ fn transform_leave_stmt(
             let then_done = then_result.done_id.unwrap_or(done_false_id);
 
             // Build then yields: original yields first, then accums + done
-            let mut then_stmts = then_result.stmts;
+            let mut then_stmts = then_result.statements;
             let mut then_yields: Vec<Value> = then_region.yields.clone();
 
             // Fix: promote any out-of-scope yield values from guard Ifs
@@ -769,7 +769,7 @@ fn transform_leave_stmt(
                     eliminate_leaves(&else_r.statements, accum_ids, next_id)
                 } else {
                     LeaveElimResult {
-                        stmts: else_r.statements.clone(),
+                        statements: else_r.statements.clone(),
                         accum_ids: accum_ids.to_vec(),
                         done_id: None,
                     }
@@ -777,7 +777,7 @@ fn transform_leave_stmt(
                 let else_done = else_result.done_id.unwrap_or(done_false_id);
 
                 // Build else yields: original yields first, then accums + done
-                let mut else_stmts = else_result.stmts;
+                let mut else_stmts = else_result.statements;
                 let mut else_yields: Vec<Value> = else_r.yields.clone();
 
                 // Fix: promote any out-of-scope yield values from guard Ifs
@@ -847,7 +847,7 @@ fn transform_leave_stmt(
             }
 
             LeaveElimResult {
-                stmts: pre_stmts,
+                statements: pre_stmts,
                 accum_ids: new_accums,
                 done_id: Some(new_done),
             }
@@ -865,7 +865,7 @@ fn transform_leave_stmt(
             let done_false_id = fresh_id(next_id);
             pre_stmts.push(Statement::Let {
                 bindings: vec![done_false_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: num::BigUint::from(0u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -878,7 +878,7 @@ fn transform_leave_stmt(
                         eliminate_leaves(&c.body.statements, accum_ids, next_id)
                     } else {
                         LeaveElimResult {
-                            stmts: c.body.statements.clone(),
+                            statements: c.body.statements.clone(),
                             accum_ids: accum_ids.to_vec(),
                             done_id: None,
                         }
@@ -886,12 +886,12 @@ fn transform_leave_stmt(
                     let case_done = case_result.done_id.unwrap_or(done_false_id);
 
                     // Original yields first, then accums + done
-                    let mut stmts = case_result.stmts;
+                    let mut statements = case_result.statements;
                     let mut yields: Vec<Value> = c.body.yields.clone();
 
                     // Fix: promote any out-of-scope yield values from guard Ifs
-                    let top_defs = collect_top_scope_defs(&stmts);
-                    promote_yields_from_guards(&mut stmts, &mut yields, &top_defs, next_id);
+                    let top_defs = collect_top_scope_defs(&statements);
+                    promote_yields_from_guards(&mut statements, &mut yields, &top_defs, next_id);
 
                     yields.extend(case_result.accum_ids.iter().map(|&id| Value {
                         id,
@@ -903,10 +903,7 @@ fn transform_leave_stmt(
                     });
                     SwitchCase {
                         value: c.value.clone(),
-                        body: Region {
-                            statements: stmts,
-                            yields,
-                        },
+                        body: Region { statements, yields },
                     }
                 })
                 .collect();
@@ -916,7 +913,7 @@ fn transform_leave_stmt(
                     eliminate_leaves(&d.statements, accum_ids, next_id)
                 } else {
                     LeaveElimResult {
-                        stmts: d.statements.clone(),
+                        statements: d.statements.clone(),
                         accum_ids: accum_ids.to_vec(),
                         done_id: None,
                     }
@@ -924,12 +921,12 @@ fn transform_leave_stmt(
                 let def_done = def_result.done_id.unwrap_or(done_false_id);
 
                 // Original yields first, then accums + done
-                let mut stmts = def_result.stmts;
+                let mut statements = def_result.statements;
                 let mut yields: Vec<Value> = d.yields.clone();
 
                 // Fix: promote any out-of-scope yield values from guard Ifs
-                let top_defs = collect_top_scope_defs(&stmts);
-                promote_yields_from_guards(&mut stmts, &mut yields, &top_defs, next_id);
+                let top_defs = collect_top_scope_defs(&statements);
+                promote_yields_from_guards(&mut statements, &mut yields, &top_defs, next_id);
 
                 yields.extend(def_result.accum_ids.iter().map(|&id| Value {
                     id,
@@ -939,10 +936,7 @@ fn transform_leave_stmt(
                     id: def_done,
                     ty: Type::Int(BitWidth::I256),
                 });
-                Region {
-                    statements: stmts,
-                    yields,
-                }
+                Region { statements, yields }
             });
 
             // Outputs: original first, then new accums + done
@@ -972,7 +966,7 @@ fn transform_leave_stmt(
             });
 
             LeaveElimResult {
-                stmts: pre_stmts,
+                statements: pre_stmts,
                 accum_ids: new_accums,
                 done_id: Some(new_done),
             }
@@ -986,7 +980,7 @@ fn transform_leave_stmt(
         _ => {
             // Shouldn't reach here; emit as-is as fallback
             LeaveElimResult {
-                stmts: vec![stmt.clone()],
+                statements: vec![statement.clone()],
                 accum_ids: accum_ids.to_vec(),
                 done_id: None,
             }
@@ -1104,30 +1098,38 @@ fn inline_in_statements(
 ) -> Vec<Statement> {
     let mut result = Vec::new();
 
-    for stmt in statements {
-        match stmt {
+    for statement in statements {
+        match statement {
             // Let binding with a function call - prime inlining target
             Statement::Let {
                 bindings,
-                value: Expr::Call { function, args },
+                value:
+                    Expression::Call {
+                        function,
+                        arguments,
+                    },
             } if inlineable.contains(function) => {
                 if let Some(func_def) = functions.get(function) {
-                    let inlined = inline_call_with_results(func_def, args, bindings, next_value_id);
+                    let inlined =
+                        inline_call_with_results(func_def, arguments, bindings, next_value_id);
                     result.extend(inlined);
                     *inlined_count += 1;
                 } else {
-                    result.push(stmt.clone());
+                    result.push(statement.clone());
                 }
             }
 
             // Expression statement with a function call (result discarded)
-            Statement::Expr(Expr::Call { function, args }) if inlineable.contains(function) => {
+            Statement::Expression(Expression::Call {
+                function,
+                arguments,
+            }) if inlineable.contains(function) => {
                 if let Some(func_def) = functions.get(function) {
-                    let inlined = inline_call_void(func_def, args, next_value_id);
+                    let inlined = inline_call_void(func_def, arguments, next_value_id);
                     result.extend(inlined);
                     *inlined_count += 1;
                 } else {
-                    result.push(stmt.clone());
+                    result.push(statement.clone());
                 }
             }
 
@@ -1187,26 +1189,26 @@ fn inline_in_statements(
             }
 
             Statement::For {
-                init_values,
-                loop_vars,
-                condition_stmts,
+                initial_values,
+                loop_variables,
+                condition_statements,
                 condition,
                 body,
-                post_input_vars,
+                post_input_variables,
                 post,
                 outputs,
             } => {
                 let new_cond_stmts = inline_in_statements(
-                    condition_stmts,
+                    condition_statements,
                     inlineable,
                     functions,
                     next_value_id,
                     inlined_count,
                 );
                 result.push(Statement::For {
-                    init_values: init_values.clone(),
-                    loop_vars: loop_vars.clone(),
-                    condition_stmts: new_cond_stmts,
+                    initial_values: initial_values.clone(),
+                    loop_variables: loop_variables.clone(),
+                    condition_statements: new_cond_stmts,
                     condition: condition.clone(),
                     body: inline_in_region(
                         body,
@@ -1215,7 +1217,7 @@ fn inline_in_statements(
                         next_value_id,
                         inlined_count,
                     ),
-                    post_input_vars: post_input_vars.clone(),
+                    post_input_variables: post_input_variables.clone(),
                     post: inline_in_region(
                         post,
                         inlineable,
@@ -1271,35 +1273,35 @@ fn inline_in_region(
 /// "exit flag" pattern with If outputs as phi nodes.
 fn inline_call_with_results(
     function: &Function,
-    args: &[Value],
+    arguments: &[Value],
     result_bindings: &[ValueId],
     next_value_id: &mut u32,
 ) -> Vec<Statement> {
     let mut remapper = InlineRemapper::new(*next_value_id);
-    let mut stmts = Vec::new();
+    let mut statements = Vec::new();
 
     // Bind parameters
     debug_assert_eq!(
-        function.params.len(),
-        args.len(),
+        function.parameters.len(),
+        arguments.len(),
         "inliner: argument count mismatch for function (expected {}, got {})",
-        function.params.len(),
-        args.len()
+        function.parameters.len(),
+        arguments.len()
     );
-    for ((param_id, _param_ty), arg) in function.params.iter().zip(args.iter()) {
+    for ((param_id, _param_ty), argument) in function.parameters.iter().zip(arguments.iter()) {
         let new_param_id = remapper.remap_value_id(*param_id);
-        stmts.push(Statement::Let {
+        statements.push(Statement::Let {
             bindings: vec![new_param_id],
-            value: Expr::Var(arg.id),
+            value: Expression::Var(argument.id),
         });
     }
 
     // Initialize return variables
     for &ret_init_id in &function.return_values_initial {
         let new_ret_id = remapper.remap_value_id(ret_init_id);
-        stmts.push(Statement::Let {
+        statements.push(Statement::Let {
             bindings: vec![new_ret_id],
-            value: Expr::Literal {
+            value: Expression::Literal {
                 value: num::BigUint::from(0u32),
                 ty: Type::Int(BitWidth::I256),
             },
@@ -1337,43 +1339,43 @@ fn inline_call_with_results(
 
     // Eliminate all Leave statements
     let elim = eliminate_leaves(&body_with_leave, &initial_accums, next_value_id);
-    stmts.extend(elim.stmts);
+    statements.extend(elim.statements);
 
     // Bind results from final accumulators
     for (result_binding, final_ret) in result_bindings.iter().zip(elim.accum_ids.iter()) {
-        stmts.push(Statement::Let {
+        statements.push(Statement::Let {
             bindings: vec![*result_binding],
-            value: Expr::Var(*final_ret),
+            value: Expression::Var(*final_ret),
         });
     }
 
-    stmts
+    statements
 }
 
 /// Inlines a function call whose result is discarded.
 fn inline_call_void(
     function: &Function,
-    args: &[Value],
+    arguments: &[Value],
     next_value_id: &mut u32,
 ) -> Vec<Statement> {
     let mut remapper = InlineRemapper::new(*next_value_id);
-    let mut stmts = Vec::new();
+    let mut statements = Vec::new();
 
     // Bind parameters
-    for ((param_id, _), arg) in function.params.iter().zip(args.iter()) {
+    for ((param_id, _), argument) in function.parameters.iter().zip(arguments.iter()) {
         let new_param_id = remapper.remap_value_id(*param_id);
-        stmts.push(Statement::Let {
+        statements.push(Statement::Let {
             bindings: vec![new_param_id],
-            value: Expr::Var(arg.id),
+            value: Expression::Var(argument.id),
         });
     }
 
     // Initialize return variables
     for &ret_init_id in &function.return_values_initial {
         let new_ret_id = remapper.remap_value_id(ret_init_id);
-        stmts.push(Statement::Let {
+        statements.push(Statement::Let {
             bindings: vec![new_ret_id],
-            value: Expr::Literal {
+            value: Expression::Literal {
                 value: num::BigUint::from(0u32),
                 ty: Type::Int(BitWidth::I256),
             },
@@ -1393,12 +1395,12 @@ fn inline_call_void(
             .collect();
 
         let elim = eliminate_leaves(&remapped_body, &initial_accums, next_value_id);
-        stmts.extend(elim.stmts);
+        statements.extend(elim.statements);
     } else {
-        stmts.extend(remapped_body);
+        statements.extend(remapped_body);
     }
 
-    stmts
+    statements
 }
 
 /// Estimates the size of a block (same metric used by from_yul.rs).
@@ -1407,8 +1409,8 @@ fn estimate_block_size(block: &Block) -> usize {
 }
 
 /// Estimates the size of a statement.
-fn estimate_statement_size(stmt: &Statement) -> usize {
-    match stmt {
+fn estimate_statement_size(statement: &Statement) -> usize {
+    match statement {
         Statement::Let { .. } => 1,
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => 1,
         Statement::SStore { .. } | Statement::TStore { .. } => 1,
@@ -1431,7 +1433,7 @@ fn estimate_statement_size(stmt: &Statement) -> usize {
             1 + estimate_region_size(body) + estimate_region_size(post)
         }
         Statement::Block(region) => estimate_region_size(region),
-        Statement::Expr(_) => 1,
+        Statement::Expression(_) => 1,
         _ => 1,
     }
 }
@@ -1460,7 +1462,7 @@ mod tests {
         let mut next_id = id * 1000;
         for _ in 0..num_params {
             function
-                .params
+                .parameters
                 .push((ValueId::new(next_id), Type::Int(BitWidth::I256)));
             next_id += 1;
         }
@@ -1476,7 +1478,7 @@ mod tests {
         for i in 0..num_stmts {
             function.body.push(Statement::Let {
                 bindings: vec![ValueId::new(next_id)],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(i as u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1510,16 +1512,16 @@ mod tests {
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
         f.body.push(Statement::Let {
             bindings: vec![ValueId::new(100)],
-            value: Expr::Call {
+            value: Expression::Call {
                 function: g_id,
-                args: vec![],
+                arguments: vec![],
             },
         });
         f.body.push(Statement::Let {
             bindings: vec![ValueId::new(101)],
-            value: Expr::Call {
+            value: Expression::Call {
                 function: g_id,
-                args: vec![],
+                arguments: vec![],
             },
         });
         f.size_estimate = 2;
@@ -1529,9 +1531,9 @@ mod tests {
         object.functions.insert(g_id, g);
 
         // Call f from top-level
-        object.code.push(Statement::Expr(Expr::Call {
+        object.code.push(Statement::Expression(Expression::Call {
             function: f_id,
-            args: vec![],
+            arguments: vec![],
         }));
 
         let analysis = analyze_call_graph(&object);
@@ -1548,9 +1550,9 @@ mod tests {
 
         // Direct recursion: f calls itself
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
-        f.body.push(Statement::Expr(Expr::Call {
+        f.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
-            args: vec![],
+            arguments: vec![],
         }));
         f.size_estimate = 1;
         object.functions.insert(f.id, f);
@@ -1565,16 +1567,16 @@ mod tests {
 
         // Mutual recursion: f calls g, g calls f
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
-        f.body.push(Statement::Expr(Expr::Call {
+        f.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(1),
-            args: vec![],
+            arguments: vec![],
         }));
         f.size_estimate = 1;
 
         let mut g = Function::new(FunctionId::new(1), "g".to_string());
-        g.body.push(Statement::Expr(Expr::Call {
+        g.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
-            args: vec![],
+            arguments: vec![],
         }));
         g.size_estimate = 1;
 
@@ -1598,7 +1600,7 @@ mod tests {
         g.return_values_initial.push(g_ret_init);
         g.body.push(Statement::Let {
             bindings: vec![g_ret_final],
-            value: Expr::Literal {
+            value: Expression::Literal {
                 value: BigUint::from(42u32),
                 ty: Type::Int(BitWidth::I256),
             },
@@ -1612,9 +1614,9 @@ mod tests {
         // Call g from top-level
         object.code.push(Statement::Let {
             bindings: vec![ValueId::new(99)],
-            value: Expr::Call {
+            value: Expression::Call {
                 function: FunctionId::new(1),
-                args: vec![],
+                arguments: vec![],
             },
         });
 
@@ -1632,7 +1634,7 @@ mod tests {
             matches!(
                 s,
                 Statement::Let {
-                    value: Expr::Call { .. },
+                    value: Expression::Call { .. },
                     ..
                 }
             )
@@ -1645,16 +1647,16 @@ mod tests {
         let mut object = Object::new("test".to_string());
 
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
-        f.body.push(Statement::Expr(Expr::Call {
+        f.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
-            args: vec![],
+            arguments: vec![],
         }));
         f.size_estimate = 1;
         object.functions.insert(f.id, f);
 
-        object.code.push(Statement::Expr(Expr::Call {
+        object.code.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
-            args: vec![],
+            arguments: vec![],
         }));
 
         let results = inline_functions(&mut object);
@@ -1681,19 +1683,19 @@ mod tests {
         object.functions.insert(large.id, large);
 
         // Call small once, medium 15 times
-        object.code.push(Statement::Expr(Expr::Call {
+        object.code.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
-            args: vec![],
+            arguments: vec![],
         }));
         for _ in 0..15 {
-            object.code.push(Statement::Expr(Expr::Call {
+            object.code.push(Statement::Expression(Expression::Call {
                 function: FunctionId::new(1),
-                args: vec![],
+                arguments: vec![],
             }));
         }
-        object.code.push(Statement::Expr(Expr::Call {
+        object.code.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(2),
-            args: vec![],
+            arguments: vec![],
         }));
 
         let analysis = analyze_call_graph(&object);

@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::{for_each_stmt, Block, Expr, MemoryRegion, Object, Statement, Value};
+use crate::ir::{for_each_stmt, Block, Expression, MemoryRegion, Object, Statement, Value};
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -181,17 +181,17 @@ impl HeapAnalysis {
 
     /// Analyzes a block for memory access patterns. Recursion through nested
     /// regions is handled by `for_each_stmt`; `analyze_statement` only handles
-    /// the per-stmt analysis (no longer recursing internally).
+    /// the per-statement analysis (no longer recursing internally).
     fn analyze_block(&mut self, block: &Block, in_function: bool) {
-        for_each_stmt(&block.statements, &mut |stmt| {
-            self.analyze_statement(stmt, in_function);
+        for_each_stmt(&block.statements, &mut |statement| {
+            self.analyze_statement(statement, in_function);
         });
     }
 
     /// Analyzes a single statement for memory access patterns. The caller is
     /// responsible for walking nested regions (use `for_each_stmt`).
-    fn analyze_statement(&mut self, stmt: &Statement, in_function: bool) {
-        match stmt {
+    fn analyze_statement(&mut self, statement: &Statement, in_function: bool) {
+        match statement {
             Statement::Let { bindings, value } => {
                 // Track offset information for bindings
                 if let Some(offset_info) = self.analyze_expr_offset(value) {
@@ -311,35 +311,35 @@ impl HeapAnalysis {
                 self.mark_escaping_range(offset, length);
             }
 
-            // Control flow: nested regions (and `For::condition_stmts`) are
+            // Control flow: nested regions (and `For::condition_statements`) are
             // walked by `analyze_block`'s `for_each_stmt`. We only need the
-            // per-stmt setup here — propagating offset info from init_values
-            // to loop_vars/outputs in `For` (those become PHI nodes in LLVM).
+            // per-statement setup here — propagating offset info from initial_values
+            // to loop_variables/outputs in `For` (those become PHI nodes in LLVM).
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
             Statement::For {
-                init_values,
-                loop_vars,
+                initial_values,
+                loop_variables,
                 outputs,
                 ..
             } => {
-                for (init_val, loop_var) in init_values.iter().zip(loop_vars.iter()) {
-                    if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
+                for (initial_value, loop_var) in initial_values.iter().zip(loop_variables.iter()) {
+                    if let Some(mut info) = self.offset_values.get(&initial_value.id.0).cloned() {
                         info.from_literal = false;
                         self.offset_values.insert(loop_var.0, info);
                     }
                 }
-                for (init_val, output) in init_values.iter().zip(outputs.iter()) {
-                    if let Some(mut info) = self.offset_values.get(&init_val.id.0).cloned() {
+                for (initial_value, output) in initial_values.iter().zip(outputs.iter()) {
+                    if let Some(mut info) = self.offset_values.get(&initial_value.id.0).cloned() {
                         info.from_literal = false;
                         self.offset_values.insert(output.0, info);
                     }
                 }
             }
 
-            Statement::Expr(expr) => {
+            Statement::Expression(expression) => {
                 // Check for memory loads that might affect analysis
-                self.analyze_expr_side_effects(expr);
+                self.analyze_expr_side_effects(expression);
             }
 
             // ReturnDataCopy writes ABI-encoded big-endian data that needs byte-swapping.
@@ -522,9 +522,9 @@ impl HeapAnalysis {
     }
 
     /// Analyzes an expression to extract offset information.
-    fn analyze_expr_offset(&self, expr: &Expr) -> Option<OffsetInfo> {
-        match expr {
-            Expr::Literal { value, .. } => {
+    fn analyze_expr_offset(&self, expression: &Expression) -> Option<OffsetInfo> {
+        match expression {
+            Expression::Literal { value, .. } => {
                 let digits = value.to_u64_digits();
                 let static_val = if digits.is_empty() {
                     0
@@ -541,19 +541,19 @@ impl HeapAnalysis {
                 })
             }
 
-            Expr::Var(id) => self.offset_values.get(&id.0).cloned().map(|mut info| {
+            Expression::Var(id) => self.offset_values.get(&id.0).cloned().map(|mut info| {
                 // A variable reference may not be a constant in LLVM IR,
                 // even if the newyork analysis knows its static value.
                 info.from_literal = false;
                 info
             }),
 
-            Expr::Binary { op, lhs, rhs } => {
+            Expression::Binary { op, lhs, rhs } => {
                 let lhs_info = self.offset_values.get(&lhs.id.0);
                 let rhs_info = self.offset_values.get(&rhs.id.0);
 
                 match op {
-                    crate::ir::BinOp::Add => {
+                    crate::ir::BinaryOperation::Add => {
                         // Adding two values: alignment is GCD of alignments
                         let lhs_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
                         let rhs_align = rhs_info.map(|i| i.alignment).unwrap_or(1);
@@ -575,7 +575,7 @@ impl HeapAnalysis {
                         })
                     }
 
-                    crate::ir::BinOp::Mul => {
+                    crate::ir::BinaryOperation::Mul => {
                         // Multiplying by constant affects alignment
                         let static_val = match (
                             lhs_info.and_then(|i| i.static_value),
@@ -602,7 +602,7 @@ impl HeapAnalysis {
                         })
                     }
 
-                    crate::ir::BinOp::And => {
+                    crate::ir::BinaryOperation::And => {
                         // AND with mask can improve alignment knowledge
                         // e.g., x & 0xFFFFFFE0 ensures 32-byte alignment
                         if let Some(mask) = rhs_info.and_then(|i| i.static_value) {
@@ -617,7 +617,7 @@ impl HeapAnalysis {
                         }
                     }
 
-                    crate::ir::BinOp::Shl => {
+                    crate::ir::BinaryOperation::Shl => {
                         // Shift left increases alignment
                         if let Some(shift) = rhs_info.and_then(|i| i.static_value) {
                             if shift < 32 {
@@ -640,27 +640,27 @@ impl HeapAnalysis {
             }
 
             // MLoad returns memory content, not useful for offset analysis
-            Expr::MLoad { .. } => None,
+            Expression::MLoad { .. } => None,
 
             // CallDataLoad could be any value
-            Expr::CallDataLoad { .. } => None,
+            Expression::CallDataLoad { .. } => None,
 
             _ => None,
         }
     }
 
     /// Analyzes expression side effects on memory.
-    fn analyze_expr_side_effects(&mut self, expr: &Expr) {
+    fn analyze_expr_side_effects(&mut self, expression: &Expression) {
         // MLoad doesn't have side effects but we track what regions are read
-        match expr {
-            Expr::MLoad { offset, .. } => {
+        match expression {
+            Expression::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
                 self.track_variable_access(offset);
                 if self.extract_static_offset(offset).is_none() {
                     self.has_dynamic_accesses = true;
                 }
             }
-            Expr::Keccak256 { offset, length } => {
+            Expression::Keccak256 { offset, length } => {
                 let _ = self.classify_access(offset);
                 if self.extract_static_offset(offset).is_none() {
                     self.has_dynamic_accesses = true;
@@ -669,10 +669,10 @@ impl HeapAnalysis {
                 // must be in big-endian format. Mark it as escaping.
                 self.mark_escaping_range(offset, length);
             }
-            Expr::Keccak256Pair { .. } | Expr::Keccak256Single { .. } => {
+            Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {
                 // Keccak256Pair/Single use scratch memory internally; nothing to classify
             }
-            Expr::MappingSLoad { .. } => {
+            Expression::MappingSLoad { .. } => {
                 // MappingSLoad is a compound keccak256+sload; no heap memory effects
             }
             _ => {}
@@ -1026,20 +1026,20 @@ mod tests {
         let analysis = HeapAnalysis::new();
 
         // Zero literal
-        let expr = Expr::Literal {
+        let expression = Expression::Literal {
             value: BigUint::from(0u32),
             ty: crate::ir::Type::default(),
         };
-        let info = analysis.analyze_expr_offset(&expr).unwrap();
+        let info = analysis.analyze_expr_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(0));
         assert_eq!(info.alignment, 32); // Zero is maximally aligned
 
         // Word-aligned literal (0x40 = 64)
-        let expr = Expr::Literal {
+        let expression = Expression::Literal {
             value: BigUint::from(64u32),
             ty: crate::ir::Type::default(),
         };
-        let info = analysis.analyze_expr_offset(&expr).unwrap();
+        let info = analysis.analyze_expr_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(64));
         // 64 = 2^6, so alignment is capped at 32
         assert_eq!(info.alignment, 5);

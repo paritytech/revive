@@ -105,13 +105,12 @@ impl<'ctx> Function<'ctx> {
     ) {
         for attribute_kind in attributes {
             match attribute_kind {
-                // `Memory` is an integer attribute whose value encodes per-
-                // location read/write effects (Other / ArgMem / InaccessibleMem
-                // pairs of bits). The all-zero encoding is `memory(none)` —
-                // the only variant any caller in this crate currently wants —
-                // so we apply it with value 0 here. If a finer-grained
-                // memory effect is ever needed, this arm should grow a
-                // dedicated representation rather than accept arbitrary u64.
+                // `Memory` is an integer attribute whose value encodes per-location read/write
+                // effects (Other / ArgMem / InaccessibleMem pairs of bits). The all-zero encoding
+                // is `memory(none)` — the only variant any caller in this crate currently wants —
+                // so we apply it with value 0 here. If a finer-grained memory effect is ever
+                // needed, this arm should grow a dedicated representation rather than accept
+                // arbitrary u64.
                 Attribute::Memory => declaration.value.add_attribute(
                     inkwell::attributes::AttributeLoc::Function,
                     llvm.create_enum_attribute(Attribute::Memory as u32, 0),
@@ -178,15 +177,13 @@ impl<'ctx> Function<'ctx> {
             );
         }
 
-        // `NoFree` and `NoUnwind` are facts about the PVM target, not
-        // optimization heuristics:
-        //   * PVM has no `free` (the heap is bump-allocated via `sbrk`), so
-        //     no Solidity-emitted function can ever release memory.
-        //   * PVM has no stack unwinding: Solidity errors leave a frame via
-        //     `revert` (`seal_return(1, ..)` + `unreachable`), never via an
-        //     unwind edge. Marking every function `nounwind` lets LLVM elide
-        //     CFI directives, lower `invoke` to `call`, and skip exception
-        //     frame setup.
+        // `NoFree` and `NoUnwind` are facts about the PVM target, not optimization heuristics:
+        //   * PVM has no `free` (the heap is bump-allocated via `sbrk`), so no Solidity-emitted
+        //     function can ever release memory.
+        //   * PVM has no stack unwinding: Solidity errors leave a frame via `revert`
+        //     (`seal_return(1, ..)` + `unreachable`), never via an unwind edge. Marking every
+        //     function `nounwind` lets LLVM elide CFI directives, lower `invoke` to `call`, and
+        //     skip exception frame setup.
         Self::set_attributes(
             llvm,
             declaration,

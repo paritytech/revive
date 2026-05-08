@@ -57,8 +57,9 @@ pub use inline::{
     analyze_call_graph, inline_functions, CallGraphAnalysis, InlineDecision, InlineResults,
 };
 pub use ir::{
-    AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
-    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
+    AddressSpace, BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function,
+    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
+    ValueId,
 };
 pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
@@ -137,14 +138,14 @@ pub fn translate_yul_object(
     type_info.infer_object_tree(&ir_object);
 
     // Iterative parameter and return type narrowing with full re-inference.
-    // Each iteration: narrow params/returns → re-run full type inference with the new
+    // Each iteration: narrow parameters/returns → re-run full type inference with the new
     // types → refine call-site demands. The re-inference cascades forward
-    // widths: narrowed params (I64) produce narrow add/and results. The demand
+    // widths: narrowed parameters (I64) produce narrow add/and results. The demand
     // refinement ensures call-site arguments also get narrow demands.
     for _ in 0..4 {
         let mut changed = type_info.narrow_function_params(&mut ir_object);
-        // Call-site forward narrowing: narrow params where ALL callers provide
-        // narrow arguments (e.g., and(val, 2^160-1) for address validation).
+        // Call-site forward narrowing: narrow parameters where ALL callers provide
+        // narrow arguments (e.g., and(value, 2^160-1) for address validation).
         changed |= type_info.narrow_function_params_from_callers(&mut ir_object);
         // Forward-based return narrowing: narrow returns whose min_width < I256
         changed |= type_info.narrow_function_returns(&mut ir_object);
@@ -155,7 +156,7 @@ pub fn translate_yul_object(
             break;
         }
         // Re-run full type inference with narrowed param/return types.
-        // The forward pass reads function.params (now narrowed), seeding
+        // The forward pass reads function.parameters (now narrowed), seeding
         // min_width at I64 instead of I256. This cascades through the
         // function body: add(I64, I8) → I65, and(I65, I256) → I65, etc.
         type_info = TypeInference::new();
@@ -220,13 +221,13 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     simplifier2.simplify_object(object);
 
     // Compound outlining: detect multi-statement patterns like
-    // `let hash = keccak256_pair(key, slot); let val = sload(hash)` and replace
+    // `let hash = keccak256_pair(key, slot); let value = sload(hash)` and replace
     // with compound IR nodes `mapping_sload(key, slot)` that get lowered to
     // keccak256_pair + sload/sstore calls, eliminating the intermediate hash value.
     compound_outlining::outline_compounds_in_object(object);
 
-    // Guard narrowing: detect `if gt(val, MASK) { revert/panic }` patterns and
-    // insert `val_narrow = and(val, MASK)` after the guard. This gives type
+    // Guard narrowing: detect `if gt(value, MASK) { revert/panic }` patterns and
+    // insert `val_narrow = and(value, MASK)` after the guard. This gives type
     // inference proof that the value fits in fewer bits, enabling downstream
     // narrowing of comparisons, arithmetic, and memory operations.
     guard_narrow::narrow_guards_in_object(object);

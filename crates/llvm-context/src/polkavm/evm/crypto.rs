@@ -36,22 +36,20 @@ pub fn sha3_one_word<'ctx>(
     word0: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     use crate::polkavm::context::pointer::heap::Keccak256OneWord;
-    if let Some(function) = context.get_function(Keccak256OneWord::NAME, false) {
-        let result = context
-            .build_call(
-                function.borrow().declaration(),
-                &[word0.into()],
-                "keccak256_single_result",
-            )
-            .expect("should always return a value");
-        Ok(result)
-    } else {
-        // Inline fallback: mstore(0, word0); sha3(0, 32)
+    let Some(function) = context.get_function(Keccak256OneWord::NAME, false) else {
         let offset = context.word_const(0);
         let length = context.word_const(32);
         crate::polkavm::evm::memory::store(context, offset, word0)?;
-        sha3(context, offset, length)
-    }
+        return sha3(context, offset, length);
+    };
+    let result = context
+        .build_call(
+            function.borrow().declaration(),
+            &[word0.into()],
+            "keccak256_single_result",
+        )
+        .expect("ICE: keccak256_one_word should return a value");
+    Ok(result)
 }
 
 /// Translates keccak256 of two 256-bit words via a deduplicated helper function.
@@ -65,13 +63,13 @@ pub fn sha3_two_words<'ctx>(
     use crate::polkavm::context::pointer::heap::Keccak256TwoWords;
     let function = context
         .get_function(Keccak256TwoWords::NAME, false)
-        .expect("__revive_keccak256_two_words should be declared");
+        .expect("ICE: __revive_keccak256_two_words should be declared");
     let result = context
         .build_call(
             function.borrow().declaration(),
             &[word0.into(), word1.into()],
             "keccak256_pair_result",
         )
-        .expect("should always return a value");
+        .expect("ICE: keccak256_two_words should return a value");
     Ok(result)
 }

@@ -4,13 +4,11 @@ use inkwell::values::BasicValueEnum;
 
 use revive_common::BYTE_LENGTH_BYTE;
 use revive_common::BYTE_LENGTH_WORD;
+use revive_common::BYTE_LENGTH_X64;
 
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
-
-/// Size of a 64-bit word in bytes.
-const BYTE_LENGTH_QWORD: usize = 8;
 
 /// Load a word size value from a heap pointer.
 /// Uses 4x 64-bit loads with bswap for efficient byte-order conversion.
@@ -34,8 +32,6 @@ impl RuntimeFunction for LoadWord {
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
-
-        // Use efficient 4x64-bit loads with word shuffling
         let result = build_efficient_load_swap(context, pointer.value)?;
         Ok(Some(result))
     }
@@ -75,34 +71,9 @@ impl RuntimeFunction for StoreWord {
             .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
         let value = Self::paramater(context, 1).into_int_value();
-
-        // Use efficient 4x64-bit stores with word shuffling
         build_efficient_store_swap(context, pointer.value, value)?;
         Ok(None)
     }
-}
-
-/// Builds an efficient 256-bit store with byte-swap at a pointer obtained via
-/// unchecked GEP (no sbrk bounds check). For use by the newyork InlineByteSwap
-/// mode on constant offsets within the static heap.
-pub fn store_bswap_unchecked<'ctx>(
-    context: &Context<'ctx>,
-    offset: inkwell::values::IntValue<'ctx>,
-    value: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<()> {
-    let pointer = context.build_heap_gep_unchecked(offset)?;
-    build_efficient_store_swap(context, pointer.value, value)
-}
-
-/// Builds an efficient 256-bit load with byte-swap at a pointer obtained via
-/// unchecked GEP (no sbrk bounds check). For use by the newyork InlineByteSwap
-/// mode on constant offsets within the static heap.
-pub fn load_bswap_unchecked<'ctx>(
-    context: &Context<'ctx>,
-    offset: inkwell::values::IntValue<'ctx>,
-) -> anyhow::Result<BasicValueEnum<'ctx>> {
-    let pointer = context.build_heap_gep_unchecked(offset)?;
-    build_efficient_load_swap(context, pointer.value)
 }
 
 /// Builds an efficient 256-bit load with byte-swap using 4x 64-bit operations.
@@ -112,7 +83,7 @@ pub fn load_bswap_unchecked<'ctx>(
 /// 1. Load 4x 64-bit values
 /// 2. Byte-swap each 64-bit value using llvm.bswap.i64
 /// 3. Combine them in reversed word order to form the 256-bit result
-fn build_efficient_load_swap<'ctx>(
+pub(crate) fn build_efficient_load_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
@@ -120,69 +91,71 @@ fn build_efficient_load_swap<'ctx>(
     let i8_type = context.llvm().custom_width_int_type(8);
     let word_type = context.word_type();
 
-    // Get the bswap.i64 intrinsic
     let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")
-        .expect("llvm.bswap.i64 intrinsic exists");
-    let bswap64_fn = bswap64
+        .expect("ICE: llvm.bswap.i64 intrinsic exists");
+    let bswap64_function = bswap64
         .get_declaration(context.module(), &[i64_type.into()])
-        .expect("bswap.i64 declaration");
+        .expect("ICE: bswap.i64 declaration");
 
-    // Load 4 qwords at byte offsets 0, 8, 16, 24 and byte-swap each
-    // Use i8 as element type so GEP offset is in bytes
-    let mut swapped = Vec::with_capacity(4);
-    for i in 0..4 {
+    let mut swapped_x64_values = Vec::with_capacity(4);
+    for index in 0..4 {
         let gep_offset = context
             .xlen_type()
-            .const_int(i * BYTE_LENGTH_QWORD as u64, false);
-        let byte_ptr = unsafe {
+            .const_int(index * BYTE_LENGTH_X64 as u64, false);
+        let byte_pointer = unsafe {
             context.builder().build_gep(
                 i8_type,
                 pointer,
                 &[gep_offset],
-                &format!("qword_ptr_{i}"),
+                &format!("byte_pointer_{index}"),
             )?
         };
-        let qword = context
+        let x64_value = context
             .builder()
-            .build_load(i64_type, byte_ptr, &format!("qword_{i}"))?
+            .build_load(i64_type, byte_pointer, &format!("x64_value_{index}"))?
             .into_int_value();
-        // Set alignment to 8 bytes to allow efficient 64-bit loads
         context
             .basic_block()
             .get_last_instruction()
-            .expect("Always exists")
-            .set_alignment(BYTE_LENGTH_QWORD as u32)
-            .expect("Alignment is valid");
+            .expect("ICE: load instruction always exists")
+            .set_alignment(BYTE_LENGTH_X64 as u32)
+            .expect("ICE: alignment is valid");
 
-        // Byte-swap the 64-bit value
-        let swapped_qword = context
+        let swapped_x64_value = context
             .builder()
-            .build_call(bswap64_fn, &[qword.into()], &format!("swapped_{i}"))?
+            .build_call(
+                bswap64_function,
+                &[x64_value.into()],
+                &format!("swapped_x64_value_{index}"),
+            )?
             .try_as_basic_value()
             .unwrap_basic()
             .into_int_value();
-        swapped.push(swapped_qword);
+        swapped_x64_values.push(swapped_x64_value);
     }
 
-    // Combine in reversed word order: qword[3], qword[2], qword[1], qword[0]
-    // This achieves the full big-endian to little-endian conversion
-    let mut result = context
-        .builder()
-        .build_int_z_extend(swapped[3], word_type, "ext_0")?;
-    for (i, &qword) in swapped.iter().rev().skip(1).enumerate() {
-        let extended =
-            context
-                .builder()
-                .build_int_z_extend(qword, word_type, &format!("ext_{}", i + 1))?;
-        let shift_amount = word_type.const_int(64 * (i + 1) as u64, false);
+    // Combine in reversed register order: chunks 3, 2, 1, 0 from most to
+    // least significant. This achieves the full big-endian to little-endian
+    // conversion of the 256-bit word.
+    let mut result =
+        context
+            .builder()
+            .build_int_z_extend(swapped_x64_values[3], word_type, "ext_0")?;
+    for (index, &x64_value) in swapped_x64_values.iter().rev().skip(1).enumerate() {
+        let extended = context.builder().build_int_z_extend(
+            x64_value,
+            word_type,
+            &format!("ext_{}", index + 1),
+        )?;
+        let shift_amount = word_type.const_int(64 * (index + 1) as u64, false);
         let shifted = context.builder().build_left_shift(
             extended,
             shift_amount,
-            &format!("shift_{}", i + 1),
+            &format!("shift_{}", index + 1),
         )?;
         result = context
             .builder()
-            .build_or(result, shifted, &format!("or_{}", i + 1))?;
+            .build_or(result, shifted, &format!("or_{}", index + 1))?;
     }
 
     Ok(result.into())
@@ -195,7 +168,7 @@ fn build_efficient_load_swap<'ctx>(
 /// 1. Extract 4x 64-bit values from the 256-bit word
 /// 2. Byte-swap each 64-bit value using llvm.bswap.i64
 /// 3. Store them in reversed word order
-fn build_efficient_store_swap<'ctx>(
+pub(crate) fn build_efficient_store_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
@@ -204,55 +177,57 @@ fn build_efficient_store_swap<'ctx>(
     let i8_type = context.llvm().custom_width_int_type(8);
     let word_type = context.word_type();
 
-    // Get the bswap.i64 intrinsic
     let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")
-        .expect("llvm.bswap.i64 intrinsic exists");
-    let bswap64_fn = bswap64
+        .expect("ICE: llvm.bswap.i64 intrinsic exists");
+    let bswap64_function = bswap64
         .get_declaration(context.module(), &[i64_type.into()])
-        .expect("bswap.i64 declaration");
+        .expect("ICE: bswap.i64 declaration");
 
-    // Extract 4 qwords, byte-swap each, and store in reversed order
-    for i in 0..4 {
-        // Extract the i-th qword (from least significant)
-        let shift_amount = word_type.const_int(64 * i as u64, false);
+    for index in 0..4 {
+        let shift_amount = word_type.const_int(64 * index as u64, false);
         let shifted = context.builder().build_right_shift(
             value,
             shift_amount,
             false,
-            &format!("shift_{i}"),
+            &format!("shift_{index}"),
         )?;
-        let qword =
+        let x64_value =
             context
                 .builder()
-                .build_int_truncate(shifted, i64_type, &format!("trunc_{i}"))?;
+                .build_int_truncate(shifted, i64_type, &format!("trunc_{index}"))?;
 
-        // Byte-swap the 64-bit value
-        let swapped_qword = context
+        let swapped_x64_value = context
             .builder()
-            .build_call(bswap64_fn, &[qword.into()], &format!("swap_{i}"))?
+            .build_call(
+                bswap64_function,
+                &[x64_value.into()],
+                &format!("swap_x64_value_{index}"),
+            )?
             .try_as_basic_value()
             .unwrap_basic()
             .into_int_value();
 
-        // Store at reversed position: qword 0 goes to byte offset 24, qword 3 goes to byte offset 0
-        // Use i8 as element type so GEP offset is in bytes
-        let store_byte_offset = (3 - i) * BYTE_LENGTH_QWORD;
+        // Reverse the position so the least-significant chunk lands at the
+        // highest byte offset; this performs the big-endian byte order on
+        // the 256-bit word as a whole.
+        let store_byte_offset = (3 - index) * BYTE_LENGTH_X64;
         let gep_offset = context
             .xlen_type()
             .const_int(store_byte_offset as u64, false);
-        let byte_ptr = unsafe {
+        let byte_pointer = unsafe {
             context.builder().build_gep(
                 i8_type,
                 pointer,
                 &[gep_offset],
-                &format!("store_ptr_{i}"),
+                &format!("store_pointer_{index}"),
             )?
         };
-        let store_inst = context.builder().build_store(byte_ptr, swapped_qword)?;
-        // Set alignment to 8 bytes to allow efficient 64-bit stores
-        store_inst
-            .set_alignment(BYTE_LENGTH_QWORD as u32)
-            .expect("Alignment is valid");
+        let store_instruction = context
+            .builder()
+            .build_store(byte_pointer, swapped_x64_value)?;
+        store_instruction
+            .set_alignment(BYTE_LENGTH_X64 as u32)
+            .expect("ICE: alignment is valid");
     }
 
     Ok(())
@@ -296,11 +271,9 @@ impl RuntimeFunction for LoadWordNative {
         context
             .basic_block()
             .get_last_instruction()
-            .expect("Always exists")
+            .expect("ICE: load instruction always exists")
             .set_alignment(BYTE_LENGTH_BYTE as u32)
-            .expect("Alignment is valid");
-
-        // No byte-swap for native operations
+            .expect("ICE: alignment is valid");
         Ok(Some(value))
     }
 }
@@ -338,15 +311,13 @@ impl RuntimeFunction for StoreWordNative {
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
         let pointer = context.build_heap_gep(offset, length)?;
-
-        // No byte-swap for native operations
         let value = Self::paramater(context, 1);
 
         context
             .builder()
             .build_store(pointer.value, value)?
             .set_alignment(BYTE_LENGTH_BYTE as u32)
-            .expect("Alignment is valid");
+            .expect("ICE: alignment is valid");
         Ok(None)
     }
 }
@@ -393,20 +364,16 @@ impl RuntimeFunction for Keccak256OneWord {
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let word0 = Self::paramater(context, 0).into_int_value();
 
-        // Store word0 at heap offset 0 using inline bswap (no sbrk needed)
         let offset0 = context.xlen_type().const_int(0, false);
-        store_bswap_unchecked(context, offset0, word0)?;
+        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset0, word0)?;
 
-        // Get heap pointer directly (offset 0 is always within static heap)
         let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
 
-        // Allocate output on stack
         let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
-        // Call hash_keccak_256
         context.build_runtime_call(
             revive_runtime_api::polkavm_imports::HASH_KECCAK_256,
             &[
@@ -416,7 +383,6 @@ impl RuntimeFunction for Keccak256OneWord {
             ],
         );
 
-        // Load result and byte-swap
         let result = context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?)?;
         Ok(Some(result))
     }
@@ -466,26 +432,21 @@ impl RuntimeFunction for Keccak256TwoWords {
         let word0 = Self::paramater(context, 0).into_int_value();
         let word1 = Self::paramater(context, 1).into_int_value();
 
-        // Store word0 at heap offset 0 using inline bswap (no sbrk needed)
         let offset0 = context.xlen_type().const_int(0, false);
-        store_bswap_unchecked(context, offset0, word0)?;
+        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset0, word0)?;
 
-        // Store word1 at heap offset 32 using inline bswap (no sbrk needed)
         let offset32 = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
-        store_bswap_unchecked(context, offset32, word1)?;
+        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset32, word1)?;
 
-        // Get heap pointer directly (offset 0 is always within static heap)
         let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(2 * BYTE_LENGTH_WORD as u64, false);
 
-        // Allocate output on stack
         let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
 
-        // Call hash_keccak_256
         context.build_runtime_call(
             revive_runtime_api::polkavm_imports::HASH_KECCAK_256,
             &[
@@ -495,7 +456,6 @@ impl RuntimeFunction for Keccak256TwoWords {
             ],
         );
 
-        // Load result and byte-swap
         let result = context.build_byte_swap(context.build_load(output_pointer, "sha3_output")?)?;
         Ok(Some(result))
     }

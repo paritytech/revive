@@ -18,7 +18,7 @@
 //! }
 //! ```
 
-use crate::ir::{Block, Expr, Function, Object, Region, Statement, Value, ValueId};
+use crate::ir::{Block, Expression, Function, Object, Region, Statement, Value, ValueId};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
@@ -156,7 +156,7 @@ impl Validator {
         self.enter_scope();
 
         // Define parameters
-        for (id, _ty) in &function.params {
+        for (id, _ty) in &function.parameters {
             self.define(*id);
         }
 
@@ -196,14 +196,14 @@ impl Validator {
     }
 
     fn validate_block(&mut self, block: &Block, context: &str) {
-        for (i, stmt) in block.statements.iter().enumerate() {
-            self.validate_statement(stmt, &format!("{}[{}]", context, i));
+        for (i, statement) in block.statements.iter().enumerate() {
+            self.validate_statement(statement, &format!("{}[{}]", context, i));
         }
     }
 
     fn validate_region(&mut self, region: &Region, context: &str) {
-        for (i, stmt) in region.statements.iter().enumerate() {
-            self.validate_statement(stmt, &format!("{}[{}]", context, i));
+        for (i, statement) in region.statements.iter().enumerate() {
+            self.validate_statement(statement, &format!("{}[{}]", context, i));
         }
 
         // Validate yields
@@ -212,8 +212,8 @@ impl Validator {
         }
     }
 
-    fn validate_statement(&mut self, stmt: &Statement, context: &str) {
-        match stmt {
+    fn validate_statement(&mut self, statement: &Statement, context: &str) {
+        match statement {
             Statement::Let { bindings, value } => {
                 // First validate the expression (uses)
                 self.validate_expr(value, context);
@@ -366,9 +366,9 @@ impl Validator {
             }
 
             Statement::For {
-                init_values,
-                loop_vars,
-                condition_stmts,
+                initial_values,
+                loop_variables,
+                condition_statements,
                 condition,
                 body,
                 post,
@@ -376,29 +376,29 @@ impl Validator {
                 ..
             } => {
                 // Validate init values
-                for v in init_values {
+                for v in initial_values {
                     self.use_value(v, context);
                 }
 
-                // Loop vars must match init values
-                if loop_vars.len() != init_values.len() {
+                // Loop variables must match init values
+                if loop_variables.len() != initial_values.len() {
                     self.error(ValidationError::FunctionError(format!(
-                        "{}: loop_vars count ({}) != init_values count ({})",
+                        "{}: loop_variables count ({}) != initial_values count ({})",
                         context,
-                        loop_vars.len(),
-                        init_values.len()
+                        loop_variables.len(),
+                        initial_values.len()
                     )));
                 }
 
                 // Enter loop scope and define loop variables
                 self.enter_scope();
-                for id in loop_vars {
+                for id in loop_variables {
                     self.define(*id);
                 }
 
                 // Validate condition statements
-                for (i, stmt) in condition_stmts.iter().enumerate() {
-                    self.validate_statement(stmt, &format!("{} cond_stmt[{}]", context, i));
+                for (i, statement) in condition_statements.iter().enumerate() {
+                    self.validate_statement(statement, &format!("{} cond_stmt[{}]", context, i));
                 }
 
                 // Validate condition expression
@@ -410,10 +410,10 @@ impl Validator {
                 // Validate post
                 self.validate_region(post, &format!("{} post", context));
 
-                // Post yields should match loop vars count (for next iteration)
-                if loop_vars.len() != post.yields.len() {
+                // Post yields should match loop variables count (for next iteration)
+                if loop_variables.len() != post.yields.len() {
                     self.error(ValidationError::YieldCountMismatch {
-                        expected: loop_vars.len(),
+                        expected: loop_variables.len(),
                         actual: post.yields.len(),
                         location: format!("{} post", context),
                     });
@@ -421,13 +421,13 @@ impl Validator {
 
                 self.exit_scope();
 
-                // Outputs should match loop vars (final values)
-                if outputs.len() != loop_vars.len() {
+                // Outputs should match loop variables (final values)
+                if outputs.len() != loop_variables.len() {
                     self.error(ValidationError::FunctionError(format!(
-                        "{}: outputs count ({}) != loop_vars count ({})",
+                        "{}: outputs count ({}) != loop_variables count ({})",
                         context,
                         outputs.len(),
-                        loop_vars.len()
+                        loop_variables.len()
                     )));
                 }
 
@@ -579,8 +579,8 @@ impl Validator {
                 self.exit_scope();
             }
 
-            Statement::Expr(expr) => {
-                self.validate_expr(expr, context);
+            Statement::Expression(expression) => {
+                self.validate_expr(expression, context);
             }
 
             Statement::SetImmutable { value, .. } => {
@@ -589,123 +589,126 @@ impl Validator {
         }
     }
 
-    fn validate_expr(&mut self, expr: &Expr, context: &str) {
-        match expr {
-            Expr::Literal { .. } => {}
+    fn validate_expr(&mut self, expression: &Expression, context: &str) {
+        match expression {
+            Expression::Literal { .. } => {}
 
-            Expr::Var(id) => {
+            Expression::Var(id) => {
                 self.use_value_id(*id, context);
             }
 
-            Expr::Binary { lhs, rhs, .. } => {
+            Expression::Binary { lhs, rhs, .. } => {
                 self.use_value(lhs, context);
                 self.use_value(rhs, context);
             }
 
-            Expr::Ternary { a, b, n, .. } => {
+            Expression::Ternary { a, b, n, .. } => {
                 self.use_value(a, context);
                 self.use_value(b, context);
                 self.use_value(n, context);
             }
 
-            Expr::Unary { operand, .. } => {
+            Expression::Unary { operand, .. } => {
                 self.use_value(operand, context);
             }
 
-            Expr::CallDataLoad { offset } => {
+            Expression::CallDataLoad { offset } => {
                 self.use_value(offset, context);
             }
 
-            Expr::CallValue
-            | Expr::Caller
-            | Expr::Origin
-            | Expr::CallDataSize
-            | Expr::CodeSize
-            | Expr::GasPrice
-            | Expr::ReturnDataSize
-            | Expr::Coinbase
-            | Expr::Timestamp
-            | Expr::Number
-            | Expr::Difficulty
-            | Expr::GasLimit
-            | Expr::ChainId
-            | Expr::SelfBalance
-            | Expr::BaseFee
-            | Expr::BlobBaseFee
-            | Expr::Gas
-            | Expr::MSize
-            | Expr::Address => {}
+            Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ReturnDataSize
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobBaseFee
+            | Expression::Gas
+            | Expression::MSize
+            | Expression::Address => {}
 
-            Expr::ExtCodeSize { address } => {
+            Expression::ExtCodeSize { address } => {
                 self.use_value(address, context);
             }
 
-            Expr::ExtCodeHash { address } => {
+            Expression::ExtCodeHash { address } => {
                 self.use_value(address, context);
             }
 
-            Expr::BlockHash { number } => {
+            Expression::BlockHash { number } => {
                 self.use_value(number, context);
             }
 
-            Expr::BlobHash { index } => {
+            Expression::BlobHash { index } => {
                 self.use_value(index, context);
             }
 
-            Expr::Balance { address } => {
+            Expression::Balance { address } => {
                 self.use_value(address, context);
             }
 
-            Expr::MLoad { offset, .. } => {
+            Expression::MLoad { offset, .. } => {
                 self.use_value(offset, context);
             }
 
-            Expr::SLoad { key, .. } => {
+            Expression::SLoad { key, .. } => {
                 self.use_value(key, context);
             }
 
-            Expr::TLoad { key } => {
+            Expression::TLoad { key } => {
                 self.use_value(key, context);
             }
 
-            Expr::Call { function, args } => {
+            Expression::Call {
+                function,
+                arguments,
+            } => {
                 if !self.known_functions.contains(&function.0) {
                     self.error(ValidationError::UnknownFunction(function.0));
                 }
-                for arg in args {
-                    self.use_value(arg, context);
+                for argument in arguments {
+                    self.use_value(argument, context);
                 }
             }
 
-            Expr::Truncate { value, .. }
-            | Expr::ZeroExtend { value, .. }
-            | Expr::SignExtendTo { value, .. } => {
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => {
                 self.use_value(value, context);
             }
 
-            Expr::Keccak256 { offset, length } => {
+            Expression::Keccak256 { offset, length } => {
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
 
-            Expr::Keccak256Pair { word0, word1 } => {
+            Expression::Keccak256Pair { word0, word1 } => {
                 self.use_value(word0, context);
                 self.use_value(word1, context);
             }
 
-            Expr::Keccak256Single { word0 } => {
+            Expression::Keccak256Single { word0 } => {
                 self.use_value(word0, context);
             }
 
-            Expr::MappingSLoad { key, slot } => {
+            Expression::MappingSLoad { key, slot } => {
                 self.use_value(key, context);
                 self.use_value(slot, context);
             }
 
-            Expr::DataOffset { .. }
-            | Expr::DataSize { .. }
-            | Expr::LoadImmutable { .. }
-            | Expr::LinkerSymbol { .. } => {}
+            Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
+            | Expression::LinkerSymbol { .. } => {}
         }
     }
 }
@@ -714,7 +717,8 @@ impl Validator {
 mod tests {
     use super::*;
     use crate::ir::{
-        BinOp, BitWidth, Block, FunctionId, Object, Region, Statement, Type, Value, ValueId,
+        BinaryOperation, BitWidth, Block, FunctionId, Object, Region, Statement, Type, Value,
+        ValueId,
     };
     use num::BigUint;
     use std::collections::BTreeMap;
@@ -731,14 +735,14 @@ mod tests {
                 statements: vec![
                     Statement::Let {
                         bindings: vec![ValueId(0)],
-                        value: Expr::Literal {
+                        value: Expression::Literal {
                             value: BigUint::from(0u64),
                             ty: Type::Int(BitWidth::I256),
                         },
                     },
                     Statement::Let {
                         bindings: vec![ValueId(1)],
-                        value: Expr::Var(ValueId(0)),
+                        value: Expression::Var(ValueId(0)),
                     },
                 ],
             },
@@ -756,7 +760,7 @@ mod tests {
             code: Block {
                 statements: vec![Statement::Let {
                     bindings: vec![ValueId(1)],
-                    value: Expr::Var(ValueId(0)), // v0 not defined
+                    value: Expression::Var(ValueId(0)), // v0 not defined
                 }],
             },
             functions: BTreeMap::new(),
@@ -779,7 +783,7 @@ mod tests {
                 statements: vec![
                     Statement::Let {
                         bindings: vec![ValueId(0)],
-                        value: Expr::Literal {
+                        value: Expression::Literal {
                             value: BigUint::from(1u64),
                             ty: Type::Int(BitWidth::I256),
                         },
@@ -819,15 +823,15 @@ mod tests {
             Function {
                 id: FunctionId(0),
                 name: "add_one".to_string(),
-                params: vec![(ValueId(0), Type::Int(BitWidth::I256))],
+                parameters: vec![(ValueId(0), Type::Int(BitWidth::I256))],
                 returns: vec![Type::Int(BitWidth::I256)],
                 return_values_initial: vec![ValueId(1)],
                 return_values: vec![ValueId(2)],
                 body: Block {
                     statements: vec![Statement::Let {
                         bindings: vec![ValueId(2)],
-                        value: Expr::Binary {
-                            op: BinOp::Add,
+                        value: Expression::Binary {
+                            op: BinaryOperation::Add,
                             lhs: int_value(0),
                             rhs: int_value(1),
                         },
@@ -856,7 +860,7 @@ mod tests {
             Function {
                 id: FunctionId(0),
                 name: "bad".to_string(),
-                params: vec![],
+                parameters: vec![],
                 returns: vec![Type::Int(BitWidth::I256), Type::Int(BitWidth::I256)],
                 return_values_initial: vec![ValueId(0)], // Only 1, should be 2
                 return_values: vec![ValueId(0)],

@@ -32,14 +32,14 @@ pub fn load_outlined<'ctx>(
     let offset = context.clip_to_xlen(offset)?;
     let function = context
         .get_function(CallDataLoad::NAME, false)
-        .expect("__revive_calldataload should be declared");
+        .expect("ICE: __revive_calldataload should be declared");
     let result = context
         .build_call(
             function.borrow().declaration(),
             &[offset.into()],
             "calldataload_result",
         )
-        .expect("__revive_calldataload should return a value");
+        .expect("ICE: __revive_calldataload should return a value");
     Ok(result)
 }
 

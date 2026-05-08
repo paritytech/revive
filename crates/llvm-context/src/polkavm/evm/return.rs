@@ -49,7 +49,7 @@ pub fn revert_empty_outlined(context: &mut Context) -> anyhow::Result<()> {
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
         .get_function(RevertEmpty::NAME, false)
-        .expect("__revive_revert_0 should be declared");
+        .expect("ICE: __revive_revert_0 should be declared");
     context.build_call(function.borrow().declaration(), &[], "revert_empty");
     Ok(())
 }
@@ -65,7 +65,7 @@ pub fn revert_outlined<'ctx>(
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
         .get_function(Revert::NAME, false)
-        .expect("__revive_revert should be declared");
+        .expect("ICE: __revive_revert should be declared");
     context.build_call(
         function.borrow().declaration(),
         &[length.into()],

@@ -55,8 +55,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, Zero};
 
 use crate::ir::{
-    for_each_stmt, BinOp, BitWidth, Block, Expr, FunctionId, MemoryRegion, Object, Region,
-    Statement, Type, Value, ValueId,
+    for_each_stmt, BinaryOperation, BitWidth, Block, Expression, FunctionId, MemoryRegion, Object,
+    Region, Statement, Type, Value, ValueId,
 };
 
 /// Results of memory optimization.
@@ -163,8 +163,8 @@ impl MemoryOptimizer {
         // First pass: analyze statements and track dead stores
         let mut processed = Vec::with_capacity(statements.len());
 
-        for (idx, stmt) in statements.into_iter().enumerate() {
-            match stmt {
+        for (index, statement) in statements.into_iter().enumerate() {
+            match statement {
                 Statement::MStore {
                     offset,
                     value,
@@ -185,12 +185,12 @@ impl MemoryOptimizer {
                                 "Dead store at index {} (offset {}) - overwritten at index {}",
                                 prev_idx,
                                 static_offset,
-                                idx
+                                index
                             );
                         }
 
                         // Track this store as pending at the exact byte offset
-                        self.pending_stores.insert(static_offset, idx);
+                        self.pending_stores.insert(static_offset, index);
 
                         self.memory_state.insert(
                             word_offset,
@@ -254,7 +254,7 @@ impl MemoryOptimizer {
                 Statement::Let { bindings, value } => {
                     // Check if the value is a function call - if so, invalidate memory state
                     // because internal functions can modify memory
-                    let is_call = matches!(&value, Expr::Call { .. });
+                    let is_call = matches!(&value, Expression::Call { .. });
 
                     // Check for load-after-store elimination opportunity
                     let optimized_value = self.optimize_expr_with_read_tracking(value);
@@ -380,12 +380,12 @@ impl MemoryOptimizer {
                 }
 
                 Statement::For {
-                    init_values,
-                    loop_vars,
-                    mut condition_stmts,
+                    initial_values,
+                    loop_variables,
+                    mut condition_statements,
                     condition,
                     mut body,
-                    post_input_vars,
+                    post_input_variables,
                     mut post,
                     outputs,
                 } => {
@@ -395,7 +395,7 @@ impl MemoryOptimizer {
                     self.pending_stores.clear();
 
                     // Recurse into loop components
-                    condition_stmts = self.optimize_statements(condition_stmts);
+                    condition_statements = self.optimize_statements(condition_statements);
                     self.memory_state.clear();
                     self.constant_values.clear();
                     self.optimize_region(&mut body);
@@ -408,12 +408,12 @@ impl MemoryOptimizer {
                     self.constant_values.clear();
 
                     processed.push(Statement::For {
-                        init_values,
-                        loop_vars,
-                        condition_stmts,
+                        initial_values,
+                        loop_variables,
+                        condition_statements,
                         condition,
                         body,
-                        post_input_vars,
+                        post_input_variables,
                         post,
                         outputs,
                     });
@@ -426,11 +426,11 @@ impl MemoryOptimizer {
                     processed.push(Statement::Block(region));
                 }
 
-                Statement::Expr(expr) => {
+                Statement::Expression(expression) => {
                     // Check if the expression is a function call - if so, invalidate memory state
-                    let is_call = matches!(&expr, Expr::Call { .. });
+                    let is_call = matches!(&expression, Expression::Call { .. });
 
-                    let optimized = self.optimize_expr_with_read_tracking(expr);
+                    let optimized = self.optimize_expr_with_read_tracking(expression);
 
                     // Invalidate memory state after function calls
                     if is_call {
@@ -438,20 +438,20 @@ impl MemoryOptimizer {
                         self.pending_stores.clear();
                     }
 
-                    processed.push(Statement::Expr(optimized));
+                    processed.push(Statement::Expression(optimized));
                 }
 
                 // External calls read/write memory - all pending stores are "used"
                 Statement::ExternalCall { .. } => {
                     self.memory_state.clear();
                     self.pending_stores.clear();
-                    processed.push(stmt);
+                    processed.push(statement);
                 }
 
                 Statement::Create { .. } => {
                     self.memory_state.clear();
                     self.pending_stores.clear();
-                    processed.push(stmt);
+                    processed.push(statement);
                 }
 
                 // Data copy operations write to memory - pending stores at dest might be dead
@@ -470,7 +470,7 @@ impl MemoryOptimizer {
                         self.memory_state.clear();
                         self.pending_stores.clear();
                     }
-                    processed.push(stmt);
+                    processed.push(statement);
                 }
 
                 // Log reads from memory - pending stores are used
@@ -493,7 +493,7 @@ impl MemoryOptimizer {
                 Statement::Return { .. } | Statement::Revert { .. } => {
                     // Memory escapes to caller - all pending stores are used
                     self.pending_stores.clear();
-                    processed.push(stmt);
+                    processed.push(statement);
                 }
 
                 // These don't affect heap memory state
@@ -510,7 +510,7 @@ impl MemoryOptimizer {
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::Leave { .. } => {
-                    processed.push(stmt);
+                    processed.push(statement);
                 }
             }
         }
@@ -522,8 +522,8 @@ impl MemoryOptimizer {
             processed
                 .into_iter()
                 .enumerate()
-                .filter(|(idx, _)| !self.dead_store_indices.contains(idx))
-                .map(|(_, stmt)| stmt)
+                .filter(|(index, _)| !self.dead_store_indices.contains(index))
+                .map(|(_, statement)| statement)
                 .collect()
         };
 
@@ -540,9 +540,9 @@ impl MemoryOptimizer {
     /// forwarded directly, eliminating the redundant memory round-trip. If the stored
     /// value has a narrower type than I256 (what MLoad produces), a ZeroExtend is
     /// inserted to maintain type correctness.
-    fn optimize_expr_with_read_tracking(&mut self, expr: Expr) -> Expr {
-        match expr {
-            Expr::MLoad { offset, region } => {
+    fn optimize_expr_with_read_tracking(&mut self, expression: Expression) -> Expression {
+        match expression {
+            Expression::MLoad { offset, region } => {
                 // Track that this offset is being read (for dead store elimination)
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = static_offset / 32 * 32;
@@ -562,12 +562,14 @@ impl MemoryOptimizer {
                             // If the stored value is narrower than I256, wrap in ZeroExtend
                             // to match the MLoad return type (always I256).
                             return match stored.ty {
-                                Type::Int(BitWidth::I256) => Expr::Var(stored.id),
-                                Type::Int(width) if width < BitWidth::I256 => Expr::ZeroExtend {
-                                    value: stored,
-                                    to: BitWidth::I256,
-                                },
-                                _ => Expr::Var(stored.id),
+                                Type::Int(BitWidth::I256) => Expression::Var(stored.id),
+                                Type::Int(width) if width < BitWidth::I256 => {
+                                    Expression::ZeroExtend {
+                                        value: stored,
+                                        to: BitWidth::I256,
+                                    }
+                                }
+                                _ => Expression::Var(stored.id),
                             };
                         }
                     }
@@ -575,10 +577,10 @@ impl MemoryOptimizer {
                     // Unknown offset - clear pending stores (might be read from any)
                     self.pending_stores.clear();
                 }
-                Expr::MLoad { offset, region }
+                Expression::MLoad { offset, region }
             }
 
-            Expr::Keccak256 { offset, length } => {
+            Expression::Keccak256 { offset, length } => {
                 let static_offset = self.try_get_static_offset(&offset);
                 let static_length = self.try_get_static_offset(&length);
 
@@ -604,7 +606,7 @@ impl MemoryOptimizer {
                             self.stats.keccak_pairs_fused += 1;
                             self.pending_stores.clear();
                             log::trace!("Fused keccak256(0, 64) into keccak256_pair");
-                            return Expr::Keccak256Pair { word0, word1 };
+                            return Expression::Keccak256Pair { word0, word1 };
                         }
                     }
                 }
@@ -626,7 +628,7 @@ impl MemoryOptimizer {
                             self.stats.keccak_singles_fused += 1;
                             self.pending_stores.clear();
                             log::trace!("Fused keccak256(0, 32) into keccak256_single");
-                            return Expr::Keccak256Single { word0 };
+                            return Expression::Keccak256Single { word0 };
                         }
                     }
                 }
@@ -635,26 +637,26 @@ impl MemoryOptimizer {
                 // Conservatively clear ALL pending stores since determining the exact
                 // range of words read is complex and error-prone.
                 self.pending_stores.clear();
-                Expr::Keccak256 { offset, length }
+                Expression::Keccak256 { offset, length }
             }
 
-            Expr::Keccak256Pair { word0, word1 } => {
+            Expression::Keccak256Pair { word0, word1 } => {
                 // Keccak256Pair/Single don't read from tracked memory; they use arguments.
                 // But they write to scratch memory internally, so clear state.
                 self.pending_stores.clear();
-                Expr::Keccak256Pair { word0, word1 }
+                Expression::Keccak256Pair { word0, word1 }
             }
 
-            Expr::Keccak256Single { word0 } => {
+            Expression::Keccak256Single { word0 } => {
                 self.pending_stores.clear();
-                Expr::Keccak256Single { word0 }
+                Expression::Keccak256Single { word0 }
             }
 
-            Expr::MappingSLoad { key, slot } => {
+            Expression::MappingSLoad { key, slot } => {
                 // MappingSLoad is a compound keccak256+sload; it uses scratch memory
                 // internally, so clear pending stores.
                 self.pending_stores.clear();
-                Expr::MappingSLoad { key, slot }
+                Expression::MappingSLoad { key, slot }
             }
 
             // All other expressions pass through unchanged
@@ -740,34 +742,34 @@ impl MemoryOptimizer {
     }
 
     /// Tries to evaluate an expression to a constant value.
-    fn try_eval_const(&self, expr: &Expr) -> Option<BigUint> {
-        match expr {
-            Expr::Literal { value, .. } => Some(value.clone()),
-            Expr::Var(id) => self.constant_values.get(&id.0).cloned(),
-            Expr::Binary { op, lhs, rhs } => {
+    fn try_eval_const(&self, expression: &Expression) -> Option<BigUint> {
+        match expression {
+            Expression::Literal { value, .. } => Some(value.clone()),
+            Expression::Var(id) => self.constant_values.get(&id.0).cloned(),
+            Expression::Binary { op, lhs, rhs } => {
                 let l = self.constant_values.get(&lhs.id.0)?;
                 let r = self.constant_values.get(&rhs.id.0)?;
                 match op {
-                    BinOp::Add => Some(l + r),
-                    BinOp::Sub => {
+                    BinaryOperation::Add => Some(l + r),
+                    BinaryOperation::Sub => {
                         if l >= r {
                             Some(l - r)
                         } else {
                             None // Underflow - not a valid offset
                         }
                     }
-                    BinOp::Mul => Some(l * r),
-                    BinOp::Div => {
+                    BinaryOperation::Mul => Some(l * r),
+                    BinaryOperation::Div => {
                         if r.is_zero() {
                             None
                         } else {
                             Some(l / r)
                         }
                     }
-                    BinOp::And => Some(l & r),
-                    BinOp::Or => Some(l | r),
-                    BinOp::Xor => Some(l ^ r),
-                    BinOp::Shl => {
+                    BinaryOperation::And => Some(l & r),
+                    BinaryOperation::Or => Some(l | r),
+                    BinaryOperation::Xor => Some(l ^ r),
+                    BinaryOperation::Shl => {
                         let shift = r.to_u32_digits().first().copied().unwrap_or(0);
                         if shift < 256 {
                             Some(l << shift as usize)
@@ -775,7 +777,7 @@ impl MemoryOptimizer {
                             Some(BigUint::from(0u32))
                         }
                     }
-                    BinOp::Shr => {
+                    BinaryOperation::Shr => {
                         let shift = r.to_u32_digits().first().copied().unwrap_or(0);
                         if shift < 256 {
                             Some(l >> shift as usize)
@@ -791,8 +793,8 @@ impl MemoryOptimizer {
     }
 
     /// Records a constant binding if the expression is constant.
-    fn record_constant(&mut self, binding_id: ValueId, expr: &Expr) {
-        if let Some(value) = self.try_eval_const(expr) {
+    fn record_constant(&mut self, binding_id: ValueId, expression: &Expression) {
+        if let Some(value) = self.try_eval_const(expression) {
             self.constant_values.insert(binding_id.0, value);
         }
     }
@@ -845,13 +847,13 @@ impl FmpPropagation {
         let mut direct_writers = BTreeSet::new();
         let mut callers: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
 
-        for (fid, func) in &object.functions {
-            if Self::statements_write_fmp(&func.body.statements) {
+        for (fid, function) in &object.functions {
+            if Self::statements_write_fmp(&function.body.statements) {
                 direct_writers.insert(*fid);
             }
-            // Build reverse call graph: for each function called by func,
+            // Build reverse call graph: for each function called by function,
             // record that fid calls it
-            Self::collect_callees(&func.body.statements, &mut |callee| {
+            Self::collect_callees(&function.body.statements, &mut |callee| {
                 callers.entry(callee).or_default().push(*fid);
             });
         }
@@ -877,11 +879,11 @@ impl FmpPropagation {
     }
 
     /// Collects all function IDs called in a statement list, recursing through
-    /// nested regions and `For::condition_stmts`.
-    fn collect_callees(stmts: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
-        for_each_stmt(stmts, &mut |stmt| {
-            if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
-                if let Expr::Call { function, .. } = value {
+    /// nested regions and `For::condition_statements`.
+    fn collect_callees(statements: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
+        for_each_stmt(statements, &mut |statement| {
+            if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+                if let Expression::Call { function, .. } = value {
                     cb(*function);
                 }
             }
@@ -913,8 +915,8 @@ impl FmpPropagation {
         let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
         let mut result = Vec::with_capacity(statements.len());
 
-        for stmt in statements {
-            match stmt {
+        for statement in statements {
+            match statement {
                 Statement::MStore {
                     offset,
                     value,
@@ -940,7 +942,7 @@ impl FmpPropagation {
 
                 Statement::Let { bindings, value } => {
                     // Check for MLoad of FMP that we can constant-fold
-                    let new_value = if let Expr::MLoad {
+                    let new_value = if let Expression::MLoad {
                         ref offset,
                         ref region,
                     } = value
@@ -952,7 +954,7 @@ impl FmpPropagation {
                         if is_fmp_load {
                             if let Some(ref known_fmp) = fmp_value {
                                 self.loads_eliminated += 1;
-                                Some(Expr::Literal {
+                                Some(Expression::Literal {
                                     value: known_fmp.clone(),
                                     ty: Type::Int(BitWidth::I256),
                                 })
@@ -976,7 +978,7 @@ impl FmpPropagation {
                     }
 
                     // Only invalidate FMP for calls to functions that write FMP
-                    if let Expr::Call { function, .. } = &final_value {
+                    if let Expression::Call { function, .. } = &final_value {
                         if self.fmp_writers.contains(function) {
                             fmp_value = None;
                         }
@@ -1063,35 +1065,36 @@ impl FmpPropagation {
                 }
 
                 Statement::For {
-                    init_values,
-                    loop_vars,
-                    mut condition_stmts,
+                    initial_values,
+                    loop_variables,
+                    mut condition_statements,
                     condition,
                     mut body,
-                    post_input_vars,
+                    post_input_variables,
                     mut post,
                     outputs,
                 } => {
                     // For loops: conservatively check if the loop body writes FMP
                     self.propagate_region(&mut body, fmp_value.clone());
-                    // Process condition_stmts as a region-like sequence
-                    condition_stmts = self.propagate_statements(condition_stmts, fmp_value.clone());
+                    // Process condition_statements as a region-like sequence
+                    condition_statements =
+                        self.propagate_statements(condition_statements, fmp_value.clone());
                     self.propagate_region(&mut post, fmp_value.clone());
 
                     if Self::statements_write_fmp(&body.statements)
-                        || Self::statements_write_fmp(&condition_stmts)
+                        || Self::statements_write_fmp(&condition_statements)
                         || Self::statements_write_fmp(&post.statements)
                     {
                         fmp_value = None;
                     }
 
                     result.push(Statement::For {
-                        init_values,
-                        loop_vars,
-                        condition_stmts,
+                        initial_values,
+                        loop_variables,
+                        condition_statements,
                         condition,
                         body,
-                        post_input_vars,
+                        post_input_variables,
                         post,
                         outputs,
                     });
@@ -1116,19 +1119,19 @@ impl FmpPropagation {
                 }
 
                 // Side-effect expression: check for calls to FMP-writing functions
-                Statement::Expr(ref expr) => {
-                    if let Expr::Call { function, .. } = expr {
+                Statement::Expression(ref expression) => {
+                    if let Expression::Call { function, .. } = expression {
                         if self.fmp_writers.contains(function) {
                             fmp_value = None;
                         }
                     }
-                    result.push(stmt);
+                    result.push(statement);
                 }
 
                 // External calls and creates can modify memory (including FMP)
                 Statement::ExternalCall { .. } | Statement::Create { .. } => {
                     fmp_value = None;
-                    result.push(stmt);
+                    result.push(statement);
                 }
 
                 // All other statements pass through unchanged
@@ -1154,9 +1157,9 @@ impl FmpPropagation {
     /// and would defeat the optimization for everyone.
     fn statements_write_fmp(statements: &[Statement]) -> bool {
         let mut found = false;
-        for_each_stmt(statements, &mut |stmt| {
+        for_each_stmt(statements, &mut |statement| {
             if matches!(
-                stmt,
+                statement,
                 Statement::MStore {
                     region: MemoryRegion::FreePointerSlot,
                     ..
@@ -1189,24 +1192,24 @@ impl FmpPropagation {
     }
 
     /// Evaluates an expression to a constant if possible.
-    fn eval_const(constants: &BTreeMap<u32, BigUint>, expr: &Expr) -> Option<BigUint> {
-        match expr {
-            Expr::Literal { value, .. } => Some(value.clone()),
-            Expr::Var(id) => constants.get(&id.0).cloned(),
-            Expr::Binary { op, lhs, rhs } => {
+    fn eval_const(constants: &BTreeMap<u32, BigUint>, expression: &Expression) -> Option<BigUint> {
+        match expression {
+            Expression::Literal { value, .. } => Some(value.clone()),
+            Expression::Var(id) => constants.get(&id.0).cloned(),
+            Expression::Binary { op, lhs, rhs } => {
                 let l = constants.get(&lhs.id.0)?;
                 let r = constants.get(&rhs.id.0)?;
                 match op {
-                    BinOp::Add => Some(l + r),
-                    BinOp::Sub => {
+                    BinaryOperation::Add => Some(l + r),
+                    BinaryOperation::Sub => {
                         if l >= r {
                             Some(l - r)
                         } else {
                             None
                         }
                     }
-                    BinOp::And => Some(l & r),
-                    BinOp::Or => Some(l | r),
+                    BinaryOperation::And => Some(l & r),
+                    BinaryOperation::Or => Some(l | r),
                     _ => None,
                 }
             }
@@ -1243,7 +1246,7 @@ mod tests {
             // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(64u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1251,7 +1254,7 @@ mod tests {
             // let value = 42
             Statement::Let {
                 bindings: vec![value_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(42u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1271,7 +1274,7 @@ mod tests {
             // let result = mload(offset)
             Statement::Let {
                 bindings: vec![result_id],
-                value: Expr::MLoad {
+                value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
                         ty: Type::Int(BitWidth::I256),
@@ -1298,7 +1301,7 @@ mod tests {
         // The mload should be replaced with Var (forwarding the stored value)
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             assert!(
-                matches!(value, Expr::Var(_)),
+                matches!(value, Expression::Var(_)),
                 "Expected Var (forwarded value), got {:?}",
                 value
             );
@@ -1324,7 +1327,7 @@ mod tests {
             // let base = 32
             Statement::Let {
                 bindings: vec![base_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(32u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1332,8 +1335,8 @@ mod tests {
             // let offset = add(base, 32)
             Statement::Let {
                 bindings: vec![offset_id],
-                value: Expr::Binary {
-                    op: BinOp::Add,
+                value: Expression::Binary {
+                    op: BinaryOperation::Add,
                     lhs: Value {
                         id: base_id,
                         ty: Type::Int(BitWidth::I256),
@@ -1347,7 +1350,7 @@ mod tests {
             // let value = 1
             Statement::Let {
                 bindings: vec![value_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(1u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1367,7 +1370,7 @@ mod tests {
             // let result = mload(offset)
             Statement::Let {
                 bindings: vec![result_id],
-                value: Expr::MLoad {
+                value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
                         ty: Type::Int(BitWidth::I256),
@@ -1424,7 +1427,7 @@ mod tests {
             // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(64u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1432,7 +1435,7 @@ mod tests {
             // let value1 = 1
             Statement::Let {
                 bindings: vec![value1_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(1u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1440,7 +1443,7 @@ mod tests {
             // let value2 = 2
             Statement::Let {
                 bindings: vec![value2_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(2u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1513,7 +1516,7 @@ mod tests {
             // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(64u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1521,7 +1524,7 @@ mod tests {
             // let value1 = 1
             Statement::Let {
                 bindings: vec![value1_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(1u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1529,7 +1532,7 @@ mod tests {
             // let value2 = 2
             Statement::Let {
                 bindings: vec![value2_id],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(2u32),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1549,7 +1552,7 @@ mod tests {
             // let result = mload(offset) - reads value1
             Statement::Let {
                 bindings: vec![result_id],
-                value: Expr::MLoad {
+                value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
                         ty: Type::Int(BitWidth::I256),
@@ -1605,17 +1608,17 @@ mod tests {
         let v2 = make_value(2);
         let v3_id = ValueId(3);
 
-        let stmts = vec![
+        let statements = vec![
             Statement::Let {
                 bindings: vec![ValueId(1)],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(0x80u64),
                     ty: Type::Int(BitWidth::I256),
                 },
             },
             Statement::Let {
                 bindings: vec![ValueId(2)],
-                value: Expr::Literal {
+                value: Expression::Literal {
                     value: BigUint::from(0x40u64),
                     ty: Type::Int(BitWidth::I256),
                 },
@@ -1627,7 +1630,7 @@ mod tests {
             },
             Statement::Let {
                 bindings: vec![v3_id],
-                value: Expr::MLoad {
+                value: Expression::MLoad {
                     offset: v2,
                     region: MemoryRegion::FreePointerSlot,
                 },
@@ -1636,7 +1639,7 @@ mod tests {
 
         let mut object = Object {
             name: "test".to_string(),
-            code: Block { statements: stmts },
+            code: Block { statements },
             functions: std::collections::BTreeMap::new(),
             subobjects: vec![],
             data: std::collections::BTreeMap::new(),
@@ -1650,7 +1653,7 @@ mod tests {
         // The 4th statement should now be a Literal(0x80) instead of MLoad
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             match value {
-                Expr::Literal { value: v, .. } => {
+                Expression::Literal { value: v, .. } => {
                     assert_eq!(*v, BigUint::from(0x80u64), "FMP should be 0x80");
                 }
                 other => panic!("Expected Literal, got {:?}", other),

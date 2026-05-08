@@ -116,10 +116,10 @@ impl MemoryRegion {
             MemoryRegion::Scratch
         } else if addr_u64.len() == 1 && addr_u64[0] == 0x40 {
             // Only offset 0x40 itself is the free-memory-pointer slot. Any other
-            // offset in 0x40..0x60 (e.g. 0x44 for ABI-encoded args to a custom
+            // offset in 0x40..0x60 (e.g. 0x44 for ABI-encoded arguments to a custom
             // error revert) stores ordinary data and must not be treated as an
             // FMP store — otherwise the I64 narrowing for FMP values truncates
-            // i256 args. OZ `revert ERC20InsufficientBalance(..., 2^128-1)`
+            // i256 arguments. OZ `revert ERC20InsufficientBalance(..., 2^128-1)`
             // dropped the upper 192 bits of `value` via this path.
             MemoryRegion::FreePointerSlot
         } else if addr_u64.len() == 1 && addr_u64[0] >= 0x80 {
@@ -162,7 +162,7 @@ impl Value {
 
 /// Binary operation kinds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum BinOp {
+pub enum BinaryOperation {
     // Arithmetic
     Add,
     Sub,
@@ -194,7 +194,7 @@ pub enum BinOp {
 
 /// Unary operation kinds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum UnaryOp {
+pub enum UnaryOperation {
     /// Zero check - result is I1.
     IsZero,
     /// Bitwise NOT.
@@ -232,7 +232,7 @@ impl FunctionId {
 
 /// Pure expressions that produce values without side effects.
 #[derive(Clone, Debug)]
-pub enum Expr {
+pub enum Expression {
     /// Literal constant.
     Literal {
         value: BigUint,
@@ -244,14 +244,14 @@ pub enum Expr {
 
     /// Binary operation.
     Binary {
-        op: BinOp,
+        op: BinaryOperation,
         lhs: Value,
         rhs: Value,
     },
 
     /// Ternary operation (addmod, mulmod).
     Ternary {
-        op: BinOp,
+        op: BinaryOperation,
         a: Value,
         b: Value,
         n: Value,
@@ -259,7 +259,7 @@ pub enum Expr {
 
     /// Unary operation.
     Unary {
-        op: UnaryOp,
+        op: UnaryOperation,
         operand: Value,
     },
 
@@ -323,7 +323,7 @@ pub enum Expr {
     /// Function call.
     Call {
         function: FunctionId,
-        args: Vec<Value>,
+        arguments: Vec<Value>,
     },
 
     // Type conversions (explicit)
@@ -417,8 +417,8 @@ impl Region {
     }
 
     /// Adds a statement to this region.
-    pub fn push(&mut self, stmt: Statement) {
-        self.statements.push(stmt);
+    pub fn push(&mut self, statement: Statement) {
+        self.statements.push(statement);
     }
 }
 
@@ -435,8 +435,8 @@ impl Block {
     }
 
     /// Adds a statement to this block.
-    pub fn push(&mut self, stmt: Statement) {
-        self.statements.push(stmt);
+    pub fn push(&mut self, statement: Statement) {
+        self.statements.push(statement);
     }
 }
 
@@ -444,10 +444,10 @@ impl Block {
 #[derive(Clone, Debug)]
 pub enum Statement {
     // SSA binding
-    /// SSA binding: let x, y, z = expr
+    /// SSA binding: let x, y, z = expression
     Let {
         bindings: Vec<ValueId>,
-        value: Expr,
+        value: Expression,
     },
 
     // Memory operations
@@ -513,21 +513,21 @@ pub enum Statement {
     /// For loop with structured regions and explicit loop-carried values.
     For {
         /// Initial values for loop-carried variables.
-        init_values: Vec<Value>,
+        initial_values: Vec<Value>,
         /// Loop-carried variable bindings (visible in condition, body, post).
-        loop_vars: Vec<ValueId>,
+        loop_variables: Vec<ValueId>,
         /// Statements to execute before evaluating condition (evaluated each iteration).
         /// These are generated inside the loop header block.
-        condition_stmts: Vec<Statement>,
-        /// Condition expression (evaluated each iteration after condition_stmts).
-        condition: Expr,
+        condition_statements: Vec<Statement>,
+        /// Condition expression (evaluated each iteration after condition_statements).
+        condition: Expression,
         /// Loop body (yields current values of loop-carried variables).
         body: Region,
         /// Input ValueIds for the post region, one per loop-carried variable.
         /// These receive the body's yielded values (merged with continue-site values
         /// via phi nodes in the LLVM codegen).
-        post_input_vars: Vec<ValueId>,
-        /// Post-iteration block (yields updated loop vars).
+        post_input_variables: Vec<ValueId>,
+        /// Post-iteration block (yields updated loop variables).
         post: Region,
         /// Final values after loop exits.
         outputs: Vec<ValueId>,
@@ -592,7 +592,7 @@ pub enum Statement {
         /// The 4-byte error selector, left-shifted by 224 bits (as stored in scratch).
         selector: BigUint,
         /// The arguments to the custom error (0-3 values).
-        args: Vec<Value>,
+        arguments: Vec<Value>,
     },
 
     /// Compound mapping store: keccak256(key, slot) → sstore(hash, value).
@@ -668,7 +668,7 @@ pub enum Statement {
     Block(Region),
 
     /// Expression evaluated for side effects only (result discarded).
-    Expr(Expr),
+    Expression(Expression),
 
     /// Set immutable variable.
     SetImmutable {
@@ -684,7 +684,7 @@ pub enum Statement {
 pub struct Function {
     pub id: FunctionId,
     pub name: String,
-    pub params: Vec<(ValueId, Type)>,
+    pub parameters: Vec<(ValueId, Type)>,
     pub returns: Vec<Type>,
     /// Initial SSA value IDs for return variables (allocated at function entry).
     /// These are the IDs that the function body's If statements will reference
@@ -706,7 +706,7 @@ impl Function {
         Function {
             id,
             name,
-            params: Vec::new(),
+            parameters: Vec::new(),
             returns: Vec::new(),
             return_values_initial: Vec::new(),
             return_values: Vec::new(),
@@ -820,18 +820,18 @@ impl Object {
     /// Does NOT recurse into subobjects.
     pub fn find_max_value_id(&self) -> u32 {
         fn scan_block(block: &Block, max_id: &mut u32) {
-            for stmt in &block.statements {
-                stmt.for_each_value_id(&mut |id| *max_id = (*max_id).max(id.0));
+            for statement in &block.statements {
+                statement.for_each_value_id(&mut |id| *max_id = (*max_id).max(id.0));
             }
-            for_each_stmt(&block.statements, &mut |stmt| {
-                stmt.for_each_value_id_def(&mut |id| *max_id = (*max_id).max(id.0));
+            for_each_stmt(&block.statements, &mut |statement| {
+                statement.for_each_value_id_def(&mut |id| *max_id = (*max_id).max(id.0));
             });
         }
 
         let mut max_id: u32 = 0;
         scan_block(&self.code, &mut max_id);
         for function in self.functions.values() {
-            for (param_id, _) in &function.params {
+            for (param_id, _) in &function.parameters {
                 max_id = max_id.max(param_id.0);
             }
             for id in &function.return_values_initial {
@@ -891,40 +891,42 @@ impl Object {
 }
 
 impl Statement {
-    /// Visits every immediate `Expr` in this statement (NOT recursing into
-    /// nested regions, and NOT into `For::condition_stmts`). Pair with
-    /// [`for_each_stmt`] to walk all `Expr`s reachable from a statement list:
+    /// Visits every immediate `Expression` in this statement (NOT recursing into
+    /// nested regions, and NOT into `For::condition_statements`). Pair with
+    /// [`for_each_stmt`] to walk all `Expression`s reachable from a statement list:
     ///
     /// ```ignore
-    /// for_each_stmt(&block.statements, &mut |stmt| {
-    ///     stmt.for_each_expr(&mut |expr| { /* ... */ });
+    /// for_each_stmt(&block.statements, &mut |statement| {
+    ///     statement.for_each_expr(&mut |expression| { /* ... */ });
     /// });
     /// ```
-    pub fn for_each_expr(&self, f: &mut dyn FnMut(&Expr)) {
+    pub fn for_each_expr(&self, f: &mut dyn FnMut(&Expression)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expr(value) => f(value),
+            Statement::Let { value, .. } | Statement::Expression(value) => f(value),
             Statement::For { condition, .. } => f(condition),
             _ => {}
         }
     }
 
     /// Mutating variant of [`Statement::for_each_expr`].
-    pub fn for_each_expr_mut(&mut self, f: &mut dyn FnMut(&mut Expr)) {
+    pub fn for_each_expr_mut(&mut self, f: &mut dyn FnMut(&mut Expression)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expr(value) => f(value),
+            Statement::Let { value, .. } | Statement::Expression(value) => f(value),
             Statement::For { condition, .. } => f(condition),
             _ => {}
         }
     }
 
     /// Visits every `ValueId` *used* by this statement, recursing through
-    /// nested regions, `For::condition_stmts`, and region yields. Does NOT
+    /// nested regions, `For::condition_statements`, and region yields. Does NOT
     /// visit defining `ValueId`s (Let bindings, If/Switch/For outputs,
-    /// loop_vars, post_input_vars, ExternalCall/Create result). Use
+    /// loop_variables, post_input_variables, ExternalCall/Create result). Use
     /// [`Statement::for_each_value_id_def`] for those.
     pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expr(value) => value.for_each_value_id(f),
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                value.for_each_value_id(f)
+            }
             Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
                 f(offset.id);
                 f(value.id);
@@ -978,17 +980,17 @@ impl Statement {
                 }
             }
             Statement::For {
-                init_values,
-                condition_stmts,
+                initial_values,
+                condition_statements,
                 condition,
                 body,
                 post,
                 ..
             } => {
-                for v in init_values {
+                for v in initial_values {
                     f(v.id);
                 }
-                for s in condition_stmts {
+                for s in condition_statements {
                     s.for_each_value_id(f);
                 }
                 condition.for_each_value_id(f);
@@ -1093,8 +1095,8 @@ impl Statement {
                     f(v.id);
                 }
             }
-            Statement::CustomErrorRevert { args, .. } => {
-                for a in args {
+            Statement::CustomErrorRevert { arguments, .. } => {
+                for a in arguments {
                     f(a.id);
                 }
             }
@@ -1106,10 +1108,12 @@ impl Statement {
     }
 
     /// Mutating variant of [`Statement::for_each_value_id`]. Same traversal
-    /// rules — visits use sites, recurses into nested regions, skips defs.
+    /// rules — visits use sites, recurses into nested regions, skips definitions.
     pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expr(value) => value.for_each_value_id_mut(f),
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                value.for_each_value_id_mut(f)
+            }
             Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
                 f(&mut offset.id);
                 f(&mut value.id);
@@ -1163,17 +1167,17 @@ impl Statement {
                 }
             }
             Statement::For {
-                init_values,
-                condition_stmts,
+                initial_values,
+                condition_statements,
                 condition,
                 body,
                 post,
                 ..
             } => {
-                for v in init_values {
+                for v in initial_values {
                     f(&mut v.id);
                 }
-                for s in condition_stmts {
+                for s in condition_statements {
                     s.for_each_value_id_mut(f);
                 }
                 condition.for_each_value_id_mut(f);
@@ -1278,8 +1282,8 @@ impl Statement {
                     f(&mut v.id);
                 }
             }
-            Statement::CustomErrorRevert { args, .. } => {
-                for a in args {
+            Statement::CustomErrorRevert { arguments, .. } => {
+                for a in arguments {
                     f(&mut a.id);
                 }
             }
@@ -1307,15 +1311,15 @@ impl Statement {
                 }
             }
             Statement::For {
-                loop_vars,
-                post_input_vars,
+                loop_variables,
+                post_input_variables,
                 outputs,
                 ..
             } => {
-                for v in loop_vars {
+                for v in loop_variables {
                     f(*v);
                 }
-                for v in post_input_vars {
+                for v in post_input_variables {
                     f(*v);
                 }
                 for o in outputs {
@@ -1327,7 +1331,7 @@ impl Statement {
         }
     }
 
-    /// Mutating variant of [`Statement::for_each_value_id_def`]. Same per-stmt
+    /// Mutating variant of [`Statement::for_each_value_id_def`]. Same per-statement
     /// scope (no recursion into nested regions). Used by the inliner to
     /// allocate fresh IDs for definitions in a cloned function body.
     pub fn for_each_value_id_def_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
@@ -1343,15 +1347,15 @@ impl Statement {
                 }
             }
             Statement::For {
-                loop_vars,
-                post_input_vars,
+                loop_variables,
+                post_input_variables,
                 outputs,
                 ..
             } => {
-                for v in loop_vars {
+                for v in loop_variables {
                     f(v);
                 }
-                for v in post_input_vars {
+                for v in post_input_variables {
                     f(v);
                 }
                 for o in outputs {
@@ -1382,143 +1386,145 @@ fn walk_region_uses_mut(region: &mut Region, f: &mut dyn FnMut(&mut ValueId)) {
     }
 }
 
-impl Expr {
+impl Expression {
     /// Visits every `ValueId` *used* by this expression. Includes the
-    /// `ValueId` of `Expr::Var` and the `id` of every `Value` operand.
+    /// `ValueId` of `Expression::Var` and the `id` of every `Value` operand.
     pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
         match self {
-            Expr::Var(id) => f(*id),
-            Expr::Binary { lhs, rhs, .. } => {
+            Expression::Var(id) => f(*id),
+            Expression::Binary { lhs, rhs, .. } => {
                 f(lhs.id);
                 f(rhs.id);
             }
-            Expr::Ternary { a, b, n, .. } => {
+            Expression::Ternary { a, b, n, .. } => {
                 f(a.id);
                 f(b.id);
                 f(n.id);
             }
-            Expr::Unary { operand, .. } => f(operand.id),
-            Expr::CallDataLoad { offset } | Expr::MLoad { offset, .. } => f(offset.id),
-            Expr::ExtCodeSize { address }
-            | Expr::ExtCodeHash { address }
-            | Expr::Balance { address } => f(address.id),
-            Expr::BlockHash { number } => f(number.id),
-            Expr::BlobHash { index } => f(index.id),
-            Expr::SLoad { key, .. } | Expr::TLoad { key } => f(key.id),
-            Expr::Call { args, .. } => {
-                for a in args {
+            Expression::Unary { operand, .. } => f(operand.id),
+            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => f(offset.id),
+            Expression::ExtCodeSize { address }
+            | Expression::ExtCodeHash { address }
+            | Expression::Balance { address } => f(address.id),
+            Expression::BlockHash { number } => f(number.id),
+            Expression::BlobHash { index } => f(index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => f(key.id),
+            Expression::Call { arguments, .. } => {
+                for a in arguments {
                     f(a.id);
                 }
             }
-            Expr::Truncate { value, .. }
-            | Expr::ZeroExtend { value, .. }
-            | Expr::SignExtendTo { value, .. } => f(value.id),
-            Expr::Keccak256 { offset, length } => {
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => f(value.id),
+            Expression::Keccak256 { offset, length } => {
                 f(offset.id);
                 f(length.id);
             }
-            Expr::Keccak256Pair { word0, word1 } => {
+            Expression::Keccak256Pair { word0, word1 } => {
                 f(word0.id);
                 f(word1.id);
             }
-            Expr::MappingSLoad { key, slot } => {
+            Expression::MappingSLoad { key, slot } => {
                 f(key.id);
                 f(slot.id);
             }
-            Expr::Keccak256Single { word0 } => f(word0.id),
-            Expr::Literal { .. }
-            | Expr::CallValue
-            | Expr::Caller
-            | Expr::Origin
-            | Expr::CallDataSize
-            | Expr::CodeSize
-            | Expr::GasPrice
-            | Expr::ReturnDataSize
-            | Expr::Coinbase
-            | Expr::Timestamp
-            | Expr::Number
-            | Expr::Difficulty
-            | Expr::GasLimit
-            | Expr::ChainId
-            | Expr::SelfBalance
-            | Expr::BaseFee
-            | Expr::BlobBaseFee
-            | Expr::Gas
-            | Expr::MSize
-            | Expr::Address
-            | Expr::DataOffset { .. }
-            | Expr::DataSize { .. }
-            | Expr::LoadImmutable { .. }
-            | Expr::LinkerSymbol { .. } => {}
+            Expression::Keccak256Single { word0 } => f(word0.id),
+            Expression::Literal { .. }
+            | Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ReturnDataSize
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobBaseFee
+            | Expression::Gas
+            | Expression::MSize
+            | Expression::Address
+            | Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
+            | Expression::LinkerSymbol { .. } => {}
         }
     }
 
-    /// Mutating variant of [`Expr::for_each_value_id`].
+    /// Mutating variant of [`Expression::for_each_value_id`].
     pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
         match self {
-            Expr::Var(id) => f(id),
-            Expr::Binary { lhs, rhs, .. } => {
+            Expression::Var(id) => f(id),
+            Expression::Binary { lhs, rhs, .. } => {
                 f(&mut lhs.id);
                 f(&mut rhs.id);
             }
-            Expr::Ternary { a, b, n, .. } => {
+            Expression::Ternary { a, b, n, .. } => {
                 f(&mut a.id);
                 f(&mut b.id);
                 f(&mut n.id);
             }
-            Expr::Unary { operand, .. } => f(&mut operand.id),
-            Expr::CallDataLoad { offset } | Expr::MLoad { offset, .. } => f(&mut offset.id),
-            Expr::ExtCodeSize { address }
-            | Expr::ExtCodeHash { address }
-            | Expr::Balance { address } => f(&mut address.id),
-            Expr::BlockHash { number } => f(&mut number.id),
-            Expr::BlobHash { index } => f(&mut index.id),
-            Expr::SLoad { key, .. } | Expr::TLoad { key } => f(&mut key.id),
-            Expr::Call { args, .. } => {
-                for a in args {
+            Expression::Unary { operand, .. } => f(&mut operand.id),
+            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => {
+                f(&mut offset.id)
+            }
+            Expression::ExtCodeSize { address }
+            | Expression::ExtCodeHash { address }
+            | Expression::Balance { address } => f(&mut address.id),
+            Expression::BlockHash { number } => f(&mut number.id),
+            Expression::BlobHash { index } => f(&mut index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => f(&mut key.id),
+            Expression::Call { arguments, .. } => {
+                for a in arguments {
                     f(&mut a.id);
                 }
             }
-            Expr::Truncate { value, .. }
-            | Expr::ZeroExtend { value, .. }
-            | Expr::SignExtendTo { value, .. } => f(&mut value.id),
-            Expr::Keccak256 { offset, length } => {
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => f(&mut value.id),
+            Expression::Keccak256 { offset, length } => {
                 f(&mut offset.id);
                 f(&mut length.id);
             }
-            Expr::Keccak256Pair { word0, word1 } => {
+            Expression::Keccak256Pair { word0, word1 } => {
                 f(&mut word0.id);
                 f(&mut word1.id);
             }
-            Expr::MappingSLoad { key, slot } => {
+            Expression::MappingSLoad { key, slot } => {
                 f(&mut key.id);
                 f(&mut slot.id);
             }
-            Expr::Keccak256Single { word0 } => f(&mut word0.id),
-            Expr::Literal { .. }
-            | Expr::CallValue
-            | Expr::Caller
-            | Expr::Origin
-            | Expr::CallDataSize
-            | Expr::CodeSize
-            | Expr::GasPrice
-            | Expr::ReturnDataSize
-            | Expr::Coinbase
-            | Expr::Timestamp
-            | Expr::Number
-            | Expr::Difficulty
-            | Expr::GasLimit
-            | Expr::ChainId
-            | Expr::SelfBalance
-            | Expr::BaseFee
-            | Expr::BlobBaseFee
-            | Expr::Gas
-            | Expr::MSize
-            | Expr::Address
-            | Expr::DataOffset { .. }
-            | Expr::DataSize { .. }
-            | Expr::LoadImmutable { .. }
-            | Expr::LinkerSymbol { .. } => {}
+            Expression::Keccak256Single { word0 } => f(&mut word0.id),
+            Expression::Literal { .. }
+            | Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ReturnDataSize
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobBaseFee
+            | Expression::Gas
+            | Expression::MSize
+            | Expression::Address
+            | Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
+            | Expression::LinkerSymbol { .. } => {}
         }
     }
 }
@@ -1528,10 +1534,10 @@ impl Expr {
 /// nested regions, so a callback that swaps a statement's variant will not
 /// have its new nested regions re-visited. For our use cases the callback
 /// only mutates inner fields, never changes the variant.
-pub fn for_each_stmt_mut(stmts: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
-    for stmt in stmts.iter_mut() {
-        f(stmt);
-        match stmt {
+pub fn for_each_stmt_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
+    for statement in statements.iter_mut() {
+        f(statement);
+        match statement {
             Statement::If {
                 then_region,
                 else_region,
@@ -1551,12 +1557,12 @@ pub fn for_each_stmt_mut(stmts: &mut [Statement], f: &mut dyn FnMut(&mut Stateme
                 }
             }
             Statement::For {
-                condition_stmts,
+                condition_statements,
                 body,
                 post,
                 ..
             } => {
-                for_each_stmt_mut(condition_stmts, f);
+                for_each_stmt_mut(condition_statements, f);
                 for_each_stmt_mut(&mut body.statements, f);
                 for_each_stmt_mut(&mut post.statements, f);
             }
@@ -1568,10 +1574,10 @@ pub fn for_each_stmt_mut(stmts: &mut [Statement], f: &mut dyn FnMut(&mut Stateme
 
 /// Visits every statement in a slice recursively, calling `f` on each one.
 /// Handles structural recursion into If/Switch/For/Block regions.
-pub fn for_each_stmt(stmts: &[Statement], f: &mut dyn FnMut(&Statement)) {
-    for stmt in stmts {
-        f(stmt);
-        match stmt {
+pub fn for_each_stmt(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
+    for statement in statements {
+        f(statement);
+        match statement {
             Statement::If {
                 then_region,
                 else_region,
@@ -1591,12 +1597,12 @@ pub fn for_each_stmt(stmts: &[Statement], f: &mut dyn FnMut(&Statement)) {
                 }
             }
             Statement::For {
-                condition_stmts,
+                condition_statements,
                 body,
                 post,
                 ..
             } => {
-                for_each_stmt(condition_stmts, f);
+                for_each_stmt(condition_statements, f);
                 for_each_stmt(&body.statements, f);
                 for_each_stmt(&post.statements, f);
             }
@@ -1608,12 +1614,12 @@ pub fn for_each_stmt(stmts: &[Statement], f: &mut dyn FnMut(&Statement)) {
 
 fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
     let mut counts = SyscallCounts::default();
-    for_each_stmt(&block.statements, &mut |stmt| match stmt {
-        Statement::Let { value, .. } | Statement::Expr(value) => match value {
-            Expr::CallValue => counts.callvalue += 1,
-            Expr::CallDataLoad { .. } => counts.calldataload += 1,
-            Expr::Caller => counts.caller += 1,
-            Expr::MLoad { .. } | Expr::Keccak256 { .. } => counts.heap_operations += 1,
+    for_each_stmt(&block.statements, &mut |statement| match statement {
+        Statement::Let { value, .. } | Statement::Expression(value) => match value {
+            Expression::CallValue => counts.callvalue += 1,
+            Expression::CallDataLoad { .. } => counts.calldataload += 1,
+            Expression::Caller => counts.caller += 1,
+            Expression::MLoad { .. } | Expression::Keccak256 { .. } => counts.heap_operations += 1,
             _ => {}
         },
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
@@ -1641,12 +1647,12 @@ fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
 
 fn count_heap_ops_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |stmt| match stmt {
+    for_each_stmt(&block.statements, &mut |statement| match statement {
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
             count += 1;
         }
         Statement::Let {
-            value: Expr::MLoad { .. },
+            value: Expression::MLoad { .. },
             ..
         } => count += 1,
         _ => {}
@@ -1656,9 +1662,9 @@ fn count_heap_ops_in_block(block: &Block) -> usize {
 
 fn count_exit_ops_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |stmt| {
+    for_each_stmt(&block.statements, &mut |statement| {
         if matches!(
-            stmt,
+            statement,
             Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop
         ) {
             count += 1;
@@ -1669,9 +1675,9 @@ fn count_exit_ops_in_block(block: &Block) -> usize {
 
 fn count_keccak_single_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |stmt| {
-        if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
-            if matches!(value, Expr::Keccak256Single { .. }) {
+    for_each_stmt(&block.statements, &mut |statement| {
+        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+            if matches!(value, Expression::Keccak256Single { .. }) {
                 count += 1;
             }
         }
@@ -1680,26 +1686,26 @@ fn count_keccak_single_in_block(block: &Block) -> usize {
 }
 
 fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for_each_stmt(&block.statements, &mut |stmt| {
-        if let Statement::ErrorStringRevert { data, .. } = stmt {
+    for_each_stmt(&block.statements, &mut |statement| {
+        if let Statement::ErrorStringRevert { data, .. } = statement {
             *counts.entry(data.len()).or_insert(0) += 1;
         }
     });
 }
 
 fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for_each_stmt(&block.statements, &mut |stmt| {
-        if let Statement::CustomErrorRevert { args, .. } = stmt {
-            *counts.entry(args.len()).or_insert(0) += 1;
+    for_each_stmt(&block.statements, &mut |statement| {
+        if let Statement::CustomErrorRevert { arguments, .. } = statement {
+            *counts.entry(arguments.len()).or_insert(0) += 1;
         }
     });
 }
 
 fn has_msize_in_block(block: &Block) -> bool {
     let mut found = false;
-    for_each_stmt(&block.statements, &mut |stmt| {
-        if let Statement::Let { value, .. } | Statement::Expr(value) = stmt {
-            if matches!(value, Expr::MSize) {
+    for_each_stmt(&block.statements, &mut |statement| {
+        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+            if matches!(value, Expression::MSize) {
                 found = true;
             }
         }

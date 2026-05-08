@@ -466,6 +466,25 @@ impl<'ctx> Context<'ctx> {
             .expect("ICE: function scope must be pushed before declaring frontend functions")
     }
 
+    /// Returns the mangled symbol name for a frontend (Solidity-emitted) function.
+    ///
+    /// Frontend names collide across compilation units: separate Yul objects can both define
+    /// `fun_main` for example. The mangling appends a code-section tag (deploy / runtime) and a
+    /// per-context counter so each definition gets a globally unique LLVM symbol, while the
+    /// original name remains the lookup key in `function_scope`.
+    fn mangle_frontend_function_name(&mut self, name: &str) -> String {
+        assert!(
+            !self.get_current_scope().contains_key(name),
+            "ICE: function '{name}' declared subsequently in the same scope"
+        );
+        let counter = self.function_counter;
+        self.function_counter += 1;
+        let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
+        self.get_current_scope()
+            .insert(name.to_string(), mangled.clone());
+        mangled
+    }
+
     /// Appends a function to the current module.
     pub fn add_function(
         &mut self,
@@ -477,16 +496,7 @@ impl<'ctx> Context<'ctx> {
         is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let name = if is_frontend {
-            assert!(
-                !self.get_current_scope().contains_key(name),
-                "ICE: function '{name}' declared subsequently in the same scope"
-            );
-            let counter = self.function_counter;
-            self.function_counter += 1;
-            let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
-            self.get_current_scope()
-                .insert(name.to_string(), mangled.clone());
-            mangled
+            self.mangle_frontend_function_name(name)
         } else {
             name.to_string()
         };
@@ -511,13 +521,13 @@ impl<'ctx> Context<'ctx> {
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
+        // Allocate return slots using the actual return type from the function signature.
+        // Narrowed return types (e.g. i64 instead of i256) flow through unchanged, reducing
+        // register pressure and spills.
         let r#return = match return_values_length {
             0 => FunctionReturn::none(),
             1 => {
                 self.set_basic_block(entry_block);
-                // Use the actual return type from the function signature.
-                // This allows narrowed return types (e.g., i64 instead of i256)
-                // to flow through, reducing register pressure and spills.
                 let alloca_type = r#type
                     .get_return_type()
                     .unwrap_or_else(|| self.word_type().as_basic_type_enum());
@@ -526,7 +536,6 @@ impl<'ctx> Context<'ctx> {
             }
             size => {
                 self.set_basic_block(entry_block);
-                // Use the actual return type from the function signature.
                 let alloca_type = r#type.get_return_type().unwrap_or_else(|| {
                     self.structure_type(
                         vec![self.word_type().as_basic_type_enum(); size].as_slice(),
@@ -736,19 +745,19 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Builds an aligned stack allocation at the function entry.
+    ///
+    /// Allocas placed at the entry block coalesce into a single stack-frame allocation,
+    /// eliminating per-alloca dynamic stack adjustment. LLVM's stack coloring pass handles
+    /// lifetime-based slot reuse regardless of alloca placement.
     pub fn build_alloca_at_entry<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        // Allocas at the entry block coalesce into a single stack frame allocation,
-        // eliminating per-alloca dynamic stack adjustment. LLVM's stack coloring pass
-        // handles lifetime-based slot reuse regardless of alloca placement.
         let current_block = self.builder.get_insert_block().unwrap();
         let function = current_block.get_parent().unwrap();
         let entry_block = function.get_first_basic_block().unwrap();
 
-        // Position at the end of the entry block (before the terminator if any)
         if let Some(terminator) = entry_block.get_terminator() {
             self.builder.position_before(&terminator);
         } else {
@@ -760,9 +769,8 @@ impl<'ctx> Context<'ctx> {
             .as_instruction()
             .unwrap()
             .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
-            .expect("Alignment is valid");
+            .expect("ICE: alignment is valid");
 
-        // Restore insertion point
         self.builder.position_at_end(current_block);
 
         Pointer::new(r#type, AddressSpace::Stack, pointer)
@@ -1116,7 +1124,13 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
-    /// Handles xlen, word, narrow, and intermediate types.
+    ///
+    /// Handles all integer widths: at xlen the value is returned unchanged, narrower types are
+    /// zero-extended (no overflow possible), word-typed values delegate to the
+    /// `WordToPointer` runtime function (which returns the truncated value or jumps to invalid),
+    /// and intermediate widths inline a truncate-extend-compare at the source width because that
+    /// is much cheaper on 32-bit PVM than extending to i256 first (i64 compare is 2 register
+    /// pairs vs i256's 8 words — roughly 10 fewer instructions per check).
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1125,12 +1139,10 @@ impl<'ctx> Context<'ctx> {
         let xlen_width = self.xlen_type().get_bit_width();
         let word_width = self.word_type().get_bit_width();
 
-        // Already xlen-sized
         if value_width == xlen_width {
             return Ok(value);
         }
 
-        // Narrow type (e.g., i1, i8) - zero-extend to xlen
         if value_width < xlen_width {
             return Ok(self.builder().build_int_z_extend(
                 value,
@@ -1139,7 +1151,6 @@ impl<'ctx> Context<'ctx> {
             )?);
         }
 
-        // Word type - use runtime function for safe truncation with overflow check
         if value_width == word_width {
             return Ok(self
                 .build_call(
@@ -1149,17 +1160,13 @@ impl<'ctx> Context<'ctx> {
                 )
                 .unwrap_or_else(|| {
                     panic!(
-                        "revive runtime function {} should return a value",
+                        "ICE: revive runtime function {} should return a value",
                         <WordToPointer as RuntimeFunction>::NAME,
                     )
                 })
                 .into_int_value());
         }
 
-        // Intermediate width (e.g., i64) - inline overflow check at original width.
-        // Doing the truncate-extend-compare at i64 is much cheaper than extending
-        // to i256 first: on 32-bit PVM, i64 comparison is 2 register pairs vs
-        // i256 comparison requiring 8 words. This saves ~10 instructions per check.
         let truncated =
             self.builder()
                 .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
@@ -1186,7 +1193,11 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.
-    /// Handles xlen, word, narrow, and intermediate types.
+    ///
+    /// Behaves like [`Self::safe_truncate_int_to_xlen`] up to xlen-and-narrower widths, but for
+    /// wider types it saturates to `xlen::MAX` rather than trapping. The wider-type branch
+    /// keeps the original-width comparison so the codegen stays compact (word-type values
+    /// remain at word_type; intermediate widths use the value's own type).
     pub fn clip_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
@@ -1195,12 +1206,10 @@ impl<'ctx> Context<'ctx> {
         let xlen_width = self.xlen_type().get_bit_width();
         let word_width = self.word_type().get_bit_width();
 
-        // Already xlen-sized - no clipping needed
         if value_width == xlen_width {
             return Ok(value);
         }
 
-        // Narrow type - zero-extend to xlen (no overflow possible)
         if value_width < xlen_width {
             return Ok(self.builder().build_int_z_extend(
                 value,
@@ -1209,9 +1218,6 @@ impl<'ctx> Context<'ctx> {
             )?);
         }
 
-        // Wider type - check for overflow and clip
-        // For word-type values, use word_type to maintain original codegen
-        // For intermediate types (e.g., i64), use the value's type
         let clipped = self.xlen_type().const_all_ones();
         let comparison_type = if value_width == word_width {
             self.word_type()
@@ -1290,9 +1296,15 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Returns a pointer to `offset` into the heap WITHOUT calling sbrk.
-    /// This is safe only for offsets known to be within the statically
-    /// pre-allocated region (e.g., the scratch area at 0x00-0x7f including
-    /// the free memory pointer slot at 0x40).
+    ///
+    /// The heap global is a fixed-size byte array (the static heap) that is always live for the
+    /// full duration of contract execution. sbrk only updates the *high-water mark* tracked in
+    /// `GLOBAL_HEAP_SIZE`; the underlying memory backing offsets up to `HEAP_SIZE` is always
+    /// addressable. Skipping sbrk is therefore safe whenever the *byte-order semantics* of the
+    /// access do not depend on a previously published high-water mark — i.e., for offsets known
+    /// to live inside the statically reserved scratch area (0x00-0x7f, including the free
+    /// memory pointer slot at 0x40), and for compiler-internal native-mode I/O whose offset
+    /// bound is proven by the type system.
     ///
     /// # Panics
     /// Assumes `offset` to be a register sized value.
@@ -1781,73 +1793,66 @@ impl<'ctx> Context<'ctx> {
     /// Returns the provable bit width of a value, if it can be determined.
     ///
     /// Checks for:
-    /// - Constants: bit width needed to represent the value
-    /// - `and %x, mask`: bit width of the mask
-    /// - `zext from smaller_type`: bit width of the source type
+    /// - Constants: bit width needed to represent the value.
+    /// - `and %x, mask`: bit width of the mask.
+    /// - `zext from smaller_type`: bit width of the source type.
+    /// - `trunc to smaller_type`: bit width of the result type.
     fn provable_bit_width(value: inkwell::values::BasicValueEnum) -> Option<u32> {
-        let int_val = value.into_int_value();
-
-        // Check if it's a constant
-        if int_val.is_const() {
-            return Self::constant_bit_width(int_val);
+        let integer_value = value.into_int_value();
+        if integer_value.is_const() {
+            return Self::constant_bit_width(integer_value);
         }
 
-        // Check if it's an instruction we can analyze
-        let inst = int_val.as_instruction()?;
-        match inst.get_opcode() {
+        let instruction = integer_value.as_instruction()?;
+        match instruction.get_opcode() {
             InstructionOpcode::And => {
-                // and %x, mask - result fits in the width of the mask
-                let op0 = inst.get_operand(0)?.value()?.into_int_value();
-                let op1 = inst.get_operand(1)?.value()?.into_int_value();
-
-                // Check if either operand is a constant mask
-                if op1.is_const() {
-                    Self::constant_bit_width(op1)
-                } else if op0.is_const() {
-                    Self::constant_bit_width(op0)
+                let operand_0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let operand_1 = instruction.get_operand(1)?.value()?.into_int_value();
+                if operand_1.is_const() {
+                    Self::constant_bit_width(operand_1)
+                } else if operand_0.is_const() {
+                    Self::constant_bit_width(operand_0)
                 } else {
                     None
                 }
             }
             InstructionOpcode::ZExt => {
-                // zext from smaller type - fits in the source width
-                let source = inst.get_operand(0)?.value()?.into_int_value();
+                let source = instruction.get_operand(0)?.value()?.into_int_value();
                 Some(source.get_type().get_bit_width())
             }
             InstructionOpcode::Trunc => {
-                // trunc to smaller type - fits in the result width
-                Some(inst.get_type().into_int_type().get_bit_width())
+                Some(instruction.get_type().into_int_type().get_bit_width())
             }
             _ => None,
         }
     }
 
     /// Returns the minimum number of bits needed to represent a constant integer.
-    /// Handles wide types (> 64 bits) by truncating to i64 and verifying roundtrip.
-    fn constant_bit_width(int_val: inkwell::values::IntValue) -> Option<u32> {
-        // For types <= 64 bits, use the direct API
-        if let Some(val) = int_val.get_zero_extended_constant() {
-            return Some(if val == 0 {
+    ///
+    /// For types up to 64 bits the direct LLVM API suffices. For wider types (e.g. i256) we
+    /// truncate to i64 and verify the round-trip: if the reconstructed wide constant equals the
+    /// original (LLVM constants are interned, so pointer equality is correct), the value fits
+    /// in u64 and we report `64 - leading_zeros`.
+    fn constant_bit_width(integer_value: inkwell::values::IntValue) -> Option<u32> {
+        if let Some(value) = integer_value.get_zero_extended_constant() {
+            return Some(if value == 0 {
                 1
             } else {
-                64 - val.leading_zeros()
+                64 - value.leading_zeros()
             });
         }
 
-        // For wider types (e.g., i256), truncate to i64 and verify roundtrip.
-        // LLVM constants are interned so pointer equality works for comparison.
-        let wide_type = int_val.get_type();
+        let wide_type = integer_value.get_type();
         if wide_type.get_bit_width() > 64 {
             let i64_type = wide_type.get_context().i64_type();
-            let truncated = int_val.const_truncate(i64_type);
-            if let Some(val) = truncated.get_zero_extended_constant() {
-                // Reconstruct at the original width - if it matches, value fits in u64
-                let reconstructed = wide_type.const_int(val, false);
-                if reconstructed == int_val {
-                    return Some(if val == 0 {
+            let truncated = integer_value.const_truncate(i64_type);
+            if let Some(value) = truncated.get_zero_extended_constant() {
+                let reconstructed = wide_type.const_int(value, false);
+                if reconstructed == integer_value {
+                    return Some(if value == 0 {
                         1
                     } else {
-                        64 - val.leading_zeros()
+                        64 - value.leading_zeros()
                     });
                 }
             }

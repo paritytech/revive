@@ -5,17 +5,17 @@
 //! Runs after simplification and before LLVM codegen.
 //!
 //! Detected patterns:
-//! - Mapping SLoad: `let hash = keccak256_pair(key, slot); let val = sload(hash)`
-//!   → `let val = mapping_sload(key, slot)`
+//! - Mapping SLoad: `let hash = keccak256_pair(key, slot); let value = sload(hash)`
+//!   → `let value = mapping_sload(key, slot)`
 //! - Mapping SStore: `let hash = keccak256_pair(key, slot); sstore(hash, value)`
 //!   → `mapping_sstore(key, slot, value)`
 use std::collections::BTreeMap;
 
-use crate::ir::{Block, Expr, Object, Region, Statement, Value};
+use crate::ir::{Block, Expression, Object, Region, Statement, Value};
 
 /// Statistics from the compound outlining pass.
 #[derive(Default, Debug)]
-pub struct CompoundOutliningStats {
+pub struct CompoundOutliningStatistics {
     /// Number of mapping sload patterns replaced.
     pub mapping_sloads: usize,
     /// Number of mapping sstore patterns replaced.
@@ -23,88 +23,85 @@ pub struct CompoundOutliningStats {
 }
 
 /// Run compound outlining on an entire object tree (including subobjects).
-pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStats {
-    let mut stats = CompoundOutliningStats::default();
+pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStatistics {
+    let mut statistics = CompoundOutliningStatistics::default();
 
-    outline_block(&mut object.code, &mut stats);
-    for func in object.functions.values_mut() {
-        outline_block(&mut func.body, &mut stats);
+    outline_block(&mut object.code, &mut statistics);
+    for function in object.functions.values_mut() {
+        outline_block(&mut function.body, &mut statistics);
     }
 
-    for sub in &mut object.subobjects {
-        let sub_stats = outline_compounds_in_object(sub);
-        stats.mapping_sloads += sub_stats.mapping_sloads;
-        stats.mapping_sstores += sub_stats.mapping_sstores;
+    for sub_object in &mut object.subobjects {
+        let sub_object_statistics = outline_compounds_in_object(sub_object);
+        statistics.mapping_sloads += sub_object_statistics.mapping_sloads;
+        statistics.mapping_sstores += sub_object_statistics.mapping_sstores;
     }
 
-    stats
+    statistics
 }
 
 /// Process a block: detect and replace compound patterns.
-fn outline_block(block: &mut Block, stats: &mut CompoundOutliningStats) {
-    // First recurse into nested regions
-    for stmt in &mut block.statements {
-        outline_nested_regions(stmt, stats);
+fn outline_block(block: &mut Block, statistics: &mut CompoundOutliningStatistics) {
+    for statement in &mut block.statements {
+        outline_nested_regions(statement, statistics);
     }
-
-    // Transform this level's statement list
-    outline_statements(&mut block.statements, stats);
+    outline_statements(&mut block.statements, statistics);
 }
 
 /// Recurse into nested regions within a statement.
-fn outline_nested_regions(stmt: &mut Statement, stats: &mut CompoundOutliningStats) {
-    match stmt {
+fn outline_nested_regions(statement: &mut Statement, statistics: &mut CompoundOutliningStatistics) {
+    match statement {
         Statement::If {
             then_region,
             else_region,
             ..
         } => {
-            outline_region(then_region, stats);
-            if let Some(r) = else_region {
-                outline_region(r, stats);
+            outline_region(then_region, statistics);
+            if let Some(region) = else_region {
+                outline_region(region, statistics);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for case in cases {
-                outline_region(&mut case.body, stats);
+                outline_region(&mut case.body, statistics);
             }
-            if let Some(d) = default {
-                outline_region(d, stats);
+            if let Some(default_region) = default {
+                outline_region(default_region, statistics);
             }
         }
         Statement::For {
-            condition_stmts,
+            condition_statements,
             body,
             post,
             ..
         } => {
-            for s in condition_stmts.iter_mut() {
-                outline_nested_regions(s, stats);
+            for statement in condition_statements.iter_mut() {
+                outline_nested_regions(statement, statistics);
             }
-            outline_region(body, stats);
-            outline_region(post, stats);
+            outline_region(body, statistics);
+            outline_region(post, statistics);
         }
         Statement::Block(region) => {
-            outline_region(region, stats);
+            outline_region(region, statistics);
         }
         _ => {}
     }
 }
 
 /// Process a region.
-fn outline_region(region: &mut Region, stats: &mut CompoundOutliningStats) {
-    for stmt in &mut region.statements {
-        outline_nested_regions(stmt, stats);
+fn outline_region(region: &mut Region, statistics: &mut CompoundOutliningStatistics) {
+    for statement in &mut region.statements {
+        outline_nested_regions(statement, statistics);
     }
-    outline_statements(&mut region.statements, stats);
+    outline_statements(&mut region.statements, statistics);
 }
 
 /// Count how many times each ValueId is referenced (used) in a statement list,
 /// recursing through nested regions and counting yields.
-fn count_value_uses(stmts: &[Statement]) -> BTreeMap<u32, usize> {
+fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
     let mut counts = BTreeMap::new();
-    for stmt in stmts {
-        stmt.for_each_value_id(&mut |id| {
+    for statement in statements {
+        statement.for_each_value_id(&mut |id| {
             *counts.entry(id.0).or_insert(0) += 1;
         });
     }
@@ -114,71 +111,68 @@ fn count_value_uses(stmts: &[Statement]) -> BTreeMap<u32, usize> {
 /// Core transformation: scan a statement list for compound patterns and replace them.
 ///
 /// Detects two patterns:
-/// 1. MappingSLoad: `let hash = keccak256_pair(key, slot); ... let val = sload(hash)`
+/// 1. MappingSLoad: `let hash = keccak256_pair(key, slot); ... let value = sload(hash)`
 ///    where hash has exactly one use (the sload).
 /// 2. MappingSStore: `let hash = keccak256_pair(key, slot); ... sstore(hash, value)`
 ///    where hash has exactly one use (the sstore).
-fn outline_statements(stmts: &mut Vec<Statement>, stats: &mut CompoundOutliningStats) {
-    // Build use counts for the entire statement list
-    let use_counts = count_value_uses(stmts);
+fn outline_statements(
+    statements: &mut Vec<Statement>,
+    statistics: &mut CompoundOutliningStatistics,
+) {
+    let use_counts = count_value_uses(statements);
 
-    // Build a map from ValueId → (index, keccak word0, keccak word1)
-    // for all single-binding Let statements whose value is Keccak256Pair.
-    let mut keccak_defs: BTreeMap<u32, (usize, Value, Value)> = BTreeMap::new();
-    for (idx, stmt) in stmts.iter().enumerate() {
+    let mut keccak_definitions: BTreeMap<u32, (usize, Value, Value)> = BTreeMap::new();
+    for (index, statement) in statements.iter().enumerate() {
         if let Statement::Let {
             bindings,
-            value: Expr::Keccak256Pair { word0, word1 },
-        } = stmt
+            value: Expression::Keccak256Pair { word0, word1 },
+        } = statement
         {
             if bindings.len() == 1 {
-                keccak_defs.insert(bindings[0].0, (idx, *word0, *word1));
+                keccak_definitions.insert(bindings[0].0, (index, *word0, *word1));
             }
         }
     }
 
-    if keccak_defs.is_empty() {
+    if keccak_definitions.is_empty() {
         return;
     }
 
-    // Collect transformations: (stmt_index, new_statement, keccak_def_index_to_remove)
-    let mut transforms: Vec<(usize, Statement, usize)> = Vec::new();
+    let mut transformations: Vec<(usize, Statement, usize)> = Vec::new();
 
-    for (idx, stmt) in stmts.iter().enumerate() {
-        match stmt {
-            // Pattern 1: let val = sload(hash) where hash = keccak256_pair(key, slot)
+    for (index, statement) in statements.iter().enumerate() {
+        match statement {
             Statement::Let {
                 bindings,
-                value: Expr::SLoad { key, .. },
+                value: Expression::SLoad { key, .. },
             } if bindings.len() == 1 => {
-                if let Some((def_idx, word0, word1)) = keccak_defs.get(&key.id.0) {
+                if let Some((definition_index, word0, word1)) = keccak_definitions.get(&key.id.0) {
                     if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1 {
-                        transforms.push((
-                            idx,
+                        transformations.push((
+                            index,
                             Statement::Let {
                                 bindings: bindings.clone(),
-                                value: Expr::MappingSLoad {
+                                value: Expression::MappingSLoad {
                                     key: *word0,
                                     slot: *word1,
                                 },
                             },
-                            *def_idx,
+                            *definition_index,
                         ));
                     }
                 }
             }
-            // Pattern 2: sstore(hash, value) where hash = keccak256_pair(key, slot)
             Statement::SStore { key, value, .. } => {
-                if let Some((def_idx, word0, word1)) = keccak_defs.get(&key.id.0) {
+                if let Some((definition_index, word0, word1)) = keccak_definitions.get(&key.id.0) {
                     if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1 {
-                        transforms.push((
-                            idx,
+                        transformations.push((
+                            index,
                             Statement::MappingSStore {
                                 key: *word0,
                                 slot: *word1,
                                 value: *value,
                             },
-                            *def_idx,
+                            *definition_index,
                         ));
                     }
                 }
@@ -187,37 +181,36 @@ fn outline_statements(stmts: &mut Vec<Statement>, stats: &mut CompoundOutliningS
         }
     }
 
-    if transforms.is_empty() {
+    if transformations.is_empty() {
         return;
     }
 
-    // Collect all indices to remove (keccak definitions that are absorbed)
     let mut indices_to_remove = std::collections::BTreeSet::new();
     let mut replacements: BTreeMap<usize, Statement> = BTreeMap::new();
 
-    for (stmt_idx, new_stmt, def_idx) in transforms {
-        // Only apply if neither index was already claimed
-        if !indices_to_remove.contains(&def_idx) && !indices_to_remove.contains(&stmt_idx) {
-            indices_to_remove.insert(def_idx);
-            replacements.insert(stmt_idx, new_stmt);
-            match &replacements[&stmt_idx] {
+    for (statement_index, new_statement, definition_index) in transformations {
+        if !indices_to_remove.contains(&definition_index)
+            && !indices_to_remove.contains(&statement_index)
+        {
+            indices_to_remove.insert(definition_index);
+            replacements.insert(statement_index, new_statement);
+            match &replacements[&statement_index] {
                 Statement::Let {
-                    value: Expr::MappingSLoad { .. },
+                    value: Expression::MappingSLoad { .. },
                     ..
-                } => stats.mapping_sloads += 1,
-                Statement::MappingSStore { .. } => stats.mapping_sstores += 1,
+                } => statistics.mapping_sloads += 1,
+                Statement::MappingSStore { .. } => statistics.mapping_sstores += 1,
                 _ => {}
             }
         }
     }
 
-    // Apply replacements
-    for (idx, new_stmt) in &replacements {
-        stmts[*idx] = new_stmt.clone();
+    for (index, new_statement) in &replacements {
+        statements[*index] = new_statement.clone();
     }
 
-    // Remove absorbed keccak definitions (iterate in reverse to preserve indices)
-    for idx in indices_to_remove.into_iter().rev() {
-        stmts.remove(idx);
+    // Iterate in reverse so the indices stay valid as elements are removed.
+    for index in indices_to_remove.into_iter().rev() {
+        statements.remove(index);
     }
 }

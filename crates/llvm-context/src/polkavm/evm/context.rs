@@ -162,9 +162,9 @@ pub fn caller_outlined<'ctx>(
     use crate::polkavm::context::runtime::RuntimeFunction;
     let function = context
         .get_function(Caller::NAME, false)
-        .expect("__revive_caller should be declared");
+        .expect("ICE: __revive_caller should be declared");
     let result = context
         .build_call(function.borrow().declaration(), &[], "caller_result")
-        .expect("__revive_caller should return a value");
+        .expect("ICE: __revive_caller should return a value");
     Ok(result)
 }

@@ -22,8 +22,9 @@
 //! ```
 
 use crate::ir::{
-    AddressSpace, BinOp, BitWidth, Block, CallKind, CreateKind, Expr, Function, FunctionId,
-    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOp, Value, ValueId,
+    AddressSpace, BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function,
+    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
+    ValueId,
 };
 use std::collections::BTreeMap;
 use std::fmt::{self, Write};
@@ -108,17 +109,17 @@ impl<'a> Printer<'a> {
     }
 
     /// Prints an IR statement and returns the formatted string.
-    pub fn print_statement(&mut self, stmt: &Statement) -> String {
+    pub fn print_statement(&mut self, statement: &Statement) -> String {
         self.output.clear();
         self.indent = 0;
-        self.write_statement(stmt);
+        self.write_statement(statement);
         std::mem::take(&mut self.output)
     }
 
     /// Prints an IR expression and returns the formatted string.
-    pub fn print_expr(&mut self, expr: &Expr) -> String {
+    pub fn print_expr(&mut self, expression: &Expression) -> String {
         self.output.clear();
-        self.write_expr(expr);
+        self.write_expr(expression);
         std::mem::take(&mut self.output)
     }
 
@@ -191,7 +192,7 @@ impl<'a> Printer<'a> {
         let _ = write!(self.output, "function {}(", function.name);
 
         // Parameters
-        for (i, (id, ty)) in function.params.iter().enumerate() {
+        for (i, (id, ty)) in function.parameters.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
             }
@@ -259,14 +260,14 @@ impl<'a> Printer<'a> {
     }
 
     fn write_block(&mut self, block: &Block) {
-        for stmt in &block.statements {
-            self.write_statement(stmt);
+        for statement in &block.statements {
+            self.write_statement(statement);
         }
     }
 
     fn write_region(&mut self, region: &Region) {
-        for stmt in &region.statements {
-            self.write_statement(stmt);
+        for statement in &region.statements {
+            self.write_statement(statement);
         }
         if !region.yields.is_empty() {
             self.write_indent();
@@ -281,8 +282,8 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn write_statement(&mut self, stmt: &Statement) {
-        match stmt {
+    fn write_statement(&mut self, statement: &Statement) {
+        match statement {
             Statement::Let { bindings, value } => {
                 self.write_indent();
                 self.output.push_str("let ");
@@ -501,9 +502,9 @@ impl<'a> Printer<'a> {
             }
 
             Statement::For {
-                init_values,
-                loop_vars,
-                condition_stmts,
+                initial_values,
+                loop_variables,
+                condition_statements,
                 condition,
                 body,
                 post,
@@ -526,12 +527,14 @@ impl<'a> Printer<'a> {
 
                 self.output.push_str("for { ");
 
-                // Init values -> loop vars
-                for (i, (init, var)) in init_values.iter().zip(loop_vars.iter()).enumerate() {
+                // Init values -> loop variables
+                for (i, (init, variable)) in
+                    initial_values.iter().zip(loop_variables.iter()).enumerate()
+                {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.write_value_id(*var);
+                    self.write_value_id(*variable);
                     self.output.push_str(" := ");
                     self.write_value(init);
                 }
@@ -540,13 +543,13 @@ impl<'a> Printer<'a> {
                 self.write_newline();
 
                 // Condition statements
-                if !condition_stmts.is_empty() {
+                if !condition_statements.is_empty() {
                     self.indent += 1;
                     self.write_indent();
-                    self.output.push_str("// condition_stmts:");
+                    self.output.push_str("// condition_statements:");
                     self.write_newline();
-                    for stmt in condition_stmts {
-                        self.write_statement(stmt);
+                    for statement in condition_statements {
+                        self.write_statement(statement);
                     }
                     self.indent -= 1;
                 }
@@ -654,9 +657,13 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
-            Statement::CustomErrorRevert { selector, args } => {
+            Statement::CustomErrorRevert {
+                selector,
+                arguments,
+            } => {
                 self.write_indent();
-                let arg_strs: Vec<String> = args.iter().map(|a| format!("v{}", a.id.0)).collect();
+                let arg_strs: Vec<String> =
+                    arguments.iter().map(|a| format!("v{}", a.id.0)).collect();
                 self.output.push_str(&format!(
                     "custom_error_revert(0x{}, [{}])",
                     selector.to_str_radix(16),
@@ -700,9 +707,9 @@ impl<'a> Printer<'a> {
                 self.write_value(gas);
                 self.output.push_str(", ");
                 self.write_value(address);
-                if let Some(val) = value {
+                if let Some(value) = value {
                     self.output.push_str(", ");
-                    self.write_value(val);
+                    self.write_value(value);
                 }
                 self.output.push_str(", ");
                 self.write_value(args_offset);
@@ -861,9 +868,9 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
-            Statement::Expr(expr) => {
+            Statement::Expression(expression) => {
                 self.write_indent();
-                self.write_expr(expr);
+                self.write_expr(expression);
                 self.write_newline();
             }
 
@@ -891,9 +898,9 @@ impl<'a> Printer<'a> {
         self.write_newline();
     }
 
-    fn write_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Literal { value, ty } => {
+    fn write_expr(&mut self, expression: &Expression) {
+        match expression {
+            Expression::Literal { value, ty } => {
                 let _ = write!(self.output, "0x{:x}", value);
                 if self.config.show_types && *ty != Type::Int(BitWidth::I256) {
                     self.output.push_str(": ");
@@ -901,11 +908,11 @@ impl<'a> Printer<'a> {
                 }
             }
 
-            Expr::Var(id) => {
+            Expression::Var(id) => {
                 self.write_value_id(*id);
             }
 
-            Expr::Binary { op, lhs, rhs } => {
+            Expression::Binary { op, lhs, rhs } => {
                 self.output.push_str(self.binop_name(*op));
                 self.output.push('(');
                 self.write_value(lhs);
@@ -914,7 +921,7 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::Ternary { op, a, b, n } => {
+            Expression::Ternary { op, a, b, n } => {
                 self.output.push_str(self.binop_name(*op));
                 self.output.push('(');
                 self.write_value(a);
@@ -925,11 +932,11 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::Unary { op, operand } => {
+            Expression::Unary { op, operand } => {
                 let name = match op {
-                    UnaryOp::IsZero => "iszero",
-                    UnaryOp::Not => "not",
-                    UnaryOp::Clz => "clz",
+                    UnaryOperation::IsZero => "iszero",
+                    UnaryOperation::Not => "not",
+                    UnaryOperation::Clz => "clz",
                 };
                 self.output.push_str(name);
                 self.output.push('(');
@@ -937,66 +944,66 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::CallDataLoad { offset } => {
+            Expression::CallDataLoad { offset } => {
                 self.output.push_str("calldataload(");
                 self.write_value(offset);
                 self.output.push(')');
             }
 
-            Expr::CallValue => self.output.push_str("callvalue()"),
-            Expr::Caller => self.output.push_str("caller()"),
-            Expr::Origin => self.output.push_str("origin()"),
-            Expr::CallDataSize => self.output.push_str("calldatasize()"),
-            Expr::CodeSize => self.output.push_str("codesize()"),
-            Expr::GasPrice => self.output.push_str("gasprice()"),
+            Expression::CallValue => self.output.push_str("callvalue()"),
+            Expression::Caller => self.output.push_str("caller()"),
+            Expression::Origin => self.output.push_str("origin()"),
+            Expression::CallDataSize => self.output.push_str("calldatasize()"),
+            Expression::CodeSize => self.output.push_str("codesize()"),
+            Expression::GasPrice => self.output.push_str("gasprice()"),
 
-            Expr::ExtCodeSize { address } => {
+            Expression::ExtCodeSize { address } => {
                 self.output.push_str("extcodesize(");
                 self.write_value(address);
                 self.output.push(')');
             }
 
-            Expr::ReturnDataSize => self.output.push_str("returndatasize()"),
+            Expression::ReturnDataSize => self.output.push_str("returndatasize()"),
 
-            Expr::ExtCodeHash { address } => {
+            Expression::ExtCodeHash { address } => {
                 self.output.push_str("extcodehash(");
                 self.write_value(address);
                 self.output.push(')');
             }
 
-            Expr::BlockHash { number } => {
+            Expression::BlockHash { number } => {
                 self.output.push_str("blockhash(");
                 self.write_value(number);
                 self.output.push(')');
             }
 
-            Expr::Coinbase => self.output.push_str("coinbase()"),
-            Expr::Timestamp => self.output.push_str("timestamp()"),
-            Expr::Number => self.output.push_str("number()"),
-            Expr::Difficulty => self.output.push_str("difficulty()"),
-            Expr::GasLimit => self.output.push_str("gaslimit()"),
-            Expr::ChainId => self.output.push_str("chainid()"),
-            Expr::SelfBalance => self.output.push_str("selfbalance()"),
-            Expr::BaseFee => self.output.push_str("basefee()"),
+            Expression::Coinbase => self.output.push_str("coinbase()"),
+            Expression::Timestamp => self.output.push_str("timestamp()"),
+            Expression::Number => self.output.push_str("number()"),
+            Expression::Difficulty => self.output.push_str("difficulty()"),
+            Expression::GasLimit => self.output.push_str("gaslimit()"),
+            Expression::ChainId => self.output.push_str("chainid()"),
+            Expression::SelfBalance => self.output.push_str("selfbalance()"),
+            Expression::BaseFee => self.output.push_str("basefee()"),
 
-            Expr::BlobHash { index } => {
+            Expression::BlobHash { index } => {
                 self.output.push_str("blobhash(");
                 self.write_value(index);
                 self.output.push(')');
             }
 
-            Expr::BlobBaseFee => self.output.push_str("blobbasefee()"),
-            Expr::Gas => self.output.push_str("gas()"),
-            Expr::MSize => self.output.push_str("msize()"),
-            Expr::Address => self.output.push_str("address()"),
+            Expression::BlobBaseFee => self.output.push_str("blobbasefee()"),
+            Expression::Gas => self.output.push_str("gas()"),
+            Expression::MSize => self.output.push_str("msize()"),
+            Expression::Address => self.output.push_str("address()"),
 
-            Expr::Balance { address } => {
+            Expression::Balance { address } => {
                 self.output.push_str("balance(");
                 self.write_value(address);
                 self.output.push(')');
             }
 
-            Expr::MLoad { offset, region } => {
+            Expression::MLoad { offset, region } => {
                 self.output.push_str("mload(");
                 self.write_value(offset);
                 self.output.push(')');
@@ -1005,7 +1012,7 @@ impl<'a> Printer<'a> {
                 }
             }
 
-            Expr::SLoad { key, static_slot } => {
+            Expression::SLoad { key, static_slot } => {
                 self.output.push_str("sload(");
                 self.write_value(key);
                 self.output.push(')');
@@ -1016,50 +1023,53 @@ impl<'a> Printer<'a> {
                 }
             }
 
-            Expr::TLoad { key } => {
+            Expression::TLoad { key } => {
                 self.output.push_str("tload(");
                 self.write_value(key);
                 self.output.push(')');
             }
 
-            Expr::Call { function, args } => {
+            Expression::Call {
+                function,
+                arguments,
+            } => {
                 if let Some(name) = self.function_names.get(function) {
                     self.output.push_str(name);
                 } else {
                     let _ = write!(self.output, "func_{}", function.0);
                 }
                 self.output.push('(');
-                for (i, arg) in args.iter().enumerate() {
+                for (i, argument) in arguments.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.write_value(arg);
+                    self.write_value(argument);
                 }
                 self.output.push(')');
             }
 
-            Expr::Truncate { value, to } => {
+            Expression::Truncate { value, to } => {
                 let _ = write!(self.output, "truncate<i{}>", to.bits());
                 self.output.push('(');
                 self.write_value(value);
                 self.output.push(')');
             }
 
-            Expr::ZeroExtend { value, to } => {
+            Expression::ZeroExtend { value, to } => {
                 let _ = write!(self.output, "zext<i{}>", to.bits());
                 self.output.push('(');
                 self.write_value(value);
                 self.output.push(')');
             }
 
-            Expr::SignExtendTo { value, to } => {
+            Expression::SignExtendTo { value, to } => {
                 let _ = write!(self.output, "sext<i{}>", to.bits());
                 self.output.push('(');
                 self.write_value(value);
                 self.output.push(')');
             }
 
-            Expr::Keccak256 { offset, length } => {
+            Expression::Keccak256 { offset, length } => {
                 self.output.push_str("keccak256(");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -1067,7 +1077,7 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::Keccak256Pair { word0, word1 } => {
+            Expression::Keccak256Pair { word0, word1 } => {
                 self.output.push_str("keccak256_pair(");
                 self.write_value(word0);
                 self.output.push_str(", ");
@@ -1075,13 +1085,13 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::Keccak256Single { word0 } => {
+            Expression::Keccak256Single { word0 } => {
                 self.output.push_str("keccak256_single(");
                 self.write_value(word0);
                 self.output.push(')');
             }
 
-            Expr::MappingSLoad { key, slot } => {
+            Expression::MappingSLoad { key, slot } => {
                 self.output.push_str("mapping_sload(");
                 self.write_value(key);
                 self.output.push_str(", ");
@@ -1089,19 +1099,19 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expr::DataOffset { id } => {
+            Expression::DataOffset { id } => {
                 let _ = write!(self.output, "dataoffset(\"{}\")", id);
             }
 
-            Expr::DataSize { id } => {
+            Expression::DataSize { id } => {
                 let _ = write!(self.output, "datasize(\"{}\")", id);
             }
 
-            Expr::LoadImmutable { key } => {
+            Expression::LoadImmutable { key } => {
                 let _ = write!(self.output, "loadimmutable(\"{}\")", key);
             }
 
-            Expr::LinkerSymbol { path } => {
+            Expression::LinkerSymbol { path } => {
                 let _ = write!(self.output, "linkersymbol(\"{}\")", path);
             }
         }
@@ -1139,31 +1149,31 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn binop_name(&self, op: BinOp) -> &'static str {
+    fn binop_name(&self, op: BinaryOperation) -> &'static str {
         match op {
-            BinOp::Add => "add",
-            BinOp::Sub => "sub",
-            BinOp::Mul => "mul",
-            BinOp::Div => "div",
-            BinOp::SDiv => "sdiv",
-            BinOp::Mod => "mod",
-            BinOp::SMod => "smod",
-            BinOp::Exp => "exp",
-            BinOp::AddMod => "addmod",
-            BinOp::MulMod => "mulmod",
-            BinOp::And => "and",
-            BinOp::Or => "or",
-            BinOp::Xor => "xor",
-            BinOp::Shl => "shl",
-            BinOp::Shr => "shr",
-            BinOp::Sar => "sar",
-            BinOp::Lt => "lt",
-            BinOp::Gt => "gt",
-            BinOp::Slt => "slt",
-            BinOp::Sgt => "sgt",
-            BinOp::Eq => "eq",
-            BinOp::Byte => "byte",
-            BinOp::SignExtend => "signextend",
+            BinaryOperation::Add => "add",
+            BinaryOperation::Sub => "sub",
+            BinaryOperation::Mul => "mul",
+            BinaryOperation::Div => "div",
+            BinaryOperation::SDiv => "sdiv",
+            BinaryOperation::Mod => "mod",
+            BinaryOperation::SMod => "smod",
+            BinaryOperation::Exp => "exp",
+            BinaryOperation::AddMod => "addmod",
+            BinaryOperation::MulMod => "mulmod",
+            BinaryOperation::And => "and",
+            BinaryOperation::Or => "or",
+            BinaryOperation::Xor => "xor",
+            BinaryOperation::Shl => "shl",
+            BinaryOperation::Shr => "shr",
+            BinaryOperation::Sar => "sar",
+            BinaryOperation::Lt => "lt",
+            BinaryOperation::Gt => "gt",
+            BinaryOperation::Slt => "slt",
+            BinaryOperation::Sgt => "sgt",
+            BinaryOperation::Eq => "eq",
+            BinaryOperation::Byte => "byte",
+            BinaryOperation::SignExtend => "signextend",
         }
     }
 
@@ -1196,14 +1206,14 @@ pub fn print_function(function: &Function) -> String {
 }
 
 /// Convenience function to print a statement to a string.
-pub fn print_statement(stmt: &Statement) -> String {
+pub fn print_statement(statement: &Statement) -> String {
     let mut printer = Printer::new();
-    printer.print_statement(stmt)
+    printer.print_statement(statement)
 }
 
 /// Convenience function to print an expression to a string.
-pub fn print_expr(expr: &Expr) -> String {
-    Printer::new().print_expr(expr)
+pub fn print_expr(expression: &Expression) -> String {
+    Printer::new().print_expr(expression)
 }
 
 /// Implement Display for Object using the printer.
@@ -1227,8 +1237,8 @@ impl fmt::Display for Statement {
     }
 }
 
-/// Implement Display for Expr using the printer.
-impl fmt::Display for Expr {
+/// Implement Display for Expression using the printer.
+impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", print_expr(self))
     }
@@ -1241,47 +1251,47 @@ mod tests {
 
     #[test]
     fn test_print_literal() {
-        let expr = Expr::Literal {
+        let expression = Expression::Literal {
             value: BigUint::from(42u64),
             ty: Type::Int(BitWidth::I256),
         };
-        let output = print_expr(&expr);
+        let output = print_expr(&expression);
         assert_eq!(output, "0x2a");
     }
 
     #[test]
     fn test_print_binary_op() {
-        let expr = Expr::Binary {
-            op: BinOp::Add,
+        let expression = Expression::Binary {
+            op: BinaryOperation::Add,
             lhs: Value::int(ValueId(0)),
             rhs: Value::int(ValueId(1)),
         };
-        let output = print_expr(&expr);
+        let output = print_expr(&expression);
         assert_eq!(output, "add(v0, v1)");
     }
 
     #[test]
     fn test_print_let_statement() {
-        let stmt = Statement::Let {
+        let statement = Statement::Let {
             bindings: vec![ValueId(2)],
-            value: Expr::Binary {
-                op: BinOp::Add,
+            value: Expression::Binary {
+                op: BinaryOperation::Add,
                 lhs: Value::int(ValueId(0)),
                 rhs: Value::int(ValueId(1)),
             },
         };
-        let output = print_statement(&stmt);
+        let output = print_statement(&statement);
         assert_eq!(output.trim(), "let v2 := add(v0, v1)");
     }
 
     #[test]
     fn test_print_mstore_with_region() {
-        let stmt = Statement::MStore {
+        let statement = Statement::MStore {
             offset: Value::int(ValueId(0)),
             value: Value::int(ValueId(1)),
             region: MemoryRegion::Scratch,
         };
-        let output = print_statement(&stmt);
+        let output = print_statement(&statement);
         assert!(output.contains("mstore(v0, v1)"));
         assert!(output.contains("/* scratch */"));
     }
@@ -1291,15 +1301,15 @@ mod tests {
         let function = Function {
             id: FunctionId(0),
             name: "add_one".to_string(),
-            params: vec![(ValueId(0), Type::Int(BitWidth::I256))],
+            parameters: vec![(ValueId(0), Type::Int(BitWidth::I256))],
             returns: vec![Type::Int(BitWidth::I256)],
             return_values_initial: vec![ValueId(1)],
             return_values: vec![ValueId(2)],
             body: Block {
                 statements: vec![Statement::Let {
                     bindings: vec![ValueId(2)],
-                    value: Expr::Binary {
-                        op: BinOp::Add,
+                    value: Expression::Binary {
+                        op: BinaryOperation::Add,
                         lhs: Value::int(ValueId(0)),
                         rhs: Value::new(ValueId(3), Type::Int(BitWidth::I256)),
                     },
@@ -1323,7 +1333,7 @@ mod tests {
             code: Block {
                 statements: vec![Statement::Let {
                     bindings: vec![ValueId(0)],
-                    value: Expr::Literal {
+                    value: Expression::Literal {
                         value: BigUint::from(0u64),
                         ty: Type::Int(BitWidth::I256),
                     },

@@ -145,13 +145,13 @@ impl ValueId {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Value {
     pub id: ValueId,
-    pub ty: Type,
+    pub value_type: Type,
 }
 
 impl Value {
     /// Creates a new typed value.
-    pub fn new(id: ValueId, ty: Type) -> Self {
-        Value { id, ty }
+    pub fn new(id: ValueId, value_type: Type) -> Self {
+        Value { id, value_type }
     }
 
     /// Creates an integer value with default I256 type.
@@ -236,7 +236,7 @@ pub enum Expression {
     /// Literal constant.
     Literal {
         value: BigUint,
-        ty: Type,
+        value_type: Type,
     },
 
     /// Reference to an SSA value.
@@ -244,14 +244,14 @@ pub enum Expression {
 
     /// Binary operation.
     Binary {
-        op: BinaryOperation,
+        operation: BinaryOperation,
         lhs: Value,
         rhs: Value,
     },
 
     /// Ternary operation (addmod, mulmod).
     Ternary {
-        op: BinaryOperation,
+        operation: BinaryOperation,
         a: Value,
         b: Value,
         n: Value,
@@ -259,7 +259,7 @@ pub enum Expression {
 
     /// Unary operation.
     Unary {
-        op: UnaryOperation,
+        operation: UnaryOperation,
         operand: Value,
     },
 

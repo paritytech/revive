@@ -737,7 +737,7 @@ mod tests {
                         bindings: vec![ValueId(0)],
                         value: Expression::Literal {
                             value: BigUint::from(0u64),
-                            ty: Type::Int(BitWidth::I256),
+                            value_type: Type::Int(BitWidth::I256),
                         },
                     },
                     Statement::Let {
@@ -785,7 +785,7 @@ mod tests {
                         bindings: vec![ValueId(0)],
                         value: Expression::Literal {
                             value: BigUint::from(1u64),
-                            ty: Type::Int(BitWidth::I256),
+                            value_type: Type::Int(BitWidth::I256),
                         },
                     },
                     Statement::If {
@@ -831,7 +831,7 @@ mod tests {
                     statements: vec![Statement::Let {
                         bindings: vec![ValueId(2)],
                         value: Expression::Binary {
-                            op: BinaryOperation::Add,
+                            operation: BinaryOperation::Add,
                             lhs: int_value(0),
                             rhs: int_value(1),
                         },

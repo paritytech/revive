@@ -548,11 +548,15 @@ impl HeapAnalysis {
                 info
             }),
 
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let lhs_info = self.offset_values.get(&lhs.id.0);
                 let rhs_info = self.offset_values.get(&rhs.id.0);
 
-                match op {
+                match operation {
                     crate::ir::BinaryOperation::Add => {
                         // Adding two values: alignment is GCD of alignments
                         let lhs_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
@@ -1028,7 +1032,7 @@ mod tests {
         // Zero literal
         let expression = Expression::Literal {
             value: BigUint::from(0u32),
-            ty: crate::ir::Type::default(),
+            value_type: crate::ir::Type::default(),
         };
         let info = analysis.analyze_expr_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(0));
@@ -1037,7 +1041,7 @@ mod tests {
         // Word-aligned literal (0x40 = 64)
         let expression = Expression::Literal {
             value: BigUint::from(64u32),
-            ty: crate::ir::Type::default(),
+            value_type: crate::ir::Type::default(),
         };
         let info = analysis.analyze_expr_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(64));

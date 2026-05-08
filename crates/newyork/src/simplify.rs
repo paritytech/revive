@@ -243,8 +243,9 @@ impl Simplifier {
 
                     // Track unary definitions for algebraic identity detection
                     // (e.g., not(not(x)) = x).
-                    if let Expression::Unary { op, operand } = &simplified_expr {
-                        self.unary_defs.insert(bindings[0].0, (*op, operand.id));
+                    if let Expression::Unary { operation, operand } = &simplified_expr {
+                        self.unary_defs
+                            .insert(bindings[0].0, (*operation, operand.id));
                     }
                 }
 
@@ -552,7 +553,7 @@ impl Simplifier {
 
             // Statements with no Value fields — copy through unchanged.
             // CustomErrorRevert's arguments are pre-resolved when the outliner builds it,
-            // so it stays in the no-op group.
+            // so it stays in the no-operation group.
             Statement::Stop
             | Statement::Invalid
             | Statement::PanicRevert { .. }
@@ -632,7 +633,11 @@ impl Simplifier {
     /// and copy propagation on operands.
     fn simplify_expr(&mut self, expression: Expression) -> Expression {
         match expression {
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let lhs = self.resolve_value(lhs);
                 let rhs = self.resolve_value(rhs);
                 let lhs_val = self.try_get_const(&lhs);
@@ -640,17 +645,18 @@ impl Simplifier {
 
                 // Constant folding: both operands are constants
                 if let (Some(a), Some(b)) = (&lhs_val, &rhs_val) {
-                    if let Some(result) = fold_binary(op, a, b) {
+                    if let Some(result) = fold_binary(operation, a, b) {
                         self.stats.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
-                            ty: result_type(op),
+                            value_type: result_type(operation),
                         };
                     }
                 }
 
                 // Algebraic identities (safe: just rewrites the expression)
-                if let Some(simplified) = simplify_binary(op, &lhs, &rhs, &lhs_val, &rhs_val) {
+                if let Some(simplified) = simplify_binary(operation, &lhs, &rhs, &lhs_val, &rhs_val)
+                {
                     self.stats.identities_simplified += 1;
                     return simplified;
                 }
@@ -661,35 +667,39 @@ impl Simplifier {
                 // makes LLVM generate more conservative code. The type inference pass
                 // already handles narrow types for the LLVM codegen.
 
-                Expression::Binary { op, lhs, rhs }
+                Expression::Binary {
+                    operation,
+                    lhs,
+                    rhs,
+                }
             }
 
-            Expression::Unary { op, operand } => {
+            Expression::Unary { operation, operand } => {
                 let operand = self.resolve_value(operand);
                 let operand_val = self.try_get_const(&operand);
 
                 if let Some(c) = &operand_val {
-                    if let Some(result) = fold_unary(op, c) {
+                    if let Some(result) = fold_unary(operation, c) {
                         self.stats.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
-                            ty: unary_result_type(op),
+                            value_type: unary_result_type(operation),
                         };
                     }
                 }
 
                 // Algebraic identity: not(not(x)) = x (double bitwise negation)
-                if op == UnaryOperation::Not {
+                if operation == UnaryOperation::Not {
                     if let Some((UnaryOperation::Not, inner)) = self.unary_defs.get(&operand.id.0) {
                         self.stats.identities_simplified += 1;
                         return Expression::Var(*inner);
                     }
                 }
 
-                Expression::Unary { op, operand }
+                Expression::Unary { operation, operand }
             }
 
-            Expression::Ternary { op, a, b, n } => {
+            Expression::Ternary { operation, a, b, n } => {
                 let a = self.resolve_value(a);
                 let b = self.resolve_value(b);
                 let n = self.resolve_value(n);
@@ -698,16 +708,16 @@ impl Simplifier {
                 let n_val = self.try_get_const(&n);
 
                 if let (Some(av), Some(bv), Some(nv)) = (&a_val, &b_val, &n_val) {
-                    if let Some(result) = fold_ternary(op, av, bv, nv) {
+                    if let Some(result) = fold_ternary(operation, av, bv, nv) {
                         self.stats.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
-                            ty: Type::Int(BitWidth::I256),
+                            value_type: Type::Int(BitWidth::I256),
                         };
                     }
                 }
 
-                Expression::Ternary { op, a, b, n }
+                Expression::Ternary { operation, a, b, n }
             }
 
             // Resolve copies in Var references
@@ -743,7 +753,7 @@ impl Simplifier {
                     self.stats.constants_folded += 1;
                     Expression::Literal {
                         value: result,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     }
                 } else {
                     Expression::Keccak256Single { word0 }
@@ -760,7 +770,7 @@ impl Simplifier {
                     self.stats.constants_folded += 1;
                     Expression::Literal {
                         value: result,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     }
                 } else {
                     Expression::Keccak256Pair { word0, word1 }
@@ -850,13 +860,13 @@ impl Simplifier {
                 bindings: vec![helper_id],
                 value: Expression::Literal {
                     value: const_value,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             Statement::Let {
                 bindings: bindings.to_vec(),
                 value: Expression::Binary {
-                    op: target_op,
+                    operation: target_op,
                     lhs,
                     rhs,
                 },
@@ -873,15 +883,19 @@ impl Simplifier {
         bindings: &[ValueId],
         expression: &Expression,
     ) -> Option<Vec<Statement>> {
-        let (op, lhs, rhs) = match expression {
-            Expression::Binary { op, lhs, rhs } => (*op, *lhs, *rhs),
+        let (operation, lhs, rhs) = match expression {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => (*operation, *lhs, *rhs),
             _ => return None,
         };
         let lhs_val = self.try_get_const(&lhs);
         let rhs_val = self.try_get_const(&rhs);
         let in_range = |k: u32| (1..256).contains(&k);
 
-        match op {
+        match operation {
             BinaryOperation::Mul => {
                 let (k, value) = if let Some(k) = rhs_val.as_ref().and_then(log2_exact) {
                     (k, lhs)
@@ -1244,8 +1258,8 @@ fn find_custom_error_pattern_backwards(
 }
 
 /// Returns the result type for a binary operation.
-fn result_type(op: BinaryOperation) -> Type {
-    match op {
+fn result_type(operation: BinaryOperation) -> Type {
+    match operation {
         BinaryOperation::Lt
         | BinaryOperation::Gt
         | BinaryOperation::Slt
@@ -1256,8 +1270,8 @@ fn result_type(op: BinaryOperation) -> Type {
 }
 
 /// Returns the result type for a unary operation.
-fn unary_result_type(op: UnaryOperation) -> Type {
-    match op {
+fn unary_result_type(operation: UnaryOperation) -> Type {
+    match operation {
         UnaryOperation::IsZero => Type::Int(BitWidth::I256),
         UnaryOperation::Not | UnaryOperation::Clz => Type::Int(BitWidth::I256),
     }
@@ -1265,11 +1279,11 @@ fn unary_result_type(op: UnaryOperation) -> Type {
 
 /// Folds a binary operation on two constant values.
 /// Returns None if the operation cannot be folded.
-fn fold_binary(op: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
+fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
     let modulus = modulus_u256();
     let max = max_u256();
 
-    Some(match op {
+    Some(match operation {
         BinaryOperation::Add => (a + b) % &modulus,
         BinaryOperation::Sub => {
             if a >= b {
@@ -1373,8 +1387,8 @@ fn fold_binary(op: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint>
 }
 
 /// Folds a unary operation on a constant value.
-fn fold_unary(op: UnaryOperation, a: &BigUint) -> Option<BigUint> {
-    Some(match op {
+fn fold_unary(operation: UnaryOperation, a: &BigUint) -> Option<BigUint> {
+    Some(match operation {
         UnaryOperation::IsZero => bool_to_u256(a.is_zero()),
         UnaryOperation::Not => {
             // Bitwise NOT: flip all 256 bits
@@ -1392,11 +1406,16 @@ fn fold_unary(op: UnaryOperation, a: &BigUint) -> Option<BigUint> {
 }
 
 /// Folds a ternary operation (addmod, mulmod).
-fn fold_ternary(op: BinaryOperation, a: &BigUint, b: &BigUint, n: &BigUint) -> Option<BigUint> {
+fn fold_ternary(
+    operation: BinaryOperation,
+    a: &BigUint,
+    b: &BigUint,
+    n: &BigUint,
+) -> Option<BigUint> {
     if n.is_zero() {
         return Some(BigUint::zero());
     }
-    Some(match op {
+    Some(match operation {
         BinaryOperation::AddMod => (a + b) % n,
         BinaryOperation::MulMod => (a * b) % n,
         _ => return None,
@@ -1441,14 +1460,17 @@ fn log2_exact(value: &BigUint) -> Option<u32> {
 /// Applies algebraic identity simplifications.
 /// Returns Some(simplified_expr) if an identity applies, None otherwise.
 fn simplify_binary(
-    op: BinaryOperation,
+    operation: BinaryOperation,
     lhs: &Value,
     rhs: &Value,
     lhs_val: &Option<BigUint>,
     rhs_val: &Option<BigUint>,
 ) -> Option<Expression> {
     let i256 = Type::Int(BitWidth::I256);
-    let literal = |value: BigUint| Expression::Literal { value, ty: i256 };
+    let literal = |value: BigUint| Expression::Literal {
+        value,
+        value_type: i256,
+    };
     let var_l = || Expression::Var(lhs.id);
     let var_r = || Expression::Var(rhs.id);
     let same = lhs.id == rhs.id;
@@ -1457,7 +1479,7 @@ fn simplify_binary(
     let zero = BigUint::zero();
     let one = BigUint::one();
 
-    match op {
+    match operation {
         // add(x, 0) = add(0, x) = x
         BinaryOperation::Add => {
             if r_is(&zero) {
@@ -1913,7 +1935,7 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
             function
                 .parameters
                 .iter()
-                .map(|(_, ty)| *ty)
+                .map(|(_, value_type)| *value_type)
                 .collect::<Vec<_>>(),
             function.returns.clone(),
         );
@@ -1960,12 +1982,12 @@ fn canonicalize_function(
 
     // Encode signature
     buf.push(parameter_types.len() as u8);
-    for ty in parameter_types {
-        buf.push(type_tag(ty));
+    for value_type in parameter_types {
+        buf.push(type_tag(value_type));
     }
     buf.push(return_types.len() as u8);
-    for ty in return_types {
-        buf.push(type_tag(ty));
+    for value_type in return_types {
+        buf.push(type_tag(value_type));
     }
 
     // Register parameters in canonical order
@@ -2019,38 +2041,42 @@ impl Canonicalizer {
 
     fn encode_value(&mut self, value: &Value, buf: &mut Vec<u8>) {
         self.encode_value_id(value.id, buf);
-        buf.push(type_tag(&value.ty));
+        buf.push(type_tag(&value.value_type));
     }
 
     fn encode_expr(&mut self, expression: &Expression, buf: &mut Vec<u8>) {
         match expression {
-            Expression::Literal { value, ty } => {
+            Expression::Literal { value, value_type } => {
                 buf.push(0x01);
                 let bytes = value.to_bytes_le();
                 buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
                 buf.extend_from_slice(&bytes);
-                buf.push(type_tag(ty));
+                buf.push(type_tag(value_type));
             }
             Expression::Var(id) => {
                 buf.push(0x02);
                 self.encode_value_id(*id, buf);
             }
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 buf.push(0x03);
-                buf.push(binop_tag(*op));
+                buf.push(binop_tag(*operation));
                 self.encode_value(lhs, buf);
                 self.encode_value(rhs, buf);
             }
-            Expression::Ternary { op, a, b, n } => {
+            Expression::Ternary { operation, a, b, n } => {
                 buf.push(0x04);
-                buf.push(binop_tag(*op));
+                buf.push(binop_tag(*operation));
                 self.encode_value(a, buf);
                 self.encode_value(b, buf);
                 self.encode_value(n, buf);
             }
-            Expression::Unary { op, operand } => {
+            Expression::Unary { operation, operand } => {
                 buf.push(0x05);
-                buf.push(unaryop_tag(*op));
+                buf.push(unaryop_tag(*operation));
                 self.encode_value(operand, buf);
             }
             Expression::Call {
@@ -2531,8 +2557,8 @@ impl Canonicalizer {
     }
 }
 
-fn type_tag(ty: &Type) -> u8 {
-    match ty {
+fn type_tag(value_type: &Type) -> u8 {
+    match value_type {
         Type::Int(bit_width) => bitwidth_tag(*bit_width),
         Type::Ptr(addr) => match addr {
             crate::ir::AddressSpace::Heap => 0xE0,
@@ -2556,8 +2582,8 @@ fn bitwidth_tag(bit_width: BitWidth) -> u8 {
     }
 }
 
-fn binop_tag(op: BinaryOperation) -> u8 {
-    match op {
+fn binop_tag(operation: BinaryOperation) -> u8 {
+    match operation {
         BinaryOperation::Add => 0,
         BinaryOperation::Sub => 1,
         BinaryOperation::Mul => 2,
@@ -2584,8 +2610,8 @@ fn binop_tag(op: BinaryOperation) -> u8 {
     }
 }
 
-fn unaryop_tag(op: UnaryOperation) -> u8 {
-    match op {
+fn unaryop_tag(operation: UnaryOperation) -> u8 {
+    match operation {
         UnaryOperation::IsZero => 0,
         UnaryOperation::Not => 1,
         UnaryOperation::Clz => 2,
@@ -2864,12 +2890,12 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
 
     // Encode signature (same as exact dedup)
     buf.push(function.parameters.len() as u8);
-    for (_, ty) in &function.parameters {
-        buf.push(type_tag(ty));
+    for (_, value_type) in &function.parameters {
+        buf.push(type_tag(value_type));
     }
     buf.push(function.returns.len() as u8);
-    for ty in &function.returns {
-        buf.push(type_tag(ty));
+    for value_type in &function.returns {
+        buf.push(type_tag(value_type));
     }
 
     // Register parameters
@@ -2901,34 +2927,38 @@ fn fuzzy_encode_expr(
     lit_counter: &mut u32,
 ) {
     match expression {
-        Expression::Literal { ty, .. } => {
+        Expression::Literal { value_type, .. } => {
             buf.push(0x01);
             // Replace literal value with position index
             buf.push(0xFF); // marker for "fuzzy literal"
             buf.extend_from_slice(&lit_counter.to_le_bytes());
             *lit_counter += 1;
-            buf.push(type_tag(ty));
+            buf.push(type_tag(value_type));
         }
         Expression::Var(id) => {
             buf.push(0x02);
             canon.encode_value_id(*id, buf);
         }
-        Expression::Binary { op, lhs, rhs } => {
+        Expression::Binary {
+            operation,
+            lhs,
+            rhs,
+        } => {
             buf.push(0x03);
-            buf.push(binop_tag(*op));
+            buf.push(binop_tag(*operation));
             canon.encode_value(lhs, buf);
             canon.encode_value(rhs, buf);
         }
-        Expression::Ternary { op, a, b, n } => {
+        Expression::Ternary { operation, a, b, n } => {
             buf.push(0x04);
-            buf.push(binop_tag(*op));
+            buf.push(binop_tag(*operation));
             canon.encode_value(a, buf);
             canon.encode_value(b, buf);
             canon.encode_value(n, buf);
         }
-        Expression::Unary { op, operand } => {
+        Expression::Unary { operation, operand } => {
             buf.push(0x05);
-            buf.push(unaryop_tag(*op));
+            buf.push(unaryop_tag(*operation));
             canon.encode_value(operand, buf);
         }
         Expression::Call {
@@ -3349,14 +3379,14 @@ fn update_call_sites_with_extra_args(
                             bindings: vec![vid],
                             value: Expression::Literal {
                                 value: arg_val.clone(),
-                                ty: Type::Int(BitWidth::I256),
+                                value_type: Type::Int(BitWidth::I256),
                             },
                         },
                     );
                     i += 1; // skip past the inserted Let
                     extra_values.push(Value {
                         id: vid,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     });
                 }
                 // Then patch the call (now at position `i`).
@@ -3443,7 +3473,7 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                         if let Some(c) = constants.get(&word0.id.0) {
                             *expression = Expression::Literal {
                                 value: fold_keccak256_single(c),
-                                ty: Type::Int(BitWidth::I256),
+                                value_type: Type::Int(BitWidth::I256),
                             };
                         }
                     }
@@ -3455,7 +3485,7 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                             let c1 = c1.clone();
                             *expression = Expression::Literal {
                                 value: fold_keccak256_pair(&c0, &c1),
-                                ty: Type::Int(BitWidth::I256),
+                                value_type: Type::Int(BitWidth::I256),
                             };
                         }
                     }
@@ -3518,16 +3548,16 @@ mod tests {
             bindings: vec![ValueId(id)],
             value: Expression::Literal {
                 value: BigUint::from(value),
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         }
     }
 
-    fn make_let_binop(id: u32, op: BinaryOperation, lhs_id: u32, rhs_id: u32) -> Statement {
+    fn make_let_binop(id: u32, operation: BinaryOperation, lhs_id: u32, rhs_id: u32) -> Statement {
         Statement::Let {
             bindings: vec![ValueId(id)],
             value: Expression::Binary {
-                op,
+                operation,
                 lhs: Value::int(ValueId(lhs_id)),
                 rhs: Value::int(ValueId(rhs_id)),
             },
@@ -3706,7 +3736,7 @@ mod tests {
             Statement::Let {
                 bindings: vec![ValueId(2)],
                 value: Expression::Binary {
-                    op: BinaryOperation::Add,
+                    operation: BinaryOperation::Add,
                     lhs: Value::int(ValueId(99)),
                     rhs: Value::int(ValueId(1)),
                 },

@@ -20,9 +20,8 @@ pub fn load<'ctx>(
 
 /// Calls the outlined `__revive_calldataload(xlen) -> i256` runtime function.
 ///
-/// This is functionally identical to [`load`] but calls a shared outlined function
+/// Functionally identical to [`load`] but calls a shared outlined function
 /// instead of inlining the alloca+call+load sequence at every call site.
-/// The caller is responsible for truncating the offset to xlen via `clip_to_xlen`.
 pub fn load_outlined<'ctx>(
     context: &mut Context<'ctx>,
     offset: inkwell::values::IntValue<'ctx>,

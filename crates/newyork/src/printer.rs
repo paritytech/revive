@@ -192,14 +192,14 @@ impl<'a> Printer<'a> {
         let _ = write!(self.output, "function {}(", function.name);
 
         // Parameters
-        for (i, (id, ty)) in function.parameters.iter().enumerate() {
+        for (i, (id, value_type)) in function.parameters.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
             }
             self.write_value_id(*id);
             if self.config.show_types {
                 self.output.push_str(": ");
-                self.write_type(*ty);
+                self.write_type(*value_type);
             }
         }
         self.output.push(')');
@@ -207,7 +207,7 @@ impl<'a> Printer<'a> {
         // Return types
         if !function.returns.is_empty() {
             self.output.push_str(" -> (");
-            for (i, (id, ty)) in function
+            for (i, (id, value_type)) in function
                 .return_values_initial
                 .iter()
                 .zip(function.returns.iter())
@@ -219,7 +219,7 @@ impl<'a> Printer<'a> {
                 self.write_value_id(*id);
                 if self.config.show_types {
                     self.output.push_str(": ");
-                    self.write_type(*ty);
+                    self.write_type(*value_type);
                 }
             }
             self.output.push(')');
@@ -900,11 +900,11 @@ impl<'a> Printer<'a> {
 
     fn write_expr(&mut self, expression: &Expression) {
         match expression {
-            Expression::Literal { value, ty } => {
+            Expression::Literal { value, value_type } => {
                 let _ = write!(self.output, "0x{:x}", value);
-                if self.config.show_types && *ty != Type::Int(BitWidth::I256) {
+                if self.config.show_types && *value_type != Type::Int(BitWidth::I256) {
                     self.output.push_str(": ");
-                    self.write_type(*ty);
+                    self.write_type(*value_type);
                 }
             }
 
@@ -912,8 +912,12 @@ impl<'a> Printer<'a> {
                 self.write_value_id(*id);
             }
 
-            Expression::Binary { op, lhs, rhs } => {
-                self.output.push_str(self.binop_name(*op));
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
+                self.output.push_str(self.binop_name(*operation));
                 self.output.push('(');
                 self.write_value(lhs);
                 self.output.push_str(", ");
@@ -921,8 +925,8 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expression::Ternary { op, a, b, n } => {
-                self.output.push_str(self.binop_name(*op));
+            Expression::Ternary { operation, a, b, n } => {
+                self.output.push_str(self.binop_name(*operation));
                 self.output.push('(');
                 self.write_value(a);
                 self.output.push_str(", ");
@@ -932,8 +936,8 @@ impl<'a> Printer<'a> {
                 self.output.push(')');
             }
 
-            Expression::Unary { op, operand } => {
-                let name = match op {
+            Expression::Unary { operation, operand } => {
+                let name = match operation {
                     UnaryOperation::IsZero => "iszero",
                     UnaryOperation::Not => "not",
                     UnaryOperation::Clz => "clz",
@@ -1119,9 +1123,9 @@ impl<'a> Printer<'a> {
 
     fn write_value(&mut self, value: &Value) {
         self.write_value_id(value.id);
-        if self.config.show_types && value.ty != Type::Int(BitWidth::I256) {
+        if self.config.show_types && value.value_type != Type::Int(BitWidth::I256) {
             self.output.push_str(": ");
-            self.write_type(value.ty);
+            self.write_type(value.value_type);
         }
     }
 
@@ -1129,8 +1133,8 @@ impl<'a> Printer<'a> {
         let _ = write!(self.output, "v{}", id.0);
     }
 
-    fn write_type(&mut self, ty: Type) {
-        match ty {
+    fn write_type(&mut self, value_type: Type) {
+        match value_type {
             Type::Int(w) => {
                 let _ = write!(self.output, "i{}", w.bits());
             }
@@ -1149,8 +1153,8 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn binop_name(&self, op: BinaryOperation) -> &'static str {
-        match op {
+    fn binop_name(&self, operation: BinaryOperation) -> &'static str {
+        match operation {
             BinaryOperation::Add => "add",
             BinaryOperation::Sub => "sub",
             BinaryOperation::Mul => "mul",
@@ -1253,7 +1257,7 @@ mod tests {
     fn test_print_literal() {
         let expression = Expression::Literal {
             value: BigUint::from(42u64),
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         };
         let output = print_expr(&expression);
         assert_eq!(output, "0x2a");
@@ -1262,7 +1266,7 @@ mod tests {
     #[test]
     fn test_print_binary_op() {
         let expression = Expression::Binary {
-            op: BinaryOperation::Add,
+            operation: BinaryOperation::Add,
             lhs: Value::int(ValueId(0)),
             rhs: Value::int(ValueId(1)),
         };
@@ -1275,7 +1279,7 @@ mod tests {
         let statement = Statement::Let {
             bindings: vec![ValueId(2)],
             value: Expression::Binary {
-                op: BinaryOperation::Add,
+                operation: BinaryOperation::Add,
                 lhs: Value::int(ValueId(0)),
                 rhs: Value::int(ValueId(1)),
             },
@@ -1309,7 +1313,7 @@ mod tests {
                 statements: vec![Statement::Let {
                     bindings: vec![ValueId(2)],
                     value: Expression::Binary {
-                        op: BinaryOperation::Add,
+                        operation: BinaryOperation::Add,
                         lhs: Value::int(ValueId(0)),
                         rhs: Value::new(ValueId(3), Type::Int(BitWidth::I256)),
                     },
@@ -1335,7 +1339,7 @@ mod tests {
                     bindings: vec![ValueId(0)],
                     value: Expression::Literal {
                         value: BigUint::from(0u64),
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                 }],
             },

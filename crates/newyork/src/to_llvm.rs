@@ -3289,7 +3289,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.function_names.insert(func_id.0, function.name.clone());
             self.function_param_types.insert(
                 func_id.0,
-                function.parameters.iter().map(|(_, ty)| *ty).collect(),
+                function
+                    .parameters
+                    .iter()
+                    .map(|(_, value_type)| *value_type)
+                    .collect(),
             );
             self.function_return_types
                 .insert(func_id.0, function.returns.clone());
@@ -3392,20 +3396,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let argument_types: Vec<_> = function
             .parameters
             .iter()
-            .map(|(_, ty)| self.ir_type_to_llvm(*ty, context))
+            .map(|(_, value_type)| self.ir_type_to_llvm(*value_type, context))
             .collect();
 
         // Check if any return types are narrowed from I256
-        let has_narrow_returns = function
-            .returns
-            .iter()
-            .any(|ty| matches!(ty, Type::Int(bit_width) if *bit_width < BitWidth::I256));
+        let has_narrow_returns = function.returns.iter().any(
+            |value_type| matches!(value_type, Type::Int(bit_width) if *bit_width < BitWidth::I256),
+        );
 
         let function_type = if has_narrow_returns {
             let return_types: Vec<_> = function
                 .returns
                 .iter()
-                .map(|ty| match ty {
+                .map(|value_type| match value_type {
                     Type::Int(bit_width) => context.integer_type(bit_width.bits() as usize),
                     _ => context.word_type(),
                 })
@@ -5883,7 +5886,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expression::Var(id) => self.get_value(*id),
 
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
 
@@ -5892,21 +5899,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // and(zext(a), zext(b)) == zext(and(a,b)) — they can't create
                 // bits that weren't in the inputs.
                 // All other ops use word type for correct EVM wrapping semantics.
-                match op {
+                match operation {
                     BinaryOperation::Lt | BinaryOperation::Gt | BinaryOperation::Eq => {
                         // For unsigned comparisons and equality, try to narrow both
                         // operands to a smaller type if provably safe. This reduces
                         // i256 comparisons (16-20 RISC-V instructions) to i64 (1-2).
                         let (lhs_cmp, rhs_cmp) =
                             self.try_narrow_comparison(context, lhs_val, rhs_val, lhs.id, rhs.id)?;
-                        self.generate_binop(*op, lhs_cmp, rhs_cmp, context)
+                        self.generate_binop(*operation, lhs_cmp, rhs_cmp, context)
                     }
                     BinaryOperation::Slt | BinaryOperation::Sgt => {
                         // Signed comparisons need sign-extension, not truncation.
                         // Keep the standard widening behavior.
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                        self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
                     BinaryOperation::And | BinaryOperation::Or | BinaryOperation::Xor => {
@@ -5918,19 +5925,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     self.ensure_exact_width(context, lhs_val, 64, "dnbit_l")?;
                                 let rhs_val =
                                     self.ensure_exact_width(context, rhs_val, 64, "dnbit_r")?;
-                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                                return self.generate_binop(*operation, lhs_val, rhs_val, context);
                             }
                             if db <= 128 {
                                 let lhs_val =
                                     self.ensure_exact_width(context, lhs_val, 128, "dnbit128_l")?;
                                 let rhs_val =
                                     self.ensure_exact_width(context, rhs_val, 128, "dnbit128_r")?;
-                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                                return self.generate_binop(*operation, lhs_val, rhs_val, context);
                             }
                         }
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "bitwise")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                        self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
                     // For add/sub/mul: when type inference proves the result fits in
@@ -5938,7 +5945,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     // Otherwise extend to i256 for correct modular semantics.
                     BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Mul => {
                         // Demand-based narrowing: for modular arithmetic, the low N
-                        // bits of (a op b) depend only on the low N bits of a and b.
+                        // bits of (a operation b) depend only on the low N bits of a and b.
                         // When all consumers only need ≤64 bits, operate at i64.
                         if let Some(db) = demand_bits {
                             if db <= 64 {
@@ -5946,14 +5953,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     self.ensure_exact_width(context, lhs_val, 64, "dnarith_l")?;
                                 let rhs_val =
                                     self.ensure_exact_width(context, rhs_val, 64, "dnarith_r")?;
-                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                                return self.generate_binop(*operation, lhs_val, rhs_val, context);
                             }
                             if db <= 128 {
                                 let lhs_val =
                                     self.ensure_exact_width(context, lhs_val, 128, "dnarith128_l")?;
                                 let rhs_val =
                                     self.ensure_exact_width(context, rhs_val, 128, "dnarith128_r")?;
-                                return self.generate_binop(*op, lhs_val, rhs_val, context);
+                                return self.generate_binop(*operation, lhs_val, rhs_val, context);
                             }
                         }
 
@@ -5963,7 +5970,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                         // For i64 tier: use widen_by_one to guarantee no overflow.
                         // add(I32, I32) → I64 guaranteed, sub(I32, I32) → i64 wraps correctly.
-                        let result_fits_i64 = match op {
+                        let result_fits_i64 = match operation {
                             BinaryOperation::Add => {
                                 crate::type_inference::widen_by_one(max_operand).bits() <= 64
                             }
@@ -5987,24 +5994,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // `0x...0000FFFF...` instead of `2^256 - 1`. Doing the sub
                         // at i256 directly preserves modular wrap semantics.
                         let result_fits_i128 =
-                            max_operand.bits() <= 64 && !matches!(op, BinaryOperation::Sub);
+                            max_operand.bits() <= 64 && !matches!(operation, BinaryOperation::Sub);
 
                         if result_fits_i64 {
                             // Result fits in i64 — use narrow arithmetic.
                             let (lhs_val, rhs_val) =
                                 self.ensure_min_width(context, lhs_val, rhs_val, 64, "arith")?;
-                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                            self.generate_binop(*operation, lhs_val, rhs_val, context)
                         } else if result_fits_i128 {
                             // Both operands ≤ I64: result fits in i128 (65 bits for
                             // add/sub, 128 bits for mul). Uses 2 registers on riscv64.
                             let (lhs_val, rhs_val) =
                                 self.ensure_min_width(context, lhs_val, rhs_val, 128, "arith128")?;
-                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                            self.generate_binop(*operation, lhs_val, rhs_val, context)
                         } else {
                             // Result needs > i128 — use i256 for correct wrapping.
                             let lhs_val = self.ensure_word_type(context, lhs_val, "arith_lhs")?;
                             let rhs_val = self.ensure_word_type(context, rhs_val, "arith_rhs")?;
-                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                            self.generate_binop(*operation, lhs_val, rhs_val, context)
                         }
                     }
 
@@ -6016,11 +6023,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         if lhs_width <= 64 && rhs_width <= 64 {
                             let (lhs_val, rhs_val) =
                                 self.ensure_same_type(context, lhs_val, rhs_val, "narrow_divmod")?;
-                            self.generate_narrow_divmod(*op, lhs_val, rhs_val, context)
+                            self.generate_narrow_divmod(*operation, lhs_val, rhs_val, context)
                         } else {
                             let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                             let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
-                            self.generate_binop(*op, lhs_val, rhs_val, context)
+                            self.generate_binop(*operation, lhs_val, rhs_val, context)
                         }
                     }
 
@@ -6049,7 +6056,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                        self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
                     // Shift right: if the value is provably narrow (≤ 64 bits) AND
@@ -6075,18 +6082,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                        self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
                     _ => {
                         let lhs_val = self.ensure_word_type(context, lhs_val, "binop_lhs")?;
                         let rhs_val = self.ensure_word_type(context, rhs_val, "binop_rhs")?;
-                        self.generate_binop(*op, lhs_val, rhs_val, context)
+                        self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
                 }
             }
 
-            Expression::Ternary { op, a, b, n } => {
+            Expression::Ternary { operation, a, b, n } => {
                 let a_val = self.translate_value(a)?.into_int_value();
                 let b_val = self.translate_value(b)?.into_int_value();
                 let n_val = self.translate_value(n)?.into_int_value();
@@ -6095,7 +6102,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let b_val = self.ensure_word_type(context, b_val, "ternary_b")?;
                 let n_val = self.ensure_word_type(context, n_val, "ternary_n")?;
 
-                match op {
+                match operation {
                     BinaryOperation::AddMod => Ok(revive_llvm_context::polkavm_evm_math::add_mod(
                         context, a_val, b_val, n_val,
                     )?),
@@ -6104,14 +6111,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     )?),
                     _ => Err(CodegenError::Unsupported(format!(
                         "Ternary operation {:?}",
-                        op
+                        operation
                     ))),
                 }
             }
 
-            Expression::Unary { op, operand } => {
+            Expression::Unary { operation, operand } => {
                 let operand_val = self.translate_value(operand)?.into_int_value();
-                match op {
+                match operation {
                     UnaryOperation::IsZero => {
                         // Return i1 directly - avoid i256 zero-extension.
                         // Downstream uses will extend via ensure_word_type when needed.
@@ -6484,7 +6491,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 // Match argument types to callee's parameter types.
                 // If the callee has narrowed parameters (e.g., I64 instead of I256),
                 // cast arguments to match. Handle cases where the argument may be
-                // wider (truncate), narrower (zero-extend), or same width (no-op).
+                // wider (truncate), narrower (zero-extend), or same width (no-operation).
                 let parameter_types = self.function_param_types.get(&function.0);
                 let mut argument_values = Vec::new();
                 for (i, argument) in arguments.iter().enumerate() {
@@ -6775,7 +6782,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Handles division by zero (returns 0 per EVM spec).
     fn generate_narrow_divmod(
         &mut self,
-        op: BinaryOperation,
+        operation: BinaryOperation,
         lhs: IntValue<'ctx>,
         rhs: IntValue<'ctx>,
         context: &mut PolkaVMContext<'ctx>,
@@ -6797,7 +6804,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         // Non-zero path: do the division
         context.set_basic_block(non_zero_block);
-        let result = match op {
+        let result = match operation {
             BinaryOperation::Div => context
                 .builder()
                 .build_int_unsigned_div(lhs, rhs, "narrow_div")
@@ -6825,12 +6832,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Generates a binary operation.
     fn generate_binop(
         &mut self,
-        op: BinaryOperation,
+        operation: BinaryOperation,
         lhs: IntValue<'ctx>,
         rhs: IntValue<'ctx>,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>> {
-        match op {
+        match operation {
             BinaryOperation::Add => Ok(revive_llvm_context::polkavm_evm_arithmetic::addition(
                 context, lhs, rhs,
             )?),
@@ -6921,8 +6928,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             BinaryOperation::AddMod | BinaryOperation::MulMod => {
                 // These are ternary ops, shouldn't reach here
                 Err(CodegenError::Unsupported(format!(
-                    "Binary call for ternary op {:?}",
-                    op
+                    "Binary call for ternary operation {:?}",
+                    operation
                 )))
             }
         }
@@ -6931,10 +6938,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Converts an IR type to LLVM type.
     fn ir_type_to_llvm(
         &self,
-        ty: Type,
+        value_type: Type,
         context: &PolkaVMContext<'ctx>,
     ) -> inkwell::types::BasicTypeEnum<'ctx> {
-        match ty {
+        match value_type {
             Type::Int(width) => context
                 .integer_type(width.bits() as usize)
                 .as_basic_type_enum(),

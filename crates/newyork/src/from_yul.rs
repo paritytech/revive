@@ -314,7 +314,7 @@ impl YulTranslator {
                     bindings: vec![value_id],
                     value: Expression::Literal {
                         value: BigUint::from(0u32),
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                 });
             }
@@ -384,7 +384,7 @@ impl YulTranslator {
                     vec![],
                     Expression::Literal {
                         value,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                 ))
             }
@@ -439,7 +439,7 @@ impl YulTranslator {
                     statements,
                     Expression::Literal {
                         value: BigUint::from(0u32),
-                        ty: Type::Void,
+                        value_type: Type::Void,
                     },
                 ));
             }
@@ -563,7 +563,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::MStore8 => {
@@ -574,7 +574,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::MCopy => {
@@ -585,7 +585,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
 
@@ -602,7 +602,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::TLoad => Ok(Expression::TLoad { key: arguments[0] }),
@@ -613,7 +613,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
 
@@ -664,7 +664,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Revert => {
@@ -674,21 +674,21 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Stop => {
                 statements.push(Statement::Stop);
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Invalid => {
                 statements.push(Statement::Invalid);
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::SelfDestruct => {
@@ -697,7 +697,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
 
@@ -804,7 +804,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Log1 => {
@@ -815,7 +815,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Log2 => {
@@ -826,7 +826,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Log3 => {
@@ -837,7 +837,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::Log4 => {
@@ -848,7 +848,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
 
@@ -861,7 +861,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::ExtCodeCopy => {
@@ -873,7 +873,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::ReturnDataCopy => {
@@ -884,7 +884,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::CallDataCopy => {
@@ -895,7 +895,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::DataCopy => {
@@ -906,7 +906,7 @@ impl YulTranslator {
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
 
@@ -920,7 +920,7 @@ impl YulTranslator {
                 // Pop just discards the value, return a void literal
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
-                    ty: Type::Void,
+                    value_type: Type::Void,
                 })
             }
             FunctionName::MemoryGuard => {
@@ -930,7 +930,7 @@ impl YulTranslator {
                 } else {
                     Ok(Expression::Literal {
                         value: BigUint::from(0x80u32),
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     })
                 }
             }
@@ -1021,7 +1021,7 @@ impl YulTranslator {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
             self.ssa
-                .define(name, Value::new(output_id, before_value.ty));
+                .define(name, Value::new(output_id, before_value.value_type));
         }
 
         // Build the if statement with explicit yields
@@ -1144,7 +1144,7 @@ impl YulTranslator {
                 inputs.push(before_value);
                 let output_id = self.ssa.fresh_value();
                 outputs.push(output_id);
-                output_names.push((name.clone(), Value::new(output_id, before_value.ty)));
+                output_names.push((name.clone(), Value::new(output_id, before_value.value_type)));
             }
         }
 
@@ -1229,11 +1229,11 @@ impl YulTranslator {
 
         // Create new SSA values for loop variables
         for (name, var_id) in &loop_variables {
-            let ty = initializer_scope
+            let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.ty)
+                .map(|v| v.value_type)
                 .unwrap_or_default();
-            self.ssa.define(name, Value::new(*var_id, ty));
+            self.ssa.define(name, Value::new(*var_id, value_type));
         }
 
         // Translate condition - condition_statements will be executed inside the loop header,
@@ -1262,11 +1262,13 @@ impl YulTranslator {
             if let Some(&value) = body_scope.get(name) {
                 body_region.yields.push(value);
             } else {
-                let ty = initializer_scope
+                let value_type = initializer_scope
                     .get(name)
-                    .map(|v| v.ty)
+                    .map(|v| v.value_type)
                     .unwrap_or_default();
-                body_region.yields.push(Value::new(*loop_variable_id, ty));
+                body_region
+                    .yields
+                    .push(Value::new(*loop_variable_id, value_type));
             }
         }
 
@@ -1277,11 +1279,11 @@ impl YulTranslator {
         for (name, _) in loop_variables.iter() {
             let post_var_id = self.ssa.fresh_value();
             post_input_var_ids.push(post_var_id);
-            let ty = initializer_scope
+            let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.ty)
+                .map(|v| v.value_type)
                 .unwrap_or_default();
-            self.ssa.define(name, Value::new(post_var_id, ty));
+            self.ssa.define(name, Value::new(post_var_id, value_type));
         }
 
         let mut post_region = self.translate_region(&for_loop.finalizer)?;
@@ -1300,11 +1302,11 @@ impl YulTranslator {
         for (name, _) in &loop_variables {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
-            let ty = initializer_scope
+            let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.ty)
+                .map(|v| v.value_type)
                 .unwrap_or_default();
-            output_values.push((name.clone(), Value::new(output_id, ty)));
+            output_values.push((name.clone(), Value::new(output_id, value_type)));
         }
 
         // Exit the loop scope first, then define outputs in the parent scope
@@ -1526,18 +1528,18 @@ impl YulTranslator {
 }
 
 /// Creates a binary operation expression.
-fn binary_op(op: BinaryOperation, arguments: &[Value]) -> Expression {
+fn binary_op(operation: BinaryOperation, arguments: &[Value]) -> Expression {
     Expression::Binary {
-        op,
+        operation,
         lhs: arguments[0],
         rhs: arguments[1],
     }
 }
 
 /// Creates a ternary operation expression.
-fn ternary_op(op: BinaryOperation, arguments: &[Value]) -> Expression {
+fn ternary_op(operation: BinaryOperation, arguments: &[Value]) -> Expression {
     Expression::Ternary {
-        op,
+        operation,
         a: arguments[0],
         b: arguments[1],
         n: arguments[2],
@@ -1545,9 +1547,9 @@ fn ternary_op(op: BinaryOperation, arguments: &[Value]) -> Expression {
 }
 
 /// Creates a unary operation expression.
-fn unary_op(op: UnaryOperation, arguments: &[Value]) -> Expression {
+fn unary_op(operation: UnaryOperation, arguments: &[Value]) -> Expression {
     Expression::Unary {
-        op,
+        operation,
         operand: arguments[0],
     }
 }

@@ -499,7 +499,7 @@ impl TypeInference {
             Expression::Binary {
                 lhs,
                 rhs,
-                op:
+                operation:
                     BinaryOperation::Add
                     | BinaryOperation::Sub
                     | BinaryOperation::Mul
@@ -516,7 +516,7 @@ impl TypeInference {
             }
             Expression::Binary {
                 rhs,
-                op: BinaryOperation::Shl,
+                operation: BinaryOperation::Shl,
                 ..
             } => {
                 // For shl(amount, value), the value operand (rhs) is transparent;
@@ -529,7 +529,7 @@ impl TypeInference {
             }
             Expression::Unary {
                 operand,
-                op: UnaryOperation::Not,
+                operation: UnaryOperation::Not,
             } => {
                 // NOT is transparent: propagate demand to operand.
                 let mut changed = false;
@@ -866,7 +866,7 @@ impl TypeInference {
                 let widths: Vec<BitWidth> = function
                     .parameters
                     .iter()
-                    .map(|(_, ty)| match ty {
+                    .map(|(_, value_type)| match value_type {
                         Type::Int(bit_width) => *bit_width,
                         _ => BitWidth::I256,
                     })
@@ -1195,7 +1195,11 @@ impl TypeInference {
     /// Collects uses from an expression.
     fn collect_uses_expr(&mut self, expression: &Expression) {
         match expression {
-            Expression::Binary { lhs, rhs, op } => match op {
+            Expression::Binary {
+                lhs,
+                rhs,
+                operation,
+            } => match operation {
                 BinaryOperation::Lt
                 | BinaryOperation::Gt
                 | BinaryOperation::Slt
@@ -1208,7 +1212,7 @@ impl TypeInference {
                 // Their demand will be propagated from the Let binding result's
                 // uses in propagate_use_demands. This enables parameter narrowing
                 // through add/or chains that flow to memory offsets.
-                // Property: for these ops, trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))
+                // Property: for these ops, trunc(operation(a,b), N) == operation(trunc(a,N), trunc(b,N))
                 // when only the lower N bits of the result are observed.
                 BinaryOperation::Add
                 | BinaryOperation::Sub
@@ -1218,7 +1222,7 @@ impl TypeInference {
                 | BinaryOperation::And => {
                     // Transparent ops: don't record demand. The lower N bits of
                     // the result depend only on the lower N bits of the operands.
-                    // trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N)) for modular
+                    // trunc(operation(a,b), N) == operation(trunc(a,N), trunc(b,N)) for modular
                     // arithmetic (add, sub, mul) and bitwise ops (and, or, xor).
                 }
                 BinaryOperation::Shl => {
@@ -1238,7 +1242,7 @@ impl TypeInference {
                 self.record_use(b.id, UseContext::Arithmetic);
                 self.record_use(n.id, UseContext::Arithmetic);
             }
-            Expression::Unary { operand, op } => match op {
+            Expression::Unary { operand, operation } => match operation {
                 UnaryOperation::Not => {
                     // NOT is transparent: ~trunc(x, N) == trunc(~x, N).
                     // Don't record demand; propagated from result's uses.
@@ -1564,7 +1568,11 @@ impl TypeInference {
 
             Expression::Var(id) => self.get(*id).min_width,
 
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let lhs_width = self.get(lhs.id).min_width;
                 let rhs_width = self.get(rhs.id).min_width;
 
@@ -1574,7 +1582,7 @@ impl TypeInference {
                 // (mload returns I256 but most values fit in I64 for memory ops).
                 let capped_operand_width = lhs_width.max(rhs_width).min(BitWidth::I64);
 
-                match op {
+                match operation {
                     // Arithmetic ops: result can be wider.
                     BinaryOperation::Add => {
                         self.widen(lhs.id, capped_operand_width);
@@ -1645,7 +1653,7 @@ impl TypeInference {
                     | BinaryOperation::Sgt
                     | BinaryOperation::Eq => {
                         // Mark signed ops
-                        if matches!(op, BinaryOperation::Slt | BinaryOperation::Sgt) {
+                        if matches!(operation, BinaryOperation::Slt | BinaryOperation::Sgt) {
                             self.mark_signed(lhs.id);
                             self.mark_signed(rhs.id);
                         }
@@ -1663,15 +1671,15 @@ impl TypeInference {
                 }
             }
 
-            Expression::Ternary { op, .. } => {
-                match op {
+            Expression::Ternary { operation, .. } => {
+                match operation {
                     // AddMod and MulMod results are bounded by the modulus
                     BinaryOperation::AddMod | BinaryOperation::MulMod => BitWidth::I256,
                     _ => BitWidth::I256,
                 }
             }
 
-            Expression::Unary { op, operand } => match op {
+            Expression::Unary { operation, operand } => match operation {
                 crate::ir::UnaryOperation::IsZero => BitWidth::I1,
                 crate::ir::UnaryOperation::Not => {
                     // NOT flips all 256 bits, producing a full-width result
@@ -1859,7 +1867,7 @@ mod tests {
         // Small literal
         let expression = Expression::Literal {
             value: BigUint::from(42u32),
-            ty: Type::default(),
+            value_type: Type::default(),
         };
         let width = inference.infer_expr_width(&expression);
         assert_eq!(width, BitWidth::I8);
@@ -1867,7 +1875,7 @@ mod tests {
         // Large literal (fits in 128 bits)
         let expression = Expression::Literal {
             value: BigUint::from(1u128) << 100,
-            ty: Type::default(),
+            value_type: Type::default(),
         };
         let width = inference.infer_expr_width(&expression);
         assert_eq!(width, BitWidth::I128);
@@ -1875,7 +1883,7 @@ mod tests {
         // Very large literal (needs > 128 bits)
         let expression = Expression::Literal {
             value: BigUint::from(1u128) << 140,
-            ty: Type::default(),
+            value_type: Type::default(),
         };
         let width = inference.infer_expr_width(&expression);
         assert_eq!(width, BitWidth::I160);
@@ -1890,7 +1898,7 @@ mod tests {
         inference.widen(ValueId(1), BitWidth::I64);
 
         let expression = Expression::Binary {
-            op: BinaryOperation::Lt,
+            operation: BinaryOperation::Lt,
             lhs: crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I64)),
             rhs: crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I64)),
         };

@@ -461,7 +461,7 @@ fn eliminate_leaves(
                     bindings: vec![done],
                     value: Expression::Literal {
                         value: num::BigUint::from(1u32),
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                 });
                 current_accums = new_accums;
@@ -508,10 +508,10 @@ fn wrap_remaining_in_guard(
     pre_stmts.push(Statement::Let {
         bindings: vec![not_done],
         value: Expression::Unary {
-            op: UnaryOperation::IsZero,
+            operation: UnaryOperation::IsZero,
             operand: Value {
                 id: done_id,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         },
     });
@@ -526,21 +526,21 @@ fn wrap_remaining_in_guard(
         .iter()
         .map(|&id| Value {
             id,
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         })
         .collect();
     let inputs: Vec<Value> = accum_ids
         .iter()
         .map(|&id| Value {
             id,
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         })
         .collect();
 
     pre_stmts.push(Statement::If {
         condition: Value {
             id: not_done,
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         },
         inputs,
         then_region: Region {
@@ -723,7 +723,7 @@ fn transform_leave_stmt(
                 bindings: vec![done_false_id],
                 value: Expression::Literal {
                     value: num::BigUint::from(0u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             });
 
@@ -749,11 +749,11 @@ fn transform_leave_stmt(
 
             then_yields.extend(then_result.accum_ids.iter().map(|&id| Value {
                 id,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             }));
             then_yields.push(Value {
                 id: then_done,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             });
 
             // Build outputs: original outputs first, then new accums + done
@@ -791,22 +791,22 @@ fn transform_leave_stmt(
 
                 else_yields.extend(else_result.accum_ids.iter().map(|&id| Value {
                     id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 }));
                 else_yields.push(Value {
                     id: else_done,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 });
 
                 // With else: extend inputs to match outputs length
                 let mut inputs: Vec<Value> = orig_inputs.clone();
                 inputs.extend(accum_ids.iter().map(|&id| Value {
                     id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 }));
                 inputs.push(Value {
                     id: done_false_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 });
 
                 pre_stmts.push(Statement::If {
@@ -827,11 +827,11 @@ fn transform_leave_stmt(
                 let mut inputs: Vec<Value> = orig_inputs.clone();
                 inputs.extend(accum_ids.iter().map(|&id| Value {
                     id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 }));
                 inputs.push(Value {
                     id: done_false_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 });
 
                 pre_stmts.push(Statement::If {
@@ -867,7 +867,7 @@ fn transform_leave_stmt(
                 bindings: vec![done_false_id],
                 value: Expression::Literal {
                     value: num::BigUint::from(0u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             });
 
@@ -895,11 +895,11 @@ fn transform_leave_stmt(
 
                     yields.extend(case_result.accum_ids.iter().map(|&id| Value {
                         id,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     }));
                     yields.push(Value {
                         id: case_done,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     });
                     SwitchCase {
                         value: c.value.clone(),
@@ -930,11 +930,11 @@ fn transform_leave_stmt(
 
                 yields.extend(def_result.accum_ids.iter().map(|&id| Value {
                     id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 }));
                 yields.push(Value {
                     id: def_done,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 });
                 Region { statements, yields }
             });
@@ -950,11 +950,11 @@ fn transform_leave_stmt(
             let mut inputs: Vec<Value> = orig_inputs.clone();
             inputs.extend(accum_ids.iter().map(|&id| Value {
                 id,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             }));
             inputs.push(Value {
                 id: done_false_id,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             });
 
             pre_stmts.push(Statement::Switch {
@@ -1303,7 +1303,7 @@ fn inline_call_with_results(
             bindings: vec![new_ret_id],
             value: Expression::Literal {
                 value: num::BigUint::from(0u32),
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         });
     }
@@ -1332,7 +1332,7 @@ fn inline_call_with_results(
             .iter()
             .map(|&id| Value {
                 id,
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             })
             .collect(),
     });
@@ -1377,7 +1377,7 @@ fn inline_call_void(
             bindings: vec![new_ret_id],
             value: Expression::Literal {
                 value: num::BigUint::from(0u32),
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         });
     }
@@ -1480,7 +1480,7 @@ mod tests {
                 bindings: vec![ValueId::new(next_id)],
                 value: Expression::Literal {
                     value: BigUint::from(i as u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             });
             next_id += 1;
@@ -1602,7 +1602,7 @@ mod tests {
             bindings: vec![g_ret_final],
             value: Expression::Literal {
                 value: BigUint::from(42u32),
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         });
         g.return_values.push(g_ret_final);

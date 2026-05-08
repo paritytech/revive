@@ -149,7 +149,7 @@ fn rewrite_allocator_p1_with_early_check(
         if !function
             .parameters
             .iter()
-            .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
+            .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
         {
             continue;
         }
@@ -180,13 +180,13 @@ fn rewrite_allocator_p1_with_early_check(
             bindings: vec![max_const],
             value: Expression::Literal {
                 value: uint64_max.clone(),
-                ty: Type::Int(BitWidth::I256),
+                value_type: Type::Int(BitWidth::I256),
             },
         });
         new_stmts.push(Statement::Let {
             bindings: vec![gt_check],
             value: Expression::Binary {
-                op: BinaryOperation::Gt,
+                operation: BinaryOperation::Gt,
                 lhs: Value::int(p1),
                 rhs: Value::int(max_const),
             },
@@ -204,7 +204,7 @@ fn rewrite_allocator_p1_with_early_check(
         new_stmts.push(Statement::Let {
             bindings: vec![p1_narrow],
             value: Expression::Binary {
-                op: BinaryOperation::And,
+                operation: BinaryOperation::And,
                 lhs: Value::int(p1),
                 rhs: Value::int(max_const),
             },
@@ -240,7 +240,7 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
             && function
                 .parameters
                 .iter()
-                .all(|(_, ty)| matches!(ty, Type::Int(BitWidth::I256)))
+                .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
         {
             let p0 = function.parameters[0].0;
             let p1 = function.parameters[1].0;
@@ -266,8 +266,8 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
     for (func_id, indices) in narrow_params {
         if let Some(function) = object.functions.get_mut(&FunctionId(func_id)) {
             for i in indices {
-                if let Some((_, ty)) = function.parameters.get_mut(i) {
-                    *ty = Type::Int(BitWidth::I64);
+                if let Some((_, value_type)) = function.parameters.get_mut(i) {
+                    *value_type = Type::Int(BitWidth::I64);
                 }
             }
         }
@@ -299,8 +299,13 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
                 if let Expression::Literal { value: lit_val, .. } = value {
                     constants.insert(bid, lit_val.clone());
                 }
-                if let Expression::Binary { op, lhs, rhs } = value {
-                    match op {
+                if let Expression::Binary {
+                    operation,
+                    lhs,
+                    rhs,
+                } = value
+                {
+                    match operation {
                         BinaryOperation::Add => {
                             add_results.insert(bid, (lhs.id.0, rhs.id.0));
                         }
@@ -525,7 +530,7 @@ fn detect_validator_mask(
 
             // Track and(param, MASK)
             if let Expression::Binary {
-                op: BinaryOperation::And,
+                operation: BinaryOperation::And,
                 ref lhs,
                 ref rhs,
             } = value
@@ -548,7 +553,7 @@ fn detect_validator_mask(
 
             // Track eq(param, and_result) or eq(and_result, param)
             if let Expression::Binary {
-                op: BinaryOperation::Eq,
+                operation: BinaryOperation::Eq,
                 ref lhs,
                 ref rhs,
             } = value
@@ -566,7 +571,7 @@ fn detect_validator_mask(
 
             // Track iszero(eq_check)
             if let Expression::Unary {
-                op: UnaryOperation::IsZero,
+                operation: UnaryOperation::IsZero,
                 ref operand,
             } = value
             {
@@ -682,7 +687,7 @@ fn narrow_block(
 
                 // Track gt(value, const_boundary) definitions.
                 if let Expression::Binary {
-                    op: BinaryOperation::Gt,
+                    operation: BinaryOperation::Gt,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -694,7 +699,7 @@ fn narrow_block(
                             // gt(value, MASK): if true, value > MASK (revert); if false, value <= MASK
                             let guarded = Value {
                                 id: resolve_id(lhs.id, &replacements),
-                                ty: lhs.ty,
+                                value_type: lhs.value_type,
                             };
                             gt_defs.insert(bid, (guarded, mask.clone()));
                         }
@@ -704,7 +709,7 @@ fn narrow_block(
                 // Track and(value, MASK) where MASK is a boundary mask.
                 // Used for eq-based address validation: iszero(eq(value, and(value, MASK)))
                 if let Expression::Binary {
-                    op: BinaryOperation::And,
+                    operation: BinaryOperation::And,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -725,7 +730,7 @@ fn narrow_block(
 
                 // Track eq(value, and(value, MASK)) definitions.
                 if let Expression::Binary {
-                    op: BinaryOperation::Eq,
+                    operation: BinaryOperation::Eq,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -746,7 +751,7 @@ fn narrow_block(
 
                 // Track iszero(eq_check) definitions.
                 if let Expression::Unary {
-                    op: UnaryOperation::IsZero,
+                    operation: UnaryOperation::IsZero,
                     ref operand,
                 } = value
                 {
@@ -761,7 +766,7 @@ fn narrow_block(
                 // boundary check (the typical finalize_allocation pattern is
                 // `if or(gt(sum, UINT64_MAX), lt(sum, addend)) { panic }`).
                 if let Expression::Binary {
-                    op: BinaryOperation::Or,
+                    operation: BinaryOperation::Or,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -774,7 +779,7 @@ fn narrow_block(
                 // Track add(a, b) definitions for overflow-aware addend
                 // narrowing.
                 if let Expression::Binary {
-                    op: BinaryOperation::Add,
+                    operation: BinaryOperation::Add,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -787,7 +792,7 @@ fn narrow_block(
                 // Track lt(sum, addend) definitions — the canonical Solidity
                 // unsigned-add-overflow check.
                 if let Expression::Binary {
-                    op: BinaryOperation::Lt,
+                    operation: BinaryOperation::Lt,
                     ref lhs,
                     ref rhs,
                 } = value
@@ -810,7 +815,7 @@ fn narrow_block(
                                 (
                                     Value {
                                         id: lhs_id,
-                                        ty: lhs.ty,
+                                        value_type: lhs.value_type,
                                     },
                                     k_minus_one,
                                 ),
@@ -826,7 +831,7 @@ fn narrow_block(
                 ref bindings,
                 value:
                     Expression::Unary {
-                        op: UnaryOperation::IsZero,
+                        operation: UnaryOperation::IsZero,
                         ref operand,
                     },
             } = statement
@@ -917,14 +922,14 @@ fn narrow_block(
                     extra_gt_guards.push((
                         Value {
                             id: ValueId(add_lhs),
-                            ty: i256_ty,
+                            value_type: i256_ty,
                         },
                         mask.clone(),
                     ));
                     extra_gt_guards.push((
                         Value {
                             id: ValueId(add_rhs),
-                            ty: i256_ty,
+                            value_type: i256_ty,
                         },
                         mask.clone(),
                     ));
@@ -953,13 +958,13 @@ fn narrow_block(
                             bindings: vec![mask_id],
                             value: Expression::Literal {
                                 value: mask,
-                                ty: Type::Int(BitWidth::I256),
+                                value_type: Type::Int(BitWidth::I256),
                             },
                         });
                         new_stmts.push(Statement::Let {
                             bindings: vec![narrow_id],
                             value: Expression::Binary {
-                                op: BinaryOperation::And,
+                                operation: BinaryOperation::And,
                                 lhs: guarded_val,
                                 rhs: Value::int(mask_id),
                             },
@@ -1007,7 +1012,7 @@ fn narrow_block(
                             bindings: vec![mask_id],
                             value: Expression::Literal {
                                 value: mask.clone(),
-                                ty: Type::Int(BitWidth::I256),
+                                value_type: Type::Int(BitWidth::I256),
                             },
                         });
 
@@ -1015,10 +1020,10 @@ fn narrow_block(
                         new_stmts.push(Statement::Let {
                             bindings: vec![narrow_id],
                             value: Expression::Binary {
-                                op: BinaryOperation::And,
+                                operation: BinaryOperation::And,
                                 lhs: Value {
                                     id: arg_id,
-                                    ty: Type::Int(BitWidth::I256),
+                                    value_type: Type::Int(BitWidth::I256),
                                 },
                                 rhs: Value::int(mask_id),
                             },

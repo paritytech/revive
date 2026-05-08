@@ -561,7 +561,7 @@ impl MemoryOptimizer {
 
                             // If the stored value is narrower than I256, wrap in ZeroExtend
                             // to match the MLoad return type (always I256).
-                            return match stored.ty {
+                            return match stored.value_type {
                                 Type::Int(BitWidth::I256) => Expression::Var(stored.id),
                                 Type::Int(width) if width < BitWidth::I256 => {
                                     Expression::ZeroExtend {
@@ -746,10 +746,14 @@ impl MemoryOptimizer {
         match expression {
             Expression::Literal { value, .. } => Some(value.clone()),
             Expression::Var(id) => self.constant_values.get(&id.0).cloned(),
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let l = self.constant_values.get(&lhs.id.0)?;
                 let r = self.constant_values.get(&rhs.id.0)?;
-                match op {
+                match operation {
                     BinaryOperation::Add => Some(l + r),
                     BinaryOperation::Sub => {
                         if l >= r {
@@ -956,7 +960,7 @@ impl FmpPropagation {
                                 self.loads_eliminated += 1;
                                 Some(Expression::Literal {
                                     value: known_fmp.clone(),
-                                    ty: Type::Int(BitWidth::I256),
+                                    value_type: Type::Int(BitWidth::I256),
                                 })
                             } else {
                                 None
@@ -1196,10 +1200,14 @@ impl FmpPropagation {
         match expression {
             Expression::Literal { value, .. } => Some(value.clone()),
             Expression::Var(id) => constants.get(&id.0).cloned(),
-            Expression::Binary { op, lhs, rhs } => {
+            Expression::Binary {
+                operation,
+                lhs,
+                rhs,
+            } => {
                 let l = constants.get(&lhs.id.0)?;
                 let r = constants.get(&rhs.id.0)?;
-                match op {
+                match operation {
                     BinaryOperation::Add => Some(l + r),
                     BinaryOperation::Sub => {
                         if l >= r {
@@ -1226,7 +1234,7 @@ mod tests {
     fn make_value(id: u32) -> Value {
         Value {
             id: ValueId(id),
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         }
     }
 
@@ -1248,7 +1256,7 @@ mod tests {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
                     value: BigUint::from(64u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let value = 42
@@ -1256,18 +1264,18 @@ mod tests {
                 bindings: vec![value_id],
                 value: Expression::Literal {
                     value: BigUint::from(42u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // mstore(offset, value)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1277,7 +1285,7 @@ mod tests {
                 value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                     region: MemoryRegion::Unknown,
                 },
@@ -1329,21 +1337,21 @@ mod tests {
                 bindings: vec![base_id],
                 value: Expression::Literal {
                     value: BigUint::from(32u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let offset = add(base, 32)
             Statement::Let {
                 bindings: vec![offset_id],
                 value: Expression::Binary {
-                    op: BinaryOperation::Add,
+                    operation: BinaryOperation::Add,
                     lhs: Value {
                         id: base_id,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                     rhs: Value {
                         id: ValueId(100), // Placeholder - this needs a temp
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                 },
             },
@@ -1352,18 +1360,18 @@ mod tests {
                 bindings: vec![value_id],
                 value: Expression::Literal {
                     value: BigUint::from(1u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // mstore(offset, value)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1373,7 +1381,7 @@ mod tests {
                 value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                     region: MemoryRegion::Unknown,
                 },
@@ -1404,7 +1412,7 @@ mod tests {
 
         let value = Value {
             id: zero_id,
-            ty: Type::Int(BitWidth::I256),
+            value_type: Type::Int(BitWidth::I256),
         };
 
         let offset = opt.try_get_static_offset(&value);
@@ -1429,7 +1437,7 @@ mod tests {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
                     value: BigUint::from(64u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let value1 = 1
@@ -1437,7 +1445,7 @@ mod tests {
                 bindings: vec![value1_id],
                 value: Expression::Literal {
                     value: BigUint::from(1u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let value2 = 2
@@ -1445,18 +1453,18 @@ mod tests {
                 bindings: vec![value2_id],
                 value: Expression::Literal {
                     value: BigUint::from(2u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // mstore(offset, value1) - this should be eliminated (dead)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value1_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1464,11 +1472,11 @@ mod tests {
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value2_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1518,7 +1526,7 @@ mod tests {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
                     value: BigUint::from(64u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let value1 = 1
@@ -1526,7 +1534,7 @@ mod tests {
                 bindings: vec![value1_id],
                 value: Expression::Literal {
                     value: BigUint::from(1u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // let value2 = 2
@@ -1534,18 +1542,18 @@ mod tests {
                 bindings: vec![value2_id],
                 value: Expression::Literal {
                     value: BigUint::from(2u32),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             // mstore(offset, value1) - NOT dead because it's read
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value1_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1555,7 +1563,7 @@ mod tests {
                 value: Expression::MLoad {
                     offset: Value {
                         id: offset_id,
-                        ty: Type::Int(BitWidth::I256),
+                        value_type: Type::Int(BitWidth::I256),
                     },
                     region: MemoryRegion::Unknown,
                 },
@@ -1564,11 +1572,11 @@ mod tests {
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 value: Value {
                     id: value2_id,
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
                 region: MemoryRegion::Unknown,
             },
@@ -1613,14 +1621,14 @@ mod tests {
                 bindings: vec![ValueId(1)],
                 value: Expression::Literal {
                     value: BigUint::from(0x80u64),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             Statement::Let {
                 bindings: vec![ValueId(2)],
                 value: Expression::Literal {
                     value: BigUint::from(0x40u64),
-                    ty: Type::Int(BitWidth::I256),
+                    value_type: Type::Int(BitWidth::I256),
                 },
             },
             Statement::MStore {

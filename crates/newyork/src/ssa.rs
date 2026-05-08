@@ -41,8 +41,8 @@ impl SsaBuilder {
     }
 
     /// Allocates a fresh typed value with the given type.
-    pub fn fresh_typed_value(&mut self, ty: Type) -> Value {
-        Value::new(self.fresh_value(), ty)
+    pub fn fresh_typed_value(&mut self, value_type: Type) -> Value {
+        Value::new(self.fresh_value(), value_type)
     }
 
     /// Defines a variable with the given name and value.
@@ -113,7 +113,7 @@ impl SsaBuilder {
                     merges.push((name.clone(), phi_result, then_value, else_value));
 
                     // Update current scope with merged value
-                    self.define(name, Value::new(phi_result, then_value.ty));
+                    self.define(name, Value::new(phi_result, then_value.value_type));
                 } else {
                     // Same value, just propagate
                     self.define(name, then_value);

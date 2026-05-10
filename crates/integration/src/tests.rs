@@ -741,62 +741,38 @@ fn sdiv_narrow_masked() {
 /// With the newyork backend, the calldata-loaded `_offset` was demand-narrowed
 /// to i64 because its only use is a memory-offset (max-width I64). The
 /// narrowing was a bare i256→i64 truncate with no overflow check, so values
-/// like 2^128 and 2^255 silently aliased to 0 and `mload(0)` returned the
-/// zero-initialized scratch slot successfully. EVM correctly OOGs on the
-/// memory expansion. Differential mode catches the mismatch.
+/// like 2^128 (high bit in the upper i128 half) and 2^255 (high bit in the
+/// top word) silently aliased to 0 and `mload(0)` returned the zero-initialized
+/// scratch slot successfully. EVM correctly OOGs on the memory expansion.
+/// Differential mode catches the mismatch.
 #[test]
 fn mload_huge_offset_traps() {
-    // 2^128 — high bit in the upper i128 half. Bare truncate to i64 yields 0.
-    let huge = U256::from(1u64) << 128;
-    let data = Contract::load_at(huge).calldata;
-    let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
-    actions.append(&mut vec![
-        Call {
-            origin: TestAddress::Alice,
-            dest: TestAddress::Instantiated(0),
-            value: 0,
-            gas_limit: None,
-            storage_deposit_limit: None,
-            data,
-        },
-        VerifyCall(VerifyCallExpectation {
-            success: false,
+    for shift in [128u32, 255] {
+        let huge = U256::from(1u64) << shift;
+        let data = Contract::load_at(huge).calldata;
+        let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
+        actions.append(&mut vec![
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ]);
+
+        Specs {
+            actions,
+            differential: true,
             ..Default::default()
-        }),
-    ]);
-
-    Specs {
-        actions,
-        differential: true,
-        ..Default::default()
+        }
+        .run();
     }
-    .run();
-
-    // 2^255 — high bit in the top word. Same wrap-to-zero failure mode.
-    let huge = U256::from(1u64) << 255;
-    let data = Contract::load_at(huge).calldata;
-    let mut actions = instantiate("contracts/MLoad.sol", "MLoad");
-    actions.append(&mut vec![
-        Call {
-            origin: TestAddress::Alice,
-            dest: TestAddress::Instantiated(0),
-            value: 0,
-            gas_limit: None,
-            storage_deposit_limit: None,
-            data,
-        },
-        VerifyCall(VerifyCallExpectation {
-            success: false,
-            ..Default::default()
-        }),
-    ]);
-
-    Specs {
-        actions,
-        differential: true,
-        ..Default::default()
-    }
-    .run();
 }
 
 /// Regression: `mload(0x40)` on a contract that only does inline-assembly

@@ -1694,16 +1694,26 @@ impl<'ctx> Context<'ctx> {
     /// LLVM's `DivRemNarrowing` pass sometimes fails to narrow div/rem in
     /// large functions after inlining. This runs as a safety net after
     /// optimization to catch those cases.
+    ///
+    /// This lives in `llvm-context` rather than `newyork` because it operates
+    /// on LLVM IR after the full LLVM optimization pipeline has run. The
+    /// proof sources we accept (LLVM constants, `and` masks, `zext`) only
+    /// exist in their final form after IPSCCP has propagated values across
+    /// function boundaries and inlining has fused producers with consumers —
+    /// information that is not available at the newyork-IR level, where
+    /// width-narrowing already runs in `type_inference` and `guard_narrow`.
+    /// It also sits alongside its sibling workaround `strip_minsize_for_divrem`,
+    /// which targets the same LLVM 21 backend bug.
     fn narrow_divrem_instructions(&self) {
         let builder = self.llvm.create_builder();
 
-        for func in self.module().get_functions() {
+        for function in self.module().get_functions() {
             let mut to_narrow = Vec::new();
 
-            for bb in func.get_basic_blocks() {
-                for inst in bb.get_instructions() {
+            for basic_block in function.get_basic_blocks() {
+                for instruction in basic_block.get_instructions() {
                     let is_divrem = matches!(
-                        inst.get_opcode(),
+                        instruction.get_opcode(),
                         InstructionOpcode::UDiv
                             | InstructionOpcode::SDiv
                             | InstructionOpcode::URem
@@ -1712,12 +1722,12 @@ impl<'ctx> Context<'ctx> {
                     if !is_divrem {
                         continue;
                     }
-                    if inst.get_type().into_int_type().get_bit_width() < 256 {
+                    if instruction.get_type().into_int_type().get_bit_width() < 256 {
                         continue;
                     }
 
-                    let lhs = inst.get_operand(0).and_then(|op| op.value());
-                    let rhs = inst.get_operand(1).and_then(|op| op.value());
+                    let lhs = instruction.get_operand(0).and_then(|op| op.value());
+                    let rhs = instruction.get_operand(1).and_then(|op| op.value());
 
                     if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
                         let lhs_width = Self::provable_bit_width(lhs);
@@ -1731,58 +1741,58 @@ impl<'ctx> Context<'ctx> {
                             // i256 sdiv. The proof sources accepted here (constants, AND-masks, ZExt) all pin the upper bits to zero strictly above
                             // the operand width, so this holds iff the operand fits with at least one bit of headroom in the narrow type.
                             let is_signed = matches!(
-                                inst.get_opcode(),
+                                instruction.get_opcode(),
                                 InstructionOpcode::SDiv | InstructionOpcode::SRem
                             );
                             let signed_sign_bit_safe =
                                 !is_signed || narrow_width > max_operand_width;
                             if narrow_width < 256 && signed_sign_bit_safe {
-                                to_narrow.push((inst, narrow_width));
+                                to_narrow.push((instruction, narrow_width));
                             }
                         }
                     }
                 }
             }
 
-            for (inst, narrow_width) in to_narrow {
-                let lhs = inst
+            for (instruction, narrow_width) in to_narrow {
+                let lhs = instruction
                     .get_operand(0)
                     .unwrap()
                     .value()
                     .unwrap()
                     .into_int_value();
-                let rhs = inst
+                let rhs = instruction
                     .get_operand(1)
                     .unwrap()
                     .value()
                     .unwrap()
                     .into_int_value();
-                let wide_type = inst.get_type().into_int_type();
+                let wide_type = instruction.get_type().into_int_type();
                 let narrow_type = self.llvm.custom_width_int_type(narrow_width);
 
-                builder.position_before(&inst);
+                builder.position_before(&instruction);
 
-                let lhs_trunc = builder.build_int_truncate(lhs, narrow_type, "").unwrap();
-                let rhs_trunc = builder.build_int_truncate(rhs, narrow_type, "").unwrap();
+                let lhs_truncated = builder.build_int_truncate(lhs, narrow_type, "").unwrap();
+                let rhs_truncated = builder.build_int_truncate(rhs, narrow_type, "").unwrap();
 
-                let narrow_result = match inst.get_opcode() {
+                let narrow_result = match instruction.get_opcode() {
                     InstructionOpcode::UDiv => builder
-                        .build_int_unsigned_div(lhs_trunc, rhs_trunc, "")
+                        .build_int_unsigned_div(lhs_truncated, rhs_truncated, "")
                         .unwrap(),
                     InstructionOpcode::SDiv => builder
-                        .build_int_signed_div(lhs_trunc, rhs_trunc, "")
+                        .build_int_signed_div(lhs_truncated, rhs_truncated, "")
                         .unwrap(),
                     InstructionOpcode::URem => builder
-                        .build_int_unsigned_rem(lhs_trunc, rhs_trunc, "")
+                        .build_int_unsigned_rem(lhs_truncated, rhs_truncated, "")
                         .unwrap(),
                     InstructionOpcode::SRem => builder
-                        .build_int_signed_rem(lhs_trunc, rhs_trunc, "")
+                        .build_int_signed_rem(lhs_truncated, rhs_truncated, "")
                         .unwrap(),
                     _ => unreachable!(),
                 };
 
                 let wide_result = if matches!(
-                    inst.get_opcode(),
+                    instruction.get_opcode(),
                     InstructionOpcode::SDiv | InstructionOpcode::SRem
                 ) {
                     builder
@@ -1794,9 +1804,9 @@ impl<'ctx> Context<'ctx> {
                         .unwrap()
                 };
 
-                let wide_inst = wide_result.as_instruction().unwrap();
-                inst.replace_all_uses_with(&wide_inst);
-                inst.erase_from_basic_block();
+                let wide_instruction = wide_result.as_instruction().unwrap();
+                instruction.replace_all_uses_with(&wide_instruction);
+                instruction.erase_from_basic_block();
             }
         }
     }

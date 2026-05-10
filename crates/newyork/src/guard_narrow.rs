@@ -427,11 +427,12 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
 /// not nested or conditional terminators. This rules out functions whose
 /// termination depends on dynamic checks the analysis can't prove always
 /// fire.
+///
+/// The body iterates to a fixed point so transitive helpers like
+/// `function trampoline() { panic_error_0x41() }` are recognised once the
+/// leaf `panic_error_0x41` is itself in the set.
 fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32> {
     let mut noreturn = std::collections::BTreeSet::new();
-    // Iterate to a fixed point so we can recognise transitive helpers like
-    // `function trampoline() { panic_error_0x41() }` once the leaf
-    // `panic_error_0x41` is itself in the set.
     loop {
         let before = noreturn.len();
         for (func_id, function) in &object.functions {

@@ -5,6 +5,14 @@ use serde::Serialize;
 
 use crate::standard_json::input::settings::optimizer::yul_details::YulDetails;
 
+/// Yul optimizer step sequence tuned for PolkaVM code size.
+///
+/// Same as the solc default sequence, but with an extra `[LScsTulD]` cleanup loop
+/// (LoadResolver, UnusedStoreEliminator, CSE, ExpressionSimplifier, LiteralRematerialiser,
+/// UnusedPruner, DeadCodeEliminator) appended before the final cleanup colon, which
+/// shaves ~174 bytes from the OZ contract suite.
+const PVM_YUL_STEPS: &str = "dhfoDgvulfnTUtnIfxa[r]EscLMVcul[j]Trpeulxa[r]cLgvifMCTUca[r]LSsTFOtfDnca[r]IulcscCTUtgvifMx[scCTUt]TOntnfDIulgvifMjmul[jul]VcTOculjmul[LScsTulD]:fDnTOcmuO";
+
 /// The `solc --standard-json` input settings optimizer details.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,24 +74,13 @@ impl Details {
 
     /// Optimizer details tuned for PolkaVM code size.
     ///
-    /// Appends an extra `[LScsTulD]` loop to the default solc Yul optimizer
-    /// sequence. This adds a final round of LoadResolver, UnusedStoreEliminator,
-    /// CSE, ExpressionSimplifier, LiteralRematerialiser, UnusedPruner, and
-    /// DeadCodeEliminator that reduces code size by ~174 bytes on OZ contracts.
-    pub fn for_polkavm() -> Self {
-        // The solc default Yul sequence with an extra cleanup loop appended.
-        // Default: dhfoDgvulfnTUtnIfxa[r]EscLMVcul [j]Trpeulxa[r]cLgvifMCTUca[r]
-        //          LSsTFOtfDnca[r]IulcscCTUtgvifMx[scCTUt]TOntnfDIulgvifMjmul[jul]
-        //          VcTOcul jmul:fDnTOcmuO
-        // Added:   [LScsTulD] before the cleanup colon
-        let steps = "dhfoDgvulfnTUtnIfxa[r]EscLMVcul \
-                     [j]Trpeulxa[r]cLgvifMCTUca[r]LSsTFOtfDnca[r]\
-                     IulcscCTUtgvifMx[scCTUt]TOntnfDIulgvifMjmul[jul]\
-                     VcTOcul jmul[LScsTulD]:fDnTOcmuO"
-            .to_string();
+    /// Enables the Yul optimizer with a step sequence that appends an extra `[LScsTulD]`
+    /// cleanup loop to solc's default — see `PVM_YUL_STEPS` for the full sequence and
+    /// rationale.
+    pub fn pvm_size() -> Self {
         Self {
             yul: Some(true),
-            yul_details: Some(YulDetails::new(None, Some(steps))),
+            yul_details: Some(YulDetails::new(None, Some(PVM_YUL_STEPS.to_string()))),
             ..Default::default()
         }
     }

@@ -288,7 +288,7 @@ impl Project {
         solc_version: &SolcVersion,
         debug_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
-        let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+        let use_newyork = std::env::var(crate::RESOLC_USE_NEWYORK_ENV)
             .map(|v| v == "1")
             .unwrap_or(false);
 

@@ -41,9 +41,9 @@ impl Optimizer {
     ///
     /// Uses the default solc optimizer with a custom Yul sequence that adds
     /// an extra `[LScsTulD]` cleanup loop for better code size on PolkaVM.
-    pub fn for_polkavm(enabled: bool) -> Self {
+    pub fn pvm_size(enabled: bool) -> Self {
         let details = if enabled {
-            Details::for_polkavm()
+            Details::pvm_size()
         } else {
             Details::default()
         };

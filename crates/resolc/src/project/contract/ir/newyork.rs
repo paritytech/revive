@@ -47,8 +47,7 @@ impl NewYork {
         let result = revive_newyork::translate_yul_object(&self.yul_object)
             .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))?;
 
-        // Debug: dump IR if RESOLC_DEBUG_IR is set
-        if std::env::var("RESOLC_DEBUG_IR").is_ok() {
+        if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
             use std::io::Write;
             let ir_text = revive_newyork::print_object(&result.object);
             let _ = writeln!(
@@ -64,31 +63,30 @@ impl NewYork {
     }
 }
 
+/// Code-size threshold for emitting the outlined single-word keccak256 helper.
+///
+/// The helper body costs ~150 bytes; each call site it replaces saves ~20 bytes through
+/// deduplication. Fewer than this many sites and the helper costs more than it returns.
+const KECCAK_SINGLE_THRESHOLD: usize = 8;
+
+/// Heap-operation threshold above which `__sbrk_internal` is marked NoInline.
+///
+/// `__sbrk_internal` has five basic blocks of bounds-checking; inlining it at too many
+/// sites bloats the binary beyond the call-overhead savings on PolkaVM.
+const SBRK_NOINLINE_THRESHOLD: usize = 30;
+
+/// Path of the heap-analysis log emitted when [`crate::RESOLC_DEBUG_HEAP_ENV`] is set.
+const HEAP_DEBUG_LOG_PATH: &str = "/tmp/resolc_heap_debug.log";
+
 impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        // Delegate to the Yul object's declare to set up all runtime functions.
-        // This ensures all the necessary runtime support (heap, storage, events, etc.)
-        // is available for the newyork IR codegen.
         self.yul_object.declare(context)?;
 
-        // Declare keccak256 helpers for deduplicating hash patterns
         revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.declare(context)?;
-        // Note: Keccak256OneWord is declared conditionally in into_llvm()
-        // based on whether the contract has any Keccak256Single IR nodes.
-
-        // Declare outlined callvalue function for deduplicating non-payable checks
         revive_llvm_context::PolkaVMCallValueFunction.declare(context)?;
-
-        // Declare outlined callvalue nonzero check for boolean-only callvalue usage
         revive_llvm_context::PolkaVMCallValueNonzeroFunction.declare(context)?;
-
-        // Declare outlined calldataload function for deduplicating ABI decoding
         revive_llvm_context::PolkaVMCallDataLoadFunction.declare(context)?;
-
-        // Declare outlined caller function for deduplicating msg.sender checks
         revive_llvm_context::PolkaVMCallerFunction.declare(context)?;
-
-        // Declare outlined revert functions for deduplicating revert(0, K) patterns
         revive_llvm_context::PolkaVMRevertEmptyFunction.declare(context)?;
         revive_llvm_context::PolkaVMRevertFunction.declare(context)?;
 
@@ -96,12 +94,10 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        // Translate Yul AST to newyork IR with optimization analysis
         let translation_result = self.translate_to_ir()?;
         let ir_object = translation_result.object;
 
-        // Debug: dump IR if RESOLC_DEBUG_IR is set
-        if std::env::var("RESOLC_DEBUG_IR").is_ok() {
+        if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
             use std::io::Write;
             let ir_text = revive_newyork::print_object(&ir_object);
             let debug_file = format!("/tmp/newyork_ir_{}.txt", ir_object.name.replace('/', "_"));
@@ -119,27 +115,17 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 .map(|(fid, decision)| (fid.0, decision))
                 .collect();
 
-        // Count heap operations for conditional sbrk outlining (applied after sbrk is emitted).
         let heap_op_count = ir_object.count_heap_operations();
-
-        // Count single-word keccak256 patterns in the IR.
-        // The outlined helper function body costs ~150 bytes, so it only pays off
-        // when enough call sites exist (each saving ~20 bytes from deduplication).
-        // With fewer than 8 sites, the function body cost exceeds the savings.
         let keccak_single_count = ir_object.count_keccak256_single();
-        const KECCAK_SINGLE_THRESHOLD: usize = 8;
         let has_keccak_single = keccak_single_count >= KECCAK_SINGLE_THRESHOLD;
-
-        // Check if we can use native-only heap mode (no byte-swapping needed)
         let use_native_heap = heap_opt.all_native();
 
-        // Log heap analysis results (output to file for subprocess visibility)
-        if std::env::var("RESOLC_DEBUG_HEAP").is_ok() {
+        if std::env::var(crate::RESOLC_DEBUG_HEAP_ENV).is_ok() {
             use std::io::Write;
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open("/tmp/resolc_heap_debug.log")
+                .open(HEAP_DEBUG_LOG_PATH)
             {
                 let _ = writeln!(
                     file,
@@ -158,7 +144,6 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             }
         }
 
-        // Set up debug info scope if available
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();
             let object_name: &str = self.yul_object.identifier.as_str();
@@ -176,10 +161,8 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         )?;
 
         if self.yul_object.identifier.ends_with("_deployed") {
-            // Runtime code path
             context.set_code_type(PolkaVMCodeType::Runtime);
 
-            // Generate the runtime code using newyork IR
             let mut codegen = LlvmCodegen::new(
                 heap_opt.clone(),
                 type_info.clone(),
@@ -189,24 +172,17 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 .generate_object(&ir_object, context)
                 .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
         } else {
-            // Deploy code path
             context.set_code_type(PolkaVMCodeType::Deploy);
 
-            // Generate entry function
             revive_llvm_context::PolkaVMEntryFunction::default().into_llvm(context)?;
 
-            // Generate runtime helper function bodies
             revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
 
-            // Emit heap functions: either native-only OR byte-swapping versions
-            // Using native-only saves ~200 bytes of code when all accesses are aligned
             if use_native_heap {
-                // Native heap mode: no byte-swapping, use direct RISC-V load/store
                 revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
                 revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
             } else {
-                // Standard mode: EVM-compatible big-endian byte order
                 revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
                 revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
             }
@@ -243,12 +219,6 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
 
-            // Mark __sbrk_internal as NoInline for contracts with many heap operations.
-            // sbrk has 5 basic blocks with bounds checking; when inlined at many sites,
-            // the duplicated code exceeds the function call overhead on PolkaVM.
-            // This must be done AFTER sbrk is emitted above, as the function doesn't
-            // exist in the LLVM module before that point.
-            const SBRK_NOINLINE_THRESHOLD: usize = 30;
             if heap_op_count > SBRK_NOINLINE_THRESHOLD {
                 if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
                     revive_llvm_context::PolkaVMFunction::set_attributes(
@@ -260,8 +230,6 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 }
             }
 
-            // Generate the deploy code using newyork IR
-            // Note: generate_object handles subobjects (inner_object) internally
             let mut codegen = LlvmCodegen::new(heap_opt, type_info, inline_decisions);
             codegen
                 .generate_object(&ir_object, context)

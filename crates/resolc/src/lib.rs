@@ -71,6 +71,22 @@ pub(crate) mod version;
 /// The rayon worker stack size.
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
+/// Environment variable: when set, routes Yul lowering through the newyork IR pipeline
+/// instead of the default `solc`/Yul path.
+pub const RESOLC_USE_NEWYORK_ENV: &str = "RESOLC_USE_NEWYORK";
+
+/// Environment variable: when set, dumps compiled blobs and metadata for newyork
+/// investigations (test harness only).
+pub const RESOLC_DEBUG_BLOB_ENV: &str = "RESOLC_DEBUG_BLOB";
+
+/// Environment variable: when set, prints the translated newyork IR for every compiled
+/// object to stderr and `/tmp/newyork_ir_<object>.txt`.
+pub const RESOLC_DEBUG_IR_ENV: &str = "RESOLC_DEBUG_IR";
+
+/// Environment variable: when set, appends the heap-optimization analysis result for
+/// every compiled object to `/tmp/resolc_heap_debug.log`.
+pub const RESOLC_DEBUG_HEAP_ENV: &str = "RESOLC_DEBUG_HEAP";
+
 /// Runs the Yul mode.
 pub fn yul<T: Compiler>(
     solc: &T,
@@ -166,7 +182,7 @@ pub fn standard_output<T: Compiler>(
         libraries,
         remappings,
         SolcStandardJsonInputSettingsSelection::new_required_for_codegen_all(),
-        SolcStandardJsonInputSettingsOptimizer::for_polkavm(solc_optimizer_enabled),
+        SolcStandardJsonInputSettingsOptimizer::pvm_size(solc_optimizer_enabled),
         Default::default(),
         suppressed_warnings,
         SolcStandardJsonInputSettingsPolkaVM::new(

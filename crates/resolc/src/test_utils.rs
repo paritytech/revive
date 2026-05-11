@@ -110,8 +110,8 @@ pub fn build_solidity_with_options(
     if output.has_errors() {
         return Ok(output);
     }
-    let debug_config = if std::env::var("RESOLC_DEBUG_BLOB").is_ok() {
-        let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+    let debug_config = if std::env::var(crate::RESOLC_DEBUG_BLOB_ENV).is_ok() {
+        let use_newyork = std::env::var(crate::RESOLC_USE_NEWYORK_ENV)
             .map(|v| v == "1")
             .unwrap_or(false);
         let suffix = if use_newyork { "newyork" } else { "yul" };
@@ -351,7 +351,7 @@ pub fn compile_blob_with_options(
     optimizer_settings: OptimizerSettings,
     libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
-    let use_newyork = std::env::var("RESOLC_USE_NEWYORK")
+    let use_newyork = std::env::var(crate::RESOLC_USE_NEWYORK_ENV)
         .map(|v| v == "1")
         .unwrap_or(false);
 
@@ -393,14 +393,13 @@ pub fn compile_blob_with_options(
     let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
     assert_eq!(&blob[..3], b"PVM");
 
-    // Debug: dump blob info for newyork investigation
-    if std::env::var("RESOLC_DEBUG_BLOB").is_ok() {
+    if std::env::var(crate::RESOLC_DEBUG_BLOB_ENV).is_ok() {
         eprintln!(
             "DEBUG [{}]: blob size={}, first_bytes={:?}, use_newyork={}",
             contract_name,
             blob.len(),
             &blob[..20.min(blob.len())],
-            std::env::var("RESOLC_USE_NEWYORK").unwrap_or_default()
+            std::env::var(crate::RESOLC_USE_NEWYORK_ENV).unwrap_or_default()
         );
         std::fs::write(format!("/tmp/debug_blob_{}.pvm", contract_name), &blob).ok();
     }

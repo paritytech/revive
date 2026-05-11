@@ -460,6 +460,10 @@ impl<'ctx> Context<'ctx> {
         &self.llvm_runtime
     }
 
+    /// Returns the topmost frontend function-name → mangled-name scope.
+    ///
+    /// Panics if no scope has been pushed; callers must invoke this from inside a region
+    /// that has already set up its function scope.
     pub fn get_current_scope(&mut self) -> &mut BTreeMap<String, String> {
         self.function_scope
             .last_mut()

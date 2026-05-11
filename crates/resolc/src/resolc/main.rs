@@ -177,7 +177,6 @@ fn main_inner(
     );
 
     let build = if arguments.newyork {
-        // NewYork IR pipeline (Yul via newyork IR)
         resolc::newyork(
             &solc,
             input_files.as_slice(),

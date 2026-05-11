@@ -17,6 +17,6 @@
     "typescript-eslint": "^8.58.1"
   },
   "overrides": {
-    "axios": "^1.15.0"
+    "axios": "^1.16.0"
   }
 }

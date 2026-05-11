@@ -71,9 +71,25 @@ pub(crate) mod version;
 /// The rayon worker stack size.
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// Environment variable: when set, routes Yul lowering through the newyork IR pipeline
-/// instead of the default `solc`/Yul path.
+/// Environment variable: when set to `"1"`, routes Yul lowering through the newyork IR
+/// pipeline instead of the default `solc`/Yul path. Equivalent to passing `--newyork`
+/// on the command line; the CLI flag and the env var are OR-ed by
+/// [`resolve_use_newyork`].
 pub const RESOLC_USE_NEWYORK_ENV: &str = "RESOLC_USE_NEWYORK";
+
+/// Returns whether the newyork IR pipeline should be used.
+///
+/// The newyork pipeline is enabled if either the `--newyork` CLI flag is set
+/// (passed in as `cli_flag`) or the [`RESOLC_USE_NEWYORK_ENV`] env var is set
+/// to `"1"`. This is the single resolution point for the flag — every entry
+/// point in this module takes a `use_newyork: bool` that callers compute via
+/// this helper.
+pub fn resolve_use_newyork(cli_flag: bool) -> bool {
+    cli_flag
+        || std::env::var(RESOLC_USE_NEWYORK_ENV)
+            .map(|value| value == "1")
+            .unwrap_or(false)
+}
 
 /// Environment variable: when set, dumps compiled blobs and metadata for newyork
 /// investigations (test harness only).
@@ -88,6 +104,9 @@ pub const RESOLC_DEBUG_IR_ENV: &str = "RESOLC_DEBUG_IR";
 pub const RESOLC_DEBUG_HEAP_ENV: &str = "RESOLC_DEBUG_HEAP";
 
 /// Runs the Yul mode.
+///
+/// When `use_newyork` is `true`, each Yul source is routed through the newyork IR
+/// pipeline instead of the direct Yul-to-LLVM path.
 pub fn yul<T: Compiler>(
     solc: &T,
     input_files: &[PathBuf],
@@ -98,47 +117,15 @@ pub fn yul<T: Compiler>(
     debug_config: DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    use_newyork: bool,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
     let solc_output = solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
     solc_output.exit_on_error();
 
     let linker_symbols = libraries.as_linker_symbols()?;
-    let project = Project::try_from_yul_paths(input_files, None, libraries, &debug_config)?;
-    let mut build = project.compile(
-        messages,
-        optimizer_settings,
-        metadata_hash,
-        &debug_config,
-        llvm_arguments,
-        memory_config,
-    )?;
-    build.take_and_write_warnings();
-    build.check_errors()?;
-
-    let mut build = build.link(linker_symbols, &debug_config);
-    build.take_and_write_warnings();
-    build.check_errors()?;
-    Ok(build)
-}
-
-/// Runs the newyork IR mode (Yul via newyork IR pipeline).
-pub fn newyork<T: Compiler>(
-    solc: &T,
-    input_files: &[PathBuf],
-    libraries: &[String],
-    metadata_hash: MetadataHash,
-    messages: &mut Vec<SolcStandardJsonOutputError>,
-    optimizer_settings: OptimizerSettings,
-    debug_config: DebugConfig,
-    llvm_arguments: &[String],
-    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
-) -> anyhow::Result<Build> {
-    let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
-    solc.validate_yul_paths(input_files, libraries.clone(), messages)?;
-
-    let linker_symbols = libraries.as_linker_symbols()?;
-    let project = Project::try_from_newyork_paths(input_files, None, libraries, &debug_config)?;
+    let project =
+        Project::try_from_yul_paths(input_files, None, libraries, &debug_config, use_newyork)?;
     let mut build = project.compile(
         messages,
         optimizer_settings,
@@ -157,6 +144,8 @@ pub fn newyork<T: Compiler>(
 }
 
 /// Runs the standard output mode.
+///
+/// See [`yul`] for the meaning of `use_newyork`.
 pub fn standard_output<T: Compiler>(
     solc: &T,
     input_files: &[PathBuf],
@@ -174,6 +163,7 @@ pub fn standard_output<T: Compiler>(
     debug_config: DebugConfig,
     llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    use_newyork: bool,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
     let mut solc_input = SolcStandardJsonInput::try_from_solidity_paths(
@@ -213,6 +203,7 @@ pub fn standard_output<T: Compiler>(
         solc_input.settings.libraries,
         &solc_version,
         &debug_config,
+        use_newyork,
     )?;
     solc_output.take_and_write_warnings();
     solc_output.check_errors()?;
@@ -236,6 +227,8 @@ pub fn standard_output<T: Compiler>(
 }
 
 /// Runs the standard JSON mode.
+///
+/// See [`yul`] for the meaning of `use_newyork`.
 pub fn standard_json<T: Compiler>(
     solc: &T,
     metadata_hash: MetadataHash,
@@ -246,6 +239,7 @@ pub fn standard_json<T: Compiler>(
     allow_paths: Option<String>,
     mut debug_config: DebugConfig,
     detect_missing_libraries: bool,
+    use_newyork: bool,
 ) -> anyhow::Result<()> {
     let solc_version = solc.version()?;
     let mut solc_input = SolcStandardJsonInput::try_from(json_path.as_deref())?;
@@ -289,6 +283,7 @@ pub fn standard_json<T: Compiler>(
         solc_input.settings.libraries,
         &solc_version,
         &debug_config,
+        use_newyork,
     )?;
 
     if solc_output.has_errors() {
@@ -324,6 +319,8 @@ pub fn standard_json<T: Compiler>(
 }
 
 /// Runs the combined JSON mode.
+///
+/// See [`yul`] for the meaning of `use_newyork`.
 pub fn combined_json<T: Compiler>(
     solc: &T,
     paths: &[PathBuf],
@@ -344,6 +341,7 @@ pub fn combined_json<T: Compiler>(
     overwrite: bool,
     llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    use_newyork: bool,
 ) -> anyhow::Result<()> {
     let selectors = CombinedJsonSelector::from_cli(format.as_str())
         .into_iter()
@@ -392,6 +390,7 @@ pub fn combined_json<T: Compiler>(
         debug_config,
         llvm_arguments,
         memory_config,
+        use_newyork,
     )?
     .write_to_combined_json(&mut combined_json)?;
 

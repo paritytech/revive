@@ -176,19 +176,9 @@ fn main_inner(
         Some(arguments.stack_size),
     );
 
-    let build = if arguments.newyork {
-        resolc::newyork(
-            &solc,
-            input_files.as_slice(),
-            arguments.libraries.as_slice(),
-            arguments.metadata_hash,
-            messages,
-            optimizer_settings,
-            debug_config,
-            &arguments.llvm_arguments,
-            memory_config,
-        )
-    } else if arguments.yul {
+    let use_newyork = resolc::resolve_use_newyork(arguments.newyork);
+
+    let build = if arguments.yul {
         resolc::yul(
             &solc,
             input_files.as_slice(),
@@ -199,6 +189,7 @@ fn main_inner(
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
@@ -211,6 +202,7 @@ fn main_inner(
             arguments.allow_paths,
             debug_config,
             arguments.detect_missing_libraries,
+            use_newyork,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
@@ -234,6 +226,7 @@ fn main_inner(
             arguments.overwrite,
             arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )?;
         return Ok(());
     } else if arguments.link {
@@ -256,6 +249,7 @@ fn main_inner(
             debug_config,
             arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )
     }?;
 

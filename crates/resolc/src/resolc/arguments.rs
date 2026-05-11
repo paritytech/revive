@@ -106,9 +106,11 @@ pub struct Arguments {
     #[arg(long = "yul")]
     pub yul: bool,
 
-    /// Switch to NewYork IR pipeline mode (experimental).
-    /// Uses the new newyork IR layer instead of direct Yul-to-LLVM translation.
-    /// This is experimental and currently not functional.
+    /// Route Yul lowering through the newyork IR pipeline (experimental).
+    ///
+    /// This flag is orthogonal to the input mode: it composes with `--yul`,
+    /// `--standard-json`, `--combined-json`, and the default Solidity mode.
+    /// Equivalent to setting the `RESOLC_USE_NEWYORK=1` environment variable.
     #[arg(long = "newyork", hide = true)]
     pub newyork: bool,
 
@@ -248,7 +250,6 @@ impl Arguments {
 
         let modes = [
             self.yul,
-            self.newyork,
             self.combined_json.is_some(),
             self.standard_json.is_some(),
             self.link,
@@ -259,7 +260,10 @@ impl Arguments {
         let acceptable_count = 1 + self.standard_json.is_some() as usize;
         if modes > acceptable_count {
             messages.push(SolcStandardJsonOutputError::new_error(
-            "Only one mode is allowed at the same time: Yul, NewYork, combined JSON, standard JSON, link.",None,None));
+                "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link.",
+                None,
+                None,
+            ));
         }
 
         if self.yul && !self.libraries.is_empty() {

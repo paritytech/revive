@@ -110,10 +110,8 @@ pub fn build_solidity_with_options(
     if output.has_errors() {
         return Ok(output);
     }
+    let use_newyork = crate::resolve_use_newyork(false);
     let debug_config = if std::env::var(crate::RESOLC_DEBUG_BLOB_ENV).is_ok() {
-        let use_newyork = std::env::var(crate::RESOLC_USE_NEWYORK_ENV)
-            .map(|v| v == "1")
-            .unwrap_or(false);
         let suffix = if use_newyork { "newyork" } else { "yul" };
         DebugConfig::new(
             Some(std::path::PathBuf::from(format!(
@@ -131,6 +129,7 @@ pub fn build_solidity_with_options(
         libraries,
         &solc_version,
         &debug_config,
+        use_newyork,
     )?
     .compile(
         &mut vec![],
@@ -241,6 +240,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
         libraries,
         &solc_version,
         &DEBUG_CONFIG,
+        crate::resolve_use_newyork(false),
     )?;
 
     let missing_libraries = project.get_missing_libraries(&deployed_libraries);
@@ -270,6 +270,7 @@ pub fn build_yul<T: ToString + Display>(
         Default::default(),
         None,
         &DEBUG_CONFIG,
+        false,
     )?
     .compile(
         &mut vec![],
@@ -313,6 +314,7 @@ pub fn build_yul_standard_json(
         Default::default(),
         Some(&mut output),
         &DEBUG_CONFIG,
+        false,
     )?
     .compile(
         &mut vec![],
@@ -351,9 +353,7 @@ pub fn compile_blob_with_options(
     optimizer_settings: OptimizerSettings,
     libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
-    let use_newyork = std::env::var(crate::RESOLC_USE_NEWYORK_ENV)
-        .map(|v| v == "1")
-        .unwrap_or(false);
+    let use_newyork = crate::resolve_use_newyork(false);
 
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),

@@ -115,12 +115,6 @@ impl MemoryRegion {
         if addr_u64.is_empty() || (addr_u64.len() == 1 && addr_u64[0] < 0x40) {
             MemoryRegion::Scratch
         } else if addr_u64.len() == 1 && addr_u64[0] == 0x40 {
-            // Only offset 0x40 itself is the free-memory-pointer slot. Any other
-            // offset in 0x40..0x60 (e.g. 0x44 for ABI-encoded arguments to a custom
-            // error revert) stores ordinary data and must not be treated as an
-            // FMP store — otherwise the I64 narrowing for FMP values truncates
-            // i256 arguments. OZ `revert ERC20InsufficientBalance(..., 2^128-1)`
-            // dropped the upper 192 bits of `value` via this path.
             MemoryRegion::FreePointerSlot
         } else if addr_u64.len() == 1 && addr_u64[0] >= 0x80 {
             MemoryRegion::Dynamic
@@ -165,7 +159,6 @@ impl Value {
 /// Binary operation kinds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BinaryOperation {
-    // Arithmetic
     Add,
     Sub,
     Mul,
@@ -176,20 +169,17 @@ pub enum BinaryOperation {
     Exp,
     AddMod,
     MulMod,
-    // Bitwise
     And,
     Or,
     Xor,
     Shl,
     Shr,
     Sar,
-    // Comparison (result is I1)
     Lt,
     Gt,
     Slt,
     Sgt,
     Eq,
-    // Byte operations
     Byte,
     SignExtend,
 }
@@ -265,7 +255,6 @@ pub enum Expression {
         operand: Value,
     },
 
-    // EVM builtins (pure getters)
     CallDataLoad {
         offset: Value,
     },
@@ -328,7 +317,6 @@ pub enum Expression {
         arguments: Vec<Value>,
     },
 
-    // Type conversions (explicit)
     Truncate {
         value: Value,
         to: BitWidth,
@@ -447,14 +435,12 @@ impl Block {
 /// Statements with effects and structured control flow.
 #[derive(Clone, Debug)]
 pub enum Statement {
-    // SSA binding
     /// SSA binding: let x, y, z = expression
     Let {
         bindings: Vec<ValueId>,
         value: Expression,
     },
 
-    // Memory operations
     /// Memory store with region annotation.
     MStore {
         offset: Value,
@@ -476,7 +462,6 @@ pub enum Statement {
         length: Value,
     },
 
-    // Storage operations
     /// Storage store with optional static slot.
     SStore {
         key: Value,
@@ -491,7 +476,6 @@ pub enum Statement {
         value: Value,
     },
 
-    // Structured control flow (with explicit value flow)
     /// Structured if with explicit yields.
     If {
         condition: Value,
@@ -555,7 +539,6 @@ pub enum Statement {
         return_values: Vec<Value>,
     },
 
-    // Terminating statements
     Revert {
         offset: Value,
         length: Value,
@@ -611,7 +594,6 @@ pub enum Statement {
         value: Value,
     },
 
-    // External calls
     ExternalCall {
         kind: CallKind,
         gas: Value,
@@ -633,14 +615,12 @@ pub enum Statement {
         result: ValueId,
     },
 
-    // Logging
     Log {
         offset: Value,
         length: Value,
         topics: Vec<Value>,
     },
 
-    // Data operations
     CodeCopy {
         dest: Value,
         offset: Value,
@@ -805,7 +785,6 @@ impl Object {
         for function in self.functions.values() {
             count_error_string_reverts_in_block(&function.body, &mut counts);
         }
-        // Don't count subobjects - each subobject has its own outlined functions
         counts
     }
 

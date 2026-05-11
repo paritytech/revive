@@ -125,12 +125,9 @@ impl Simplifier {
 
     /// Simplifies an entire object in place.
     pub fn simplify_object(&mut self, object: &mut Object) -> SimplifyResults {
-        // Find maximum ValueId in use so we can allocate fresh IDs
         self.next_value_id = object.find_max_value_id() + 1;
 
-        // Simplify main code block
         self.simplify_block(&mut object.code);
-        // DCE on main code block (no explicit return values)
         self.statistics.dead_bindings_removed +=
             eliminate_dead_code_in_stmts(&mut object.code.statements, &BTreeSet::new());
 
@@ -142,7 +139,6 @@ impl Simplifier {
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
 
-            // DCE pass: remove unused pure Let bindings (bottom-up, then fixpoint)
             let mut extra_used = BTreeSet::new();
             for ret_id in &function.return_values {
                 extra_used.insert(ret_id.0);
@@ -150,11 +146,6 @@ impl Simplifier {
             self.statistics.dead_bindings_removed +=
                 eliminate_dead_code_in_stmts(&mut function.body.statements, &extra_used);
         }
-
-        // NOTE: Do NOT recurse into subobjects here. The optimize_object_tree
-        // in lib.rs handles subobject recursion. Processing subobjects here would
-        // cause them to be simplified BEFORE inlining runs on them, breaking the
-        // required pass ordering (inline -> simplify -> mem_opt).
 
         std::mem::take(&mut self.statistics)
     }
@@ -179,23 +170,8 @@ impl Simplifier {
             result.extend(simplified);
         }
 
-        // Post-pass: outline Solidity panic revert patterns.
-        // Pattern: mstore(0, panic_selector) + mstore(4, code) + revert(0, 0x24)
-        // Replace with PanicRevert { code } which deduplicates to a shared block.
-        // Use self.constants which still has all accumulated constants from this scope.
         result = outline_panic_patterns(result, &self.constants);
 
-        // Post-pass: outline Solidity Error(string) revert patterns.
-        // Pattern: mload(0x40) + mstore(fmp, 0x08c379a0...) + mstore(fmp+4, 0x20) +
-        //          mstore(fmp+0x24, length) + mstore(fmp+0x44, data) + revert(fmp, total)
-        // Replace with ErrorStringRevert { length, data } which calls a shared function.
-        // NOTE: ErrorStringRevert outlining disabled - causes regressions on OZ contracts
-        // (0-1 sites per contract, inline path generates worse code than original MStores)
-        // result = outline_error_string_patterns(result, &self.constants);
-
-        // Post-pass: outline custom error revert patterns.
-        // Pattern: mstore(0, selector) [+ mstore(4, arg0) + ...] + revert(0, 4+32*N)
-        // Replace with CustomErrorRevert { selector, arguments }.
         result = outline_custom_error_patterns(result, &self.constants);
 
         self.constants = outer_constants;
@@ -211,8 +187,6 @@ impl Simplifier {
             Statement::Let { bindings, value } => {
                 let simplified_expr = self.simplify_expression(value);
 
-                // Strength reduction: mul(x, 2^k) → shl(k, x), div(x, 2^k) → shr(k, x)
-                // We need to emit: let shift_id = k; let result = shl(shift_id, x)
                 if bindings.len() == 1 {
                     if let Some(statements) = self.try_strength_reduce(&bindings, &simplified_expr)
                     {
@@ -220,29 +194,22 @@ impl Simplifier {
                     }
                 }
 
-                // Track constants
                 if bindings.len() == 1 {
                     if let Expression::Literal { ref value, .. } = simplified_expr {
                         self.constants.insert(bindings[0].0, value.clone());
                     }
-                    // Track copies (let x = y)
                     if let Expression::Var(src_id) = &simplified_expr {
                         let resolved = self.resolve_copy(*src_id);
                         self.copies.insert(bindings[0].0, resolved);
-                        // Also propagate constant knowledge
                         if let Some(c) = self.constants.get(&resolved.0).cloned() {
                             self.constants.insert(bindings[0].0, c);
                         }
                     }
 
-                    // Record first binding for pure environment reads (CSE).
-                    // Subsequent reads of the same kind will be replaced with Var(id).
                     if let Some(kind) = env_read_kind(&simplified_expr) {
                         self.env_reads.entry(kind).or_insert(bindings[0]);
                     }
 
-                    // Track unary definitions for algebraic identity detection
-                    // (e.g., not(not(x)) = x).
                     if let Expression::Unary { operation, operand } = &simplified_expr {
                         self.unary_defs
                             .insert(bindings[0].0, (*operation, operand.id));
@@ -301,8 +268,6 @@ impl Simplifier {
                 let condition = self.resolve_value(condition);
                 let cond_val = self.try_get_const(&condition);
 
-                // Constant branch elimination: hoist taken branch statements,
-                // then assign outputs OUTSIDE the block so DCE can see them.
                 if let Some(cond_const) = cond_val {
                     let is_true = !cond_const.is_zero();
                     self.statistics.branches_eliminated += 1;
@@ -310,9 +275,6 @@ impl Simplifier {
                     if is_true {
                         let then_region = self.simplify_region(then_region);
                         let mut result = Vec::new();
-                        // Emit statements directly (not wrapped in a Block) so that
-                        // DCE at the parent level can see that values defined here
-                        // are used by the output assignments below.
                         result.extend(then_region.statements);
                         for (output_id, yield_val) in outputs.iter().zip(then_region.yields.iter())
                         {
@@ -335,7 +297,6 @@ impl Simplifier {
                         }
                         return result;
                     } else {
-                        // Condition false, no else: outputs come from inputs (passthrough)
                         let inputs: Vec<Value> =
                             inputs.into_iter().map(|v| self.resolve_value(v)).collect();
                         let mut result = vec![];
@@ -373,8 +334,6 @@ impl Simplifier {
                 let scrutinee = self.resolve_value(scrutinee);
                 let scrut_val = self.try_get_const(&scrutinee);
 
-                // Constant switch elimination: hoist taken case statements,
-                // then assign outputs OUTSIDE the block so DCE can see them.
                 if let Some(scrut_const) = scrut_val {
                     let matching_case = cases.into_iter().find(|c| c.value == scrut_const);
 
@@ -383,7 +342,6 @@ impl Simplifier {
                     } else if let Some(default_region) = default {
                         self.simplify_region(default_region)
                     } else {
-                        // No matching case and no default - outputs come from inputs
                         let inputs: Vec<Value> =
                             inputs.into_iter().map(|v| self.resolve_value(v)).collect();
                         let mut result = vec![];
@@ -398,9 +356,6 @@ impl Simplifier {
                     };
 
                     let mut result = Vec::new();
-                    // Emit statements directly (not wrapped in a Block) so that
-                    // DCE at the parent level can see that values defined here
-                    // are used by the output assignments below.
                     result.extend(taken_region.statements);
                     for (output_id, yield_val) in outputs.iter().zip(taken_region.yields.iter()) {
                         result.push(Statement::Let {
@@ -423,9 +378,6 @@ impl Simplifier {
                     .collect();
                 let mut default = default.map(|r| self.simplify_region(r));
 
-                // Callvalue check hoisting: if all cases start with
-                // `let tmp = callvalue(); if tmp { revert(0,0) }`, hoist it before the switch.
-                // This eliminates N-1 redundant copies of the check (e.g., 10 copies in ERC20).
                 let mut hoisted = Vec::new();
                 if !cases.is_empty() {
                     let all_have_callvalue_check = cases
@@ -436,32 +388,22 @@ impl Simplifier {
                         });
 
                     if all_have_callvalue_check {
-                        // Clone the two-statement check from the first case
-                        // (Let + If), but we only need ONE copy hoisted
                         let first_stmts = &cases[0].body.statements;
                         if first_stmts.len() >= 2 {
                             hoisted.push(first_stmts[0].clone());
                             hoisted.push(first_stmts[1].clone());
                         }
-                        // Remove the two-statement prefix from all cases
                         for case in &mut cases {
                             if has_callvalue_revert_prefix(&case.body.statements) {
                                 case.body.statements.drain(0..2);
                             }
                         }
-                        // Remove from default if it has one
                         if let Some(ref mut d) = default {
                             if has_callvalue_revert_prefix(&d.statements) {
                                 d.statements.drain(0..2);
                             }
                         }
                     } else {
-                        // Partial callvalue read hoisting: when not all cases have
-                        // the full callvalue-revert prefix, but many cases start with
-                        // `let vN = callvalue()`, hoist just the syscall read before
-                        // the switch. Each case that had `let vN = callvalue()` becomes
-                        // `let vN = hoisted_cv` (a copy, no syscall). This eliminates
-                        // N-1 redundant callvalue syscalls.
                         const PARTIAL_HOIST_THRESHOLD: usize = 3;
                         let callvalue_case_count = cases
                             .iter()
@@ -478,7 +420,6 @@ impl Simplifier {
                                 bindings: vec![hoisted_cv_id],
                                 value: Expression::CallValue,
                             });
-                            // Replace callvalue() in each case with Var(hoisted_cv_id)
                             for case in &mut cases {
                                 replace_leading_callvalue_with_var(
                                     &mut case.body.statements,
@@ -520,8 +461,6 @@ impl Simplifier {
                     .map(|v| self.resolve_value(v))
                     .collect();
 
-                // Save state for loop body (loop body can't see pre-loop constants reliably
-                // since values change each iteration)
                 let saved_constants = self.constants.clone();
                 let saved_copies = self.copies.clone();
 
@@ -551,20 +490,12 @@ impl Simplifier {
                 vec![Statement::Expression(self.simplify_expression(expression))]
             }
 
-            // Statements with no Value fields — copy through unchanged.
-            // CustomErrorRevert's arguments are pre-resolved when the outliner builds it,
-            // so it stays in the no-operation group.
             Statement::Stop
             | Statement::Invalid
             | Statement::PanicRevert { .. }
             | Statement::ErrorStringRevert { .. }
             | Statement::CustomErrorRevert { .. } => vec![statement],
 
-            // Pass-through statements: apply copy propagation to every used Value
-            // (definitions like Let bindings, ExternalCall::result, Create::result are not
-            // visited by `for_each_value_id_mut`). MStore/MStore8 are handled above
-            // because they additionally re-resolve their `MemoryRegion` from the
-            // (possibly-now-constant) offset.
             mut other @ (Statement::MCopy { .. }
             | Statement::SStore { .. }
             | Statement::TStore { .. }
@@ -592,7 +523,6 @@ impl Simplifier {
 
     /// Simplifies a region in place.
     fn simplify_region(&mut self, region: Region) -> Region {
-        // Save outer scope state (including env reads to prevent cross-branch leaking)
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
         let outer_env_reads = self.env_reads.clone();
@@ -603,25 +533,16 @@ impl Simplifier {
             statements.extend(simplified);
         }
 
-        // Outline panic revert patterns using the full accumulated constants for this scope
         statements = outline_panic_patterns(statements, &self.constants);
 
-        // Outline Error(string) revert patterns
-        // NOTE: ErrorStringRevert outlining disabled - see above
-        // statements = outline_error_string_patterns(statements, &self.constants);
-
-        // Outline custom error revert patterns
         statements = outline_custom_error_patterns(statements, &self.constants);
 
-        // Resolve yields BEFORE restoring outer scope, since yield values
-        // reference definitions from inside the region.
         let yields: Vec<Value> = region
             .yields
             .into_iter()
             .map(|v| self.resolve_value(v))
             .collect();
 
-        // Restore outer scope
         self.constants = outer_constants;
         self.copies = outer_copies;
         self.env_reads = outer_env_reads;
@@ -643,7 +564,6 @@ impl Simplifier {
                 let lhs_val = self.try_get_const(&lhs);
                 let rhs_val = self.try_get_const(&rhs);
 
-                // Constant folding: both operands are constants
                 if let (Some(a), Some(b)) = (&lhs_val, &rhs_val) {
                     if let Some(result) = fold_binary(operation, a, b) {
                         self.statistics.constants_folded += 1;
@@ -654,18 +574,11 @@ impl Simplifier {
                     }
                 }
 
-                // Algebraic identities (safe: just rewrites the expression)
                 if let Some(simplified) = simplify_binary(operation, &lhs, &rhs, &lhs_val, &rhs_val)
                 {
                     self.statistics.identities_simplified += 1;
                     return simplified;
                 }
-
-                // NOTE: AND mask elimination (and(x, MASK) = x when x fits in MASK bits)
-                // was implemented but causes a code size INCREASE because LLVM uses AND
-                // operations as range hints for its own optimization passes. Removing them
-                // makes LLVM generate more conservative code. The type inference pass
-                // already handles narrow types for the LLVM codegen.
 
                 Expression::Binary {
                     operation,
@@ -688,7 +601,6 @@ impl Simplifier {
                     }
                 }
 
-                // Algebraic identity: not(not(x)) = x (double bitwise negation)
                 if operation == UnaryOperation::Not {
                     if let Some((UnaryOperation::Not, inner)) = self.unary_defs.get(&operand.id.0) {
                         self.statistics.identities_simplified += 1;
@@ -720,13 +632,11 @@ impl Simplifier {
                 Expression::Ternary { operation, a, b, n }
             }
 
-            // Resolve copies in Var references
             Expression::Var(id) => {
                 let resolved = self.resolve_copy(id);
                 Expression::Var(resolved)
             }
 
-            // MLoad: resolve offset and annotate memory region from constant offsets
             Expression::MLoad { offset, region } => {
                 let offset = self.resolve_value(offset);
                 let region = if region == MemoryRegion::Unknown {
@@ -737,15 +647,12 @@ impl Simplifier {
                 Expression::MLoad { offset, region }
             }
 
-            // CSE for pure environment reads: replace with cached binding if available.
-            // These values are invariant for the entire contract invocation.
             Expression::CallDataSize => self.cse_env_read(EnvRead::CallDataSize, expression),
             Expression::CallValue => self.cse_env_read(EnvRead::CallValue, expression),
             Expression::Caller => self.cse_env_read(EnvRead::Caller, expression),
             Expression::Origin => self.cse_env_read(EnvRead::Origin, expression),
             Expression::Address => self.cse_env_read(EnvRead::Address, expression),
 
-            // Constant keccak256 folding: precompute hash of constant arguments
             Expression::Keccak256Single { word0 } => {
                 let word0 = self.resolve_value(word0);
                 if let Some(c) = self.try_get_const(&word0) {
@@ -782,7 +689,6 @@ impl Simplifier {
                 slot: self.resolve_value(slot),
             },
 
-            // All other expressions pass through unchanged
             other => other,
         }
     }
@@ -814,7 +720,6 @@ impl Simplifier {
     /// Resolves a ValueId through the copy chain.
     fn resolve_copy(&self, id: ValueId) -> ValueId {
         let mut current = id;
-        // Follow the copy chain (with cycle protection)
         for _ in 0..32 {
             if let Some(&target) = self.copies.get(&current.0) {
                 if target == current {
@@ -954,7 +859,6 @@ fn outline_panic_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
 ) -> Vec<Statement> {
-    // Quick check: does this list even contain a Revert statement?
     let has_revert = statements
         .iter()
         .any(|s| matches!(s, Statement::Revert { .. }));
@@ -962,7 +866,6 @@ fn outline_panic_patterns(
         return statements;
     }
 
-    // Build a merged constant map: start from scope constants, add local literals
     let mut constants: BTreeMap<u32, BigUint> = scope_constants.clone();
     for statement in &statements {
         if let Statement::Let {
@@ -979,7 +882,6 @@ fn outline_panic_patterns(
     let mut result = Vec::with_capacity(statements.len());
 
     for statement in statements {
-        // Check if this is a revert(0, 0x24) - the terminal of a panic pattern
         if let Statement::Revert {
             ref offset,
             ref length,
@@ -1017,7 +919,6 @@ fn find_panic_pattern_backwards(
         return None;
     }
 
-    // Find the mstore(4, code) - must be within the last few statements (allow some Let bindings)
     let mut mstore4_idx = None;
     let mut error_code = None;
     let search_limit = len.saturating_sub(10);
@@ -1034,7 +935,6 @@ fn find_panic_pattern_backwards(
                                 break;
                             }
                         }
-                        // Handle zero code
                         if code_val.is_zero() {
                             mstore4_idx = Some(j);
                             error_code = Some(0u8);
@@ -1051,7 +951,6 @@ fn find_panic_pattern_backwards(
     let mstore4_idx = mstore4_idx?;
     let error_code = error_code?;
 
-    // Now find mstore(0, panic_selector) before mstore4_idx
     let search_limit2 = mstore4_idx.saturating_sub(10);
     for j in (search_limit2..mstore4_idx).rev() {
         match &statements[j] {
@@ -1060,8 +959,6 @@ fn find_panic_pattern_backwards(
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
                         if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX {
-                            // Verify that between j and the end there are only mstores, let
-                            // bindings, and dead expressions (no side effects we'd be removing)
                             let only_safe = statements[j..].iter().all(|s| {
                                 matches!(
                                     s,
@@ -1101,7 +998,6 @@ fn outline_custom_error_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
 ) -> Vec<Statement> {
-    // Quick check: does this list contain a Revert statement?
     let has_revert = statements
         .iter()
         .any(|s| matches!(s, Statement::Revert { .. }));
@@ -1109,7 +1005,6 @@ fn outline_custom_error_patterns(
         return statements;
     }
 
-    // Build merged constant map
     let mut constants: BTreeMap<u32, BigUint> = scope_constants.clone();
     for statement in &statements {
         if let Statement::Let {
@@ -1127,15 +1022,12 @@ fn outline_custom_error_patterns(
     let mut result = Vec::with_capacity(statements.len());
 
     for statement in statements {
-        // Check if this is a revert(0, N) where N is 4, 0x24, 0x44, 0x64, 0x84
         if let Statement::Revert {
             ref offset,
             ref length,
         } = statement
         {
-            // The revert offset must be constant 0
             if constants.get(&offset.id.0).is_some_and(|v| *v == zero) {
-                // The revert length must be a constant: 4 (0-argument), 0x24 (1-argument), 0x44 (2-argument), etc.
                 if let Some(total_len) = constants.get(&length.id.0).and_then(|v| v.to_u64()) {
                     let num_args = if total_len == 4 {
                         Some(0usize)
@@ -1149,12 +1041,11 @@ fn outline_custom_error_patterns(
                         if let Some((start_idx, selector, arguments)) =
                             find_custom_error_pattern_backwards(&result, &constants, num_args)
                         {
-                            // Keep Let bindings, remove only MStore statements
                             let mut kept = Vec::new();
                             for s in result.drain(start_idx..) {
                                 match s {
-                                    Statement::MStore { .. } => {} // remove
-                                    _ => kept.push(s),             // keep lets/exprs
+                                    Statement::MStore { .. } => {}
+                                    _ => kept.push(s),
                                 }
                             }
                             result.extend(kept);
@@ -1205,27 +1096,21 @@ fn find_custom_error_pattern_backwards(
     for j in (search_limit..len).rev() {
         match &statements[j] {
             Statement::MStore { offset, value, .. } => {
-                // Check the mstore offset
                 if let Some(off_val) = constants.get(&offset.id.0) {
                     if *off_val == zero {
-                        // mstore(0, selector) — selector must be a constant
                         if let Some(sel) = constants.get(&value.id.0) {
                             found_selector = Some(sel.clone());
                             earliest_idx = earliest_idx.min(j);
                         }
                     } else if *off_val == four && num_args >= 1 {
-                        // mstore(4, arg0)
                         arguments[0] = Some(*value);
                         earliest_idx = earliest_idx.min(j);
-                    } else {
-                        // mstore(0x24, arg1), mstore(0x44, arg2), ...
-                        if let Some(off_u64) = off_val.to_u64() {
-                            if off_u64 >= 0x24 && (off_u64 - 4) % 0x20 == 0 {
-                                let arg_idx = ((off_u64 - 4) / 0x20) as usize;
-                                if arg_idx < num_args {
-                                    arguments[arg_idx] = Some(*value);
-                                    earliest_idx = earliest_idx.min(j);
-                                }
+                    } else if let Some(off_u64) = off_val.to_u64() {
+                        if off_u64 >= 0x24 && (off_u64 - 4) % 0x20 == 0 {
+                            let arg_idx = ((off_u64 - 4) / 0x20) as usize;
+                            if arg_idx < num_args {
+                                arguments[arg_idx] = Some(*value);
+                                earliest_idx = earliest_idx.min(j);
                             }
                         }
                     }
@@ -1236,11 +1121,9 @@ fn find_custom_error_pattern_backwards(
         }
     }
 
-    // Verify all parts were found
     let selector = found_selector?;
     let arguments: Vec<Value> = arguments.into_iter().collect::<Option<Vec<_>>>()?;
 
-    // Verify that statements between earliest_idx and len are only Let/MStore/Expression
     let all_safe = statements[earliest_idx..].iter().all(|s| {
         matches!(
             s,
@@ -1286,7 +1169,6 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
             if a >= b {
                 a - b
             } else {
-                // Wrapping subtraction: a - b + 2^256
                 &modulus - (b - a)
             }
         }
@@ -1319,16 +1201,10 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
                 fold_smod(a, b, &modulus)?
             }
         }
-        BinaryOperation::Exp => {
-            // a^b mod 2^256
-            a.modpow(b, &modulus)
-        }
+        BinaryOperation::Exp => a.modpow(b, &modulus),
         BinaryOperation::And => a & b,
         BinaryOperation::Or => a | b,
         BinaryOperation::Xor => a ^ b,
-        // EVM shift convention: shl(shift_amount, value) = value << shift_amount
-        // In our IR: Binary { Shl, lhs: shift_amount, rhs: value }
-        // So a = shift_amount, b = value
         BinaryOperation::Shl => {
             if *a >= BigUint::from(256u32) {
                 BigUint::zero()
@@ -1368,7 +1244,6 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
             }
         }
         BinaryOperation::Byte => {
-            // byte(n, x): nth byte of x (0-indexed from most significant)
             if *a >= BigUint::from(32u32) {
                 BigUint::zero()
             } else {
@@ -1378,7 +1253,6 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
             }
         }
         BinaryOperation::SignExtend => fold_signextend(a, b, &max)?,
-        // Ternary ops handled separately
         BinaryOperation::AddMod | BinaryOperation::MulMod => return None,
     })
 }
@@ -1387,10 +1261,7 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
 fn fold_unary(operation: UnaryOperation, a: &BigUint) -> Option<BigUint> {
     Some(match operation {
         UnaryOperation::IsZero => bool_to_u256(a.is_zero()),
-        UnaryOperation::Not => {
-            // Bitwise NOT: flip all 256 bits
-            &max_u256() ^ a
-        }
+        UnaryOperation::Not => &max_u256() ^ a,
         UnaryOperation::Clz => {
             if a.is_zero() {
                 BigUint::from(256u32)
@@ -1450,7 +1321,6 @@ fn log2_exact(value: &BigUint) -> Option<u32> {
     if value.is_zero() || !((value - BigUint::one()) & value).is_zero() {
         return None;
     }
-    // value is a power of 2: find the exponent
     Some((value.bits() - 1) as u32)
 }
 
@@ -1477,7 +1347,6 @@ fn simplify_binary(
     let one = BigUint::one();
 
     match operation {
-        // add(x, 0) = add(0, x) = x
         BinaryOperation::Add => {
             if r_is(&zero) {
                 Some(var_l())
@@ -1488,58 +1357,48 @@ fn simplify_binary(
             }
         }
 
-        // sub(x, 0) = x; sub(x, x) = 0
         BinaryOperation::Sub if r_is(&zero) => Some(var_l()),
         BinaryOperation::Sub if same => Some(literal(zero)),
         BinaryOperation::Sub => None,
 
-        // mul(x, 0) = mul(0, x) = 0; mul(x, 1) = mul(1, x) = x
         BinaryOperation::Mul if r_is(&zero) || l_is(&zero) => Some(literal(zero)),
         BinaryOperation::Mul if r_is(&one) => Some(var_l()),
         BinaryOperation::Mul if l_is(&one) => Some(var_r()),
         BinaryOperation::Mul => None,
 
-        // div(x, 1) = x; div(0, x) = 0; div(x, x) = 1 (when x != 0; same id is definitely equal)
         BinaryOperation::Div | BinaryOperation::SDiv if r_is(&one) => Some(var_l()),
         BinaryOperation::Div | BinaryOperation::SDiv if l_is(&zero) => Some(literal(zero)),
         BinaryOperation::Div | BinaryOperation::SDiv if same => Some(literal(one)),
         BinaryOperation::Div | BinaryOperation::SDiv => None,
 
-        // mod(x, 1) = 0; mod(0, x) = 0; mod(x, x) = 0
         BinaryOperation::Mod | BinaryOperation::SMod if r_is(&one) || l_is(&zero) || same => {
             Some(literal(zero))
         }
         BinaryOperation::Mod | BinaryOperation::SMod => None,
 
-        // and(_, 0) = 0; and(x, MAX) = x; and(x, x) = x
         BinaryOperation::And if r_is(&zero) || l_is(&zero) => Some(literal(zero)),
         BinaryOperation::And if r_is(&max_u256()) || same => Some(var_l()),
         BinaryOperation::And if l_is(&max_u256()) => Some(var_r()),
         BinaryOperation::And => None,
 
-        // or(x, 0) = x; or(_, MAX) = MAX; or(x, x) = x
         BinaryOperation::Or if r_is(&zero) || same => Some(var_l()),
         BinaryOperation::Or if l_is(&zero) => Some(var_r()),
         BinaryOperation::Or if r_is(&max_u256()) || l_is(&max_u256()) => Some(literal(max_u256())),
         BinaryOperation::Or => None,
 
-        // xor(x, 0) = x; xor(x, x) = 0
         BinaryOperation::Xor if r_is(&zero) => Some(var_l()),
         BinaryOperation::Xor if l_is(&zero) => Some(var_r()),
         BinaryOperation::Xor if same => Some(literal(zero)),
         BinaryOperation::Xor => None,
 
-        // shl/shr/sar(0, x) = x (IR convention: lhs = shift_amount, rhs = value)
         BinaryOperation::Shl | BinaryOperation::Shr | BinaryOperation::Sar if l_is(&zero) => {
             Some(var_r())
         }
         BinaryOperation::Shl | BinaryOperation::Shr | BinaryOperation::Sar => None,
 
-        // eq(x, x) = 1
         BinaryOperation::Eq if same => Some(literal(one)),
         BinaryOperation::Eq => None,
 
-        // lt/gt/slt/sgt(x, x) = 0
         BinaryOperation::Lt | BinaryOperation::Gt | BinaryOperation::Slt | BinaryOperation::Sgt
             if same =>
         {
@@ -1582,7 +1441,6 @@ fn fold_sdiv(a: &BigUint, b: &BigUint, modulus: &BigUint) -> Option<BigUint> {
 
     let result = &abs_a / &abs_b;
 
-    // Negate if signs differ
     if a_neg != b_neg && !result.is_zero() {
         Some(modulus - &result)
     } else {
@@ -1605,7 +1463,6 @@ fn fold_smod(a: &BigUint, b: &BigUint, modulus: &BigUint) -> Option<BigUint> {
 
     let result = &abs_a % &abs_b;
 
-    // Result has sign of dividend (a)
     if a_neg && !result.is_zero() {
         Some(modulus - &result)
     } else {
@@ -1618,7 +1475,6 @@ fn fold_sar(a: &BigUint, b: &BigUint, modulus: &BigUint, max: &BigUint) -> Optio
     if *b >= BigUint::from(256u32) {
         let half = modulus >> 1;
         return if *a >= half {
-            // Negative: SAR fills with 1s
             Some(max.clone())
         } else {
             Some(BigUint::zero())
@@ -1629,7 +1485,6 @@ fn fold_sar(a: &BigUint, b: &BigUint, modulus: &BigUint, max: &BigUint) -> Optio
     let half = modulus >> 1;
 
     if *a >= half {
-        // Negative value: fill with 1s from the top
         let shifted = a >> shift;
         let fill = (max >> (256 - shift)) << (256 - shift);
         Some((shifted | fill) % modulus)
@@ -1641,7 +1496,6 @@ fn fold_sar(a: &BigUint, b: &BigUint, modulus: &BigUint, max: &BigUint) -> Optio
 /// Helper: EVM signextend(b, x) operation.
 fn fold_signextend(b: &BigUint, x: &BigUint, max: &BigUint) -> Option<BigUint> {
     if *b >= BigUint::from(31u32) {
-        // No change when b >= 31
         return Some(x.clone());
     }
 
@@ -1650,11 +1504,9 @@ fn fold_signextend(b: &BigUint, x: &BigUint, max: &BigUint) -> Option<BigUint> {
     let sign_bit = (x >> bit_pos) & BigUint::one();
 
     if sign_bit.is_one() {
-        // Sign bit is 1: fill upper bits with 1s
         let mask = max << (bit_pos + 1);
         Some((x | mask) & max)
     } else {
-        // Sign bit is 0: clear upper bits
         let mask = (BigUint::one() << (bit_pos + 1)) - BigUint::one();
         Some(x & mask)
     }
@@ -1688,7 +1540,6 @@ fn eliminate_dead_code_in_stmts(
 ) -> usize {
     let mut total_removed = 0;
 
-    // Phase 0: Remove unreachable code after terminators (revert/return/stop/invalid/leave)
     if let Some(terminator_pos) = statements.iter().position(is_terminator) {
         let unreachable_count = statements.len() - terminator_pos - 1;
         if unreachable_count > 0 {
@@ -1697,12 +1548,10 @@ fn eliminate_dead_code_in_stmts(
         }
     }
 
-    // Phase 1: Recursively DCE nested regions (bottom-up)
     for statement in statements.iter_mut() {
         total_removed += eliminate_dead_code_in_nested(statement, extra_used);
     }
 
-    // Phase 2: DCE at this level with fixpoint iteration
     loop {
         let mut used = extra_used.clone();
         for statement in statements.iter() {
@@ -1713,14 +1562,12 @@ fn eliminate_dead_code_in_stmts(
 
         let before = statements.len();
         statements.retain(|statement| {
-            // Remove unused Let bindings with pure expressions
             if let Statement::Let { bindings, value } = statement {
                 let all_unused = bindings.iter().all(|id| !used.contains(&id.0));
                 if all_unused && !expr_has_side_effects(value) {
                     return false;
                 }
             }
-            // Remove pure expression statements (e.g., void literals after revert/return)
             if let Statement::Expression(expression) = statement {
                 if !expr_has_side_effects(expression) {
                     return false;
@@ -1775,14 +1622,10 @@ fn eliminate_dead_code_in_nested(
             removed
         }
         Statement::Block(region) => {
-            // Block regions can define values used by the parent scope (e.g., function
-            // return values assigned inside a scoped block). Propagate parent's extra_used
-            // so those definitions are not incorrectly DCE'd.
             let mut extra = yields_as_used(&region.yields);
             extra.extend(parent_extra_used);
             eliminate_dead_code_in_stmts(&mut region.statements, &extra)
         }
-        // Skip For loops - complex loop_var/phi semantics
         _ => 0,
     }
 }
@@ -1814,7 +1657,6 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
         return false;
     }
 
-    // Statement 0: let <id> = callvalue()
     let callvalue_id = match &statements[0] {
         Statement::Let {
             bindings,
@@ -1827,8 +1669,6 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
         return false;
     };
 
-    // Statement 1: if <cv_id> { <let bindings>* revert(...) <unreachable>? }
-    // Must have: no inputs, no outputs, no else, then_region contains a Revert
     match &statements[1] {
         Statement::If {
             condition,
@@ -1837,20 +1677,15 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
             else_region,
             outputs,
         } => {
-            // Condition must reference the callvalue binding
             if condition.id != cv_id {
                 return false;
             }
-            // No SSA value flow (non-payable check doesn't modify variables)
             if !inputs.is_empty() || !outputs.is_empty() {
                 return false;
             }
-            // No else branch
             if else_region.is_some() {
                 return false;
             }
-            // Then region must contain a Revert statement somewhere
-            // (typically: Let bindings for 0 values, then Revert, then unreachable Expression)
             then_region
                 .statements
                 .iter()
@@ -1897,10 +1732,6 @@ fn yields_as_used(yields: &[Value]) -> BTreeSet<u32> {
     used
 }
 
-// =============================================================================
-// Function deduplication
-// =============================================================================
-
 /// Deduplicates functions with identical bodies in an object.
 ///
 /// Two functions are considered duplicates if they have:
@@ -1917,13 +1748,10 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
         return 0;
     }
 
-    // Step 1: Compute canonical forms for all functions
     let mut canonical_to_id: BTreeMap<Vec<u8>, FunctionId> = BTreeMap::new();
     let mut redirects: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
 
     for function in object.functions.values() {
-        // Skip functions that are too small to bother (the overhead of a call
-        // is roughly 2-3 instructions, so only dedup functions > 3 statements)
         if function.size_estimate <= 3 {
             continue;
         }
@@ -1940,7 +1768,6 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
         let canonical = canonicalize_function(function, &signature.0, &signature.1);
 
         if let Some(&canonical_id) = canonical_to_id.get(&canonical) {
-            // This function is a duplicate of canonical_id
             redirects.insert(function.id, canonical_id);
         } else {
             canonical_to_id.insert(canonical, function.id);
@@ -1952,13 +1779,11 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
     }
 
     let removed_count = redirects.len();
-    // Step 2: Redirect all calls in the IR
     redirect_calls_in_block(&mut object.code, &redirects);
     for function in object.functions.values_mut() {
         redirect_calls_in_block(&mut function.body, &redirects);
     }
 
-    // Step 3: Remove duplicate functions
     for dup_id in redirects.keys() {
         object.functions.remove(dup_id);
     }
@@ -1977,7 +1802,6 @@ fn canonicalize_function(
     let mut canon = Canonicalizer::new();
     let mut buf = Vec::new();
 
-    // Encode signature
     buf.push(parameter_types.len() as u8);
     for value_type in parameter_types {
         buf.push(type_tag(value_type));
@@ -1987,22 +1811,18 @@ fn canonicalize_function(
         buf.push(type_tag(value_type));
     }
 
-    // Register parameters in canonical order
     for (parameter_id, _) in &function.parameters {
         canon.get_or_insert(*parameter_id);
     }
-    // Register return value initials
     for rv in &function.return_values_initial {
         canon.get_or_insert(*rv);
     }
 
-    // Encode body
     for statement in &function.body.statements {
         canon.encode_statement(statement, &mut buf);
     }
 
-    // Encode return values
-    buf.push(0xFE); // marker for return values
+    buf.push(0xFE);
     for rv in &function.return_values {
         canon.encode_value_id(*rv, &mut buf);
     }
@@ -2081,7 +1901,6 @@ impl Canonicalizer {
                 arguments,
             } => {
                 buf.push(0x06);
-                // FunctionId is a global reference, preserve it
                 buf.extend_from_slice(&function.0.to_le_bytes());
                 buf.push(arguments.len() as u8);
                 for argument in arguments {
@@ -2186,7 +2005,6 @@ impl Canonicalizer {
                 buf.extend_from_slice(&(path.len() as u16).to_le_bytes());
                 buf.extend_from_slice(path.as_bytes());
             }
-            // Nullary builtins: each gets a unique tag
             _ => {
                 buf.push(nullary_expr_tag(expression));
             }
@@ -2661,13 +2479,9 @@ fn nullary_expr_tag(expression: &Expression) -> u8 {
         Expression::Gas => 0x50,
         Expression::MSize => 0x51,
         Expression::Address => 0x52,
-        _ => 0x00, // Should not happen for nullary expressions
+        _ => 0x00,
     }
 }
-
-// =============================================================================
-// Fuzzy function deduplication (parameterize by differing literals)
-// =============================================================================
 
 /// Maximum number of differing literal positions allowed for fuzzy dedup.
 /// Each differing literal becomes a new i256 parameter, so keep this small.
@@ -2689,8 +2503,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         return 0;
     }
 
-    // Step 1: Compute fuzzy canonical forms (literals replaced by position indices)
-    // Group functions by fuzzy hash
     let mut fuzzy_groups: BTreeMap<Vec<u8>, Vec<FunctionId>> = BTreeMap::new();
 
     for function in object.functions.values() {
@@ -2705,7 +2517,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             .push(function.id);
     }
 
-    // Step 2: For each group with 2+ members, find differing literals
     let mut total_removed = 0;
     let mut next_value_id = object.find_max_value_id() + 1;
 
@@ -2714,7 +2525,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             continue;
         }
 
-        // Collect literals from each function in the group
         let mut group_literals: Vec<(FunctionId, Vec<BigUint>)> = Vec::new();
         for &fid in group {
             let function = &object.functions[&fid];
@@ -2722,7 +2532,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             group_literals.push((fid, lits));
         }
 
-        // All functions must have the same number of literals
         let lit_count = group_literals[0].1.len();
         if group_literals
             .iter()
@@ -2731,7 +2540,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             continue;
         }
 
-        // Find positions where literals differ
         let mut differing_positions: Vec<usize> = Vec::new();
         for pos in 0..lit_count {
             let first_val = &group_literals[0].1[pos];
@@ -2744,13 +2552,9 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         if differing_positions.is_empty() {
-            continue; // Exact duplicates - handled by existing dedup
+            continue;
         }
 
-        // Group differing positions by their value signature across all functions.
-        // Positions that have the same value in every function member share one parameter.
-        // For example, if a storage slot constant appears at positions {1,2,7,21,23} and
-        // it's the only value that differs, we need 1 parameter, not 5.
         let mut value_sig_to_group: BTreeMap<Vec<Vec<u8>>, Vec<usize>> = BTreeMap::new();
         for &pos in &differing_positions {
             let sig: Vec<Vec<u8>> = group_literals
@@ -2765,8 +2569,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             continue;
         }
 
-        // Build mapping: for each differing position, which unique parameter index?
-        // Sorted by first position in each group for deterministic ordering.
         let mut parameter_groups: Vec<Vec<usize>> = value_sig_to_group.into_values().collect();
         parameter_groups.sort_by_key(|g| g[0]);
         let mut position_to_parameter_index: BTreeMap<usize, usize> = BTreeMap::new();
@@ -2776,11 +2578,9 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             }
         }
 
-        // The canonical function is the first in the group
         let canonical_id = group[0];
         let canonical_func = object.functions.get(&canonical_id).unwrap().clone();
 
-        // Check that all functions have the same parameter count and return types
         let canonical_param_count = canonical_func.parameters.len();
         let canonical_returns = &canonical_func.returns;
         let all_compatible = group.iter().skip(1).all(|&fid| {
@@ -2797,8 +2597,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             continue;
         }
 
-        // Build the parameterized canonical function:
-        // Add one i256 parameter for each unique differing value group
         let mut new_parameter_ids: Vec<ValueId> = Vec::new();
         for _ in 0..unique_param_count {
             let vid = ValueId(next_value_id);
@@ -2806,13 +2604,11 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             new_parameter_ids.push(vid);
         }
 
-        // Build the per-position param ID mapping for replacement
         let position_parameter_ids: Vec<(usize, ValueId)> = differing_positions
             .iter()
             .map(|&pos| (pos, new_parameter_ids[position_to_parameter_index[&pos]]))
             .collect();
 
-        // Clone canonical function and add new parameters
         let mut parameterized = canonical_func.clone();
         for &vid in &new_parameter_ids {
             parameterized
@@ -2820,23 +2616,17 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                 .push((vid, Type::Int(BitWidth::I256)));
         }
 
-        // Replace the differing literals in the parameterized body with Var references
         let canonical_lits = &group_literals[0].1;
 
         replace_literals_with_params(&mut parameterized.body, &position_parameter_ids);
 
-        // Replace canonical function with parameterized version
         object.functions.insert(canonical_id, parameterized);
 
-        // Build call-site redirects and argument mappings
-        // For the canonical function's own call sites, add its original literals as arguments
-        // (one argument per unique parameter, using the first position in each group)
         let canonical_extra_args: Vec<BigUint> = parameter_groups
             .iter()
             .map(|positions| canonical_lits[positions[0]].clone())
             .collect();
 
-        // Update all call sites across the IR
         for &fid in group {
             let extra_args: Vec<BigUint> = if fid == canonical_id {
                 canonical_extra_args.clone()
@@ -2848,8 +2638,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                     .collect()
             };
 
-            // Update all call sites for this function ID to call canonical_id
-            // with the extra literal arguments appended
             update_call_sites_with_extra_args(
                 &mut object.code,
                 fid,
@@ -2868,7 +2656,6 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             }
         }
 
-        // Remove duplicate functions (all except canonical)
         for &fid in group.iter().skip(1) {
             object.functions.remove(&fid);
             total_removed += 1;
@@ -2885,7 +2672,6 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     let mut canon = Canonicalizer::new();
     let mut buf = Vec::new();
 
-    // Encode signature (same as exact dedup)
     buf.push(function.parameters.len() as u8);
     for (_, value_type) in &function.parameters {
         buf.push(type_tag(value_type));
@@ -2895,7 +2681,6 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
         buf.push(type_tag(value_type));
     }
 
-    // Register parameters
     for (parameter_id, _) in &function.parameters {
         canon.get_or_insert(*parameter_id);
     }
@@ -2903,7 +2688,6 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
         canon.get_or_insert(*rv);
     }
 
-    // Encode body with literals replaced by placeholder
     let mut lit_counter = 0u32;
     for statement in &function.body.statements {
         fuzzy_encode_statement(&mut canon, statement, &mut buf, &mut lit_counter);
@@ -2926,8 +2710,7 @@ fn fuzzy_encode_expressionession(
     match expression {
         Expression::Literal { value_type, .. } => {
             buf.push(0x01);
-            // Replace literal value with position index
-            buf.push(0xFF); // marker for "fuzzy literal"
+            buf.push(0xFF);
             buf.extend_from_slice(&lit_counter.to_le_bytes());
             *lit_counter += 1;
             buf.push(type_tag(value_type));
@@ -2963,8 +2746,6 @@ fn fuzzy_encode_expressionession(
             arguments,
         } => {
             buf.push(0x06);
-            // For fuzzy dedup, we use a placeholder for FunctionId too,
-            // since the callee may itself be a different duplicate
             buf.extend_from_slice(&function.0.to_le_bytes());
             buf.push(arguments.len() as u8);
             for argument in arguments {
@@ -2974,7 +2755,6 @@ fn fuzzy_encode_expressionession(
         Expression::SLoad { key, static_slot } => {
             buf.push(0x12);
             canon.encode_value(key, buf);
-            // Replace static_slot with position index (it's a literal)
             if static_slot.is_some() {
                 buf.push(1);
                 buf.push(0xFF);
@@ -2984,7 +2764,6 @@ fn fuzzy_encode_expressionession(
                 buf.push(0);
             }
         }
-        // For all other expressions, delegate to exact encoding
         _ => {
             canon.encode_expression(expression, buf);
         }
@@ -3063,7 +2842,6 @@ fn fuzzy_encode_statement(
             }
             buf.push(cases.len() as u8);
             for c in cases {
-                // Case values are literals - replace with placeholder
                 buf.push(0xFF);
                 buf.extend_from_slice(&lit_counter.to_le_bytes());
                 *lit_counter += 1;
@@ -3119,7 +2897,6 @@ fn fuzzy_encode_statement(
             buf.push(0x89);
             fuzzy_encode_expressionession(canon, expression, buf, lit_counter);
         }
-        // For all other statements, delegate to exact encoding
         _ => {
             canon.encode_statement(statement, buf);
         }
@@ -3269,7 +3046,7 @@ fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(us
                 }
                 Statement::Switch { cases, default, .. } => {
                     for c in cases {
-                        *counter += 1; // case value position
+                        *counter += 1;
                         walk(&mut c.body.statements, positions, counter);
                     }
                     if let Some(d) = default {
@@ -3318,7 +3095,6 @@ fn update_call_sites_with_extra_args(
     ) {
         let mut i = 0;
         while i < statements.len() {
-            // Recurse into nested regions first.
             match &mut statements[i] {
                 Statement::If {
                     then_region,
@@ -3359,13 +3135,11 @@ fn update_call_sites_with_extra_args(
                 }
                 _ => {}
             }
-            // Then check if this statement is a target call.
             let is_target = matches!(&statements[i],
                 Statement::Let { value: Expression::Call { function, .. }, .. }
                 | Statement::Expression(Expression::Call { function, .. })
                 if *function == old_id);
             if is_target {
-                // Insert one Let-literal per extra argument before the call.
                 let mut extra_values = Vec::with_capacity(extra_args.len());
                 for arg_val in extra_args {
                     let vid = ValueId(*next_id);
@@ -3380,13 +3154,12 @@ fn update_call_sites_with_extra_args(
                             },
                         },
                     );
-                    i += 1; // skip past the inserted Let
+                    i += 1;
                     extra_values.push(Value {
                         id: vid,
                         value_type: Type::Int(BitWidth::I256),
                     });
                 }
-                // Then patch the call (now at position `i`).
                 match &mut statements[i] {
                     Statement::Let {
                         value:
@@ -3457,14 +3230,12 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                 bindings,
                 value: expression,
             } => {
-                // Track literal constants
                 if bindings.len() == 1 {
                     if let Expression::Literal { value, .. } = expression {
                         constants.insert(bindings[0].0, value.clone());
                     }
                 }
 
-                // Fold constant keccak256 calls
                 match expression {
                     Expression::Keccak256Single { word0 } => {
                         if let Some(c) = constants.get(&word0.id.0) {
@@ -3489,17 +3260,12 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                     _ => {}
                 }
 
-                // Record the folded result as a constant too
                 if bindings.len() == 1 {
                     if let Expression::Literal { value, .. } = expression {
                         constants.insert(bindings[0].0, value.clone());
                     }
                 }
             }
-            // Nested regions get their own scope (cloned constants) so that
-            // Let bindings introduced inside don't leak to sibling branches.
-            // `For::condition_statements` is intentionally not scoped — it's part
-            // of the loop header and shares the outer scope.
             Statement::If {
                 then_region,
                 else_region,
@@ -3651,8 +3417,6 @@ mod tests {
 
     #[test]
     fn test_constant_fold_shifts() {
-        // EVM convention: shl(shift_amount, value) = value << shift_amount
-        // fold_binary(Shl, a=shift_amount, b=value) = b << a
         assert_eq!(
             fold_binary(
                 BinaryOperation::Shl,
@@ -3661,7 +3425,6 @@ mod tests {
             ),
             Some(BigUint::from(256u64))
         );
-        // shr(shift_amount, value) = value >> shift_amount
         assert_eq!(
             fold_binary(
                 BinaryOperation::Shr,
@@ -3692,8 +3455,6 @@ mod tests {
     fn test_simplifier_constant_propagation() {
         let mut simplifier = Simplifier::new();
 
-        // v3 uses v1 and v2, so we also need something that uses v3
-        // to prevent DCE from removing everything
         let statements = vec![
             make_let_literal(1, 10),
             make_let_literal(2, 20),
@@ -3707,9 +3468,6 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        // After constant folding + DCE: v1 and v2 are removed (unused after folding),
-        // v3 = literal 30 remains, and the return references v3
-        // Find the Let for v3
         let v3_let = block.statements.iter().find(
             |s| matches!(s, Statement::Let { bindings, .. } if bindings.contains(&ValueId(3))),
         );
@@ -3729,7 +3487,6 @@ mod tests {
 
         let statements = vec![
             make_let_literal(1, 0),
-            // let v2 = add(v99, v1) where v1 = 0 → should simplify to Var(v99)
             Statement::Let {
                 bindings: vec![ValueId(2)],
                 value: Expression::Binary {
@@ -3747,7 +3504,6 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        // After: add(v99, 0) → Var(v99), v2 now holds Var(v99)
         let v2_let = block.statements.iter().find(
             |s| matches!(s, Statement::Let { bindings, .. } if bindings.contains(&ValueId(2))),
         );
@@ -3763,13 +3519,11 @@ mod tests {
 
     #[test]
     fn test_no_crash_on_unused_bindings() {
-        // DCE is currently disabled, but the simplifier should not crash
-        // with unused bindings present.
         let mut simplifier = Simplifier::new();
 
         let statements = vec![
-            make_let_literal(1, 42),  // v1 = 42, unused
-            make_let_literal(2, 100), // v2 = 100, used below
+            make_let_literal(1, 42),
+            make_let_literal(2, 100),
             Statement::Return {
                 offset: Value::int(ValueId(2)),
                 length: Value::int(ValueId(2)),
@@ -3779,7 +3533,6 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        // Without DCE, all statements are preserved
         assert_eq!(block.statements.len(), 3);
     }
 
@@ -3789,12 +3542,10 @@ mod tests {
 
         let statements = vec![
             make_let_literal(1, 42),
-            // let v2 = v1 (copy)
             Statement::Let {
                 bindings: vec![ValueId(2)],
                 value: Expression::Var(ValueId(1)),
             },
-            // use v2 → should become v1
             Statement::Return {
                 offset: Value::int(ValueId(2)),
                 length: Value::int(ValueId(2)),
@@ -3804,10 +3555,7 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        // The return should now reference v1 (or the literal 42 via constant prop)
         if let Statement::Return { offset, .. } = &block.statements[block.statements.len() - 1] {
-            // v2 was a copy of v1, so after propagation it should resolve to v1
-            // With constant propagation it might even be inlined as literal
             assert!(
                 offset.id.0 == 1
                     || matches!(block.statements.last(), Some(Statement::Return { .. }))
@@ -3817,7 +3565,6 @@ mod tests {
 
     #[test]
     fn test_ternary_fold() {
-        // addmod(10, 20, 7) = 30 % 7 = 2
         let result = fold_ternary(
             BinaryOperation::AddMod,
             &BigUint::from(10u64),
@@ -3826,7 +3573,6 @@ mod tests {
         );
         assert_eq!(result, Some(BigUint::from(2u64)));
 
-        // mulmod(5, 7, 6) = 35 % 6 = 5
         let result = fold_ternary(
             BinaryOperation::MulMod,
             &BigUint::from(5u64),
@@ -3835,7 +3581,6 @@ mod tests {
         );
         assert_eq!(result, Some(BigUint::from(5u64)));
 
-        // addmod(x, y, 0) = 0
         let result = fold_ternary(
             BinaryOperation::AddMod,
             &BigUint::from(10u64),
@@ -3857,7 +3602,6 @@ mod tests {
 
     #[test]
     fn test_byte_fold() {
-        // byte(31, 0xff) = 0xff (least significant byte)
         let result = fold_binary(
             BinaryOperation::Byte,
             &BigUint::from(31u64),
@@ -3865,7 +3609,6 @@ mod tests {
         );
         assert_eq!(result, Some(BigUint::from(0xFFu64)));
 
-        // byte(0, 0xff) = 0 (most significant byte of 0xff is 0)
         let result = fold_binary(
             BinaryOperation::Byte,
             &BigUint::from(0u64),

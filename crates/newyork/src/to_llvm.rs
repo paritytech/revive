@@ -401,7 +401,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let mut defined_ids: Vec<_> = self.values.keys().copied().collect();
             defined_ids.sort();
             let max_id = defined_ids.iter().max().copied().unwrap_or(0);
-            // Find the nearest defined IDs
             let lower_bound = defined_ids
                 .iter()
                 .filter(|&&x| x < value.id.0)
@@ -432,15 +431,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return None;
         }
 
-        // Try to get as zero-extended constant (works for <= 64-bit types)
         if let Some(v) = value.get_zero_extended_constant() {
             return Some(v);
         }
 
-        // For i256 constants, get_zero_extended_constant returns None because the
-        // bit-width > 64. Parse the printed representation instead.
         let s = value.print_to_string().to_string();
-        // Format is "i256 <value>" - extract the value part
         if let Some(val_str) = s.strip_prefix("i256 ") {
             if let Ok(v) = val_str.trim().parse::<u64>() {
                 return Some(v);
@@ -476,15 +471,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if !value.is_const() {
             return None;
         }
-        // Inkwell doesn't expose >u64 constant inspection; fall back to the
-        // printed representation. Format: `i256 <decimal>`.
         let s = value.print_to_string().to_string();
         let val_str = s.strip_prefix("i256 ")?.trim();
         let big = val_str.parse::<num::BigUint>().ok()?;
         if big.is_zero() {
             return None;
         }
-        // Selector pattern: bottom 224 bits clear, top 32 bits non-zero.
         let low_mask = (num::BigUint::from(1u32) << 224) - 1u32;
         if (&big & &low_mask) != num::BigUint::ZERO {
             return None;
@@ -546,27 +538,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return NativeMemoryMode::AllNative;
         }
         if let Some(static_val) = Self::try_extract_const_u64(offset_llvm) {
-            // For any constant offset that the heap analysis identifies as native-safe
-            // (word-aligned, not tainted, not escaping), use InlineNative.
-            // The heap is statically allocated at 131072 bytes, so any constant offset
-            // well within that range can safely use unchecked GEP (no sbrk overhead).
-            // This enables LLVM's GVN to do store-to-load forwarding on these accesses,
-            // potentially eliminating the heap access entirely.
             if self.heap_opt.can_use_native(static_val) {
                 return NativeMemoryMode::InlineNative;
             }
-            // The free memory pointer at offset 0x40 is a Solidity-internal convention.
-            // Even when 0x40 appears in escaping regions (from revert(0, 0x44)), the FMP
-            // value gets overwritten by ABI-encoded error data before the escape.
-            // This optimization is ONLY safe when no `return` statement covers 0x40 —
-            // inline assembly like `return(0, 96)` would return the native FMP value.
             if static_val == FREE_MEMORY_POINTER_SLOT && self.heap_opt.fmp_native_safe() {
                 return NativeMemoryMode::InlineNative;
             }
-            // For constant offsets that need byte-swapping (escaping/tainted), use
-            // InlineByteSwap: unchecked GEP + inline bswap. This avoids sbrk overhead
-            // and lets LLVM fold constant-value byte-swaps at compile time, merge
-            // adjacent stores, and do store-to-load forwarding across the bswap.
             return NativeMemoryMode::InlineByteSwap;
         }
         NativeMemoryMode::ByteSwap
@@ -615,13 +592,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if value_width == word_width {
             Ok(value)
         } else if value_width < word_width {
-            // Zero-extend to word type
             context
                 .builder()
                 .build_int_z_extend(value, context.word_type(), name)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))
         } else {
-            // Shouldn't happen - truncate as fallback
             context
                 .builder()
                 .build_int_truncate(value, context.word_type(), name)
@@ -644,14 +619,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if a_width == b_width {
             Ok((a, b))
         } else if a_width > b_width {
-            // Extend b to match a
             let b_ext = context
                 .builder()
                 .build_int_z_extend(b, a.get_type(), &format!("{}_ext_b", name))
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
             Ok((a, b_ext))
         } else {
-            // Extend a to match b
             let a_ext = context
                 .builder()
                 .build_int_z_extend(a, b.get_type(), &format!("{}_ext_a", name))
@@ -742,16 +715,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let a_width = a.get_type().get_bit_width();
         let b_width = b.get_type().get_bit_width();
 
-        // Only try to narrow if at least one operand is wider than 64 bits
         if a_width <= 64 && b_width <= 64 {
             return self.ensure_same_type(context, a, b, "cmp");
         }
 
-        // Check provable narrow widths from LLVM IR structure
         let a_proven = Self::provable_narrow_width(a).unwrap_or(a_width);
         let b_proven = Self::provable_narrow_width(b).unwrap_or(b_width);
 
-        // Also check constant widths
         let a_effective = if a.is_const() {
             Self::constant_effective_width(a)
                 .unwrap_or(a_proven)
@@ -767,20 +737,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             b_proven
         };
 
-        // Also check forward-propagated type inference min_width.
-        // This catches cases where the LLVM IR structure doesn't reveal narrowness
-        // but the newyork IR analysis does (e.g., calldatasize, shift results).
         let a_inferred = self.inferred_width(a_id).bits();
         let b_inferred = self.inferred_width(b_id).bits();
         let a_effective = a_effective.min(a_inferred);
         let b_effective = b_effective.min(b_inferred);
 
-        // Both operands must be provably narrow for truncation to be correct
         let max_needed = a_effective.max(b_effective);
 
-        // Map to standard width (8, 32, 64, 128) for LLVM optimization.
-        // i128 on riscv64 uses 2 registers (~4 instructions for compare)
-        // vs i256 which uses 4 registers (~8 instructions for compare).
         let target_bits = if max_needed <= 8 {
             8
         } else if max_needed <= 32 {
@@ -790,13 +753,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         } else if max_needed <= 128 {
             128
         } else {
-            // One or both operands need >128 bits; fall back to widening
             return self.ensure_same_type(context, a, b, "cmp");
         };
 
         let target_type = context.integer_type(target_bits as usize);
 
-        // Truncate both operands to the target width
         let a_narrow = if a_width > target_bits {
             context
                 .builder()
@@ -857,24 +818,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let value_width = integer_value.get_type().get_bit_width();
 
-        // Only truncate values wider than 64 bits
         if value_width <= 64 {
             return Ok(value);
         }
 
-        // Strategy 1: Check structural proof from the LLVM IR itself.
         if let Some(proven_width) = Self::provable_narrow_width(integer_value) {
             let target_bits = if proven_width <= 8 {
-                8 // Clamp i1..i8 to i8 for LLVM type compatibility
+                8
             } else if proven_width <= 32 {
                 32
             } else if proven_width <= 64 {
                 64
             } else if proven_width <= 128 {
-                128 // i128 uses 2 registers vs 4 for i256 on riscv64
+                128
             } else {
-                // > 128 bits — not worth narrowing to non-standard widths
-                0 // Fall through to strategy 2
+                0
             };
 
             if target_bits > 0 && target_bits < value_width {
@@ -887,18 +845,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
         }
 
-        // Strategy 2: Backward demand narrowing from type inference.
-        // Uses `use_demand_width` which correctly examines ALL recorded use contexts.
-        //
-        // If every use site only needs ≤I64 bits (e.g., all are memory offsets),
-        // truncate here. LLVM will fold the truncation back into the producing
-        // operation, converting entire computation chains to narrow types.
-        //
-        // Safety: For modular-arithmetic operations (add/sub/mul), truncating the
-        // result preserves the lower N bits. Since all use sites only observe the
-        // lower N bits (proven by backward analysis), the truncation is sound.
-        // For memory offsets, any value > 2^32 is invalid on PolkaVM regardless.
-        //
         let constraint = self.type_info.get(binding_id);
         if !constraint.is_signed {
             let demand = self.type_info.use_demand_width(binding_id);
@@ -907,7 +853,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 BitWidth::I32 => 32,
                 BitWidth::I64 => 64,
                 BitWidth::I128 => 128,
-                _ => return Ok(value), // I160 or I256: not worth narrowing
+                _ => return Ok(value),
             };
             if target_bits < value_width {
                 let narrow_type = context.integer_type(target_bits as usize);
@@ -937,14 +883,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         match instruction.get_opcode() {
             InstructionOpcode::ZExt => {
                 let operand = instruction.get_operand(0)?.value()?.into_int_value();
-                // Use the provable narrow width of the source if tighter than its type
                 let type_width = operand.get_type().get_bit_width();
                 let proven = Self::provable_narrow_width(operand).unwrap_or(type_width);
                 Some(proven.min(type_width))
             }
             InstructionOpcode::And => {
-                // and %a, %b → result fits in min(width(a), width(b)) bits
-                // AND can only clear bits, so the result is bounded by either operand.
                 let op0 = instruction.get_operand(0)?.value()?.into_int_value();
                 let op1 = instruction.get_operand(1)?.value()?.into_int_value();
                 let w0 = if op0.is_const() {
@@ -966,14 +909,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
             InstructionOpcode::Trunc => {
                 let target_width = instruction.get_type().into_int_type().get_bit_width();
-                // Also check if the source is provably narrower than the target
                 let operand = instruction.get_operand(0)?.value()?.into_int_value();
                 let src_narrow = Self::provable_narrow_width(operand)
                     .unwrap_or(operand.get_type().get_bit_width());
                 Some(src_narrow.min(target_width))
             }
             InstructionOpcode::LShr => {
-                // lshr %value, constant_amount → result has at most (width - amount) bits
                 let shift_amount = instruction.get_operand(1)?.value()?.into_int_value();
                 if let Some(shift) = Self::try_get_small_constant(shift_amount) {
                     let input_width = instruction
@@ -985,14 +926,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     if shift < input_width as u64 {
                         Some((input_width as u64 - shift) as u32)
                     } else {
-                        Some(1) // shift >= width → result is 0
+                        Some(1)
                     }
                 } else {
                     None
                 }
             }
             InstructionOpcode::Or => {
-                // or %a, %b → result fits in max(width(a), width(b)) bits
                 let op0 = instruction.get_operand(0)?.value()?.into_int_value();
                 let op1 = instruction.get_operand(1)?.value()?.into_int_value();
                 let w0 = Self::provable_narrow_width(op0);
@@ -1003,7 +943,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             InstructionOpcode::Add => {
-                // add %a, %b → result fits in max(width(a), width(b)) + 1 bits
                 let op0 = instruction.get_operand(0)?.value()?.into_int_value();
                 let op1 = instruction.get_operand(1)?.value()?.into_int_value();
                 let w0 = Self::provable_narrow_width(op0)
@@ -1023,7 +962,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             InstructionOpcode::Mul => {
-                // mul %a, %b → result fits in width(a) + width(b) bits
                 let op0 = instruction.get_operand(0)?.value()?.into_int_value();
                 let op1 = instruction.get_operand(1)?.value()?.into_int_value();
                 let w0 = Self::provable_narrow_width(op0)
@@ -1052,7 +990,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if let Some(value) = integer_value.get_zero_extended_constant() {
             return Some(value);
         }
-        // For wider types, try truncate + roundtrip verification
         let wide_type = integer_value.get_type();
         if wide_type.get_bit_width() > 64 && integer_value.is_const() {
             let i64_type = wide_type.get_context().i64_type();
@@ -1070,7 +1007,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Returns the effective bit width needed to represent a constant integer value.
     /// For wide types (> 64 bits), checks progressively wider truncation targets.
     fn constant_effective_width(integer_value: IntValue<'ctx>) -> Option<u32> {
-        // For types <= 64 bits, use the direct API
         if let Some(value) = integer_value.get_zero_extended_constant() {
             return Some(if value == 0 {
                 1
@@ -1079,12 +1015,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             });
         }
 
-        // For wider types (e.g., i256), check if the value fits in standard widths.
-        // Test from narrow to wide: first 64, then 160. This enables narrowing
-        // for common patterns like address masks (160-bit) and small constants.
         let wide_type = integer_value.get_type();
         if wide_type.get_bit_width() > 64 && integer_value.is_const() {
-            // Check if it fits in 64 bits
             let i64_type = wide_type.get_context().i64_type();
             let truncated_64 = integer_value.const_truncate(i64_type);
             if let Some(value) = truncated_64.get_zero_extended_constant() {
@@ -1097,10 +1029,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     });
                 }
             }
-
-            // 160-bit constants (e.g., address masks) are generated as i160 at
-            // the literal level, so they will be caught by type width checks
-            // rather than needing LLVM const-expression analysis here.
         }
 
         None
@@ -1123,16 +1051,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<IntValue<'ctx>> {
         let value_width = value.get_type().get_bit_width();
 
-        // Already at or below xlen (32 bits) — no narrowing needed.
         if value_width <= 32 {
             return Ok(value);
         }
 
         let inferred = self.inferred_width(source_id);
 
-        // If forward inference proves value fits in 32 bits (xlen), truncate
-        // directly to i32. This eliminates the overflow check entirely in
-        // safe_truncate_int_to_xlen (which returns immediately for xlen values).
         if matches!(inferred, BitWidth::I1 | BitWidth::I8 | BitWidth::I32) {
             let i32_type = context.llvm().i32_type();
             return context
@@ -1141,8 +1065,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .map_err(|e| CodegenError::Llvm(e.to_string()));
         }
 
-        // If value fits in 64 bits but not 32, truncate to i64.
-        // safe_truncate_int_to_xlen will do a cheap i64→i32 check.
         if matches!(inferred, BitWidth::I64) && value_width > 64 {
             let i64_type = context.llvm().i64_type();
             return context
@@ -1157,12 +1079,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Checks if a basic block is unreachable (has no predecessors or already has a terminator).
     /// This is used to determine if a region ended early due to Leave/Break/Return/etc.
     fn block_is_unreachable(block: inkwell::basic_block::BasicBlock<'ctx>) -> bool {
-        // If block has a terminator, it was already terminated
         if block.get_terminator().is_some() {
             return true;
         }
-        // If block has no instructions at all and its name contains "unreachable",
-        // it was created as an unreachable landing pad after Leave/Break/Continue
         if block.get_first_instruction().is_none() {
             if let Ok(name) = block.get_name().to_str() {
                 if name.contains("unreachable") {
@@ -1196,17 +1115,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(block);
         }
 
-        // Save current insertion point
         let current_block = context.basic_block();
 
-        // Create the shared revert block at the end of the current function
         let block_name = format!("revert_shared_{const_length}");
         let revert_block = context.append_basic_block(&block_name);
         context.set_basic_block(revert_block);
 
-        // Use outlined __revive_revert functions (shared across all call sites).
-        // For length 0: use zero-argument __revive_revert_0() (no argument overhead).
-        // For length > 0: use __revive_revert(xlen_length) with pre-truncated xlen argument.
         if const_length == 0 {
             revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -1216,10 +1130,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         }
 
-        // __revive_revert is noreturn; add explicit unreachable for LLVM.
         context.build_unreachable();
 
-        // Restore insertion point
         context.set_basic_block(current_block);
 
         self.revert_blocks.insert(const_length, revert_block);
@@ -1238,10 +1150,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(block);
         }
 
-        // Save current insertion point
         let current_block = context.basic_block();
 
-        // Create the shared panic block
         let block_name = format!("panic_0x{error_code:02x}");
         let panic_block = context.append_basic_block(&block_name);
         context.set_basic_block(panic_block);
@@ -1255,18 +1165,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
             panic_selector,
         )?;
 
-        // Emit: mstore(4, error_code) using inline bswap for constant folding
         let four_xlen = context.xlen_type().const_int(4, false);
         let code_val = context.word_const(error_code as u64);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
             context, four_xlen, code_val,
         )?;
 
-        // Branch to the shared revert(0, 0x24) block
         let revert_block = self.get_or_create_revert_block(context, 0x24)?;
         context.build_unconditional_branch(revert_block);
 
-        // Restore insertion point
         context.set_basic_block(current_block);
 
         self.panic_blocks.insert(error_code, panic_block);
@@ -1291,9 +1198,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let word_type = context.word_type();
         let function_name = format!("__revive_error_string_revert_{num_words}");
 
-        // Build function type: void(i256 length, i256 word0, ..., i256 wordN-1)
         let mut parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-            vec![word_type.into()]; // length
+            vec![word_type.into()];
         for _ in 0..num_words {
             parameter_types.push(word_type.into());
         }
@@ -1421,8 +1327,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let word_type = context.word_type();
         let function_name = format!("__revive_custom_error_{num_args}");
 
-        // Build function type: void(i256 selector, i256 arg0, ..., i256 argN-1)
-        // Selector is passed as the first parameter
         let parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
             (0..=num_args).map(|_| word_type.into()).collect();
         let function_type = context.llvm().void_type().fn_type(&parameter_types, false);
@@ -1451,13 +1355,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let entry_block = context.llvm().append_basic_block(function, "entry");
         context.set_basic_block(entry_block);
 
-        // param 0 = selector, parameters 1..=num_args = dynamic arguments
         let selector_parameter = function.get_nth_param(0).unwrap().into_int_value();
         let argument_parameters: Vec<_> = (1..=num_args)
             .map(|i| function.get_nth_param(i as u32).unwrap().into_int_value())
             .collect();
 
-        // mstore(0, selector)
         let offset_0 = context.xlen_type().const_int(0, false);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
             context,
@@ -1586,7 +1488,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let store_block = context.llvm().append_basic_block(function, "store");
 
-        // Entry: bounds check
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
@@ -1613,12 +1514,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(out_of_bounds, trap_block, store_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Store block: unchecked GEP + bswap store
         context.set_basic_block(store_block);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
             context,
@@ -1674,7 +1573,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let store_block = context.llvm().append_basic_block(function, "store");
 
-        // Entry: bounds check
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let heap_size = context.heap_size();
@@ -1700,12 +1598,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(out_of_bounds, trap_block, store_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Store block: store 32 zero bytes
         context.set_basic_block(store_block);
         let pointer = context.build_heap_gep_unchecked(offset_param)?;
         let word_type = context.word_type();
@@ -1771,7 +1667,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let store_block = context.llvm().append_basic_block(function, "store");
 
-        // Entry: bounds check, same shape as store_zero_checked / store_bswap_checked.
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
@@ -1798,16 +1693,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(out_of_bounds, trap_block, store_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block.
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Store block: zero high 24 bytes via a single i256 zero store, then
-        // overwrite the last 8 bytes with the bswapped low word. LLVM's
-        // backend will lower the i256 zero into 4×i64 zero stores; merging
-        // the writes lets it fold three of them into a single wider store
-        // (or memset) when alignment permits.
         context.set_basic_block(store_block);
         let pointer = context.build_heap_gep_unchecked(offset_param)?;
         let word_type = context.word_type();
@@ -1818,9 +1707,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
             .expect("Alignment is valid");
-        // bswap the i64 input via the LLVM intrinsic (no i64 wrapper exists
-        // in PolkaVMIntrinsicFunction; only word-width and eth-address-width
-        // wrappers do).
         let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")
             .expect("llvm.bswap.i64 intrinsic exists");
         let bswap64_decl = bswap64
@@ -1933,8 +1819,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Store block: zero the full 32 bytes, then overwrite the top 4
-        // bytes with bswap(selector).
         context.set_basic_block(store_block);
         let pointer = context.build_heap_gep_unchecked(offset_param)?;
         let word_type = context.word_type();
@@ -2017,7 +1901,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let store_block = context.llvm().append_basic_block(function, "store");
 
-        // Entry: bounds check (offset + 32 must fit in heap)
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
@@ -2044,23 +1927,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(out_of_bounds, trap_block, store_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Store block: call store_bswap_checked + seal_return
-        // Reuse the existing store_bswap_checked function to avoid duplicating
-        // the bswap+bounds-check logic. This keeps return_word's body small.
         context.set_basic_block(store_block);
         let store_fn = self.get_or_create_store_bswap_checked_fn(context)?;
         context
             .builder()
             .build_call(store_fn, &[offset_param.into(), value_param.into()], "")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        // seal_return(0, heap_ptr + offset, 32)
-        // store_bswap_checked already verified the offset is within heap bounds,
-        // so unchecked GEP is safe here.
         let heap_pointer = context
             .build_heap_gep_unchecked(offset_param)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2072,7 +1948,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.build_runtime_call(
             "seal_return",
             &[
-                xlen_type.const_zero().into(), // flags = 0
+                xlen_type.const_zero().into(),
                 offset_pointer.into(),
                 length.into(),
             ],
@@ -2120,7 +1996,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let load_block = context.llvm().append_basic_block(function, "load");
 
-        // Entry: bounds check
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let heap_size = context.heap_size();
@@ -2146,12 +2021,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(out_of_bounds, trap_block, load_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "heap_trap");
         context.build_unreachable();
 
-        // Load block: unchecked GEP + bswap load
         context.set_basic_block(load_block);
         let result =
             revive_llvm_context::polkavm_evm_memory::load_bswap_unchecked(context, offset_param)
@@ -2209,14 +2082,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let trap_block = context.llvm().append_basic_block(function, "trap");
         let exit_block = context.llvm().append_basic_block(function, "exit");
 
-        // Entry: bounds check
         context.set_basic_block(entry_block);
         let flags_param = function.get_nth_param(0).unwrap().into_int_value();
         let offset_param = function.get_nth_param(1).unwrap().into_int_value();
         let length_parameter = function.get_nth_param(2).unwrap().into_int_value();
 
         let heap_size = context.heap_size();
-        // Check offset >= heap_size first to avoid wrapping in the subtraction below
         let offset_oob = context
             .builder()
             .build_int_compare(
@@ -2232,7 +2103,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(offset_oob, trap_block, offset_ok_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // offset < heap_size, so subtraction is safe
         context.set_basic_block(offset_ok_block);
         let remaining = context
             .builder()
@@ -2252,12 +2122,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_conditional_branch(length_oob, trap_block, exit_block)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Trap block
         context.set_basic_block(trap_block);
         context.build_call(context.intrinsics().trap, &[], "exit_trap");
         context.build_unreachable();
 
-        // Exit block: unchecked GEP + seal_return
         context.set_basic_block(exit_block);
         let heap_pointer = context
             .build_heap_gep_unchecked(offset_param)
@@ -2317,22 +2185,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let key_param = function.get_nth_param(0).unwrap().into_int_value();
 
-        // Byte-swap key (EVM big-endian -> RISC-V little-endian)
         let key_bswap = context
             .build_byte_swap(key_param.as_basic_value_enum())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Alloca for key and value pointers
         let key_pointer = context.build_alloca_at_entry(word_type, "sload_key");
         let value_pointer = context.build_alloca_at_entry(word_type, "sload_value");
 
-        // Store bswapped key
         context
             .builder()
             .build_store(key_pointer.value, key_bswap)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Call GET_STORAGE syscall
         let is_transient = xlen_type.const_int(0, false);
         let arguments = [
             is_transient.into(),
@@ -2341,7 +2205,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         ];
         context.build_runtime_call("get_storage_or_zero", &arguments);
 
-        // Load result and byte-swap back
         let value = context
             .build_load(value_pointer, "sload_result")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2399,7 +2262,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
 
-        // Byte-swap key and value
         let key_bswap = context
             .build_byte_swap(key_param.as_basic_value_enum())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2407,11 +2269,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_byte_swap(value_param.as_basic_value_enum())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Alloca for key and value pointers
         let key_pointer = context.build_alloca_at_entry(word_type, "sstore_key");
         let value_pointer = context.build_alloca_at_entry(word_type, "sstore_value");
 
-        // Store bswapped key and value
         context
             .builder()
             .build_store(key_pointer.value, key_bswap)
@@ -2421,7 +2281,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_store(value_pointer.value, value_bswap)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Call SET_STORAGE syscall
         let is_transient = xlen_type.const_int(0, false);
         let arguments = [
             is_transient.into(),
@@ -2478,9 +2337,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_param = function.get_nth_param(0).unwrap().into_int_value();
         let slot_param = function.get_nth_param(1).unwrap().into_int_value();
 
-        // Store bswapped key at heap[0] and slot at heap[32] using efficient 4x64-bit
-        // bswap (same pattern as __revive_keccak256_two_words). This avoids stack allocas
-        // and GEPs, producing a smaller function body.
         let offset0 = xlen_type.const_int(0, false);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(context, offset0, key_param)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2495,11 +2351,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
-        // Hash output on stack - also reused as storage key pointer
         let hash_output = context.build_alloca_at_entry(word_type, "map_sload_hash");
         let value_pointer = context.build_alloca_at_entry(word_type, "map_sload_value");
 
-        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
         context.build_runtime_call(
             "hash_keccak_256",
             &[
@@ -2509,8 +2363,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             ],
         );
 
-        // Hash output is in LE byte order (native), same as what get_storage_or_zero
-        // expects. No bswap needed! Use hash_output directly as storage key.
         let is_transient = xlen_type.const_int(0, false);
         context.build_runtime_call(
             "get_storage_or_zero",
@@ -2521,7 +2373,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             ],
         );
 
-        // Load result and bswap back to EVM big-endian using efficient 4x64-bit swap
         let value = context
             .build_load(value_pointer, "map_sload_result")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2581,7 +2432,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let slot_param = function.get_nth_param(1).unwrap().into_int_value();
         let value_param = function.get_nth_param(2).unwrap().into_int_value();
 
-        // Store bswapped key at heap[0] and slot at heap[32] using efficient 4x64-bit swap
         let offset0 = xlen_type.const_int(0, false);
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(context, offset0, key_param)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2591,7 +2441,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         )
         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Bswap value and store to stack alloca
         let value_bswap = context
             .build_byte_swap(value_param.as_basic_value_enum())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
@@ -2607,10 +2456,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
-        // Hash output on stack
         let hash_output = context.build_alloca_at_entry(word_type, "map_sstore_hash");
 
-        // Call hash_keccak_256(input_ptr, 64, hash_output_ptr)
         context.build_runtime_call(
             "hash_keccak_256",
             &[
@@ -2620,8 +2467,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             ],
         );
 
-        // Hash output is in LE byte order (native), same as what set_storage_or_clear
-        // expects. No bswap needed! Use hash_output directly as storage key.
         let is_transient = xlen_type.const_int(0, false);
         context.build_runtime_call(
             "set_storage_or_clear",
@@ -2653,7 +2498,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     value: Expression::Literal { ref value, .. },
                     ..
                 } => {
-                    // Allow bindings of literal zeros (common Yul pattern: let v := 0)
                     if !value.is_zero() {
                         return false;
                     }
@@ -2688,7 +2532,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .module()
                 .add_function("__revive_callvalue_check", function_type, None);
 
-        // noinline + minsize: don't inline this, optimize for size
         let noinline_attr = context.llvm().create_enum_attribute(
             inkwell::attributes::Attribute::get_named_enum_kind_id("noinline"),
             0,
@@ -2704,7 +2547,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let entry_block = context.llvm().append_basic_block(function, "entry");
         context.set_basic_block(entry_block);
 
-        // Call __revive_callvalue_nonzero() to check if callvalue is nonzero
         let is_nonzero =
             revive_llvm_context::polkavm_evm_ether_gas::value_nonzero_outlined(context)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?
@@ -2715,13 +2557,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.build_conditional_branch(is_nonzero, revert_block, ok_block)?;
 
-        // Revert block: call __revive_revert_0()
         context.set_basic_block(revert_block);
         revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context.build_unreachable();
 
-        // OK block: just return
         context.set_basic_block(ok_block);
         context
             .builder()
@@ -2756,9 +2596,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             "seal_return",
             &[flags.into(), offset_pointer.into(), length_xlen.into()],
         );
-        // No build_unreachable() here: seal_return never returns at runtime
-        // but isn't marked noreturn in LLVM IR. Subsequent dead code after the
-        // call is valid LLVM IR and will be pruned during optimization.
         Ok(())
     }
 
@@ -2778,10 +2615,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(block);
         }
 
-        // Save current insertion point
         let current_block = context.basic_block();
 
-        // Create the shared return block at the end of the current function
         let block_name = format!("return_shared_{const_offset:x}_{const_length:x}");
         let return_block = context.append_basic_block(&block_name);
         context.set_basic_block(return_block);
@@ -2792,10 +2627,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         );
 
         if !self.has_msize && !is_deploy {
-            // Bypass sbrk: use unchecked heap GEP for the return data pointer.
-            // Constant offsets are within the 131072-byte static heap, so sbrk
-            // bounds checking is unnecessary. This eliminates ~5 basic blocks
-            // of sbrk overhead per shared return block.
             let offset_xlen = context.xlen_type().const_int(const_offset, false);
             let length_xlen = context.xlen_type().const_int(const_length, false);
             self.emit_exit_unchecked(context, offset_xlen, length_xlen, false)?;
@@ -2806,10 +2637,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         }
 
-        // Ensure the block has a terminator.
         context.build_unreachable();
 
-        // Restore insertion point
         context.set_basic_block(current_block);
 
         self.return_blocks.insert(key, return_block);
@@ -2824,19 +2653,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let mut callvalue_ids = BTreeSet::new();
         let mut used_ids = BTreeSet::new();
 
-        // Pass 1: find all callvalue let bindings
         Self::find_callvalue_bindings(&object.code.statements, &mut callvalue_ids);
         for function in object.functions.values() {
             Self::find_callvalue_bindings(&function.body.statements, &mut callvalue_ids);
         }
 
-        // Pass 2: find non-condition uses of callvalue IDs
         Self::find_value_uses(&object.code.statements, &callvalue_ids, &mut used_ids);
         for function in object.functions.values() {
             Self::find_value_uses(&function.body.statements, &callvalue_ids, &mut used_ids);
         }
 
-        // Dead = callvalue IDs with no non-condition uses
         callvalue_ids.difference(&used_ids).copied().collect()
     }
 
@@ -2874,11 +2700,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
                     Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
                 }
-                Statement::If {
-                    // condition is NOT marked as used - handled by callvalue_nonzero
-                    inputs,
-                    ..
-                } => {
+                Statement::If { inputs, .. } => {
                     for v in inputs {
                         Self::mark_if_callvalue(v.id.0, callvalue_ids, used);
                     }
@@ -3000,7 +2822,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
                 _ => {}
             }
-            // Recurse into nested regions
             Self::for_each_nested_region(statement, |region_stmts| {
                 Self::find_value_uses(region_stmts, callvalue_ids, used);
             });
@@ -3112,7 +2933,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     Statement::MappingSStore { .. } => sstores += 1,
                     _ => {}
                 }
-                // Recurse into nested regions
                 match statement {
                     Statement::If {
                         then_region,
@@ -3186,8 +3006,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         use crate::ir::for_each_statement;
         use num::Zero;
 
-        // Build a map of ValueId -> literal constant in one pass over the
-        // whole object (top-level + every function body).
         let mut literals: BTreeMap<u32, num::BigUint> = BTreeMap::new();
         let mut record = |s: &Statement| {
             if let Statement::Let { bindings, value } = s {
@@ -3208,11 +3026,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             if lit_val.is_zero() {
                 return None;
             }
-            // Low-word: fits in u64 (high 192 bits zero).
             if lit_val.bits() <= 64 {
                 return Some(true);
             }
-            // High-word: low 224 bits zero, top 32 bits non-zero, fits in u32.
             let low_mask: num::BigUint = (num::BigUint::from(1u32) << 224) - 1u32;
             if (lit_val & &low_mask).is_zero() {
                 let top: num::BigUint = lit_val >> 224u32;
@@ -3248,13 +3064,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         object: &Object,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        // Reset per-function shared blocks for the new entry point
         self.revert_blocks.clear();
         self.return_blocks.clear();
         self.panic_blocks.clear();
 
-        // Decide whether to use outlined syscall functions based on call-site counts.
-        // The function body overhead is only worth paying when there are enough call sites.
         let syscall_counts = object.count_syscall_sites();
         const CALLVALUE_OUTLINE_THRESHOLD: usize = 3;
         const CALLER_OUTLINE_THRESHOLD: usize = 3;
@@ -3262,32 +3075,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if self.use_outlined_callvalue {
             self.dead_callvalue_ids = Self::find_dead_callvalue_ids(object);
         }
-        // Calldataload outlining: share alloca+syscall overhead across call sites.
         const CALLDATALOAD_OUTLINE_THRESHOLD: usize = 20;
         self.use_outlined_calldataload =
             syscall_counts.calldataload >= CALLDATALOAD_OUTLINE_THRESHOLD;
         self.use_outlined_caller = syscall_counts.caller >= CALLER_OUTLINE_THRESHOLD;
-        // Specialised constant-value MStore helpers: each helper body is
-        // ~25 bytes and per-call savings are ~3 PVM inst (~6 bytes), so
-        // the break-even is around 4-5 call sites. Choose 5 to give a
-        // small margin and avoid the small-contract regression observed
-        // when the body cost is paid for too few sites.
         const CONST_STORE_PATTERN_THRESHOLD: usize = 5;
         let (low_word_sites, high_word_sites) = Self::count_constant_mstore_patterns(object);
         self.use_outlined_store_low_word = low_word_sites >= CONST_STORE_PATTERN_THRESHOLD;
         self.use_outlined_store_high_word = high_word_sites >= CONST_STORE_PATTERN_THRESHOLD;
-        // Count mapping operations to decide if combined mapping functions are worth it.
-        // Each compound function body is ~250 bytes. Each call site saves ~12 bytes
-        // (one fewer function call). When ALL keccak256_pair usages are compound,
-        // __revive_keccak256_two_words has no callers and LLVM DCE eliminates it
-        // (~300 bytes saved), drastically lowering the effective threshold.
-        // Use a combined threshold with adaptive lowering based on helper elimination.
         const MAPPING_COMBINED_THRESHOLD: usize = 9;
         let (mapping_sloads, mapping_sstores) = Self::count_mapping_ops(object);
         let combined_mapping_ops = mapping_sloads + mapping_sstores;
-        // If no remaining Keccak256Pair nodes exist, the keccak helper function will be
-        // dead-code eliminated when compound functions are used, giving extra ~300 bytes
-        // of savings. This makes compound profitable at much lower call counts.
         self.use_outlined_mapping_sload =
             mapping_sloads > 0 && combined_mapping_ops >= MAPPING_COMBINED_THRESHOLD;
         self.use_outlined_mapping_sstore =
@@ -3296,7 +3094,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.error_string_revert_counts = object.count_error_string_reverts();
         self.custom_error_revert_counts = object.count_custom_error_reverts();
 
-        // Determine if this is deploy or runtime code and set the code type
         let is_runtime = object.name.ends_with("_deployed");
         if is_runtime {
             context.set_code_type(revive_llvm_context::PolkaVMCodeType::Runtime);
@@ -3304,12 +3101,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             context.set_code_type(revive_llvm_context::PolkaVMCodeType::Deploy);
         }
 
-        // Push a function scope for this object's frontend function declarations.
-        // The LLVM context requires a scope to track Yul-name → mangled-name mappings
-        // when declaring frontend functions via add_function(..., is_frontend: true).
         context.push_function_scope();
 
-        // First pass: declare all user-defined functions
         for (func_id, function) in &object.functions {
             self.declare_function(function, context)?;
             self.function_names.insert(func_id.0, function.name.clone());
@@ -3325,18 +3118,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .insert(func_id.0, function.returns.clone());
         }
 
-        // Set LLVM inline attributes based on our custom heuristics.
-        // This guides LLVM's inliner for functions that survived our IR-level inlining.
         for function in object.functions.values() {
             self.set_inline_attributes(function, context);
         }
 
-        // Second pass: generate function bodies
         for function in object.functions.values() {
             self.generate_function(function, context)?;
         }
 
-        // Generate main code block within the appropriate function context
         let function_name = if is_runtime {
             PolkaVMFunctionRuntimeCode
         } else {
@@ -3354,7 +3143,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .set_debug_location(0, 0, None)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Append a branch to the return block when the body falls through without one.
         match context
             .basic_block()
             .get_last_instruction()
@@ -3370,17 +3158,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
         }
 
-        // Build the return block
         context.set_basic_block(context.current_function().borrow().return_block());
         context.build_return(None);
 
         context.pop_debug_scope();
         context.pop_function_scope();
 
-        // Recursively handle subobjects (inner_object for deployed code)
-        // Each subobject gets a fresh codegen instance for values (SSA values are scoped to objects)
-        // but shares the generated_functions set to avoid regenerating shared utility functions.
-        // Each subobject uses its own scoped TypeInference to avoid ValueId namespace collisions.
         for (i, subobject) in object.subobjects.iter().enumerate() {
             let sub_type_info = self
                 .type_info
@@ -3395,7 +3178,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.inline_decisions.clone(),
             );
             subobject_codegen.generate_object(subobject, context)?;
-            // Merge back any new generated functions
             self.generated_functions
                 .extend(subobject_codegen.generated_functions);
         }
@@ -3466,19 +3248,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let llvm_ctx = context.llvm();
 
-        // Check if our IR-level inliner made a decision for this function
         let ir_decision = self.inline_decisions.get(&function.id.0).copied();
 
         let attr = match ir_decision {
-            // Our heuristics say always inline - trust them (they have domain knowledge).
-            // These are functions that could not be inlined at IR level (e.g., due to
-            // Leave statements inside For loops) but should still be inlined by LLVM.
             Some(crate::InlineDecision::AlwaysInline) => {
                 Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
             }
-            // NeverInline: only enforce NoInline for large functions to prevent bloat.
-            // Small NeverInline functions (e.g., dead functions with call_count=0) can
-            // be left to LLVM's judgment.
             Some(crate::InlineDecision::NeverInline) => {
                 if function.size_estimate >= LARGE_FUNCTION_NOINLINE_THRESHOLD {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
@@ -3486,9 +3261,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 }
             }
-            // CostBenefit: tune inlining based on call count and function size.
-            // Functions with 2+ call sites get NoInline to prevent code bloat.
-            // Single-call functions are left to LLVM's judgment (it respects MinSize).
             Some(crate::InlineDecision::CostBenefit) => {
                 if function.call_count >= 2 {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
@@ -3496,7 +3268,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 }
             }
-            // No decision (function not analyzed): only hint for very small functions
             None => {
                 if function.size_estimate <= SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD {
                     Some(revive_llvm_context::PolkaVMAttribute::AlwaysInline)
@@ -3522,7 +3293,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        // Build the internal function name (includes _Deploy or _Runtime suffix)
         let internal_name = format!(
             "{}_{}",
             function.name,
@@ -3532,21 +3302,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .unwrap_or_default()
         );
 
-        // Skip if this function's body has already been generated
-        // We use the internal name (with code_type suffix) to properly track
-        // deploy vs runtime variants of the same function
         if self.generated_functions.contains(&internal_name) {
             return Ok(());
         }
         self.generated_functions.insert(internal_name);
 
-        // Reset shared blocks for this function scope
         let saved_revert_blocks = std::mem::take(&mut self.revert_blocks);
         let saved_return_blocks = std::mem::take(&mut self.return_blocks);
         let saved_panic_blocks = std::mem::take(&mut self.panic_blocks);
 
-        // Save the current values map and start fresh for this function
-        // Each function has its own SSA namespace
         let saved_values = std::mem::take(&mut self.values);
         let saved_callvalue_ids = std::mem::take(&mut self.callvalue_value_ids);
         let saved_return_types =
@@ -3555,8 +3319,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        // Zero-extending narrowed parameters back to the word type acts as an implicit
-        // range proof so LLVM can eliminate overflow checks against the narrow value.
         for (index, (parameter_id, parameter_type)) in function.parameters.iter().enumerate() {
             let parameter_value = context.current_function().borrow().get_nth_param(index);
             let stored_value = match parameter_type {
@@ -3577,24 +3339,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.set_value(*parameter_id, stored_value);
         }
 
-        // Initialize return values to zero
-        // Return variables in Yul start at zero and can be assigned in the body.
-        // We need to initialize BOTH the initial IDs (used by If statements as "before" values)
-        // AND the final IDs (used for the actual return).
         let zero = context.word_const(0).as_basic_value_enum();
         for ret_id in &function.return_values_initial {
             self.set_value(*ret_id, zero);
         }
-        // Also set the final return value IDs (they may be the same as initial or different)
         for ret_id in &function.return_values {
             self.set_value(*ret_id, zero);
         }
 
-        // Generate body
         self.generate_block(&function.body, context)?;
 
-        // Store return values to return pointer before going to return block.
-        // For narrowed return types, truncate the i256 value to the narrow type.
         match context.current_function().borrow().r#return() {
             revive_llvm_context::PolkaVMFunctionReturn::None => {}
             revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
@@ -3635,7 +3389,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             revive_llvm_context::PolkaVMFunctionReturn::Compound { pointer, size } => {
-                // Multiple return values - build a struct with possibly narrow fields
                 let field_types: Vec<_> = (0..size)
                     .map(|i| match function.returns.get(i) {
                         Some(Type::Int(bit_width)) if *bit_width < BitWidth::I256 => context
@@ -3701,12 +3454,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
         }
 
-        // Build return - handle based on return type
         let return_block = context.current_function().borrow().return_block();
         context.build_unconditional_branch(return_block);
         context.set_basic_block(return_block);
 
-        // Get the return type and build appropriate return
         match context.current_function().borrow().r#return() {
             revive_llvm_context::PolkaVMFunctionReturn::None => {
                 context.build_return(None);
@@ -3727,7 +3478,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.pop_debug_scope();
 
-        // Restore the saved values map, shared blocks, and caches from before this function
         self.values = saved_values;
         self.callvalue_value_ids = saved_callvalue_ids;
         self.current_return_types = saved_return_types;
@@ -3764,7 +3514,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<()> {
         let mut i = 0;
         while i < statements.len() {
-            // Look-ahead: MStore + [optional Let(const)] + Return(same_offset, 32)
             if let Some(skip) = self.try_match_return_word(statements, i, context)? {
                 i += skip;
                 continue;
@@ -3793,13 +3542,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(None);
         }
 
-        // First statement must be MStore
         let (store_offset, store_value) = match &statements[i] {
             Statement::MStore { offset, value, .. } => (offset, value),
             _ => return Ok(None),
         };
 
-        // Check preconditions: non-msize, non-deploy runtime code
         if self.has_msize {
             return Ok(None);
         }
@@ -3810,15 +3557,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(None);
         }
 
-        // Try pattern 1: MStore + Return (adjacent, 2 statements)
-        // Try pattern 2: MStore + Let(const 32) + Return (3 statements)
         let (ret_offset, ret_length, skip) = if i + 1 < statements.len() {
             if let Statement::Return { offset, length } = &statements[i + 1] {
                 (offset, length, 2)
             } else if i + 2 < statements.len() {
-                // Check for Let(vN, Literal(32)) + Return(off, vN)
                 if let Statement::Return { offset, length } = &statements[i + 2] {
-                    // The intervening statement must be a Let binding for the length
                     if let Statement::Let {
                         bindings,
                         value: Expression::Literal { .. },
@@ -3842,23 +3585,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return Ok(None);
         };
 
-        // Same offset ValueId
         if store_offset.id != ret_offset.id {
             return Ok(None);
         }
 
-        // Check: offset must be dynamic (ByteSwap mode) — constant offsets already
-        // use the shared return block deduplication which is more efficient.
         let offset_val = self.translate_value(store_offset)?.into_int_value();
         if Self::try_extract_const_u64(offset_val).is_some() {
             return Ok(None);
         }
 
-        // Check: length must be constant 32
-        // For pattern 2, check the literal value directly without generating the Let.
-        // For pattern 1, translate the length and check.
         if skip == 3 {
-            // The Let binds a Literal — extract its value directly
             if let Statement::Let {
                 value: Expression::Literal { value, .. },
                 ..
@@ -3878,7 +3614,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
         }
 
-        // Pattern matched! Emit return_word(offset, value).
         let offset_narrow = self.narrow_offset_for_pointer(
             context,
             offset_val,
@@ -3898,7 +3633,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_call(function, &[offset_xlen.into(), value_val.into()], "")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // return_word is noreturn — add unreachable + dead block for subsequent code
         context.build_unreachable();
         let dead_block = context.append_basic_block("return_word_dead");
         context.set_basic_block(dead_block);
@@ -3912,7 +3646,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         statement: &Statement,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        // Track which statement we're processing for better error messages
         let statement_kind = match statement {
             Statement::Let { .. } => "Let",
             Statement::MStore { .. } => "MStore",
@@ -3965,20 +3698,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<()> {
         match statement {
             Statement::Let { bindings, value } => {
-                // Track ValueIds bound to CallValue for boolean optimization
                 if bindings.len() == 1 && matches!(value, Expression::CallValue) {
                     self.callvalue_value_ids.insert(bindings[0].0);
-                    // Skip emitting callvalue syscalls that are only used in check
-                    // patterns. The outlined __revive_callvalue_check() and
-                    // __revive_callvalue_nonzero() handle reading callvalue internally.
                     if self.dead_callvalue_ids.contains(&bindings[0].0) {
                         return Ok(());
                     }
                 }
 
-                // Compute demand hint for single-binding Lets: if every use site
-                // only needs ≤64 bits, tell generate_expression so modular BinOps can
-                // operate at i64 directly instead of i256+trunc.
                 let demand = if bindings.len() == 1 {
                     let binding_id = bindings[0];
                     let constraint = self.type_info.get(binding_id);
@@ -4004,16 +3730,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.try_narrow_let_binding(context, llvm_value, binding_id)?;
                     self.set_value(binding_id, llvm_value);
                 } else {
-                    // Tuple unpacking - extract each element
                     let struct_val = llvm_value.into_struct_value();
                     for (index, binding) in bindings.iter().enumerate() {
                         let field = context
                             .builder()
                             .build_extract_value(struct_val, index as u32, &format!("{}", index))
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        // If the extracted field is a narrow int (from a function with
-                        // narrow return types), zero-extend it back to i256 for the
-                        // function body which operates on i256 values.
                         let field = if field.is_int_value() {
                             let integer_value = field.into_int_value();
                             if integer_value.get_type().get_bit_width() < 256 {
@@ -4044,7 +3766,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let value_val = self.translate_value(value)?.into_int_value();
-                // MStore requires 256-bit value
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
 
                 match self.native_memory_mode(offset_val) {
@@ -4062,13 +3783,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             offset_val,
                             "mstore_offset_xlen",
                         )?;
-                        // Constant offsets use unchecked GEP since the static heap
-                        // is 131072 bytes and all native-safe constant offsets are
-                        // well within that range. This avoids sbrk function call overhead.
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
-                        // The free memory pointer (offset 0x40) only holds heap offsets
-                        // bounded by the static heap size (≤131072). Store as i32 to
-                        // eliminate 7/8 of the store width on 32-bit PVM.
                         let is_fmp_store = Self::try_extract_const_u64(offset_val)
                             == Some(FREE_MEMORY_POINTER_SLOT)
                             && matches!(region, MemoryRegion::FreePointerSlot);
@@ -4091,9 +3806,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                             .expect("Alignment is valid");
-                        // Update msize watermark: InlineNative stores bypass sbrk
-                        // which normally tracks the heap size.
-                        // Skip when the contract doesn't use msize() to save code.
                         if self.has_msize {
                             let static_off = Self::try_extract_const_u64(offset_val)
                                 .unwrap_or(DYNAMIC_HEAP_BASE);
@@ -4113,7 +3825,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             "mstore_offset_xlen",
                         )?;
                         if value_val.is_const() {
-                            // Constant values: inline bswap so LLVM folds bswap(const) = const
                             revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
                                 context,
                                 offset_xlen,
@@ -4121,8 +3832,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         } else {
-                            // Variable values: call outlined function to avoid
-                            // duplicating 4× bswap.i64 sequence at every site
                             let function = self.get_or_create_store_bswap_fn(context)?;
                             let value_word =
                                 self.ensure_word_type(context, value_val, "store_bswap_val")?;
@@ -4155,16 +3864,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             "mstore_offset_narrow",
                         )?;
                         if !self.has_msize {
-                            // Non-msize: lightweight bounds check + unchecked GEP.
-                            // Avoids sbrk overhead (5+ BBs, watermark update).
                             let offset_xlen = context
                                 .safe_truncate_int_to_xlen(offset_val)
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                             if value_val.is_null() {
-                                // Zero store: no bswap needed, no i256 parameter.
-                                // bswap(0) = 0, so the bswap inside store_bswap_checked
-                                // is wasted. Using a dedicated zero-store function
-                                // eliminates passing the i256 zero parameter entirely.
                                 let function = self.get_or_create_store_zero_checked_fn(context)?;
                                 context
                                     .builder()
@@ -4173,13 +3876,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             } else if self.use_outlined_store_low_word
                                 && Self::value_fits_in_i64(value_val).is_some()
                             {
-                                // Compile-time constant whose high 192 bits are
-                                // zero — call the specialized low-word variant.
-                                // Saves 2 register pairs at the call site and
-                                // ~10 instructions in the shared body vs the
-                                // generic store_bswap_checked. Only enabled
-                                // when there are enough such sites in this
-                                // object to amortise the helper's body cost.
                                 let low = Self::value_fits_in_i64(value_val).unwrap();
                                 let function =
                                     self.get_or_create_store_low_word_checked_fn(context)?;
@@ -4195,10 +3891,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             } else if self.use_outlined_store_high_word
                                 && Self::value_is_selector_shl_224(value_val).is_some()
                             {
-                                // Compile-time `shl(224, sel)` selector pattern
-                                // — pass the i32 selector and let the helper
-                                // bswap+store it in the top 4 bytes after a
-                                // 32-byte zero clear.
                                 let sel = Self::value_is_selector_shl_224(value_val).unwrap();
                                 let function =
                                     self.get_or_create_store_high_word_checked_fn(context)?;
@@ -4225,7 +3917,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                             }
                         } else {
-                            // Msize contracts: full sbrk for watermark tracking.
                             revive_llvm_context::polkavm_evm_memory::store(
                                 context, offset_val, value_val,
                             )?;
@@ -4247,7 +3938,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     "mstore8_offset_narrow",
                 )?;
                 let value_val = self.translate_value(value)?.into_int_value();
-                // MStore8 expects word-sized value (takes low byte)
                 let value_val = self.ensure_word_type(context, value_val, "mstore8_val")?;
                 revive_llvm_context::polkavm_evm_memory::store_byte(
                     context, offset_val, value_val,
@@ -4298,8 +3988,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let key_arg = self.value_to_storage_key_argument(key, context)?;
                 if key_arg.is_register() {
-                    // Value-based path: key is in a register, use outlined function
-                    // to avoid alloca+store at each call site for key and value.
                     let key_val = key_arg
                         .access(context)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -4317,7 +4005,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         )
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                 } else {
-                    // Pointer-based path: key is a global constant pointer.
                     let value_arg = self.value_to_argument(value, context)?;
                     revive_llvm_context::polkavm_evm_storage::store(context, &key_arg, &value_arg)?;
                 }
@@ -4338,10 +4025,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 else_region,
                 outputs,
             } => {
-                // Optimization: if `if callvalue() { revert(0, 0) }` with no else/outputs,
-                // replace the entire if with a single call to an outlined function that
-                // checks callvalue and reverts if nonzero. This eliminates the branch,
-                // the then-block, and the join-block at each call site.
                 if self.use_outlined_callvalue
                     && self.callvalue_value_ids.contains(&condition.id.0)
                     && else_region.is_none()
@@ -4356,10 +4039,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     return Ok(());
                 }
 
-                // Optimization: if the condition is a callvalue-bound value and we have
-                // the outlined callvalue, use __revive_callvalue_nonzero() which returns
-                // i1 directly. This avoids a 256-bit comparison at every call site.
-                // In OZ ERC20, this saves ~20 sites × ~15 bytes = ~300 bytes.
                 let cond_bool = if self.use_outlined_callvalue
                     && self.callvalue_value_ids.contains(&condition.id.0)
                 {
@@ -4368,8 +4047,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .into_int_value()
                 } else {
                     let cond_val = self.translate_value(condition)?.into_int_value();
-                    // Compare at native width - no need to extend to word type
-                    // since comparing != 0 works correctly at any integer width
                     let cond_zero = cond_val.get_type().const_zero();
                     context
                         .builder()
@@ -4385,8 +4062,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let then_block = context.append_basic_block("if_then");
                 let join_block = context.append_basic_block("if_join");
 
-                // Track which branches contribute to phi nodes
-                // (branches that end with terminators like Leave/Break don't contribute)
                 let mut phi_incoming: Vec<(
                     Vec<BasicValueEnum<'ctx>>,
                     inkwell::basic_block::BasicBlock<'ctx>,
@@ -4396,11 +4071,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     let else_block = context.append_basic_block("if_else");
                     context.build_conditional_branch(cond_bool, then_block, else_block)?;
 
-                    // Generate then branch
                     context.set_basic_block(then_block);
                     self.generate_region(then_region, context)?;
                     let then_end_block = context.basic_block();
-                    // Only collect yields and branch if the block is reachable
                     if !Self::block_is_unreachable(then_end_block) {
                         let mut then_yields = Vec::new();
                         for (i, yield_val) in then_region.yields.iter().enumerate() {
@@ -4413,14 +4086,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         context.build_unconditional_branch(join_block);
                         phi_incoming.push((then_yields, then_end_block));
                     } else if then_end_block.get_terminator().is_none() {
-                        // Add unreachable terminator for blocks that don't have one
                         context
                             .builder()
                             .build_unreachable()
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     }
 
-                    // Generate else branch
                     context.set_basic_block(else_block);
                     self.generate_region(else_region, context)?;
                     let else_end_block = context.basic_block();
@@ -4442,11 +4113,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     }
                 } else {
-                    // No else branch - the "else" path goes directly to join
                     let entry_block = context.basic_block();
                     context.build_conditional_branch(cond_bool, then_block, join_block)?;
 
-                    // Collect inputs as the "else" yields (from entry block to join)
                     let mut else_yields = Vec::new();
                     for (i, input_val) in inputs.iter().enumerate() {
                         else_yields.push(self.translate_value_as_word(
@@ -4457,7 +4126,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                     phi_incoming.push((else_yields, entry_block));
 
-                    // Generate then branch
                     context.set_basic_block(then_block);
                     self.generate_region(then_region, context)?;
                     let then_end_block = context.basic_block();
@@ -4482,10 +4150,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 context.set_basic_block(join_block);
 
-                // Create phi nodes for outputs only if we have at least two incoming edges
-                // If there's only one incoming edge, just use the value directly (no phi needed)
                 if phi_incoming.len() >= 2 {
-                    // Verify all yields match outputs length
                     for (yields, _) in &phi_incoming {
                         if yields.len() != outputs.len() {
                             return Err(CodegenError::Llvm(format!(
@@ -4507,9 +4172,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.set_value(*output_id, phi.as_basic_value());
                     }
                 } else if phi_incoming.len() == 1 {
-                    // Only one incoming edge - use the yielded values directly
                     let (yields, _) = &phi_incoming[0];
-                    // Verify yields matches outputs
                     if yields.len() != outputs.len() {
                         return Err(CodegenError::Llvm(format!(
                             "If statement mismatch: {} yields vs {} outputs (outputs: {:?})",
@@ -4522,21 +4185,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.set_value(*output_id, yields[i]);
                     }
                 } else {
-                    // No incoming edges - the join block is unreachable (all branches terminated early)
-                    // But we still need to define outputs (with undef values) in case
-                    // subsequent unreachable code references them
                     for output_id in outputs.iter() {
                         self.set_value(
                             *output_id,
                             context.word_type().get_undef().as_basic_value_enum(),
                         );
                     }
-                    // Add unreachable terminator
                     context
                         .builder()
                         .build_unreachable()
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    // Create a new block for any dead code that follows
                     let dead_block = context.append_basic_block("if_dead");
                     context.set_basic_block(dead_block);
                 }
@@ -4552,11 +4210,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let mut scrut_val = self.translate_value(scrutinee)?.into_int_value();
                 let scrut_width = scrut_val.get_type().get_bit_width();
 
-                // Narrow the scrutinee when provably safe. For dispatch switches
-                // like `switch shr(224, calldataload(0))`, the scrutinee is i256
-                // but provable_narrow_width detects the lshr→32 bits pattern.
-                // Narrowing to i32 turns 8-word i256 comparisons into single-word
-                // i32 comparisons, saving ~14 PVM instructions per case.
                 if scrut_width > 32 {
                     let all_cases_fit_32 = cases
                         .iter()
@@ -4580,10 +4233,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let scrut_type = scrut_val.get_type();
                 let join_block = context.append_basic_block("switch_join");
 
-                // Create case blocks with constants matching scrutinee width.
-                // Case values can be up to 256 bits (e.g. switching on a keccak
-                // hash or extcodehash), so build them from BigUint limbs rather
-                // than assuming they fit in u64.
                 let mut case_blocks = Vec::new();
                 for (index, case) in cases.iter().enumerate() {
                     let case_block = context.append_basic_block(&format!("switch_case_{}", index));
@@ -4596,10 +4245,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     case_blocks.push((case_val, case_block, &case.body));
                 }
 
-                // Create default block
                 let default_block = context.append_basic_block("switch_default");
 
-                // Build switch instruction
                 let switch_cases: Vec<_> = case_blocks
                     .iter()
                     .map(|(value, block, _)| (*value, *block))
@@ -4609,21 +4256,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .build_switch(scrut_val, default_block, &switch_cases)
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                // Collect yields from each case
-                // Track which branches contribute to phi nodes
-                // (branches that end with terminators like Leave/Break don't contribute)
                 let mut all_yields: Vec<(
                     Vec<BasicValueEnum<'ctx>>,
                     inkwell::basic_block::BasicBlock<'ctx>,
                 )> = Vec::new();
 
-                // Generate case bodies
                 for (index, (_, case_block, body)) in case_blocks.into_iter().enumerate() {
                     context.set_basic_block(case_block);
                     self.generate_region(body, context)?;
                     let end_block = context.basic_block();
 
-                    // Only collect yields and branch if the block is reachable
                     if !Self::block_is_unreachable(end_block) {
                         let mut yields = Vec::new();
                         for (yield_idx, yield_val) in body.yields.iter().enumerate() {
@@ -4644,7 +4286,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         context.build_unconditional_branch(join_block);
                         all_yields.push((yields, end_block));
                     } else if end_block.get_terminator().is_none() {
-                        // Add unreachable terminator for blocks that don't have one
                         context
                             .builder()
                             .build_unreachable()
@@ -4652,7 +4293,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
 
-                // Generate default
                 context.set_basic_block(default_block);
                 if let Some(default_region) = default {
                     self.generate_region(default_region, context)?;
@@ -4676,7 +4316,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     }
                 } else {
-                    // No default region - use inputs as yields
                     let default_end_block = context.basic_block();
                     let mut default_yields = Vec::new();
                     for (i, input_val) in inputs.iter().enumerate() {
@@ -4692,7 +4331,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 context.set_basic_block(join_block);
 
-                // Create phi nodes for outputs only if we have incoming edges
                 if all_yields.len() >= 2 {
                     for (i, output_id) in outputs.iter().enumerate() {
                         let phi = context
@@ -4708,7 +4346,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.set_value(*output_id, phi.as_basic_value());
                     }
                 } else if all_yields.len() == 1 {
-                    // Only one incoming edge - use values directly
                     let (yields, _) = &all_yields[0];
                     for (i, output_id) in outputs.iter().enumerate() {
                         if i < yields.len() {
@@ -4716,20 +4353,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                 } else {
-                    // No incoming edges - all branches terminated early
-                    // Set outputs to undef values for unreachable code that may reference them
                     for output_id in outputs.iter() {
                         self.set_value(
                             *output_id,
                             context.word_type().get_undef().as_basic_value_enum(),
                         );
                     }
-                    // Add unreachable terminator
                     context
                         .builder()
                         .build_unreachable()
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                    // Create a new block for any dead code that follows
                     let dead_block = context.append_basic_block("switch_dead");
                     context.set_basic_block(dead_block);
                 }
@@ -4745,7 +4378,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 post,
                 outputs,
             } => {
-                // Get initial values for loop variables (ensure word type for phi nodes)
                 let mut init_llvm_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for (i, initial_value) in initial_values.iter().enumerate() {
                     init_llvm_values.push(self.translate_value_as_word(
@@ -4758,7 +4390,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let entry_block = context.basic_block();
                 let cond_block = context.append_basic_block("for_cond");
                 let body_block = context.append_basic_block("for_body");
-                // Landing block merges body-end and continue paths before the post
                 let continue_landing = context.append_basic_block("for_continue_landing");
                 let post_block = context.append_basic_block("for_post");
                 let join_block = context.append_basic_block("for_join");
@@ -4766,8 +4397,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.build_unconditional_branch(cond_block);
                 context.set_basic_block(cond_block);
 
-                // Create phi nodes for loop-carried variables at the condition block.
-                // All phis must be created first (LLVM requires phis grouped at block top).
                 let mut loop_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
                 let mut loop_phi_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for (i, _loop_var) in loop_variables.iter().enumerate() {
@@ -4776,7 +4405,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .build_phi(context.word_type(), &format!("loop_var_{}", i))
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                    // Add incoming from entry (initial value)
                     if i < init_llvm_values.len() {
                         phi.add_incoming(&[(&init_llvm_values[i], entry_block)]);
                     }
@@ -4785,16 +4413,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     loop_phis.push(phi);
                 }
 
-                // After all phis are created, apply demand-based narrowing and
-                // bind the (possibly truncated) values to the loop variables.
-                // Loop phis are i256, but if the non-comparison demand is ≤ i64,
-                // truncate the value so body operations use the narrower type.
-                // This is safe because:
-                // 1. Only unsigned loop variables are narrowed (signed needs sign-extend)
-                // 2. non_comparison_demand excludes Comparison uses
-                // 3. If ANY non-comparison use needs I256 (Arithmetic, StorageAccess,
-                //    ExternalCall, etc.), the demand stays at I256 and no truncation occurs
-                // 4. Yield values are zero-extended back to i256 via translate_value_as_word
                 for (i, loop_var) in loop_variables.iter().enumerate() {
                     let phi_val = loop_phis[i].as_basic_value();
                     let non_comp = self.type_info.non_comparison_demand(*loop_var);
@@ -4817,16 +4435,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     self.set_value(*loop_var, loop_val);
                 }
 
-                // Generate condition statements (these may use loop_variables)
                 for statement in condition_statements {
                     self.generate_statement(statement, context)?;
                 }
 
-                // Evaluate condition
                 let cond_val = self
                     .generate_expression(condition, context, None)?
                     .into_int_value();
-                // Compare at native width - no need to extend to word type
                 let cond_zero = cond_val.get_type().const_zero();
                 let cond_bool = context
                     .builder()
@@ -4838,14 +4453,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                // Capture the actual block where the condition was evaluated.
-                // This may differ from cond_block if the condition expression or
-                // condition_statements created new basic blocks (e.g., shift_right
-                // creates overflow/non_overflow/join blocks internally).
                 let cond_eval_block = context.basic_block();
 
-                // Create phi nodes at the join block to merge values from
-                // the condition-false exit and any break sites.
                 context.set_basic_block(join_block);
                 let mut join_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
                 let has_loop_vars = !loop_variables.is_empty();
@@ -4859,10 +4468,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
 
-                // The condition-false path: loop exits normally, values are the
-                // current loop phi values. Branch from the block where the condition
-                // was actually evaluated (which may not be cond_block if the condition
-                // expression created internal basic blocks).
                 context.set_basic_block(cond_eval_block);
                 context.build_conditional_branch(cond_bool, body_block, join_block)?;
                 if has_loop_vars {
@@ -4871,8 +4476,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
 
-                // Create phi nodes at the continue_landing block.
-                // These merge body-end values with continue-site values.
                 context.set_basic_block(continue_landing);
                 let mut landing_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
                 let has_body_yields = !body.yields.is_empty();
@@ -4887,28 +4490,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
                 context.build_unconditional_branch(post_block);
 
-                // Push loop info for break/continue.
-                // continue_block points to continue_landing so continue contributes to the phis.
                 context.push_loop(body_block, continue_landing, join_block);
 
-                // Push the post phis info so Continue handler can contribute values
                 self.for_loop_post_phis.push(ForLoopPostPhis {
                     phis: landing_phis.clone(),
                     loop_var_phi_values: loop_phi_values.clone(),
                 });
 
-                // Push break phis info so Break handler can contribute values
                 self.for_loop_break_phis.push(ForLoopBreakPhis {
                     phis: join_phis.clone(),
                     loop_var_phi_values: loop_phi_values.clone(),
                 });
 
-                // Generate the body
                 context.set_basic_block(body_block);
                 self.generate_region(body, context)?;
 
-                // Compute body yield values BEFORE the branch terminator,
-                // since translate_value_as_word may emit zext instructions.
                 let body_end_block = context.basic_block();
                 let mut body_yield_vals: Vec<inkwell::values::BasicValueEnum<'ctx>> = Vec::new();
                 if has_body_yields {
@@ -4922,27 +4518,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
 
-                // Body falls through to continue_landing
                 context.build_unconditional_branch(continue_landing);
 
-                // Add body-end values to the landing phis
                 for (phi, yield_val) in landing_phis.iter().zip(body_yield_vals.iter()) {
                     phi.add_incoming(&[(yield_val, body_end_block)]);
                 }
 
-                // Pop the post and break phis info
                 self.for_loop_post_phis.pop();
                 self.for_loop_break_phis.pop();
 
-                // Now generate the post block. The landing phi values are the
-                // "body output" values that the post should use.
                 context.set_basic_block(post_block);
 
-                // Map the post's fresh input ValueIds to the landing phi values.
-                // The post region references post_input_variables[i] for loop-carried
-                // variables. The landing phis merge body-end and continue-site values,
-                // so mapping post_input_variables to phi outputs gives the post correct values
-                // regardless of whether the body fell through or hit a continue.
                 if has_body_yields {
                     for (i, phi) in landing_phis.iter().enumerate() {
                         if i < post_input_variables.len() {
@@ -4953,7 +4539,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 self.generate_region(post, context)?;
 
-                // Collect yields from post region and wire up cond-block phi nodes
                 let post_end_block = context.basic_block();
                 for (i, phi) in loop_phis.iter().enumerate() {
                     if i < post.yields.len() {
@@ -4971,8 +4556,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.pop_loop();
                 context.set_basic_block(join_block);
 
-                // Set outputs to the join phi values which merge condition-exit
-                // and break-site values, giving the correct final iteration values.
                 if has_loop_vars {
                     for (i, output_id) in outputs.iter().enumerate() {
                         if i < join_phis.len() {
@@ -4980,7 +4563,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                 } else {
-                    // No loop variables, fall back to loop phis
                     for (i, output_id) in outputs.iter().enumerate() {
                         if i < loop_phis.len() {
                             self.set_value(*output_id, loop_phis[i].as_basic_value());
@@ -4990,9 +4572,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Break { values } => {
-                // Contribute the break-point values to the join block phis.
-                // The IR annotates each break with the current values of the
-                // loop-carried variables at the point of the break.
                 if let Some(break_phis) = self.for_loop_break_phis.last() {
                     let current_block = context.basic_block();
                     for (i, phi) in break_phis.phis.iter().enumerate() {
@@ -5012,15 +4591,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 let join_block = context.r#loop().join_block;
                 context.build_unconditional_branch(join_block);
-                // Create unreachable block for dead code after break
                 let unreachable = context.append_basic_block("break_unreachable");
                 context.set_basic_block(unreachable);
             }
 
             Statement::Continue { values } => {
-                // Contribute the continue-point values to the landing phis.
-                // The IR annotates each continue with the current values of the
-                // loop-carried variables at the point of the continue.
                 if let Some(post_phis) = self.for_loop_post_phis.last() {
                     let current_block = context.basic_block();
                     for (i, phi) in post_phis.phis.iter().enumerate() {
@@ -5045,8 +4620,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Leave { return_values } => {
-                // Store return values to return pointer before branching to return block.
-                // For narrowed return types, truncate values to match the pointer type.
                 match context.current_function().borrow().r#return() {
                     revive_llvm_context::PolkaVMFunctionReturn::None => {}
                     revive_llvm_context::PolkaVMFunctionReturn::Primitive { pointer } => {
@@ -5181,14 +4754,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
 
-                // Check if this is a `revert(0, K)` pattern where K is a constant.
-                // These are very common in Solidity contracts:
-                // - revert(0, 0): callvalue checks, ABI decoding, overflow guards (100+ sites)
-                // - revert(0, 36): error messages with string data (70+ sites)
-                // - revert(0, 4): custom error selectors (20+ sites)
-                // - revert(0, 68): errors with two arguments (17+ sites)
-                // Each site generates the same exit sequence, so we deduplicate by
-                // creating ONE shared block per constant length and branching to it.
                 if Self::is_const_zero(offset_val) {
                     if let Some(const_len) = Self::try_extract_const_u64(length_val) {
                         let revert_block = self.get_or_create_revert_block(context, const_len)?;
@@ -5199,7 +4764,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
                 if !self.has_msize {
-                    // Non-msize: call shared __revive_exit_checked (noinline).
                     let offset_xlen = context
                         .safe_truncate_int_to_xlen(offset_val)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -5229,8 +4793,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let offset_val = self.translate_value(offset)?.into_int_value();
                 let length_val = self.translate_value(length)?.into_int_value();
 
-                // Deduplicate return(const_offset, const_length) patterns by
-                // creating ONE shared block per (offset, length) pair and branching to it.
                 if let (Some(const_off), Some(const_len)) = (
                     Self::try_extract_const_u64(offset_val),
                     Self::try_extract_const_u64(length_val),
@@ -5249,7 +4811,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         Some(revive_llvm_context::PolkaVMCodeType::Deploy)
                     )
                 {
-                    // Non-msize runtime: call shared __revive_exit_checked (noinline).
                     let offset_xlen = context
                         .safe_truncate_int_to_xlen(offset_val)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -5276,7 +4837,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Stop => {
-                // Stop is equivalent to return(0, 0) - use the shared return block
                 let return_block = self.get_or_create_return_block(context, 0, 0)?;
                 context.build_unconditional_branch(return_block);
                 let dead_block = context.append_basic_block("stop_dedup_dead");
@@ -5302,7 +4862,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .copied()
                     .unwrap_or(0);
 
-                // Only outline when >= 2 sites exist to amortize function body cost
                 if count >= 2 {
                     let function = self.get_or_create_error_string_revert_fn(num_words, context)?;
 
@@ -5391,7 +4950,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     context.build_unreachable();
                 }
 
-                // Add dead block for subsequent code
                 let dead_block = context.append_basic_block("error_string_dead");
                 context.set_basic_block(dead_block);
             }
@@ -5408,7 +4966,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .unwrap_or(0);
 
                 if count >= 3 {
-                    // Outlined path: call shared function with selector + arguments
                     let function = self.get_or_create_custom_error_revert_fn(num_args, context)?;
 
                     let selector_val = context.word_const_str_hex(&selector.to_str_radix(16));
@@ -5427,7 +4984,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     context.build_unreachable();
                 } else {
-                    // Inline path: emit mstores + revert directly using InlineByteSwap
                     let selector_val = context.word_const_str_hex(&selector.to_str_radix(16));
                     let offset_0 = context.xlen_type().const_int(0, false);
                     revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
@@ -5454,7 +5010,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     context.build_unconditional_branch(revert_block);
                 }
 
-                // Add dead block for subsequent code
                 let dead_block = context.append_basic_block("custom_error_dead");
                 context.set_basic_block(dead_block);
             }
@@ -5476,7 +5031,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 ret_length,
                 result,
             } => {
-                // CALLCODE is not supported on PolkaVM
                 if matches!(kind, CallKind::CallCode) {
                     return Err(CodegenError::Unsupported(
                         "The `CALLCODE` instruction is not supported".into(),
@@ -5533,39 +5087,35 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             args_length_val,
                             ret_offset_val,
                             ret_length_val,
-                            vec![], // No constant simulation addresses
-                            false,  // Not a static call
+                            vec![],
+                            false,
                         )?
                     }
                     CallKind::CallCode => {
                         unreachable!("CallCode is handled above")
                     }
-                    CallKind::StaticCall => {
-                        revive_llvm_context::polkavm_evm_call::call(
-                            context,
-                            gas_val,
-                            address_val,
-                            None,
-                            args_offset_val,
-                            args_length_val,
-                            ret_offset_val,
-                            ret_length_val,
-                            vec![], // No constant simulation addresses
-                            true,   // Static call
-                        )?
-                    }
-                    CallKind::DelegateCall => {
-                        revive_llvm_context::polkavm_evm_call::delegate_call(
-                            context,
-                            gas_val,
-                            address_val,
-                            args_offset_val,
-                            args_length_val,
-                            ret_offset_val,
-                            ret_length_val,
-                            vec![], // No constant simulation addresses
-                        )?
-                    }
+                    CallKind::StaticCall => revive_llvm_context::polkavm_evm_call::call(
+                        context,
+                        gas_val,
+                        address_val,
+                        None,
+                        args_offset_val,
+                        args_length_val,
+                        ret_offset_val,
+                        ret_length_val,
+                        vec![],
+                        true,
+                    )?,
+                    CallKind::DelegateCall => revive_llvm_context::polkavm_evm_call::delegate_call(
+                        context,
+                        gas_val,
+                        address_val,
+                        args_offset_val,
+                        args_length_val,
+                        ret_offset_val,
+                        ret_length_val,
+                        vec![],
+                    )?,
                 };
                 self.set_value(*result, call_result);
             }
@@ -5627,7 +5177,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     length.id,
                     "log_length_narrow",
                 )?;
-                // Topics must be word type for the log function
                 let topic_vals: Vec<BasicValueEnum<'ctx>> = topics
                     .iter()
                     .enumerate()
@@ -5640,8 +5189,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .collect::<Result<_>>()?;
 
                 {
-                    // Use sbrk-based log functions for bounds checking (dynamic
-                    // offsets could exceed the heap).
                     match topic_vals.len() {
                         0 => revive_llvm_context::polkavm_evm_event::log::<0>(
                             context,
@@ -5683,7 +5230,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 offset,
                 length,
             } => {
-                // CODECOPY is only supported in deploy code, not runtime
                 if matches!(
                     context.code_type(),
                     Some(revive_llvm_context::PolkaVMCodeType::Runtime)
@@ -5692,7 +5238,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         "The `CODECOPY` instruction is not supported in the runtime code".into(),
                     ));
                 }
-                // In deploy code, codecopy copies from calldata
                 let dest_val = self.translate_value(dest)?.into_int_value();
                 let dest_val = self.narrow_offset_for_pointer(
                     context,
@@ -5720,7 +5265,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::ExtCodeCopy { .. } => {
-                // ExtCodeCopy is not supported on PolkaVM
                 return Err(CodegenError::Unsupported(
                     "The `EXTCODECOPY` instruction is not supported".into(),
                 ));
@@ -5762,9 +5306,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 offset,
                 length: _,
             } => {
-                // DataCopy writes the contract hash at the destination offset
-                // This is used in create patterns: datacopy(dest, dataoffset("deployed"), datasize("deployed"))
-                // The offset is actually the contract hash to write
                 let dest_val = self.translate_value(dest)?.into_int_value();
                 let dest_val = self.narrow_offset_for_pointer(
                     context,
@@ -5813,7 +5354,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Statement::Expression(expression) => {
-                // Evaluate for side effects, discard result
                 let _ = self.generate_expression(expression, context, None)?;
             }
 
@@ -5827,7 +5367,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     self.ensure_word_type(context, value_val, "mapping_sstore_value")?;
 
                 if self.use_outlined_mapping_sstore {
-                    // Call combined mapping_sstore(key, slot, value)
                     let mapping_sstore_fn = self.get_or_create_mapping_sstore_fn(context)?;
                     context
                         .builder()
@@ -5838,8 +5377,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         )
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                 } else {
-                    // Decompose: keccak256_pair(key, slot) + sstore_word(hash, value)
-                    // Use slot wrapper for large constant slots (same as Keccak256Pair)
                     let hash_val =
                         if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
                             let wrapper_fn =
@@ -5905,9 +5442,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>> {
         match expression {
             Expression::Literal { value, .. } => {
-                // Generate narrow literals for values that fit in 64 bits.
-                // This enables more efficient code generation - the values will be
-                // extended to word type only where needed (runtime function calls).
                 if value.bits() <= 64 {
                     let val_u64 = value.to_u64().unwrap_or(0);
                     Ok(context
@@ -5931,31 +5465,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let lhs_val = self.translate_value(lhs)?.into_int_value();
                 let rhs_val = self.translate_value(rhs)?.into_int_value();
 
-                // Comparisons produce i1 and can operate on narrow types.
-                // Bitwise ops (And/Or/Xor) are safe with narrow types because
-                // and(zext(a), zext(b)) == zext(and(a,b)) — they can't create
-                // bits that weren't in the inputs.
-                // All other ops use word type for correct EVM wrapping semantics.
                 match operation {
                     BinaryOperation::Lt | BinaryOperation::Gt | BinaryOperation::Eq => {
-                        // For unsigned comparisons and equality, try to narrow both
-                        // operands to a smaller type if provably safe. This reduces
-                        // i256 comparisons (16-20 RISC-V instructions) to i64 (1-2).
                         let (lhs_cmp, rhs_cmp) =
                             self.try_narrow_comparison(context, lhs_val, rhs_val, lhs.id, rhs.id)?;
                         self.generate_binop(*operation, lhs_cmp, rhs_cmp, context)
                     }
                     BinaryOperation::Slt | BinaryOperation::Sgt => {
-                        // Signed comparisons need sign-extension, not truncation.
-                        // Keep the standard widening behavior.
                         let (lhs_val, rhs_val) =
                             self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
                         self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
                     BinaryOperation::And | BinaryOperation::Or | BinaryOperation::Xor => {
-                        // Demand-based narrowing: bitwise ops on truncated
-                        // inputs produce the same low bits as on full inputs.
                         if let Some(db) = demand_bits {
                             if db <= 64 {
                                 let lhs_val =
@@ -5977,13 +5499,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
-                    // For add/sub/mul: when type inference proves the result fits in
-                    // i64, do the arithmetic at i64 width (native RISC-V ops).
-                    // Otherwise extend to i256 for correct modular semantics.
                     BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Mul => {
-                        // Demand-based narrowing: for modular arithmetic, the low N
-                        // bits of (a operation b) depend only on the low N bits of a and b.
-                        // When all consumers only need ≤64 bits, operate at i64.
                         if let Some(db) = demand_bits {
                             if db <= 64 {
                                 let lhs_val =
@@ -6005,8 +5521,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         let rhs_inferred = self.inferred_width(rhs.id);
                         let max_operand = lhs_inferred.max(rhs_inferred);
 
-                        // For i64 tier: use widen_by_one to guarantee no overflow.
-                        // add(I32, I32) → I64 guaranteed, sub(I32, I32) → i64 wraps correctly.
                         let result_fits_i64 = match operation {
                             BinaryOperation::Add => {
                                 crate::type_inference::widen_by_one(max_operand).bits() <= 64
@@ -6018,42 +5532,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             _ => unreachable!(),
                         };
 
-                        // For i128 tier: if both operands fit in i64, the result of
-                        // add/sub fits in i65 (< i128). For mul, if both operands fit
-                        // in i64, the product fits in i128.
-                        //
-                        // Sub is excluded from this fast-path because demand_bits is
-                        // None (or > 128) here — the result will be widened back to
-                        // i256 via `ensure_word_type` (zero-extension). For an
-                        // underflowed sub the i128 result has its high bit set
-                        // (e.g. `sub i128 0, 1` = 2^128 - 1) and zero-extending
-                        // drops the EVM-required all-1 upper bits, returning
-                        // `0x...0000FFFF...` instead of `2^256 - 1`. Doing the sub
-                        // at i256 directly preserves modular wrap semantics.
                         let result_fits_i128 =
                             max_operand.bits() <= 64 && !matches!(operation, BinaryOperation::Sub);
 
                         if result_fits_i64 {
-                            // Result fits in i64 — use narrow arithmetic.
                             let (lhs_val, rhs_val) =
                                 self.ensure_min_width(context, lhs_val, rhs_val, 64, "arith")?;
                             self.generate_binop(*operation, lhs_val, rhs_val, context)
                         } else if result_fits_i128 {
-                            // Both operands ≤ I64: result fits in i128 (65 bits for
-                            // add/sub, 128 bits for mul). Uses 2 registers on riscv64.
                             let (lhs_val, rhs_val) =
                                 self.ensure_min_width(context, lhs_val, rhs_val, 128, "arith128")?;
                             self.generate_binop(*operation, lhs_val, rhs_val, context)
                         } else {
-                            // Result needs > i128 — use i256 for correct wrapping.
                             let lhs_val = self.ensure_word_type(context, lhs_val, "arith_lhs")?;
                             let rhs_val = self.ensure_word_type(context, rhs_val, "arith_rhs")?;
                             self.generate_binop(*operation, lhs_val, rhs_val, context)
                         }
                     }
 
-                    // For div/mod with structurally narrow operands (LLVM type ≤ 64 bits),
-                    // use native ops instead of expensive 256-bit runtime calls.
                     BinaryOperation::Div | BinaryOperation::Mod => {
                         let lhs_width = lhs_val.get_type().get_bit_width();
                         let rhs_width = rhs_val.get_type().get_bit_width();
@@ -6068,14 +5564,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
 
-                    // Shift left: for constant shift amounts where demand ≤ 64,
-                    // operate at i64 width. For non-constant or large shifts, use i256.
                     BinaryOperation::Shl => {
                         if let Some(db) = demand_bits {
                             if db <= 64 {
                                 if let Some(shift) = Self::try_get_small_constant(lhs_val) {
                                     if shift >= 64 {
-                                        // Shift ≥ 64 at i64 width → all low bits are 0
                                         let i64_type = context.llvm().i64_type();
                                         return Ok(i64_type.const_zero().as_basic_value_enum());
                                     }
@@ -6096,8 +5589,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
-                    // Shift right: if the value is provably narrow (≤ 64 bits) AND
-                    // the shift amount is a known constant < 64, operate at i64 width.
                     BinaryOperation::Shr => {
                         let rhs_inferred = self.inferred_width(rhs.id);
                         if rhs_inferred.bits() <= 64 {
@@ -6134,7 +5625,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let a_val = self.translate_value(a)?.into_int_value();
                 let b_val = self.translate_value(b)?.into_int_value();
                 let n_val = self.translate_value(n)?.into_int_value();
-                // Ensure all operands are word type for ternary operations
                 let a_val = self.ensure_word_type(context, a_val, "ternary_a")?;
                 let b_val = self.ensure_word_type(context, b_val, "ternary_b")?;
                 let n_val = self.ensure_word_type(context, n_val, "ternary_n")?;
@@ -6157,8 +5647,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let operand_val = self.translate_value(operand)?.into_int_value();
                 match operation {
                     UnaryOperation::IsZero => {
-                        // Return i1 directly - avoid i256 zero-extension.
-                        // Downstream uses will extend via ensure_word_type when needed.
                         let zero = operand_val.get_type().const_zero();
                         let is_zero = context
                             .builder()
@@ -6172,8 +5660,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         Ok(is_zero.as_basic_value_enum())
                     }
                     UnaryOperation::Not => {
-                        // Demand-based narrowing: the low N bits of NOT(x) depend only
-                        // on the low N bits of x. When demand ≤ 64, operate at i64.
                         if let Some(db) = demand_bits {
                             if db <= 64 {
                                 let narrow_val =
@@ -6186,7 +5672,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 return Ok(xor_result.as_basic_value_enum());
                             }
                         }
-                        // Full 256-bit NOT for cases without narrow demand.
                         let operand_val = self.ensure_word_type(context, operand_val, "not_op")?;
                         let all_ones = context.word_type().const_all_ones();
                         let xor_result = context
@@ -6196,7 +5681,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         Ok(xor_result.as_basic_value_enum())
                     }
                     UnaryOperation::Clz => {
-                        // Count leading zeros requires word type
                         let operand_val = self.ensure_word_type(context, operand_val, "clz_op")?;
                         Ok(
                             revive_llvm_context::polkavm_evm_bitwise::count_leading_zeros(
@@ -6231,7 +5715,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
 
-            // caller already returns zext i160 → i256 (after byte-swap).
             Expression::Caller => {
                 if self.use_outlined_caller {
                     Ok(
@@ -6246,18 +5729,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
 
-            // origin already returns zext i160 → i256 (after byte-swap).
             Expression::Origin => Ok(revive_llvm_context::polkavm_evm_contract_context::origin(
                 context,
             )?),
 
-            // calldatasize already returns zext i32 → i256, so LLVM knows
-            // it fits in 32 bits. No additional range proof needed.
             Expression::CallDataSize => {
                 Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
             }
 
-            // codesize: both calldatasize and ext_code::size already return zext i32 → i256.
             Expression::CodeSize => match context.code_type() {
                 Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
                     Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
@@ -6270,12 +5749,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )),
             },
 
-            // gas_price already returns zext i32 → i256.
             Expression::GasPrice => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_price(context)?)
             }
 
-            // extcodesize returns zext i32 → i256.
             Expression::ExtCodeSize { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
                 let addr_val = self.ensure_word_type(context, addr_val, "extcodesize_addr")?;
@@ -6285,7 +5762,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?)
             }
 
-            // returndatasize already returns zext i32 → i256.
             Expression::ReturnDataSize => {
                 Ok(revive_llvm_context::polkavm_evm_return_data::size(context)?)
             }
@@ -6308,7 +5784,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )
             }
 
-            // coinbase already returns zext i160 → i256 (after byte-swap).
             Expression::Coinbase => Ok(
                 revive_llvm_context::polkavm_evm_contract_context::coinbase(context)?,
             ),
@@ -6325,12 +5800,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Self::apply_range_proof(context, value, 64, "number")
             }
 
-            // difficulty returns a constant, no range proof needed.
             Expression::Difficulty => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::difficulty(context)?)
             }
 
-            // gas_limit already returns zext i32 → i256.
             Expression::GasLimit => {
                 Ok(revive_llvm_context::polkavm_evm_contract_context::gas_limit(context)?)
             }
@@ -6350,17 +5823,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Expression::BlobHash { .. } | Expression::BlobBaseFee => {
-                // Blob opcodes return 0 for now (EIP-4844)
                 Ok(context.word_const(0).as_basic_value_enum())
             }
 
-            // gas already returns zext i32 → i256.
             Expression::Gas => Ok(revive_llvm_context::polkavm_evm_ether_gas::gas(context)?),
 
-            // msize already returns zext i32 → i256.
             Expression::MSize => Ok(revive_llvm_context::polkavm_evm_memory::msize(context)?),
 
-            // address already returns zext i160 → i256 (after byte-swap).
             Expression::Address => Ok(revive_llvm_context::polkavm_evm_contract_context::address(
                 context,
             )?),
@@ -6375,13 +5844,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expression::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                // Range proof on FMP loads. FMP is bounded by `heap_size`
-                // regardless of whether the contract is native-safe — sbrk
-                // enforces the bound on every store. The native-safe check
-                // is about byte ORDER (so InlineNative/ByteSwap don't mix);
-                // the range bound itself is independent. Even contracts that
-                // can't use native mode still have FMP < heap_size, so the
-                // range proof is sound here.
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 
@@ -6394,13 +5856,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     NativeMemoryMode::InlineNative => {
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
-                        // Constant offsets use unchecked GEP since the static heap
-                        // is 131072 bytes and all native-safe offsets fit easily.
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
                         if is_free_pointer {
-                            // FMP only holds heap offsets bounded by heap size (≤131072).
-                            // Load as i32 and zero-extend: eliminates 7/8 of the load
-                            // width on 32-bit PVM and makes the range proof redundant.
                             let narrow = context
                                 .builder()
                                 .build_load(context.xlen_type(), pointer.value, "fmp_load")
@@ -6436,7 +5893,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             "mload_offset_narrow",
                         )?;
                         if !self.has_msize {
-                            // Non-msize: lightweight bounds check + unchecked GEP.
                             let offset_xlen = context
                                 .safe_truncate_int_to_xlen(offset_val)
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -6449,28 +5905,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 .basic()
                                 .expect("load_bswap_checked should return a value")
                         } else {
-                            // Msize contracts: full sbrk for watermark tracking.
                             revive_llvm_context::polkavm_evm_memory::load(context, offset_val)?
                         }
                     }
                 };
-                // The free memory pointer (mload(64)) is bounded by the heap size
-                // (enforced by sbrk). Use a tight range proof: compute the minimum
-                // number of bits needed to represent the heap size, then truncate
-                // to that width. This proves to LLVM that fmp + small_offset < 2^32,
-                // allowing elimination of ALL downstream overflow checks in
-                // safe_truncate_int_to_xlen.
                 if is_free_pointer {
                     let heap_size = context
                         .heap_size()
                         .get_zero_extended_constant()
                         .unwrap_or(131072);
-                    // FMP values are heap offsets in [0, heap_size). The max
-                    // value is `heap_size - 1`, not `heap_size` itself, so the
-                    // range bound is `bits(heap_size - 1)`. For a power-of-two
-                    // heap (e.g. 131072 = 2^17), this is 1 bit tighter than
-                    // bits(heap_size) and lets LLVM use a single `and` with
-                    // the heap_size-1 mask instead of `heap_size*2-1`.
                     let max_fmp = heap_size.saturating_sub(1).max(1);
                     let raw_bits = 64 - max_fmp.leading_zeros();
                     let range_bits = raw_bits.clamp(8, 31);
@@ -6486,8 +5929,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let key_arg = self.value_to_storage_key_argument(key, context)?;
                 if key_arg.is_register() {
-                    // Value-based path: key is in a register, use outlined function
-                    // to avoid alloca+store at each call site.
                     let key_val = key_arg
                         .access(context)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -6501,7 +5942,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .expect("sload_word should return a value");
                     Ok(result)
                 } else {
-                    // Pointer-based path: key is a global constant pointer.
                     Ok(revive_llvm_context::polkavm_evm_storage::load(
                         context, &key_arg,
                     )?)
@@ -6525,10 +5965,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .ok_or(CodegenError::UndefinedFunction(*function))?
                     .clone();
 
-                // Match argument types to callee's parameter types.
-                // If the callee has narrowed parameters (e.g., I64 instead of I256),
-                // cast arguments to match. Handle cases where the argument may be
-                // wider (truncate), narrower (zero-extend), or same width (no-operation).
                 let parameter_types = self.function_param_types.get(&function.0);
                 let mut argument_values = Vec::new();
                 for (i, argument) in arguments.iter().enumerate() {
@@ -6574,7 +6010,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     argument_values.push(value);
                 }
 
-                // Ensure debug location is set for function calls
                 context.set_debug_location(1, 0, None)?;
 
                 let llvm_function = context
@@ -6586,13 +6021,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     &format!("{}_result", function_name),
                 );
 
-                // build_call returns None for void functions, which is valid
-                // For void functions, return a zero value as a placeholder
                 let result = result.unwrap_or_else(|| context.word_const(0).as_basic_value_enum());
 
-                // For functions with a single narrow return type, zero-extend back to i256
-                // so downstream uses (which operate on i256) work correctly.
-                // Multi-return (struct) results are handled at the extract_value site.
                 let return_types = self.function_return_types.get(&function.0);
                 let result = match return_types {
                     Some(return_types)
@@ -6680,7 +6110,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let word1_val = self.translate_value(word1)?.into_int_value();
                 let word1_val = self.ensure_word_type(context, word1_val, "keccak_word1")?;
 
-                // Use outlined slot wrapper when word1 is a large constant
                 if word1_val.is_const() && Self::try_extract_const_u64(word1_val).is_none() {
                     let wrapper_fn =
                         self.get_or_create_keccak256_slot_wrapper(word1_val, context)?;
@@ -6716,9 +6145,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Expression::DataOffset { id } => {
-                // DataOffset returns a reference to the contract code hash
-                // For subcontract deployments, this is the hash of the deployed bytecode
-                // We use the PolkaVM create infrastructure which handles this
                 let argument =
                     revive_llvm_context::polkavm_evm_create::contract_hash(context, id.clone())?;
                 argument
@@ -6727,7 +6153,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Expression::DataSize { id } => {
-                // DataSize returns the size of the deploy call header
                 let argument =
                     revive_llvm_context::polkavm_evm_create::header_size(context, id.clone())?;
                 argument
@@ -6753,7 +6178,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let slot_val = self.ensure_word_type(context, slot_val, "mapping_sload_slot")?;
 
                 if self.use_outlined_mapping_sload {
-                    // Call combined mapping_sload(key, slot)
                     let mapping_sload_fn = self.get_or_create_mapping_sload_fn(context)?;
                     let result = context
                         .builder()
@@ -6768,8 +6192,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .expect("mapping_sload should return a value");
                     Ok(result)
                 } else {
-                    // Decompose: keccak256_pair(key, slot) + sload_word(hash)
-                    // Use slot wrapper for large constant slots (same as Keccak256Pair)
                     let hash_val =
                         if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
                             let wrapper_fn =
@@ -6827,7 +6249,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let int_type = lhs.get_type();
         let zero = int_type.const_zero();
 
-        // Check for division by zero
         let is_zero = context
             .builder()
             .build_int_compare(inkwell::IntPredicate::EQ, rhs, zero, "divmod_iszero")
@@ -6839,7 +6260,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.build_conditional_branch(is_zero, join_block, non_zero_block)?;
 
-        // Non-zero path: do the division
         context.set_basic_block(non_zero_block);
         let result = match operation {
             BinaryOperation::Div => context
@@ -6855,7 +6275,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let non_zero_exit = context.basic_block();
         context.build_unconditional_branch(join_block);
 
-        // Join: phi between 0 (zero divisor) and result (non-zero divisor)
         context.set_basic_block(join_block);
         let phi = context
             .builder()
@@ -6909,8 +6328,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context, lhs, rhs,
             )?),
             BinaryOperation::Shl => {
-                // For constant shift amounts, skip the overflow check and generate
-                // direct shl. This eliminates branch + phi overhead for known shifts.
                 if let Some(shift) = Self::try_get_small_constant(lhs) {
                     if shift >= 256 {
                         return Ok(rhs.get_type().const_zero().as_basic_value_enum());
@@ -6926,10 +6343,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )?)
             }
             BinaryOperation::Shr => {
-                // For constant shift amounts, skip the overflow check and generate
-                // direct lshr. This produces a clean instruction that
-                // provable_narrow_width can detect, enabling downstream narrowing
-                // (e.g., shr(224, calldataload(0)) → i32 selector).
                 if let Some(shift) = Self::try_get_small_constant(lhs) {
                     if shift >= 256 {
                         return Ok(rhs.get_type().const_zero().as_basic_value_enum());
@@ -6949,8 +6362,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     context, lhs, rhs,
                 )?,
             ),
-            // Comparisons return i1 directly — downstream uses zero-extend via
-            // `ensure_word_type` when needed.
             BinaryOperation::Lt => build_cmp(context, inkwell::IntPredicate::ULT, lhs, rhs, "lt"),
             BinaryOperation::Gt => build_cmp(context, inkwell::IntPredicate::UGT, lhs, rhs, "gt"),
             BinaryOperation::Slt => build_cmp(context, inkwell::IntPredicate::SLT, lhs, rhs, "slt"),
@@ -6962,13 +6373,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             BinaryOperation::SignExtend => Ok(revive_llvm_context::polkavm_evm_math::sign_extend(
                 context, lhs, rhs,
             )?),
-            BinaryOperation::AddMod | BinaryOperation::MulMod => {
-                // These are ternary ops, shouldn't reach here
-                Err(CodegenError::Unsupported(format!(
-                    "Binary call for ternary operation {:?}",
-                    operation
-                )))
-            }
+            BinaryOperation::AddMod | BinaryOperation::MulMod => Err(CodegenError::Unsupported(
+                format!("Binary call for ternary operation {:?}", operation),
+            )),
         }
     }
 
@@ -6982,8 +6389,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Type::Int(width) => context
                 .integer_type(width.bits() as usize)
                 .as_basic_type_enum(),
-            Type::Ptr(_) => context.word_type().as_basic_type_enum(), // Pointers are word-sized
-            Type::Void => context.word_type().as_basic_type_enum(),   // Void defaults to word
+            Type::Ptr(_) => context.word_type().as_basic_type_enum(),
+            Type::Void => context.word_type().as_basic_type_enum(),
         }
     }
 
@@ -7041,7 +6448,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let wrapper_name = format!("__keccak256_slot_{}", self.keccak256_slot_wrappers.len());
 
-        // Create the wrapper function type: (i256) -> i256
         let word_type = context.word_type();
         let function_type = word_type.fn_type(&[word_type.into()], false);
 
@@ -7051,7 +6457,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(inkwell::module::Linkage::Internal),
         );
 
-        // Set NoInline + OptimizeForSize attributes
         let noinline_attr = context
             .llvm()
             .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
@@ -7066,16 +6471,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, optsize_attr);
         wrapper_fn.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
 
-        // Save current builder position
         let saved_block = context.basic_block();
 
-        // Build the wrapper function body
         let entry_block = context.llvm().append_basic_block(wrapper_fn, "entry");
         context.set_basic_block(entry_block);
 
         let word0_param = wrapper_fn.get_nth_param(0).unwrap().into_int_value();
 
-        // Get the __revive_keccak256_two_words function
         let keccak_fn = context
             .get_function(
                 revive_llvm_context::PolkaVMKeccak256TwoWordsFunction::NAME,
@@ -7119,23 +6521,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let integer_value = llvm_val.into_int_value();
         let word_val = self.ensure_word_type(context, integer_value, "storage_key")?;
 
-        // Only use global constants for actual constants (not runtime values)
         if !word_val.is_const() {
             return Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()));
         }
 
-        // Only use global constants for large constants (>64 bits).
-        // Small constants (0, 1, etc.) are cheap to materialize inline and the
-        // rodata overhead would exceed the savings on small contracts.
         if Self::try_extract_const_u64(word_val).is_some() {
             return Ok(PolkaVMArgument::value(word_val.as_basic_value_enum()));
         }
 
-        // Use the constant's string representation as cache key
         let const_str = word_val.print_to_string().to_string();
 
         if let Some(&global_ptr) = self.storage_key_globals.get(&const_str) {
-            // Reuse existing global constant
             let pointer = revive_llvm_context::PolkaVMPointer::new(
                 context.word_type(),
                 Default::default(),
@@ -7146,7 +6542,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 "storage_key_global".into(),
             ))
         } else {
-            // Create a new global constant
             let global_name = format!("__storage_key_{}", self.storage_key_globals.len());
             let global = context.module().add_global(
                 context.word_type(),

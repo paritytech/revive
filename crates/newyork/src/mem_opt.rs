@@ -120,24 +120,15 @@ impl MemoryOptimizer {
 
     /// Optimizes an object in place.
     pub fn optimize_object(&mut self, object: &mut Object) -> MemOptResults {
-        // Find the maximum value ID in use
         self.next_value_id = object.find_max_value_id() + 1;
 
-        // Optimize main code block
         self.optimize_block(&mut object.code);
 
-        // Optimize all functions
         for function in object.functions.values_mut() {
-            // Reset state between functions
             self.memory_state.clear();
             self.constant_values.clear();
             self.optimize_block(&mut function.body);
         }
-
-        // NOTE: Do NOT recurse into subobjects here. The optimize_object_tree
-        // in lib.rs handles subobject recursion. Processing subobjects here would
-        // cause them to be optimized BEFORE inlining runs on them, breaking the
-        // required pass ordering (inline -> simplify -> mem_opt).
 
         std::mem::take(&mut self.statistics)
     }
@@ -156,11 +147,9 @@ impl MemoryOptimizer {
 
     /// Optimizes a list of statements.
     fn optimize_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
-        // Save outer scope's dead store tracking state
         let outer_dead_stores = std::mem::take(&mut self.dead_store_indices);
         let outer_pending = std::mem::take(&mut self.pending_stores);
 
-        // First pass: analyze statements and track dead stores
         let mut processed = Vec::with_capacity(statements.len());
 
         for (index, statement) in statements.into_iter().enumerate() {
@@ -170,14 +159,9 @@ impl MemoryOptimizer {
                     value,
                     region,
                 } => {
-                    // Track the store for load-after-store elimination
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = static_offset / 32 * 32;
 
-                        // Check if there's a pending store to the exact same byte offset
-                        // that wasn't read. Only kill if offsets match exactly, because
-                        // overlapping stores (e.g., mstore(0,X) + mstore(4,Y)) only
-                        // partially overwrite, and the first store is still needed.
                         if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
                             self.dead_store_indices.insert(prev_idx);
                             self.statistics.stores_eliminated += 1;
@@ -189,7 +173,6 @@ impl MemoryOptimizer {
                             );
                         }
 
-                        // Track this store as pending at the exact byte offset
                         self.pending_stores.insert(static_offset, index);
 
                         self.memory_state.insert(
@@ -202,9 +185,6 @@ impl MemoryOptimizer {
                         );
                         self.statistics.values_tracked += 1;
                     } else {
-                        // Unknown offset - invalidate all tracked state and pending stores
-                        // Unknown offset store might read from anywhere, so all pending stores
-                        // must be kept (they're no longer provably dead)
                         self.memory_state.clear();
                         self.pending_stores.clear();
                     }
@@ -220,19 +200,12 @@ impl MemoryOptimizer {
                     value,
                     region,
                 } => {
-                    // MStore8 taints the word, invalidate tracking for that word
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = static_offset / 32 * 32;
                         self.memory_state.remove(&word_offset);
-                        // Don't mark previous store as dead - mstore8 only writes one byte.
-                        // The previous 32-byte store might still be needed.
-                        // Remove any pending store whose 32-byte range covers this byte.
-                        // pending_stores is keyed by exact byte offset, so we must check
-                        // the range [word_offset, word_offset+32) for matching entries.
                         self.pending_stores
                             .retain(|&k, _| k < word_offset || k >= word_offset + 32);
                     } else {
-                        // Unknown offset - invalidate all
                         self.memory_state.clear();
                         self.pending_stores.clear();
                     }
@@ -244,28 +217,21 @@ impl MemoryOptimizer {
                 }
 
                 Statement::MCopy { dest, src, length } => {
-                    // MCopy reads from src and writes to dest
-                    // All pending stores are no longer dead (might be read by mcopy)
                     self.memory_state.clear();
                     self.pending_stores.clear();
                     processed.push(Statement::MCopy { dest, src, length });
                 }
 
                 Statement::Let { bindings, value } => {
-                    // Check if the value is a function call - if so, invalidate memory state
-                    // because internal functions can modify memory
                     let is_call = matches!(&value, Expression::Call { .. });
 
-                    // Check for load-after-store elimination opportunity
                     let optimized_value = self.optimize_expr_with_read_tracking(value);
 
-                    // Invalidate memory state after function calls
                     if is_call {
                         self.memory_state.clear();
                         self.pending_stores.clear();
                     }
 
-                    // Track constant bindings for single-value lets
                     if bindings.len() == 1 {
                         self.record_constant(bindings[0], &optimized_value);
                     }
@@ -276,7 +242,6 @@ impl MemoryOptimizer {
                     });
                 }
 
-                // Control flow - preserve state through branches where possible
                 Statement::If {
                     condition,
                     inputs,
@@ -284,33 +249,26 @@ impl MemoryOptimizer {
                     else_region,
                     outputs,
                 } => {
-                    // Pending stores might be read in branches
                     self.pending_stores.clear();
 
-                    // Save pre-branch state to pass into each branch
                     let pre_branch_memory = self.memory_state.clone();
                     let pre_branch_constants = self.constant_values.clone();
 
-                    // Recurse into then_region with pre-branch state
                     self.optimize_region(&mut then_region);
                     let then_memory = self.memory_state.clone();
                     let then_constants = self.constant_values.clone();
 
-                    // Recurse into else_region with pre-branch state
                     let else_region = if let Some(mut er) = else_region {
                         self.memory_state = pre_branch_memory;
                         self.constant_values = pre_branch_constants;
                         self.optimize_region(&mut er);
 
-                        // After both branches: intersect states (keep only what both agree on)
                         self.memory_state =
                             Self::intersect_memory_state(&then_memory, &self.memory_state);
                         self.constant_values =
                             Self::intersect_constants(&then_constants, &self.constant_values);
                         Some(er)
                     } else {
-                        // No else branch: intersect then-state with pre-branch state
-                        // (if the condition is false, state is unchanged)
                         self.memory_state =
                             Self::intersect_memory_state(&then_memory, &pre_branch_memory);
                         self.constant_values =
@@ -336,11 +294,9 @@ impl MemoryOptimizer {
                 } => {
                     self.pending_stores.clear();
 
-                    // Save pre-branch state
                     let pre_branch_memory = self.memory_state.clone();
                     let pre_branch_constants = self.constant_values.clone();
 
-                    // Recurse into each case, collecting exit states
                     let mut exit_memories = Vec::new();
                     let mut exit_constants = Vec::new();
                     for case in &mut cases {
@@ -351,7 +307,6 @@ impl MemoryOptimizer {
                         exit_constants.push(self.constant_values.clone());
                     }
 
-                    // Recurse into default
                     let default = if let Some(mut d) = default {
                         self.memory_state = pre_branch_memory;
                         self.constant_values = pre_branch_constants;
@@ -360,13 +315,11 @@ impl MemoryOptimizer {
                         exit_constants.push(self.constant_values.clone());
                         Some(d)
                     } else {
-                        // No default: pre-branch state is a possible exit state
                         exit_memories.push(pre_branch_memory);
                         exit_constants.push(pre_branch_constants);
                         None
                     };
 
-                    // Intersect all exit states
                     self.memory_state = Self::intersect_memory_states(&exit_memories);
                     self.constant_values = Self::intersect_all_constants(&exit_constants);
 
@@ -389,12 +342,10 @@ impl MemoryOptimizer {
                     mut post,
                     outputs,
                 } => {
-                    // For loops: clear all state and pending stores
                     self.memory_state.clear();
                     self.constant_values.clear();
                     self.pending_stores.clear();
 
-                    // Recurse into loop components
                     condition_statements = self.optimize_statements(condition_statements);
                     self.memory_state.clear();
                     self.constant_values.clear();
@@ -403,7 +354,6 @@ impl MemoryOptimizer {
                     self.constant_values.clear();
                     self.optimize_region(&mut post);
 
-                    // Clear after loop
                     self.memory_state.clear();
                     self.constant_values.clear();
 
@@ -420,19 +370,16 @@ impl MemoryOptimizer {
                 }
 
                 Statement::Block(mut region) => {
-                    // Recurse into block - pending stores might be read in the block
                     self.pending_stores.clear();
                     self.optimize_region(&mut region);
                     processed.push(Statement::Block(region));
                 }
 
                 Statement::Expression(expression) => {
-                    // Check if the expression is a function call - if so, invalidate memory state
                     let is_call = matches!(&expression, Expression::Call { .. });
 
                     let optimized = self.optimize_expr_with_read_tracking(expression);
 
-                    // Invalidate memory state after function calls
                     if is_call {
                         self.memory_state.clear();
                         self.pending_stores.clear();
@@ -441,7 +388,6 @@ impl MemoryOptimizer {
                     processed.push(Statement::Expression(optimized));
                 }
 
-                // External calls read/write memory - all pending stores are "used"
                 Statement::ExternalCall { .. } => {
                     self.memory_state.clear();
                     self.pending_stores.clear();
@@ -454,17 +400,14 @@ impl MemoryOptimizer {
                     processed.push(statement);
                 }
 
-                // Data copy operations write to memory - pending stores at dest might be dead
                 Statement::CodeCopy { dest, .. }
                 | Statement::ExtCodeCopy { dest, .. }
                 | Statement::ReturnDataCopy { dest, .. }
                 | Statement::DataCopy { dest, .. }
                 | Statement::CallDataCopy { dest, .. } => {
-                    // Invalidate the destination region
                     if let Some(static_offset) = self.try_get_static_offset(&dest) {
                         let word_offset = static_offset / 32 * 32;
                         self.memory_state.remove(&word_offset);
-                        // Don't mark as dead - the copy might not overwrite completely
                         self.pending_stores.remove(&word_offset);
                     } else {
                         self.memory_state.clear();
@@ -473,14 +416,11 @@ impl MemoryOptimizer {
                     processed.push(statement);
                 }
 
-                // Log reads from memory - pending stores are used
                 Statement::Log {
                     offset,
                     length,
                     topics,
                 } => {
-                    // Log reads from memory at offset..offset+length
-                    // Mark all pending stores as used (conservative)
                     self.pending_stores.clear();
                     processed.push(Statement::Log {
                         offset,
@@ -489,14 +429,11 @@ impl MemoryOptimizer {
                     });
                 }
 
-                // Return/Revert read from memory - pending stores are used
                 Statement::Return { .. } | Statement::Revert { .. } => {
-                    // Memory escapes to caller - all pending stores are used
                     self.pending_stores.clear();
                     processed.push(statement);
                 }
 
-                // These don't affect heap memory state
                 Statement::SStore { .. }
                 | Statement::TStore { .. }
                 | Statement::MappingSStore { .. }
@@ -515,7 +452,6 @@ impl MemoryOptimizer {
             }
         }
 
-        // Second pass: filter out dead stores
         let result = if self.dead_store_indices.is_empty() {
             processed
         } else {
@@ -527,7 +463,6 @@ impl MemoryOptimizer {
                 .collect()
         };
 
-        // Restore outer scope's dead store tracking state
         self.dead_store_indices = outer_dead_stores;
         self.pending_stores = outer_pending;
 
@@ -543,24 +478,19 @@ impl MemoryOptimizer {
     fn optimize_expr_with_read_tracking(&mut self, expression: Expression) -> Expression {
         match expression {
             Expression::MLoad { offset, region } => {
-                // Track that this offset is being read (for dead store elimination)
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = static_offset / 32 * 32;
 
-                    // Mark the pending store as read (no longer dead)
                     self.pending_stores.remove(&word_offset);
 
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
                         if tracked.offset == static_offset {
                             tracked.was_read = true;
 
-                            // Forward the stored value instead of loading from memory.
                             let stored = tracked.stored_value;
                             self.statistics.loads_eliminated += 1;
                             log::trace!("Load-after-store forwarding at offset {}", static_offset);
 
-                            // If the stored value is narrower than I256, wrap in ZeroExtend
-                            // to match the MLoad return type (always I256).
                             return match stored.value_type {
                                 Type::Int(BitWidth::I256) => Expression::Var(stored.id),
                                 Type::Int(width) if width < BitWidth::I256 => {
@@ -574,7 +504,6 @@ impl MemoryOptimizer {
                         }
                     }
                 } else {
-                    // Unknown offset - clear pending stores (might be read from any)
                     self.pending_stores.clear();
                 }
                 Expression::MLoad { offset, region }
@@ -584,8 +513,6 @@ impl MemoryOptimizer {
                 let static_offset = self.try_get_static_offset(&offset);
                 let static_length = self.try_get_static_offset(&length);
 
-                // Try to fuse mstore(0, w0) + mstore(32, w1) + keccak256(0, 64)
-                // into keccak256_pair(w0, w1) to deduplicate the hash boilerplate.
                 if static_offset == Some(0) && static_length == Some(64) {
                     if let (Some(tracked0), Some(tracked32)) =
                         (self.memory_state.get(&0), self.memory_state.get(&32))
@@ -593,8 +520,6 @@ impl MemoryOptimizer {
                         if tracked0.offset == 0 && tracked32.offset == 32 {
                             let word0 = tracked0.stored_value;
                             let word1 = tracked32.stored_value;
-                            // Mark the scratch stores as dead since keccak256_pair
-                            // handles the stores internally.
                             if let Some(&idx0) = self.pending_stores.get(&0) {
                                 self.dead_store_indices.insert(idx0);
                                 self.statistics.stores_eliminated += 1;
@@ -611,16 +536,10 @@ impl MemoryOptimizer {
                     }
                 }
 
-                // Try to fuse mstore(0, w0) + keccak256(0, 32)
-                // into keccak256_single(w0) to deduplicate the hash boilerplate.
-                // This pays off on OpenZeppelin contracts where 15-20 single-word
-                // keccak sites exist (storage slot hashing for ERC20Votes, etc.).
                 if static_offset == Some(0) && static_length == Some(32) {
                     if let Some(tracked0) = self.memory_state.get(&0) {
                         if tracked0.offset == 0 {
                             let word0 = tracked0.stored_value;
-                            // Mark the scratch store as dead since keccak256_single
-                            // handles the store internally.
                             if let Some(&idx0) = self.pending_stores.get(&0) {
                                 self.dead_store_indices.insert(idx0);
                                 self.statistics.stores_eliminated += 1;
@@ -633,16 +552,11 @@ impl MemoryOptimizer {
                     }
                 }
 
-                // Keccak256 reads multiple words from memory (offset..offset+length).
-                // Conservatively clear ALL pending stores since determining the exact
-                // range of words read is complex and error-prone.
                 self.pending_stores.clear();
                 Expression::Keccak256 { offset, length }
             }
 
             Expression::Keccak256Pair { word0, word1 } => {
-                // Keccak256Pair/Single don't read from tracked memory; they use arguments.
-                // But they write to scratch memory internally, so clear state.
                 self.pending_stores.clear();
                 Expression::Keccak256Pair { word0, word1 }
             }
@@ -653,13 +567,10 @@ impl MemoryOptimizer {
             }
 
             Expression::MappingSLoad { key, slot } => {
-                // MappingSLoad is a compound keccak256+sload; it uses scratch memory
-                // internally, so clear pending stores.
                 self.pending_stores.clear();
                 Expression::MappingSLoad { key, slot }
             }
 
-            // All other expressions pass through unchanged
             other => other,
         }
     }
@@ -672,7 +583,6 @@ impl MemoryOptimizer {
         let mut result = BTreeMap::new();
         for (offset, val_a) in a {
             if let Some(val_b) = b.get(offset) {
-                // Keep only if both branches stored the same value at the same offset
                 if val_a.stored_value.id == val_b.stored_value.id && val_a.offset == val_b.offset {
                     result.insert(*offset, val_a.clone());
                 }
@@ -729,13 +639,10 @@ impl MemoryOptimizer {
         self.constant_values.get(&value.id.0).and_then(|big| {
             let digits = big.to_u64_digits();
             if digits.is_empty() {
-                // Zero is represented by an empty vec
                 Some(0)
             } else if digits.len() == 1 {
-                // Single digit fits in u64
                 Some(digits[0])
             } else {
-                // Value is too large to be a valid memory offset
                 None
             }
         })
@@ -759,7 +666,7 @@ impl MemoryOptimizer {
                         if l >= r {
                             Some(l - r)
                         } else {
-                            None // Underflow - not a valid offset
+                            None
                         }
                     }
                     BinaryOperation::Mul => Some(l * r),
@@ -789,7 +696,7 @@ impl MemoryOptimizer {
                             Some(BigUint::from(0u32))
                         }
                     }
-                    _ => None, // Other operations not tracked
+                    _ => None,
                 }
             }
             _ => None,
@@ -837,7 +744,6 @@ impl FmpPropagation {
 
     /// Runs FMP propagation on an object.
     pub fn propagate_object(&mut self, object: &mut Object) {
-        // Pre-analyze which functions write to FMP (directly or transitively).
         self.fmp_writers = Self::find_fmp_writers(object);
 
         self.propagate_block(&mut object.code);
@@ -855,18 +761,13 @@ impl FmpPropagation {
             if Self::statements_write_fmp(&function.body.statements) {
                 direct_writers.insert(*fid);
             }
-            // Build reverse call graph: for each function called by function,
-            // record that fid calls it
             Self::collect_callees(&function.body.statements, &mut |callee| {
                 callers.entry(callee).or_default().push(*fid);
             });
         }
 
-        // Also check the main code block
         Self::collect_callees(&object.code.statements, &mut |_callee| {});
 
-        // Propagate: if f writes FMP, then any function that calls f
-        // also (transitively) writes FMP
         let mut writers = direct_writers.clone();
         let mut worklist: Vec<FunctionId> = direct_writers.into_iter().collect();
         while let Some(fid) = worklist.pop() {
@@ -926,13 +827,11 @@ impl FmpPropagation {
                     value,
                     region,
                 } => {
-                    // Check if this is a store to offset 0x40 (FMP slot)
                     let resolved_offset = Self::resolve_offset(&constants, &offset);
                     let is_fmp_store =
                         region == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40);
 
                     if is_fmp_store {
-                        // Try to resolve the stored value to a constant
                         let new_fmp = Self::resolve_value(&constants, &value);
                         fmp_value = new_fmp;
                     }
@@ -945,7 +844,6 @@ impl FmpPropagation {
                 }
 
                 Statement::Let { bindings, value } => {
-                    // Check for MLoad of FMP that we can constant-fold
                     let new_value = if let Expression::MLoad {
                         ref offset,
                         ref region,
@@ -974,14 +872,12 @@ impl FmpPropagation {
 
                     let final_value = new_value.unwrap_or(value);
 
-                    // Track constants for offset resolution
                     if bindings.len() == 1 {
                         if let Some(c) = Self::eval_const(&constants, &final_value) {
                             constants.insert(bindings[0].0, c);
                         }
                     }
 
-                    // Only invalidate FMP for calls to functions that write FMP
                     if let Expression::Call { function, .. } = &final_value {
                         if self.fmp_writers.contains(function) {
                             fmp_value = None;
@@ -994,7 +890,6 @@ impl FmpPropagation {
                     });
                 }
 
-                // Control flow: propagate FMP into branches, invalidate if any branch writes FMP
                 Statement::If {
                     condition,
                     inputs,
@@ -1002,7 +897,6 @@ impl FmpPropagation {
                     else_region,
                     outputs,
                 } => {
-                    // Propagate known FMP into then branch
                     self.propagate_region(&mut then_region, fmp_value.clone());
                     let then_writes = Self::region_writes_fmp(&then_region);
 
@@ -1078,9 +972,7 @@ impl FmpPropagation {
                     mut post,
                     outputs,
                 } => {
-                    // For loops: conservatively check if the loop body writes FMP
                     self.propagate_region(&mut body, fmp_value.clone());
-                    // Process condition_statements as a region-like sequence
                     condition_statements =
                         self.propagate_statements(condition_statements, fmp_value.clone());
                     self.propagate_region(&mut post, fmp_value.clone());
@@ -1104,7 +996,6 @@ impl FmpPropagation {
                     });
                 }
 
-                // MCopy with dest=0x40 could modify FMP
                 Statement::MCopy { dest, src, length } => {
                     if Self::resolve_offset(&constants, &dest) == Some(0x40) {
                         fmp_value = None;
@@ -1112,17 +1003,14 @@ impl FmpPropagation {
                     result.push(Statement::MCopy { dest, src, length });
                 }
 
-                // Nested block: propagate FMP into the block
                 Statement::Block(mut region) => {
                     self.propagate_region(&mut region, fmp_value.clone());
-                    // Check if the block writes FMP
                     if Self::region_writes_fmp(&region) {
                         fmp_value = None;
                     }
                     result.push(Statement::Block(region));
                 }
 
-                // Side-effect expression: check for calls to FMP-writing functions
                 Statement::Expression(ref expression) => {
                     if let Expression::Call { function, .. } = expression {
                         if self.fmp_writers.contains(function) {
@@ -1132,13 +1020,11 @@ impl FmpPropagation {
                     result.push(statement);
                 }
 
-                // External calls and creates can modify memory (including FMP)
                 Statement::ExternalCall { .. } | Statement::Create { .. } => {
                     fmp_value = None;
                     result.push(statement);
                 }
 
-                // All other statements pass through unchanged
                 other => {
                     result.push(other);
                 }
@@ -1244,14 +1130,11 @@ mod tests {
 
         let mut opt = MemoryOptimizer::new();
 
-        // Create IR for: let offset = 64; let value = 42; mstore(offset, value); let result = mload(offset)
-        // After optimization, the mload should be eliminated
         let offset_id = ValueId(1);
         let value_id = ValueId(2);
         let result_id = ValueId(3);
 
         let statements = vec![
-            // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
@@ -1259,7 +1142,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let value = 42
             Statement::Let {
                 bindings: vec![value_id],
                 value: Expression::Literal {
@@ -1267,7 +1149,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // mstore(offset, value)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1279,7 +1160,6 @@ mod tests {
                 },
                 region: MemoryRegion::Unknown,
             },
-            // let result = mload(offset)
             Statement::Let {
                 bindings: vec![result_id],
                 value: Expression::MLoad {
@@ -1302,11 +1182,8 @@ mod tests {
 
         let statistics = opt.optimize_object(&mut object);
 
-        // Load-after-store elimination should forward the stored value.
-        // Since the stored value is I256, it should be replaced with Var.
         assert_eq!(statistics.loads_eliminated, 1);
 
-        // The mload should be replaced with Var (forwarding the stored value)
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             assert!(
                 matches!(value, Expression::Var(_)),
@@ -1324,15 +1201,12 @@ mod tests {
 
         let mut opt = MemoryOptimizer::new();
 
-        // Create IR for: let base = 32; let offset = add(base, 32); mstore(offset, 1); let x = mload(offset)
-        // The offset should be resolved to 64 (32 + 32), and load should be eliminated
         let base_id = ValueId(1);
         let offset_id = ValueId(2);
         let value_id = ValueId(3);
         let result_id = ValueId(4);
 
         let statements = vec![
-            // let base = 32
             Statement::Let {
                 bindings: vec![base_id],
                 value: Expression::Literal {
@@ -1340,7 +1214,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let offset = add(base, 32)
             Statement::Let {
                 bindings: vec![offset_id],
                 value: Expression::Binary {
@@ -1350,12 +1223,11 @@ mod tests {
                         value_type: Type::Int(BitWidth::I256),
                     },
                     rhs: Value {
-                        id: ValueId(100), // Placeholder - this needs a temp
+                        id: ValueId(100),
                         value_type: Type::Int(BitWidth::I256),
                     },
                 },
             },
-            // let value = 1
             Statement::Let {
                 bindings: vec![value_id],
                 value: Expression::Literal {
@@ -1363,7 +1235,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // mstore(offset, value)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1375,7 +1246,6 @@ mod tests {
                 },
                 region: MemoryRegion::Unknown,
             },
-            // let result = mload(offset)
             Statement::Let {
                 bindings: vec![result_id],
                 value: Expression::MLoad {
@@ -1396,17 +1266,13 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        // Note: This test will currently fail because the rhs of the Binary is a placeholder
-        // We need to improve the test to properly construct the add expression
         let _stats = opt.optimize_object(&mut object);
-        // For now, just verify no crash occurs
     }
 
     #[test]
     fn test_zero_offset_handling() {
         let mut opt = MemoryOptimizer::new();
 
-        // Verify that zero offset is correctly tracked
         let zero_id = ValueId(1);
         opt.constant_values.insert(zero_id.0, BigUint::from(0u32));
 
@@ -1425,14 +1291,11 @@ mod tests {
 
         let mut opt = MemoryOptimizer::new();
 
-        // Create IR for: mstore(64, 1); mstore(64, 2)
-        // The first store is dead because it's overwritten before being read
         let offset_id = ValueId(1);
         let value1_id = ValueId(2);
         let value2_id = ValueId(3);
 
         let statements = vec![
-            // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
@@ -1440,7 +1303,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let value1 = 1
             Statement::Let {
                 bindings: vec![value1_id],
                 value: Expression::Literal {
@@ -1448,7 +1310,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let value2 = 2
             Statement::Let {
                 bindings: vec![value2_id],
                 value: Expression::Literal {
@@ -1456,7 +1317,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // mstore(offset, value1) - this should be eliminated (dead)
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1468,7 +1328,6 @@ mod tests {
                 },
                 region: MemoryRegion::Unknown,
             },
-            // mstore(offset, value2) - this overwrites the previous
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1492,14 +1351,10 @@ mod tests {
 
         let statistics = opt.optimize_object(&mut object);
 
-        // Should have eliminated 1 dead store
         assert_eq!(statistics.stores_eliminated, 1);
 
-        // Should have 4 statements now (3 lets + 1 mstore)
-        // The first mstore should be removed
         assert_eq!(object.code.statements.len(), 4);
 
-        // The remaining mstore should be the one with value2
         if let Statement::MStore { value, .. } = &object.code.statements[3] {
             assert_eq!(value.id, value2_id);
         } else {
@@ -1513,15 +1368,12 @@ mod tests {
 
         let mut opt = MemoryOptimizer::new();
 
-        // Create IR for: mstore(64, 1); mload(64); mstore(64, 2)
-        // The first store should NOT be eliminated because it's read before being overwritten
         let offset_id = ValueId(1);
         let value1_id = ValueId(2);
         let value2_id = ValueId(3);
         let result_id = ValueId(4);
 
         let statements = vec![
-            // let offset = 64
             Statement::Let {
                 bindings: vec![offset_id],
                 value: Expression::Literal {
@@ -1529,7 +1381,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let value1 = 1
             Statement::Let {
                 bindings: vec![value1_id],
                 value: Expression::Literal {
@@ -1537,7 +1388,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // let value2 = 2
             Statement::Let {
                 bindings: vec![value2_id],
                 value: Expression::Literal {
@@ -1545,7 +1395,6 @@ mod tests {
                     value_type: Type::Int(BitWidth::I256),
                 },
             },
-            // mstore(offset, value1) - NOT dead because it's read
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1557,7 +1406,6 @@ mod tests {
                 },
                 region: MemoryRegion::Unknown,
             },
-            // let result = mload(offset) - reads value1
             Statement::Let {
                 bindings: vec![result_id],
                 value: Expression::MLoad {
@@ -1568,7 +1416,6 @@ mod tests {
                     region: MemoryRegion::Unknown,
                 },
             },
-            // mstore(offset, value2) - overwrites
             Statement::MStore {
                 offset: Value {
                     id: offset_id,
@@ -1592,13 +1439,10 @@ mod tests {
 
         let statistics = opt.optimize_object(&mut object);
 
-        // Should have eliminated 0 stores (the first is read, the second is live at end)
         assert_eq!(statistics.stores_eliminated, 0);
 
-        // Load-after-store elimination should forward the stored value
         assert_eq!(statistics.loads_eliminated, 1);
 
-        // Should have all 6 statements (load is replaced, not removed)
         assert_eq!(object.code.statements.len(), 6);
     }
 
@@ -1607,11 +1451,6 @@ mod tests {
         use crate::ir::{MemoryRegion, Object};
         use num::BigUint;
 
-        // Build a simple IR:
-        //   let v1 = 0x80
-        //   let v2 = 0x40
-        //   mstore(v2, v1) /* free_ptr */
-        //   let v3 = mload(v2) /* free_ptr */
         let v1 = make_value(1);
         let v2 = make_value(2);
         let v3_id = ValueId(3);
@@ -1658,7 +1497,6 @@ mod tests {
 
         assert_eq!(fmp.loads_eliminated, 1, "Should eliminate 1 FMP load");
 
-        // The 4th statement should now be a Literal(0x80) instead of MLoad
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             match value {
                 Expression::Literal { value: v, .. } => {

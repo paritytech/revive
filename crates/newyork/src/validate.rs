@@ -132,40 +132,32 @@ impl Validator {
     }
 
     fn validate_object(&mut self, object: &Object) {
-        // Collect all function IDs first
         for id in object.functions.keys() {
             self.known_functions.insert(id.0);
         }
 
-        // Validate main code block
         self.validate_block(&object.code, &format!("object '{}' code", object.name));
 
-        // Validate all functions
         for function in object.functions.values() {
             self.validate_function(function);
         }
 
-        // Validate subobjects recursively
         for subobject in &object.subobjects {
             self.validate_object(subobject);
         }
     }
 
     fn validate_function(&mut self, function: &Function) {
-        // Start fresh scope for function
         self.enter_scope();
 
-        // Define parameters
         for (id, _ty) in &function.parameters {
             self.define(*id);
         }
 
-        // Define initial return value IDs
         for id in &function.return_values_initial {
             self.define(*id);
         }
 
-        // Validate return value counts match
         if function.returns.len() != function.return_values_initial.len() {
             self.error(ValidationError::FunctionError(format!(
                 "function '{}': returns count ({}) != return_values_initial count ({})",
@@ -184,10 +176,8 @@ impl Validator {
             )));
         }
 
-        // Validate body
         self.validate_block(&function.body, &format!("function '{}'", function.name));
 
-        // Check that final return values are defined
         for id in &function.return_values {
             self.use_value_id(*id, &format!("function '{}' return", function.name));
         }
@@ -206,7 +196,6 @@ impl Validator {
             self.validate_statement(statement, &format!("{}[{}]", context, i));
         }
 
-        // Validate yields
         for value in &region.yields {
             self.use_value(value, &format!("{} yield", context));
         }
@@ -215,10 +204,8 @@ impl Validator {
     fn validate_statement(&mut self, statement: &Statement, context: &str) {
         match statement {
             Statement::Let { bindings, value } => {
-                // First validate the expression (uses)
                 self.validate_expression(value, context);
 
-                // Then define the bindings
                 for id in bindings {
                     self.define(*id);
                 }
@@ -276,13 +263,11 @@ impl Validator {
                     self.use_value(v, context);
                 }
 
-                // Validate then region in its own scope
                 self.enter_scope();
                 self.validate_region(then_region, &format!("{} then", context));
                 let then_yield_count = then_region.yields.len();
                 self.exit_scope();
 
-                // Validate else region if present
                 let else_yield_count = if let Some(else_region) = else_region {
                     self.enter_scope();
                     self.validate_region(else_region, &format!("{} else", context));
@@ -290,11 +275,9 @@ impl Validator {
                     self.exit_scope();
                     count
                 } else {
-                    // No else - implicit yield of inputs
                     inputs.len()
                 };
 
-                // Check yield counts match outputs
                 if outputs.len() != then_yield_count {
                     self.error(ValidationError::YieldCountMismatch {
                         expected: outputs.len(),
@@ -311,7 +294,6 @@ impl Validator {
                     });
                 }
 
-                // Define output values
                 for id in outputs {
                     self.define(*id);
                 }
@@ -329,7 +311,6 @@ impl Validator {
                     self.use_value(v, context);
                 }
 
-                // Validate each case
                 for (i, case) in cases.iter().enumerate() {
                     self.enter_scope();
                     self.validate_region(&case.body, &format!("{} case[{}]", context, i));
@@ -344,7 +325,6 @@ impl Validator {
                     self.exit_scope();
                 }
 
-                // Validate default
                 if let Some(default_region) = default {
                     self.enter_scope();
                     self.validate_region(default_region, &format!("{} default", context));
@@ -359,7 +339,6 @@ impl Validator {
                     self.exit_scope();
                 }
 
-                // Define output values
                 for id in outputs {
                     self.define(*id);
                 }
@@ -375,12 +354,10 @@ impl Validator {
                 outputs,
                 ..
             } => {
-                // Validate init values
                 for v in initial_values {
                     self.use_value(v, context);
                 }
 
-                // Loop variables must match init values
                 if loop_variables.len() != initial_values.len() {
                     self.error(ValidationError::FunctionError(format!(
                         "{}: loop_variables count ({}) != initial_values count ({})",
@@ -390,27 +367,21 @@ impl Validator {
                     )));
                 }
 
-                // Enter loop scope and define loop variables
                 self.enter_scope();
                 for id in loop_variables {
                     self.define(*id);
                 }
 
-                // Validate condition statements
                 for (i, statement) in condition_statements.iter().enumerate() {
                     self.validate_statement(statement, &format!("{} cond_stmt[{}]", context, i));
                 }
 
-                // Validate condition expression
                 self.validate_expression(condition, &format!("{} condition", context));
 
-                // Validate body
                 self.validate_region(body, &format!("{} body", context));
 
-                // Validate post
                 self.validate_region(post, &format!("{} post", context));
 
-                // Post yields should match loop variables count (for next iteration)
                 if loop_variables.len() != post.yields.len() {
                     self.error(ValidationError::YieldCountMismatch {
                         expected: loop_variables.len(),
@@ -421,7 +392,6 @@ impl Validator {
 
                 self.exit_scope();
 
-                // Outputs should match loop variables (final values)
                 if outputs.len() != loop_variables.len() {
                     self.error(ValidationError::FunctionError(format!(
                         "{}: outputs count ({}) != loop_variables count ({})",
@@ -431,7 +401,6 @@ impl Validator {
                     )));
                 }
 
-                // Define output values
                 for id in outputs {
                     self.define(*id);
                 }
@@ -760,7 +729,7 @@ mod tests {
             code: Block {
                 statements: vec![Statement::Let {
                     bindings: vec![ValueId(1)],
-                    value: Expression::Var(ValueId(0)), // v0 not defined
+                    value: Expression::Var(ValueId(0)),
                 }],
             },
             functions: BTreeMap::new(),
@@ -793,13 +762,13 @@ mod tests {
                         inputs: vec![],
                         then_region: Region {
                             statements: vec![],
-                            yields: vec![int_value(0)], // yields 1 value
+                            yields: vec![int_value(0)],
                         },
                         else_region: Some(Region {
                             statements: vec![],
-                            yields: vec![], // yields 0 values
+                            yields: vec![],
                         }),
-                        outputs: vec![ValueId(1)], // expects 1 output
+                        outputs: vec![ValueId(1)],
                     },
                 ],
             },
@@ -862,7 +831,7 @@ mod tests {
                 name: "bad".to_string(),
                 parameters: vec![],
                 returns: vec![Type::Int(BitWidth::I256), Type::Int(BitWidth::I256)],
-                return_values_initial: vec![ValueId(0)], // Only 1, should be 2
+                return_values_initial: vec![ValueId(0)],
                 return_values: vec![ValueId(0)],
                 body: Block { statements: vec![] },
                 call_count: 0,

@@ -32,19 +32,8 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
     let mut statistics = GuardNarrowStats::default();
 
-    // Pre-scan: detect functions that always terminate (panic helpers, etc.).
-    // The narrower needs to recognize `if guard { panic_call() }` as a guard
-    // pattern just like `if guard { revert(0,0) }`. Without this, the
-    // canonical Solidity finalize_allocation overflow check —
-    // `if or(gt(sum, UINT64_MAX), lt(sum, addend)) { panic_error_0x41() }` —
-    // never narrows the addition result.
     let noreturn = detect_noreturn_functions(object);
 
-    // Pre-scan: detect validator functions (void, single param, contains
-    // eq-based guard pattern like `if iszero(eq(param, and(param, MASK))) { revert }`).
-    // These prove their parameter fits in MASK bits, but the proof doesn't
-    // propagate to callers. We record (function_id → mask) so that call sites
-    // can insert narrowing ANDs.
     let validators = detect_validator_functions(object, &noreturn);
 
     let _ = narrow_block(
@@ -62,9 +51,6 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
             &validators,
             &noreturn,
         );
-        // Apply replacements to function return values. Without this, functions
-        // like abi_decode_address return the unmasked value (i256) instead of
-        // the AND-masked value (i160), blocking return type narrowing.
         if !replacements.is_empty() {
             for return_value in &mut function.return_values {
                 if let Some(&new_id) = replacements.get(&return_value.0) {
@@ -74,27 +60,8 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
         }
     }
 
-    // Body-level rewrite for the canonical Solidity allocator: insert an
-    // explicit `if gt(p1, UINT64_MAX) { panic_0x41 }` at the top of every
-    // `finalize_allocation`-shaped function and replace subsequent uses of
-    // `p1` with `and(p1, UINT64_MAX)`. The function signature stays at
-    // `(i64, i256)` so caller IR is unchanged, but the body now exposes
-    // an explicit i64 bound on `p1` to the rest of the pipeline. The
-    // existing `or(gt(sum, UINT64_MAX), lt(sum, p0))` overflow check
-    // becomes structurally redundant in the i64 regime — LLVM/IPSCCP can
-    // recognise that and shrink the body without changing semantics.
     rewrite_allocator_p1_with_early_check(object, &mut next_id, &noreturn);
 
-    // Pattern-based parameter narrowing for the canonical Solidity
-    // allocator. After guard_narrow has applied addend narrowing inside
-    // `finalize_allocation`-shaped functions (`add(p0, p1)` followed by an
-    // `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { panic }` overflow check),
-    // both parameters provably fit in i64 — yet `narrow_function_params` can't
-    // see this because the lt/gt comparisons demand I256. Detect the
-    // structural shape and narrow the parameters directly. Plain truncation
-    // at call sites is sound because the function's own overflow check
-    // would have trapped on any caller that passed a wide value, and the
-    // truncation happens in the caller's frame.
     narrow_allocator_param_types(object, &noreturn);
 
     for subobject in &mut object.subobjects {
@@ -227,14 +194,6 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
             continue;
         }
 
-        // Pattern 1: 2-param finalize_allocation shape. Narrow ONLY p0
-        // (the FMP-typed addend that's also the lt rhs in the overflow
-        // check). The other param can be a user-controlled allocation
-        // size — `new uint[](2 << 100)` is a valid Solidity expression
-        // that *intentionally* triggers the overflow check; truncating
-        // it at the call site would silently make the panic disappear.
-        // p0 is always sourced from `mload(0x40)` in OZ contracts and
-        // bounded by heap_size, so plain truncation is sound.
         if function.parameters.len() == 2
             && function.returns.is_empty()
             && function
@@ -249,18 +208,6 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
                 continue;
             }
         }
-
-        // Pattern 2 (`if gt(p, UINT64_MAX) { panic }` entry guard) is
-        // intentionally NOT applied here: callers pass user-controlled
-        // sizes such as `new uint[](2 << 100)`, and the panic the guard
-        // is *supposed* to trigger would be silently lost if we plain-
-        // truncated the i256 to i64 at the call site. The
-        // try_catch/call/panic and try_catch/create/panic differential
-        // tests (cases 7 / 16, panic code 0x41) exercise exactly this
-        // path. The body-internal guard_narrow AND-mask (iter25/26) is
-        // still inserted, so the function body itself still benefits
-        // from narrowed downstream arithmetic — just not via a narrowed
-        // signature.
     }
 
     for (function_id, indices) in narrow_params {
@@ -283,7 +230,6 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
 fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
     use num::Zero;
 
-    // Pre-pass: build maps for binary expressions in this block.
     let mut add_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut and_results: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
     let mut gt_const_checks: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
@@ -310,7 +256,6 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
                             add_results.insert(bid, (lhs.id.0, rhs.id.0));
                         }
                         BinaryOperation::And => {
-                            // Track `and(x, MASK)` where MASK is a constant.
                             if let Some(mask) = constants.get(&rhs.id.0) {
                                 and_results.insert(bid, (lhs.id.0, mask.clone()));
                             } else if let Some(mask) = constants.get(&lhs.id.0) {
@@ -323,8 +268,6 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
                             }
                         }
                         BinaryOperation::Lt => {
-                            // `lt(sum, addend)` — record both operands so we
-                            // can match `lt(sum, p0)`.
                             lt_against_addend.insert(bid, (lhs.id.0, rhs.id.0));
                         }
                         BinaryOperation::Or => {
@@ -348,15 +291,11 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
         return false;
     };
 
-    // Walk back through replacements applied during this guard pass: the
-    // mstore value is typically a fresh `and(sum, MASK)` we inserted. Step
-    // through the and to recover the original sum.
     let sum_id = match and_results.get(&fmp_val) {
         Some((orig, _mask)) => *orig,
         None => fmp_val,
     };
 
-    // The sum must be `add(p0, x)` (or `add(x, p0)`).
     let Some(&(add_lhs, add_rhs)) = add_results.get(&sum_id) else {
         return false;
     };
@@ -365,24 +304,16 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
         return false;
     }
 
-    // Check for an overflow guard in the OR chain that contains both
-    // `gt(sum, UINT64_MAX)` and `lt(sum, p0)`.
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
     let mut visit: Vec<u32> = Vec::new();
     let mut have_gt_sum_max = false;
     let mut have_lt_sum_p0 = false;
 
     for (or_id, (l, r)) in &or_results {
-        // Walk: did this or-result get used as an `if` condition somewhere
-        // in the block, and is the if a terminator? We don't enforce the
-        // last detail here (a noreturn-aware check would, but caller-side
-        // guard_narrow has already applied if it's a guard); just verify
-        // the OR's operands.
         let _ = or_id;
         visit.push(*l);
         visit.push(*r);
     }
-    // Also accept un-or'd direct gt/lt pairs.
     for id in &visit {
         if let Some((value, c)) = gt_const_checks.get(id) {
             if *value == sum_id && *c == uint64_max {
@@ -395,7 +326,6 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
             }
         }
     }
-    // Also check direct (no-OR) presence in the block.
     for (id, (value, c)) in &gt_const_checks {
         let _ = id;
         if *value == sum_id && *c == uint64_max {
@@ -409,8 +339,6 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
         }
     }
 
-    // Allow the loose form (only one of the two): solc emits both, so
-    // require both to be safe.
     have_gt_sum_max && have_lt_sum_p0
 }
 
@@ -482,7 +410,6 @@ fn detect_validator_functions(
     let mut validators = BTreeMap::new();
 
     for (function_id, function) in &object.functions {
-        // Must be void (no return values) with exactly one parameter
         if !function.returns.is_empty() || function.parameters.len() != 1 {
             continue;
         }
@@ -505,11 +432,10 @@ fn detect_validator_mask(
 ) -> Option<BigUint> {
     let statements = &block.statements;
 
-    // Track definitions to resolve the pattern
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    let mut and_defs: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new(); // and_id -> (orig_id, mask)
-    let mut eq_mask_defs: BTreeMap<u32, BigUint> = BTreeMap::new(); // eq_id -> mask
-    let mut iszero_eq_defs: BTreeMap<u32, BigUint> = BTreeMap::new(); // iszero_id -> mask
+    let mut and_defs: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
+    let mut eq_mask_defs: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut iszero_eq_defs: BTreeMap<u32, BigUint> = BTreeMap::new();
 
     for statement in statements {
         if let Statement::Let {
@@ -529,7 +455,6 @@ fn detect_validator_mask(
                 constants.insert(bid, lit_val.clone());
             }
 
-            // Track and(param, MASK)
             if let Expression::Binary {
                 operation: BinaryOperation::And,
                 ref lhs,
@@ -552,7 +477,6 @@ fn detect_validator_mask(
                 }
             }
 
-            // Track eq(param, and_result) or eq(and_result, param)
             if let Expression::Binary {
                 operation: BinaryOperation::Eq,
                 ref lhs,
@@ -570,7 +494,6 @@ fn detect_validator_mask(
                 }
             }
 
-            // Track iszero(eq_check)
             if let Expression::Unary {
                 operation: UnaryOperation::IsZero,
                 ref operand,
@@ -582,7 +505,6 @@ fn detect_validator_mask(
             }
         }
 
-        // Check for if iszero_check { <terminates> }
         if let Statement::If {
             ref condition,
             ref then_region,
@@ -615,62 +537,32 @@ fn narrow_block(
     validators: &BTreeMap<u32, BigUint>,
     noreturn: &std::collections::BTreeSet<u32>,
 ) -> BTreeMap<u32, ValueId> {
-    // First, recurse into nested regions within each statement.
     for statement in &mut block.statements {
         narrow_stmt_regions(statement, next_id, statistics, validators, noreturn);
     }
 
-    // Now process this block's top-level statements for guard patterns.
     let statements = std::mem::take(&mut block.statements);
     let mut new_stmts = Vec::with_capacity(statements.len() + 16);
 
-    // Track known constants and gt-comparison definitions.
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    // gt_check_id -> (guarded_value, boundary_mask)
     let mut gt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
-    // Track and(value, MASK) definitions for eq-based patterns:
-    // and_result_id -> (original_value_id, and_result_id_as_ValueId)
     let mut and_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    // Track eq(value, and(value, MASK)) definitions:
-    // eq_result_id -> original_value_id (to be replaced with and_result after guard)
     let mut eq_mask_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    // Track iszero(eq_check) definitions:
-    // iszero_result_id -> (original_value_id, and_result_id)
     let mut iszero_eq_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    // Track or(a, b) definitions for combined-check guards like
-    // `if or(gt(value, MAX), lt(sum, addend)) { panic }` in finalize_allocation.
-    // or_result_id -> (lhs_id, rhs_id)
     let mut or_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    // Track add(a, b) definitions so we can recognise the canonical
-    // overflow check pattern `sum = add(a, b); if lt(sum, a) { panic }`
-    // and narrow both addends when the sum is bounded.
-    // add_result_id -> (lhs_id, rhs_id)
     let mut add_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    // Track lt(sum, addend) definitions for overflow checks.
-    // lt_result_id -> (sum_id, addend_id)
     let mut lt_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    // Track lt(value, K) where K is a power-of-two constant. After
-    // `if iszero(lt(value, K)) { panic }` falls through, value < K so value
-    // fits in `log2(K)` bits and can be narrowed by `and(value, K-1)`.
-    // Solidity emits this for enum range checks (`if value >= 8 panic`)
-    // and bounded-integer guards.
-    // lt_result_id -> (val_value, mask = K-1)
     let mut lt_const_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
-    // Track iszero(lt_const) so the if-guard can find the original value.
-    // iszero_result_id -> (val_value, mask)
     let mut iszero_lt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
-    // Accumulated replacements: old_value_id -> new_value_id
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
     for statement in statements {
-        // Apply accumulated replacements to this statement.
         let statement = if replacements.is_empty() {
             statement
         } else {
             replace_value_ids_in_statement(statement, &replacements)
         };
 
-        // Track constant definitions (let vN = 0xFFFF...).
         if let Statement::Let {
             ref bindings,
             ref value,
@@ -686,18 +578,15 @@ fn narrow_block(
                     constants.insert(bid, lit_val.clone());
                 }
 
-                // Track gt(value, const_boundary) definitions.
                 if let Expression::Binary {
                     operation: BinaryOperation::Gt,
                     ref lhs,
                     ref rhs,
                 } = value
                 {
-                    // Resolve rhs through replacements and check if it's a boundary constant.
                     let rhs_id = resolve_id(rhs.id, &replacements);
                     if let Some(mask) = constants.get(&rhs_id.0) {
                         if is_boundary_mask(mask) {
-                            // gt(value, MASK): if true, value > MASK (revert); if false, value <= MASK
                             let guarded = Value {
                                 id: resolve_id(lhs.id, &replacements),
                                 value_type: lhs.value_type,
@@ -707,8 +596,6 @@ fn narrow_block(
                     }
                 }
 
-                // Track and(value, MASK) where MASK is a boundary mask.
-                // Used for eq-based address validation: iszero(eq(value, and(value, MASK)))
                 if let Expression::Binary {
                     operation: BinaryOperation::And,
                     ref lhs,
@@ -717,7 +604,6 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    // Check if either operand is a boundary mask constant.
                     if let Some(mask) = constants.get(&rhs_id.0) {
                         if is_wide_boundary_mask(mask) {
                             and_defs.insert(bid, (lhs_id.0, ValueId(bid)));
@@ -729,7 +615,6 @@ fn narrow_block(
                     }
                 }
 
-                // Track eq(value, and(value, MASK)) definitions.
                 if let Expression::Binary {
                     operation: BinaryOperation::Eq,
                     ref lhs,
@@ -738,7 +623,6 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    // Check both orderings: eq(value, and_result) or eq(and_result, value)
                     if let Some(&(orig_id, and_val_id)) = and_defs.get(&rhs_id.0) {
                         if orig_id == lhs_id.0 {
                             eq_mask_defs.insert(bid, (orig_id, and_val_id));
@@ -750,7 +634,6 @@ fn narrow_block(
                     }
                 }
 
-                // Track iszero(eq_check) definitions.
                 if let Expression::Unary {
                     operation: UnaryOperation::IsZero,
                     ref operand,
@@ -762,10 +645,6 @@ fn narrow_block(
                     }
                 }
 
-                // Track or(a, b) definitions so combined-check guards can
-                // pull narrowing facts from any operand that is itself a gt
-                // boundary check (the typical finalize_allocation pattern is
-                // `if or(gt(sum, UINT64_MAX), lt(sum, addend)) { panic }`).
                 if let Expression::Binary {
                     operation: BinaryOperation::Or,
                     ref lhs,
@@ -777,8 +656,6 @@ fn narrow_block(
                     or_defs.insert(bid, (lhs_id.0, rhs_id.0));
                 }
 
-                // Track add(a, b) definitions for overflow-aware addend
-                // narrowing.
                 if let Expression::Binary {
                     operation: BinaryOperation::Add,
                     ref lhs,
@@ -790,8 +667,6 @@ fn narrow_block(
                     add_defs.insert(bid, (lhs_id.0, rhs_id.0));
                 }
 
-                // Track lt(sum, addend) definitions — the canonical Solidity
-                // unsigned-add-overflow check.
                 if let Expression::Binary {
                     operation: BinaryOperation::Lt,
                     ref lhs,
@@ -802,12 +677,6 @@ fn narrow_block(
                     let rhs_id = resolve_id(rhs.id, &replacements);
                     lt_defs.insert(bid, (lhs_id.0, rhs_id.0));
 
-                    // Additionally: if rhs is a constant K = 2^N (power of
-                    // two), record lt(value, K) so a downstream
-                    // `if iszero(this_lt) { panic }` can narrow value to N
-                    // bits via `and(value, K-1)`. This is the canonical enum
-                    // range check `if uint(value) >= EnumLen { panic }` Solidity
-                    // emits as `if iszero(lt(value, EnumLen)) { panic }`.
                     if let Some(k) = constants.get(&rhs_id.0) {
                         let k_minus_one = if k.is_zero() { BigUint::ZERO } else { k - 1u32 };
                         if !k.is_zero() && (k & &k_minus_one) == BigUint::ZERO {
@@ -826,8 +695,6 @@ fn narrow_block(
                 }
             }
 
-            // After tracking all binary definitions, propagate into iszero's so the
-            // guard handler can recognise `if iszero(lt_const) { panic }`.
             if let Statement::Let {
                 ref bindings,
                 value:
@@ -847,7 +714,6 @@ fn narrow_block(
             }
         }
 
-        // Check for guard pattern: if gt_check { <terminates> }
         if let Statement::If {
             ref condition,
             ref then_region,
@@ -861,17 +727,8 @@ fn narrow_block(
                 && outputs.is_empty()
                 && region_terminates(then_region, noreturn)
             {
-                // Resolve the condition through any or-chains to find guard
-                // checks. `if or(or(a, b), c) { panic }` implies all of a, b, c
-                // are false on the fall-through; collect every gt boundary
-                // check reachable through the or operands.
                 let mut gt_guards: Vec<(Value, BigUint)> = Vec::new();
                 let mut iszero_eq_guards: Vec<(u32, ValueId)> = Vec::new();
-                // Track lt(sum, addend) operands inside the OR-chain. These
-                // alone don't narrow anything, but combined with a gt(sum, MASK)
-                // for the SAME sum where sum = add(a, b) and addend == a or b,
-                // they prove no wraparound and we can narrow BOTH addends to
-                // MASK bits as well.
                 let mut lt_overflows: Vec<(u32, u32)> = Vec::new();
                 let mut visit = vec![cond_id.0];
                 let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
@@ -886,9 +743,6 @@ fn narrow_block(
                     } else if let Some(&(sum_id, addend_id)) = lt_defs.get(&id) {
                         lt_overflows.push((sum_id, addend_id));
                     } else if let Some((value, mask)) = iszero_lt_defs.get(&id) {
-                        // `if iszero(lt(value, K)) { panic }` falls through with
-                        // `lt(value, K)` true, i.e., value < K. Treat the same as
-                        // a gt-mask narrowing of value.
                         gt_guards.push((*value, mask.clone()));
                     } else if let Some(&(lhs_id, rhs_id)) = or_defs.get(&id) {
                         visit.push(lhs_id);
@@ -896,26 +750,14 @@ fn narrow_block(
                     }
                 }
 
-                // Overflow-aware addend narrowing: when the OR chain proves
-                // both `sum < MASK` (gt guard) and `sum >= addend` (lt
-                // overflow check), the addition didn't wrap, so BOTH addends
-                // individually fit in MASK bits. Solidity emits this combined
-                // check for every checked addition (finalize_allocation,
-                // array_allocation_size_bytes, copy_byte_array_to_storage,
-                // ABI offset arithmetic, ...).
                 let mut extra_gt_guards: Vec<(Value, BigUint)> = Vec::new();
                 for (sum_id, addend_id) in &lt_overflows {
                     let Some(&(add_lhs, add_rhs)) = add_defs.get(sum_id) else {
                         continue;
                     };
-                    // Match a gt guard on the same sum to obtain the bound.
                     let Some((_, mask)) = gt_guards.iter().find(|(g, _)| g.id.0 == *sum_id) else {
                         continue;
                     };
-                    // Solidity's overflow check uses one of the addends as
-                    // the lt rhs (`if lt(sum, a)`), so confirm the structural
-                    // match before propagating narrowness to the OTHER addend
-                    // too.
                     if *addend_id != add_lhs && *addend_id != add_rhs {
                         continue;
                     }
@@ -937,16 +779,10 @@ fn narrow_block(
                 }
                 gt_guards.extend(extra_gt_guards);
 
-                // Apply gt-mask narrowing for each guarded value reachable
-                // through the (possibly nested) or-chain. This catches the
-                // `or(gt, lt)` pattern in finalize_allocation where the gt
-                // operand bounds the sum to UINT64_MAX.
                 if !gt_guards.is_empty() || !iszero_eq_guards.is_empty() {
                     new_stmts.push(statement);
 
                     for (guarded_val, mask) in gt_guards {
-                        // Skip if this value was already narrowed by an
-                        // earlier (more specific) guard in this block.
                         if replacements.contains_key(&guarded_val.id.0) {
                             continue;
                         }
@@ -985,9 +821,6 @@ fn narrow_block(
             }
         }
 
-        // Interprocedural validator narrowing: detect calls to validator functions
-        // that prove their argument fits in a boundary mask. Insert AND after the
-        // call to give type inference the narrowed value.
         if let Statement::Expression(Expression::Call {
             ref function,
             ref arguments,
@@ -996,7 +829,6 @@ fn narrow_block(
             if arguments.len() == 1 {
                 if let Some(mask) = validators.get(&function.0) {
                     let arg_id = resolve_id(arguments[0].id, &replacements);
-                    // Don't re-narrow if already replaced (e.g., earlier validator call)
                     if let std::collections::btree_map::Entry::Vacant(e) =
                         replacements.entry(arg_id.0)
                     {
@@ -1005,10 +837,8 @@ fn narrow_block(
                         let narrow_id = ValueId(*next_id);
                         *next_id += 1;
 
-                        // Push the validator call first.
                         new_stmts.push(statement);
 
-                        // Emit: let mask_id = MASK
                         new_stmts.push(Statement::Let {
                             bindings: vec![mask_id],
                             value: Expression::Literal {
@@ -1017,7 +847,6 @@ fn narrow_block(
                             },
                         });
 
-                        // Emit: let narrow_id = and(argument, mask_id)
                         new_stmts.push(Statement::Let {
                             bindings: vec![narrow_id],
                             value: Expression::Binary {
@@ -1030,7 +859,6 @@ fn narrow_block(
                             },
                         });
 
-                        // Replace subsequent uses of the argument.
                         e.insert(narrow_id);
                         statistics.guards_narrowed += 1;
                         continue;
@@ -1117,12 +945,10 @@ fn is_boundary_mask(value: &BigUint) -> bool {
     if value.is_zero() {
         return false;
     }
-    // Must be 2^N - 1 (all low bits set).
     let plus_one = value + 1u32;
     if (plus_one.clone() & value) != BigUint::ZERO {
         return false;
     }
-    // Only useful if the mask fits in 64 bits (native register width).
     *value <= BigUint::from(u64::MAX)
 }
 
@@ -1137,13 +963,10 @@ fn is_wide_boundary_mask(value: &BigUint) -> bool {
     if value.is_zero() {
         return false;
     }
-    // Must be 2^N - 1 (all low bits set).
     let plus_one = value + 1u32;
     if (plus_one.clone() & value) != BigUint::ZERO {
         return false;
     }
-    // Accept masks up to 160 bits (address width). Wider masks don't
-    // provide enough savings to justify the narrowing overhead.
     let bits = value.bits();
     bits <= 160
 }
@@ -1170,10 +993,6 @@ fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>
         ) {
             return true;
         }
-        // A call to a known noreturn function (e.g., panic_error_0xNN) acts
-        // as a terminator at this site. Without recognizing this, the OZ
-        // canonical `if check { panic_error_0x41() }` pattern in
-        // finalize_allocation never narrows.
         if let Statement::Expression(Expression::Call { function, .. }) = s {
             if noreturn.contains(&function.0) {
                 return true;
@@ -1186,7 +1005,6 @@ fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>
 /// Resolve a ValueId through the replacement chain.
 fn resolve_id(id: ValueId, replacements: &BTreeMap<u32, ValueId>) -> ValueId {
     let mut current = id;
-    // Follow replacement chain (at most a few hops).
     for _ in 0..8 {
         if let Some(&replacement) = replacements.get(&current.0) {
             current = replacement;

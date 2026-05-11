@@ -224,8 +224,6 @@ impl YulTranslator {
                 let region = self.translate_region(block)?;
                 let block_scope = self.ssa.exit_scope();
 
-                // Propagate modifications of parent-scope variables back to the parent scope so
-                // that assignments inside the block remain visible to enclosing code.
                 for (name, value) in &block_scope {
                     if parent_scope.contains_key(name) {
                         self.ssa.define(name, *value);
@@ -257,7 +255,6 @@ impl YulTranslator {
                 }
                 Ok(vec![Statement::Leave { return_values }])
             }
-            // Objects and Code are handled at the top level by `translate_object`.
             YulStatement::Object(_) | YulStatement::Code(_) => Ok(vec![]),
         }
     }
@@ -446,8 +443,6 @@ impl YulTranslator {
             _ => {}
         }
 
-        // Translate arguments in RIGHT-TO-LEFT order per the Yul/EVM spec,
-        // then reverse to restore left-to-right order for the call.
         let mut statements = Vec::new();
         let mut arguments = Vec::new();
 
@@ -498,7 +493,6 @@ impl YulTranslator {
         match &arguments[index] {
             YulExpression::Literal(literal) => match &literal.inner {
                 LexicalLiteral::String(string) => Ok(string.inner.clone()),
-                // Non-string literals are formatted as their decimal string representation.
                 _ => Ok(self.parse_literal(literal)?.to_string()),
             },
             _ => Err(TranslationError::Unsupported(
@@ -916,23 +910,18 @@ impl YulTranslator {
                 unreachable!("ICE: LinkerSymbol handled in translate_function_call")
             }
 
-            // PC is not supported on PolkaVM
             FunctionName::Pc => Err(TranslationError::Unsupported("pc".to_string())),
 
-            // CLZ (count leading zeros)
             FunctionName::Clz => Ok(unary_op(UnaryOperation::Clz, &arguments)),
 
-            // Immutables are handled in translate_function_call
             FunctionName::LoadImmutable | FunctionName::SetImmutable => {
                 unreachable!("LoadImmutable/SetImmutable handled in translate_function_call")
             }
 
-            // Verbatim
             FunctionName::Verbatim { .. } => {
                 Err(TranslationError::Unsupported("verbatim".to_string()))
             }
 
-            // User-defined function call
             FunctionName::UserDefined(name) => {
                 let function_id = self
                     .lookup_function(name)
@@ -952,12 +941,10 @@ impl YulTranslator {
     ) -> std::result::Result<Vec<Statement>, TranslationError> {
         let mut statements = Vec::new();
 
-        // Translate condition
         let (condition_statements, condition_expression) =
             self.translate_expression(&if_conditional.condition)?;
         statements.extend(condition_statements);
 
-        // Create a temporary for the condition if needed
         let condition_value = match condition_expression {
             Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
@@ -970,16 +957,12 @@ impl YulTranslator {
             }
         };
 
-        // Save current scope state
         let scope_before = self.ssa.current_scope().clone();
 
-        // Translate then branch
         self.ssa.enter_scope();
         let then_region = self.translate_region(&if_conditional.block)?;
         let then_scope = self.ssa.exit_scope();
 
-        // Yul has no else branch, but we need to handle SSA properly
-        // Find variables that were modified in the then branch
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
         let mut modified_vars = Vec::new();
@@ -993,7 +976,6 @@ impl YulTranslator {
             }
         }
 
-        // Create output values for each modified variable
         for (name, before_value, _then_value) in &modified_vars {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
@@ -1001,13 +983,11 @@ impl YulTranslator {
                 .define(name, Value::new(output_id, before_value.value_type));
         }
 
-        // Build the if statement with explicit yields
         let mut then_with_yields = then_region;
         for (_, _, then_value) in &modified_vars {
             then_with_yields.yields.push(*then_value);
         }
 
-        // The else region just yields the original values unchanged
         let else_region = if modified_vars.is_empty() {
             None
         } else {
@@ -1036,12 +1016,10 @@ impl YulTranslator {
     ) -> std::result::Result<Vec<Statement>, TranslationError> {
         let mut statements = Vec::new();
 
-        // Translate scrutinee
         let (scrutinee_statements, scrutinee_expression) =
             self.translate_expression(&switch.expression)?;
         statements.extend(scrutinee_statements);
 
-        // Create a temporary for the scrutinee if needed
         let scrutinee_value = match scrutinee_expression {
             Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
@@ -1054,10 +1032,8 @@ impl YulTranslator {
             }
         };
 
-        // Save current scope state
         let scope_before = self.ssa.current_scope().clone();
 
-        // Translate each case ONCE and collect their scopes and regions
         let mut cases = Vec::new();
         let mut all_scopes = Vec::new();
 
@@ -1072,7 +1048,6 @@ impl YulTranslator {
             cases.push((case_value, case_region));
         }
 
-        // Translate default case ONCE
         let (default_scope, default_region) = if let Some(default_block) = &switch.default {
             self.ssa.restore_scope(scope_before.clone());
             self.ssa.enter_scope();
@@ -1083,10 +1058,8 @@ impl YulTranslator {
             (None, None)
         };
 
-        // Collect all variables that were modified in any branch
         let mut modified_vars: BTreeMap<String, Value> = BTreeMap::new();
 
-        // Check each case scope for modified variables
         for case_scope in &all_scopes {
             for (name, &value) in case_scope {
                 if let Some(&before_value) = scope_before.get(name) {
@@ -1097,7 +1070,6 @@ impl YulTranslator {
             }
         }
 
-        // Check default scope for modified variables
         if let Some(ref default_scope) = default_scope {
             for (name, &value) in default_scope {
                 if let Some(&before_value) = scope_before.get(name) {
@@ -1108,10 +1080,8 @@ impl YulTranslator {
             }
         }
 
-        // Get sorted list of modified variable names for deterministic ordering
         let modified_names: Vec<String> = modified_vars.keys().cloned().collect();
 
-        // Create inputs and outputs
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
         let mut output_names = Vec::new();
@@ -1125,11 +1095,9 @@ impl YulTranslator {
             }
         }
 
-        // Add yields to already-translated cases (no re-translation needed)
         let mut cases_with_yields = Vec::new();
         for (index, (case_value, mut case_region)) in cases.into_iter().enumerate() {
             let case_scope = &all_scopes[index];
-            // Add yields for modified variables
             for name in &modified_names {
                 let before_value = modified_vars.get(name).copied().unwrap();
                 let value = case_scope.get(name).copied().unwrap_or(before_value);
@@ -1141,10 +1109,8 @@ impl YulTranslator {
             });
         }
 
-        // Add yields to already-translated default (no re-translation needed)
         let default_with_yields = if let Some(mut region) = default_region {
             let default_scope = default_scope.as_ref().unwrap();
-            // Add yields for modified variables
             for name in &modified_names {
                 let before_value = modified_vars.get(name).copied().unwrap();
                 let value = default_scope.get(name).copied().unwrap_or(before_value);
@@ -1152,7 +1118,6 @@ impl YulTranslator {
             }
             Some(region)
         } else if !modified_names.is_empty() {
-            // No default branch but we have modified variables - need to yield the originals
             let mut region = Region::new();
             for name in &modified_names {
                 let before_value = modified_vars.get(name).copied().unwrap();
@@ -1163,7 +1128,6 @@ impl YulTranslator {
             None
         };
 
-        // Update the scope with output values
         self.ssa.restore_scope(scope_before);
         for (name, value) in output_names {
             self.ssa.define(&name, value);
@@ -1187,14 +1151,12 @@ impl YulTranslator {
     ) -> std::result::Result<Vec<Statement>, TranslationError> {
         let mut statements = Vec::new();
 
-        // Translate initializer
         self.ssa.enter_scope();
         for statement in &for_loop.initializer.statements {
             let initializer_statements = self.translate_statement(statement)?;
             statements.extend(initializer_statements);
         }
 
-        // Identify loop-carried variables (variables defined in initializer)
         let initializer_scope = self.ssa.current_scope().clone();
         let mut loop_variables = Vec::new();
         let mut initializer_values = Vec::new();
@@ -1204,7 +1166,6 @@ impl YulTranslator {
             initializer_values.push(value);
         }
 
-        // Create new SSA values for loop variables
         for (name, var_id) in &loop_variables {
             let value_type = initializer_scope
                 .get(name)
@@ -1213,17 +1174,9 @@ impl YulTranslator {
             self.ssa.define(name, Value::new(*var_id, value_type));
         }
 
-        // Translate condition - condition_statements will be executed inside the loop header,
-        // not before the loop, because they may reference loop_variables
         let (condition_statements, condition_expression) =
             self.translate_expression(&for_loop.condition)?;
 
-        // Translate body in its own scope. The body may modify loop-carried variables.
-        // Body yields the current values of ALL loop-carried variables at end of body.
-        // These yields are used by the LLVM codegen to create phi nodes at the post-block
-        // entry, merging body-end values with continue-site values.
-        //
-        // Push loop variable names so break/continue can collect current values.
         let loop_variable_names: Vec<String> =
             loop_variables.iter().map(|(n, _)| n.clone()).collect();
         self.loop_variable_names_stack.push(loop_variable_names);
@@ -1234,7 +1187,6 @@ impl YulTranslator {
 
         self.loop_variable_names_stack.pop();
 
-        // Body yields: for each loop-carried variable, yield the body's final value.
         for (name, loop_variable_id) in &loop_variables {
             if let Some(&value) = body_scope.get(name) {
                 body_region.yields.push(value);
@@ -1249,8 +1201,6 @@ impl YulTranslator {
             }
         }
 
-        // Translate post in its own scope. The post receives body outputs as fresh
-        // ValueIds (mapped to landing phi values by the LLVM codegen).
         self.ssa.enter_scope();
         let mut post_input_var_ids = Vec::new();
         for (name, _) in loop_variables.iter() {
@@ -1266,14 +1216,12 @@ impl YulTranslator {
         let mut post_region = self.translate_region(&for_loop.finalizer)?;
         let post_scope = self.ssa.exit_scope();
 
-        // Post yields: the final values of loop-carried variables after the post runs.
         for (name, _) in &loop_variables {
             if let Some(&value) = post_scope.get(name) {
                 post_region.yields.push(value);
             }
         }
 
-        // Create output bindings
         let mut outputs = Vec::new();
         let mut output_values = Vec::new();
         for (name, _) in &loop_variables {
@@ -1415,8 +1363,6 @@ impl YulTranslator {
                         .ok_or_else(|| TranslationError::InvalidLiteral(inner.clone()))
                 }
             },
-            // String and hex literals are converted to their byte representation, right-padded
-            // to 32 bytes. Escape sequences are processed for regular strings (not hex strings).
             LexicalLiteral::String(string_literal) => {
                 let string = &string_literal.inner;
                 let mut hex_string = if string_literal.is_hexadecimal {
@@ -1433,7 +1379,6 @@ impl YulTranslator {
                             }
                             match bytes[index] {
                                 b'x' => {
-                                    // \xNN - two hex digit escape
                                     if index + 2 < bytes.len() {
                                         hex.push(bytes[index + 1] as char);
                                         hex.push(bytes[index + 2] as char);
@@ -1441,7 +1386,6 @@ impl YulTranslator {
                                     index += 3;
                                 }
                                 b'u' => {
-                                    // \uNNNN - unicode escape
                                     if index + 4 < bytes.len() {
                                         let code_point_string = &string[index + 1..index + 5];
                                         if let Ok(codepoint) =
@@ -1471,7 +1415,6 @@ impl YulTranslator {
                                     index += 1;
                                 }
                                 b'\n' => {
-                                    // Line continuation - skip
                                     index += 1;
                                 }
                                 other => {
@@ -1487,7 +1430,6 @@ impl YulTranslator {
                     hex
                 };
 
-                // Truncate if too long, then right-pad to 32 bytes (64 hex chars)
                 if hex_string.len() > 64 {
                     hex_string.truncate(64);
                 }
@@ -1580,6 +1522,5 @@ mod tests {
     #[test]
     fn test_parse_decimal_literal() {
         let _translator = YulTranslator::new();
-        // Would need actual YulLiteral construction for testing
     }
 }

@@ -52,7 +52,6 @@ pub mod to_llvm;
 pub mod type_inference;
 pub mod validate;
 
-// Re-export main types
 pub use from_yul::{TranslationError, YulTranslator};
 pub use heap_opt::{
     AccessPattern, HeapAnalysis, HeapAnalysisStats, HeapOptResults, MemorySlot, OffsetInfo,
@@ -77,6 +76,13 @@ pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
 pub use validate::{validate_function, validate_object, ValidationError, ValidationResult};
+/// Maximum number of param/return narrowing iterations.
+///
+/// Each iteration narrows function signatures, re-runs full type inference with the
+/// new widths so narrowed parameters cascade through `add`/`and`/etc. forward, and
+/// then refines call-site demands. Four iterations is enough to reach a fixed point
+/// on the OZ corpus; any further work is bounded by an explicit `changed` check.
+const PARAM_NARROW_ITERATIONS: u32 = 4;
 
 /// Result of translating a Yul object to newyork IR.
 pub struct TranslationResult {
@@ -129,7 +135,6 @@ pub fn translate_yul_object(
         }
     }
 
-    // Run analysis passes on the full object tree
     let mut heap_analysis = HeapAnalysis::new();
     heap_analysis.analyze_object(&ir_object);
     let heap_opt = HeapOptResults::from_analysis(&heap_analysis);
@@ -137,37 +142,8 @@ pub fn translate_yul_object(
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
-    // Iterative parameter and return type narrowing with full re-inference.
-    // Each iteration: narrow parameters/returns → re-run full type inference with the new
-    // types → refine call-site demands. The re-inference cascades forward
-    // widths: narrowed parameters (I64) produce narrow add/and results. The demand
-    // refinement ensures call-site arguments also get narrow demands.
-    for _ in 0..4 {
-        let mut changed = type_info.narrow_function_params(&mut ir_object);
-        // Call-site forward narrowing: narrow parameters where ALL callers provide
-        // narrow arguments (e.g., and(value, 2^160-1) for address validation).
-        changed |= type_info.narrow_function_params_from_callers(&mut ir_object);
-        // Forward-based return narrowing: narrow returns whose min_width < I256
-        changed |= type_info.narrow_function_returns(&mut ir_object);
-        // Backward demand-based return narrowing: narrow returns where ALL callers
-        // only use narrow results (e.g., as memory offsets)
-        changed |= type_info.narrow_function_returns_from_demand(&mut ir_object);
-        if !changed {
-            break;
-        }
-        // Re-run full type inference with narrowed param/return types.
-        // The forward pass reads function.parameters (now narrowed), seeding
-        // min_width at I64 instead of I256. This cascades through the
-        // function body: add(I64, I8) → I65, and(I65, I256) → I65, etc.
-        type_info = TypeInference::new();
-        type_info.infer_object_tree(&ir_object);
-        // Refine call-site demands with the narrowed param types.
-        // This updates fn_arg_demand so argument values get narrow backward
-        // demands, enabling further param narrowing in the next iteration.
-        type_info.refine_demands_from_params(&ir_object);
-    }
+    let type_info = narrow_signatures_to_fixed_point(&mut ir_object, type_info);
 
-    // Validate IR correctness
     if let Err(errors) = validate::validate_object(&ir_object) {
         for error in &errors {
             log::warn!("IR validation error in {}: {}", ir_object.name, error);
@@ -183,70 +159,72 @@ pub fn translate_yul_object(
     })
 }
 
-/// Runs optimization passes on an object and all its subobjects recursively.
-/// Returns the combined inline and memory optimization results from all objects.
+/// Iteratively narrows function parameter and return types until no change.
+///
+/// Each iteration applies four narrowing strategies — forward param, caller-driven
+/// param, forward return, demand-driven return — and re-runs full type inference
+/// so the new signature widths cascade through every function body before the next
+/// iteration. Bounded by [`PARAM_NARROW_ITERATIONS`] but exits early on a fixed point.
+fn narrow_signatures_to_fixed_point(
+    ir_object: &mut ir::Object,
+    mut type_info: TypeInference,
+) -> TypeInference {
+    for _ in 0..PARAM_NARROW_ITERATIONS {
+        let mut changed = type_info.narrow_function_params(ir_object);
+        changed |= type_info.narrow_function_params_from_callers(ir_object);
+        changed |= type_info.narrow_function_returns(ir_object);
+        changed |= type_info.narrow_function_returns_from_demand(ir_object);
+        if !changed {
+            break;
+        }
+        type_info = TypeInference::new();
+        type_info.infer_object_tree(ir_object);
+        type_info.refine_demands_from_params(ir_object);
+    }
+    type_info
+}
+
+/// Runs the full newyork optimization pipeline on an object and its subobjects.
+///
+/// Pass order matters: inlining runs first to expose intra-procedural opportunities,
+/// then simplify+dedup clean up the IR, then mem_opt + FMP propagation expose
+/// constant keccak inputs, and finally compound outlining and guard narrowing
+/// rewrite specialized patterns. Each of those rewriting passes can produce new
+/// constants and dead code, so a simplify pass follows each cluster; a second dedup
+/// catches near-duplicates that only emerge after canonicalization.
+///
+/// Subobjects are processed recursively and their inline/memory results are merged
+/// into the returned aggregates.
 fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResults) {
-    // Run inlining pass first - this exposes more optimization opportunities
     let mut inline_results = inline_functions(object);
 
-    // Run simplification pass (constant folding, algebraic identities, copy propagation, DCE)
-    // This cleans up the IR after inlining, eliminating redundant operations.
     let mut simplifier = Simplifier::new();
     let _simplify_stats = simplifier.simplify_object(object);
 
-    // Run function deduplication after simplification (canonical forms are cleaner)
     let _dedup_count = deduplicate_functions(object);
-
-    // Run fuzzy function deduplication: functions that differ only in literal constants
-    // are merged by parameterizing the differing literals.
     let _fuzzy_dedup_count = simplify::deduplicate_functions_fuzzy(object);
 
-    // Run memory optimization pass (load-after-store elimination)
     let mut mem_optimizer = MemoryOptimizer::new();
     let mut mem_opt_results = mem_optimizer.optimize_object(object);
-    // Run FMP propagation pass (replace mload(0x40) with known constant)
     let mut fmp_prop = mem_opt::FmpPropagation::new(0);
     fmp_prop.propagate_object(object);
 
-    // Fold constant keccak256 expressions created by the mem_opt pass.
-    // The mem_opt pass creates Keccak256Single/Pair nodes from mstore+keccak256
-    // patterns. When the argument is a constant, we can precompute the hash.
     simplify::fold_constant_keccak(object);
 
-    // Second full simplify pass: mem_opt, FMP propagation, and keccak fold create new
-    // constant expressions and dead code. A full simplify pass (constant folding, copy
-    // propagation, algebraic simplification, DCE) propagates these opportunities through
-    // downstream arithmetic, which DCE alone would miss.
     let mut simplifier2 = Simplifier::new();
     simplifier2.simplify_object(object);
 
-    // Compound outlining: detect multi-statement patterns like
-    // `let hash = keccak256_pair(key, slot); let value = sload(hash)` and replace
-    // with compound IR nodes `mapping_sload(key, slot)` that get lowered to
-    // keccak256_pair + sload/sstore calls, eliminating the intermediate hash value.
     compound_outlining::outline_compounds_in_object(object);
-
-    // Guard narrowing: detect `if gt(value, MASK) { revert/panic }` patterns and
-    // insert `val_narrow = and(value, MASK)` after the guard. This gives type
-    // inference proof that the value fits in fewer bits, enabling downstream
-    // narrowing of comparisons, arithmetic, and memory operations.
     guard_narrow::narrow_guards_in_object(object);
 
-    // Third simplify pass: compound outlining and guard narrowing introduce new
-    // constant expressions and dead code. A final simplify pass propagates these
-    // opportunities and cleans up the IR before LLVM codegen.
     let mut simplifier3 = Simplifier::new();
     simplifier3.simplify_object(object);
 
-    // Second dedup pass: guard narrowing and compound outlining canonicalize
-    // code into forms that may expose new duplicate or near-duplicate functions.
     let _dedup_count2 = deduplicate_functions(object);
     let _fuzzy_dedup_count2 = simplify::deduplicate_functions_fuzzy(object);
 
-    // Recursively optimize subobjects
     for subobject in &mut object.subobjects {
         let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);
-        // Merge sub-results into main results
         inline_results.inlined_call_sites += sub_inline.inlined_call_sites;
         inline_results
             .removed_functions

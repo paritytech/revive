@@ -104,27 +104,21 @@ impl SsaBuilder {
     ) -> Vec<(String, ValueId, Value, Value)> {
         let mut merges = Vec::new();
 
-        // Find variables that differ between branches
         for (name, &then_value) in then_scope {
             if let Some(&else_value) = else_scope.get(name) {
                 if then_value.id != else_value.id {
-                    // Need a phi node
                     let phi_result = self.fresh_value();
                     merges.push((name.clone(), phi_result, then_value, else_value));
 
-                    // Update current scope with merged value
                     self.define(name, Value::new(phi_result, then_value.value_type));
                 } else {
-                    // Same value, just propagate
                     self.define(name, then_value);
                 }
             } else {
-                // Variable only in then branch - propagate
                 self.define(name, then_value);
             }
         }
 
-        // Variables only in else branch
         for (name, &else_value) in else_scope {
             if !then_scope.contains_key(name) {
                 self.define(name, else_value);

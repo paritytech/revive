@@ -209,7 +209,6 @@ fn outline_statements(
         statements[*index] = new_statement.clone();
     }
 
-    // Iterate in reverse so the indices stay valid as elements are removed.
     for index in indices_to_remove.into_iter().rev() {
         statements.remove(index);
     }

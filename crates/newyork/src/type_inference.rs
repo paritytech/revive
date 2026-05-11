@@ -37,8 +37,8 @@ pub struct TypeConstraint {
 impl Default for TypeConstraint {
     fn default() -> Self {
         TypeConstraint {
-            min_width: BitWidth::I1,   // Start with minimum
-            max_width: BitWidth::I256, // Start with maximum
+            min_width: BitWidth::I1,
+            max_width: BitWidth::I256,
             is_signed: false,
         }
     }
@@ -67,7 +67,7 @@ impl TypeConstraint {
     pub fn join(&self, other: &TypeConstraint) -> TypeConstraint {
         TypeConstraint {
             min_width: self.min_width.max(other.min_width),
-            max_width: self.max_width.min(other.max_width), // Narrower max
+            max_width: self.max_width.min(other.max_width),
             is_signed: self.is_signed || other.is_signed,
         }
     }
@@ -129,22 +129,12 @@ impl UseContext {
     /// Returns the maximum width needed for this use context.
     fn max_width_needed(&self) -> BitWidth {
         match self {
-            // Memory-offset use must NOT drive narrowing. The mload/mstore
-            // codegen narrows the offset to xlen via a checked truncate
-            // (`safe_truncate_int_to_xlen`); demand-narrowing the source
-            // value to I64 first would silently drop the upper bits of an
-            // out-of-range offset before the check could observe it. This
-            // surfaced as `mload(2^128) == 0` returning success when it
-            // should OOG. Returning I256 here makes the value flow as i256
-            // and lets the use-site check trap correctly. Other use
-            // contexts (Arithmetic, StorageAccess, etc.) keep their wide
-            // demand for separate reasons.
             UseContext::MemoryOffset => BitWidth::I256,
             UseContext::MemoryValue => BitWidth::I256,
             UseContext::StorageAccess => BitWidth::I256,
-            UseContext::Comparison => BitWidth::I256, // Preserve, don't constrain
-            UseContext::Arithmetic => BitWidth::I256, // Conservative
-            UseContext::FunctionArg => BitWidth::I256, // Conservative for now
+            UseContext::Comparison => BitWidth::I256,
+            UseContext::Arithmetic => BitWidth::I256,
+            UseContext::FunctionArg => BitWidth::I256,
             UseContext::FunctionReturn => BitWidth::I256,
             UseContext::ExternalCall => BitWidth::I256,
             UseContext::General => BitWidth::I256,
@@ -198,7 +188,6 @@ impl TypeInference {
     /// Gets the effective width for a value (considering both min and max).
     pub fn effective_width(&self, id: ValueId) -> BitWidth {
         let constraint = self.get(id);
-        // The effective width is the minimum required, but capped by use context
         constraint
             .min_width
             .max(constraint.max_width.min(constraint.min_width))
@@ -225,8 +214,6 @@ impl TypeInference {
             let mut widest_needed = BitWidth::I1;
             for use_ctx in uses {
                 let needed = match use_ctx {
-                    // If we have a refined function-argument demand for this value,
-                    // use that instead of the blanket I256.
                     UseContext::FunctionArg => self
                         .fn_arg_demand
                         .get(&id.0)
@@ -289,8 +276,6 @@ impl TypeInference {
     /// and FunctionId namespaces (both start at 0 per object). We process each
     /// object with a fresh context to avoid cross-object constraint pollution.
     pub fn infer_object(&mut self, object: &Object) {
-        // Pre-populate function_returns so the forward pass can propagate
-        // return value widths to call sites interprocedurally.
         for (function_id, function) in &object.functions {
             if !function.return_values.is_empty() {
                 self.function_returns
@@ -298,7 +283,6 @@ impl TypeInference {
             }
         }
 
-        // Phase 1: Forward propagation - determine minimum widths
         loop {
             self.changed = false;
 
@@ -313,20 +297,13 @@ impl TypeInference {
             }
         }
 
-        // Phase 2: Backward propagation - collect uses and narrow max_width
         self.collect_uses_block(&object.code);
         for function in object.functions.values() {
             self.collect_uses_function(function);
         }
 
-        // Phase 2.5: Propagate use demands through transparent operations.
-        // For add/or/xor/and, the operands only need to be as wide as the result's
-        // use sites require (modular arithmetic preserves lower bits). This enables
-        // parameter narrowing through add chains: `let pos := add(param, 32);
-        // mstore(pos, value)` → param only needs I64.
         self.propagate_use_demands(object);
 
-        // Phase 3: Apply backward constraints
         self.apply_backward_constraints();
     }
 
@@ -341,22 +318,12 @@ impl TypeInference {
         for subobject in &object.subobjects {
             let mut sub_inference = TypeInference::new();
             sub_inference.infer_object_tree(subobject);
-            // Store subobject results in our sub_inferences map for later use
-            // by narrow_function_params and codegen.
             self.sub_inferences.push(sub_inference);
         }
     }
 
     /// Forward pass for a function.
     fn infer_function_forward(&mut self, function: &Function) {
-        // Widen parameters to their declared type width in the forward pass.
-        // This ensures min_width (used by `inferred_width` in codegen) reflects
-        // the true runtime range — parameters can hold any value their type allows.
-        // Without this, `narrow_offset_for_pointer` may unsoundly truncate
-        // param-derived values that the forward analysis under-approximates.
-        //
-        // Note: param NARROWING is driven by the backward max_width (Phase 2.5),
-        // not the forward min_width. So this does not prevent narrowing.
         for (parameter_id, parameter_type) in &function.parameters {
             if let Type::Int(width) = parameter_type {
                 self.widen(*parameter_id, *width);
@@ -370,7 +337,6 @@ impl TypeInference {
     fn collect_uses_function(&mut self, function: &Function) {
         self.collect_uses_block(&function.body);
 
-        // Return values escape to caller - mark as needing full width
         for ret_id in &function.return_values {
             self.record_use(*ret_id, UseContext::FunctionReturn);
         }
@@ -379,9 +345,6 @@ impl TypeInference {
     /// Apply backward constraints based on collected uses.
     fn apply_backward_constraints(&mut self) {
         for (id, uses) in &self.uses {
-            // Find the widest width needed across all uses.
-            // For FunctionArg, use fn_arg_demand if available (from
-            // refine_demands_from_params) instead of the conservative I256.
             let mut widest_needed = BitWidth::I1;
             for use_ctx in uses {
                 let needed = match use_ctx {
@@ -476,12 +439,6 @@ impl TypeInference {
                         snapshot.extend(uses.iter().copied());
                     }
                     if !snapshot.is_empty() {
-                        // `record_use_if_new` mutates `self.uses`, which can
-                        // reallocate tree nodes and invalidate any reference
-                        // into `self.uses[&result_id.0]`; the snapshot
-                        // (reused across iterations) keeps the read borrow
-                        // disjoint from those writes without per-iteration
-                        // BTreeSet clones.
                         changed |= self.propagate_demand_to_expression(value, &snapshot);
                     }
                 }
@@ -520,8 +477,6 @@ impl TypeInference {
                 operation: BinaryOperation::Shl,
                 ..
             } => {
-                // For shl(amount, value), the value operand (rhs) is transparent;
-                // the shift amount (lhs) needs full width. Propagate demand to value.
                 let mut changed = false;
                 for use_ctx in result_uses {
                     changed |= self.record_use_if_new(rhs.id, *use_ctx);
@@ -532,7 +487,6 @@ impl TypeInference {
                 operand,
                 operation: UnaryOperation::Not,
             } => {
-                // NOT is transparent: propagate demand to operand.
                 let mut changed = false;
                 for use_ctx in result_uses {
                     changed |= self.record_use_if_new(operand.id, *use_ctx);
@@ -582,35 +536,23 @@ impl TypeInference {
             for (parameter_id, parameter_type) in &mut function.parameters {
                 let constraint = self.get(*parameter_id);
 
-                // Only narrow I256 integer parameters
                 if !matches!(parameter_type, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                // Skip signed values (truncation + zero-extension doesn't preserve sign)
                 if constraint.is_signed {
                     continue;
                 }
 
                 let demand = constraint.max_width;
                 if demand < BitWidth::I256 {
-                    // Clamp to at least I32 (XLEN on PolkaVM).
                     let clamped = demand.max(BitWidth::I32);
                     *parameter_type = Type::Int(clamped);
                     changed = true;
                 }
-                // If demand == I256 we do NOT narrow even when only Comparison uses
-                // block narrowing. Solidity's ABI validation emits
-                // `eq(value, and(value, mask))` to trap on out-of-range inputs; the
-                // comparison's correctness depends on observing value's *full* i256
-                // width. Pre-narrowing value loses the high bits the comparison is
-                // meant to detect and silently accepts out-of-range values. See
-                // the `sub_type_validation`, `factorial`, and `uint128_arithmetic`
-                // integration tests for the regression this prevents.
             }
         }
 
-        // Recurse into subobjects using their scoped type inference contexts
         for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
             changed |= sub_inf.narrow_function_params(subobject);
         }
@@ -631,13 +573,9 @@ impl TypeInference {
     /// validation, the call-site argument has min_width=I160. This pass detects
     /// that ALL callers provide I160 values and narrows the parameter to I160.
     pub fn narrow_function_params_from_callers(&self, object: &mut Object) -> bool {
-        // Collect the widest min_width for each parameter across all call sites.
-        // Key: (function_id, param_index) → widest min_width seen across all callers.
         let mut argument_widths: BTreeMap<(u32, usize), BitWidth> = BTreeMap::new();
-        // Track which functions are called at all.
         let mut called_functions: BTreeSet<u32> = BTreeSet::new();
 
-        // Walk all code and function bodies to find call sites.
         self.collect_argument_widths_block(
             &object.code,
             &mut argument_widths,
@@ -653,7 +591,6 @@ impl TypeInference {
 
         let mut changed = false;
         for (&function_id, function) in &mut object.functions {
-            // Only narrow functions that have at least one call site.
             if !called_functions.contains(&function_id.0) {
                 continue;
             }
@@ -671,7 +608,6 @@ impl TypeInference {
             }
         }
 
-        // Recurse into subobjects
         for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
             changed |= sub_inf.narrow_function_params_from_callers(subobject);
         }
@@ -733,12 +669,10 @@ impl TypeInference {
         let mut changed = false;
         for function in object.functions.values_mut() {
             for (i, ret_ty) in function.returns.iter_mut().enumerate() {
-                // Only narrow I256 integer returns
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                // Look up the return value ID's min_width from forward analysis
                 let ret_id = match function.return_values.get(i) {
                     Some(id) => *id,
                     None => continue,
@@ -746,14 +680,12 @@ impl TypeInference {
 
                 let constraint = self.get(ret_id);
 
-                // Skip signed values (truncation + zero-extension doesn't preserve sign)
                 if constraint.is_signed {
                     continue;
                 }
 
                 let width = constraint.min_width;
                 if width < BitWidth::I256 {
-                    // Clamp to at least I32 (XLEN on PolkaVM)
                     let clamped = width.max(BitWidth::I32);
                     *ret_ty = Type::Int(clamped);
                     changed = true;
@@ -761,7 +693,6 @@ impl TypeInference {
             }
         }
 
-        // Recurse into subobjects
         for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
             changed |= sub_inf.narrow_function_returns(subobject);
         }
@@ -786,11 +717,8 @@ impl TypeInference {
     ///
     /// Returns true if any return type was narrowed.
     pub fn narrow_function_returns_from_demand(&self, object: &mut Object) -> bool {
-        // Compute return demand per function: for each function, find the widest
-        // use demand across all call sites for each return value position.
         let mut return_demands: BTreeMap<u32, Vec<BitWidth>> = BTreeMap::new();
 
-        // Walk all code and function bodies to find Expression::Call sites
         self.collect_return_demands_block(&object.code, &mut return_demands);
         for function in object.functions.values() {
             self.collect_return_demands_block(&function.body, &mut return_demands);
@@ -800,11 +728,10 @@ impl TypeInference {
         for function in object.functions.values_mut() {
             let demands = match return_demands.get(&function.id.0) {
                 Some(d) => d,
-                None => continue, // No call sites found (dead function)
+                None => continue,
             };
 
             for (i, ret_ty) in function.returns.iter_mut().enumerate() {
-                // Only narrow I256 integer returns (skip already-narrowed ones)
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
@@ -822,7 +749,6 @@ impl TypeInference {
             }
         }
 
-        // Recurse into subobjects
         for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
             changed |= sub_inf.narrow_function_returns_from_demand(subobject);
         }
@@ -867,7 +793,6 @@ impl TypeInference {
     /// fully narrowed to I64 even though it was originally classified as
     /// FunctionArg (which defaults to I256).
     pub fn refine_demands_from_params(&mut self, object: &Object) {
-        // Build a map from FunctionId -> parameter widths (after narrowing)
         let parameter_widths: BTreeMap<u32, Vec<BitWidth>> = object
             .functions
             .iter()
@@ -884,19 +809,15 @@ impl TypeInference {
             })
             .collect();
 
-        // Walk all code and find Expression::Call sites, updating argument demands
         self.refine_demands_in_block(&object.code, &parameter_widths);
         for function in object.functions.values() {
             self.refine_demands_in_block(&function.body, &parameter_widths);
         }
 
-        // Re-run demand propagation through transparent ops with updated demands
         self.propagate_use_demands(object);
 
-        // Re-apply backward constraints with updated use info
         self.apply_backward_constraints();
 
-        // Recurse into subobjects
         for (subobject, sub_inf) in object.subobjects.iter().zip(self.sub_inferences.iter_mut()) {
             sub_inf.refine_demands_from_params(subobject);
         }
@@ -928,19 +849,7 @@ impl TypeInference {
         } = expression
         {
             if let Some(widths) = parameter_widths.get(&function.0) {
-                // Check if ALL parameters are narrowed (< I256)
-                let all_narrow = arguments
-                    .iter()
-                    .zip(widths.iter())
-                    .all(|(_, w)| *w < BitWidth::I256);
-                if !all_narrow {
-                    // If any parameter is still I256, we can't narrow the FunctionArg demand
-                    // for this specific call. But we still refine individual arguments below.
-                }
-
                 for (argument, parameter_width) in arguments.iter().zip(widths.iter()) {
-                    // Track the widest narrowed parameter demand for this argument value.
-                    // A value may be passed as argument to multiple functions - we take the widest.
                     let entry = self
                         .fn_arg_demand
                         .entry(argument.id.0)
@@ -948,8 +857,6 @@ impl TypeInference {
                     *entry = (*entry).max(*parameter_width);
                 }
             } else {
-                // Unknown function (possibly a call to a function not in our object)
-                // Mark arguments as needing full width
                 for argument in arguments {
                     let entry = self
                         .fn_arg_demand
@@ -995,10 +902,6 @@ impl TypeInference {
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);
                 if *region == MemoryRegion::FreePointerSlot {
-                    // FMP stores only need I64: the stored value is bounded by heap_size
-                    // (fits in I32) and is stored as i32 in InlineNative mode. Using
-                    // MemoryOffset demand (I64) instead of MemoryValue (I256) enables
-                    // parameter narrowing for functions like finalize_allocation_runtime.
                     self.record_use(value.id, UseContext::MemoryOffset);
                     self.narrow_from_use(value.id, BitWidth::I64);
                 } else {
@@ -1023,8 +926,6 @@ impl TypeInference {
             }
 
             Statement::If { condition, .. } => {
-                // Condition only needs to be non-zero, can stay narrow.
-                // Nested regions are walked by `collect_uses_block`'s `for_each_statement`.
                 self.record_use(condition.id, UseContext::Comparison);
             }
 
@@ -1060,7 +961,6 @@ impl TypeInference {
                 if let Some(value) = value {
                     self.record_use(value.id, UseContext::ExternalCall);
                 }
-                // Offsets and lengths are memory pointers
                 self.record_use(args_offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(args_offset.id, BitWidth::I64);
                 self.record_use(args_length.id, UseContext::MemoryOffset);
@@ -1081,7 +981,7 @@ impl TypeInference {
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
                 for topic in topics {
-                    self.record_use(topic.id, UseContext::MemoryValue); // Topics are 256-bit
+                    self.record_use(topic.id, UseContext::MemoryValue);
                 }
             }
 
@@ -1114,8 +1014,6 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            // DataCopy is special: the offset field carries the contract code hash
-            // (256-bit), not a memory offset. Only dest is a memory pointer.
             Statement::DataCopy {
                 dest,
                 offset,
@@ -1123,7 +1021,6 @@ impl TypeInference {
             } => {
                 self.record_use(dest.id, UseContext::MemoryOffset);
                 self.narrow_from_use(dest.id, BitWidth::I64);
-                // Offset is the contract code hash — needs full 256-bit width
                 self.record_use(offset.id, UseContext::MemoryValue);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
@@ -1138,7 +1035,6 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            // `Statement::Block`'s region is walked by `for_each_statement` recursion.
             Statement::Block(_) => {}
 
             Statement::Let { value, .. } => {
@@ -1149,7 +1045,6 @@ impl TypeInference {
                 self.collect_uses_expression(expression);
             }
 
-            // Create operations: value is ETH sent, offset/length are memory pointers
             Statement::Create {
                 value,
                 offset,
@@ -1167,32 +1062,26 @@ impl TypeInference {
                 }
             }
 
-            // SetImmutable: value needs full width (stored as contract data)
             Statement::SetImmutable { value, .. } => {
                 self.record_use(value.id, UseContext::General);
             }
 
-            // SelfDestruct: address needs full width
             Statement::SelfDestruct { address } => {
                 self.record_use(address.id, UseContext::ExternalCall);
             }
 
-            // Leave: return values escape to caller, need full width
             Statement::Leave { return_values } => {
                 for value in return_values {
                     self.record_use(value.id, UseContext::FunctionReturn);
                 }
             }
 
-            // Break/Continue: carry loop variables, need full width
             Statement::Break { values } | Statement::Continue { values } => {
                 for value in values {
                     self.record_use(value.id, UseContext::General);
                 }
             }
 
-            // PanicRevert: no variable values (code is u8 constant)
-            // Stop/Invalid: no values
             Statement::PanicRevert { .. }
             | Statement::ErrorStringRevert { .. }
             | Statement::CustomErrorRevert { .. }
@@ -1217,28 +1106,13 @@ impl TypeInference {
                     self.record_use(lhs.id, UseContext::Comparison);
                     self.record_use(rhs.id, UseContext::Comparison);
                 }
-                // Transparent ops: don't record Arithmetic for operands.
-                // Their demand will be propagated from the Let binding result's
-                // uses in propagate_use_demands. This enables parameter narrowing
-                // through add/or chains that flow to memory offsets.
-                // Property: for these ops, trunc(operation(a,b), N) == operation(trunc(a,N), trunc(b,N))
-                // when only the lower N bits of the result are observed.
                 BinaryOperation::Add
                 | BinaryOperation::Sub
                 | BinaryOperation::Mul
                 | BinaryOperation::Or
                 | BinaryOperation::Xor
-                | BinaryOperation::And => {
-                    // Transparent ops: don't record demand. The lower N bits of
-                    // the result depend only on the lower N bits of the operands.
-                    // trunc(operation(a,b), N) == operation(trunc(a,N), trunc(b,N)) for modular
-                    // arithmetic (add, sub, mul) and bitwise ops (and, or, xor).
-                }
+                | BinaryOperation::And => {}
                 BinaryOperation::Shl => {
-                    // Left shift: shl(amount, value) = value << amount.
-                    // Transparent for the value (rhs): the lower N bits of
-                    // (value << amount) depend only on the lower N bits of value
-                    // (for amount < N). The shift amount (lhs) needs Arithmetic.
                     self.record_use(lhs.id, UseContext::Arithmetic);
                 }
                 _ => {
@@ -1252,10 +1126,7 @@ impl TypeInference {
                 self.record_use(n.id, UseContext::Arithmetic);
             }
             Expression::Unary { operand, operation } => match operation {
-                UnaryOperation::Not => {
-                    // NOT is transparent: ~trunc(x, N) == trunc(~x, N).
-                    // Don't record demand; propagated from result's uses.
-                }
+                UnaryOperation::Not => {}
                 _ => {
                     self.record_use(operand.id, UseContext::Arithmetic);
                 }
@@ -1268,12 +1139,6 @@ impl TypeInference {
                 self.record_use(key.id, UseContext::StorageAccess);
             }
             Expression::CallDataLoad { offset } => {
-                // Do NOT narrow the offset: calldataload's offset is a full 256-bit
-                // EVM value. The clip_to_xlen overflow check must see all 256 bits
-                // to correctly clamp out-of-range offsets to 0xFFFFFFFF. Truncating
-                // to i64 first would lose upper bits and produce wrong clamp results
-                // (e.g., 0xa3<<248 truncated to i64 becomes 0, but should clamp to
-                // 0xFFFFFFFF because the original value > 0xFFFFFFFF).
                 self.record_use(offset.id, UseContext::Arithmetic);
             }
             Expression::Keccak256 { offset, length } => {
@@ -1315,7 +1180,6 @@ impl TypeInference {
     fn infer_statement_forward(&mut self, statement: &Statement) {
         match statement {
             Statement::Let { bindings, value } => {
-                // Record known constants for shift-amount analysis
                 if let Expression::Literal { value: literal, .. } = value {
                     if let Some(v) = literal.to_u64() {
                         if bindings.len() == 1 {
@@ -1330,20 +1194,16 @@ impl TypeInference {
             }
 
             Statement::MStore { offset, value, .. } => {
-                // Offset is typically 32-bit or 64-bit
                 self.widen(offset.id, BitWidth::I64);
-                // Value stored to memory is full 256-bit
                 self.widen(value.id, BitWidth::I256);
             }
 
             Statement::MStore8 { offset, value, .. } => {
                 self.widen(offset.id, BitWidth::I64);
-                // Only 8 bits are used from value
                 self.widen(value.id, BitWidth::I8);
             }
 
             Statement::SStore { key, value, .. } => {
-                // Storage keys and values are 256-bit
                 self.widen(key.id, BitWidth::I256);
                 self.widen(value.id, BitWidth::I256);
             }
@@ -1366,16 +1226,12 @@ impl TypeInference {
                 outputs,
                 ..
             } => {
-                // Condition only needs to be boolean-like
                 self.widen(condition.id, BitWidth::I1);
                 self.infer_region_forward(then_region);
                 if let Some(else_region) = else_region {
                     self.infer_region_forward(else_region);
                 }
 
-                // Propagate region yield types to outputs.
-                // Each output receives its value from the corresponding yield of
-                // whichever branch executes.
                 for region in std::iter::once(then_region).chain(else_region.as_ref()) {
                     for (yield_val, output) in region.yields.iter().zip(outputs.iter()) {
                         let yield_constraint = self.get(yield_val.id);
@@ -1391,11 +1247,9 @@ impl TypeInference {
                 outputs,
                 ..
             } => {
-                // Switch value could be any size, but often fits in 64 bits
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
                     self.infer_region_forward(&case.body);
-                    // Propagate case yields to outputs
                     for (yield_val, output) in case.body.yields.iter().zip(outputs.iter()) {
                         let yield_constraint = self.get(yield_val.id);
                         self.widen(*output, yield_constraint.min_width);
@@ -1403,7 +1257,6 @@ impl TypeInference {
                 }
                 if let Some(default) = default {
                     self.infer_region_forward(default);
-                    // Propagate default yields to outputs
                     for (yield_val, output) in default.yields.iter().zip(outputs.iter()) {
                         let yield_constraint = self.get(yield_val.id);
                         self.widen(*output, yield_constraint.min_width);
@@ -1421,21 +1274,16 @@ impl TypeInference {
                 outputs,
                 ..
             } => {
-                // Loop variables participate in complex data flows across iterations.
-                // Conservatively mark them as full width to avoid unsound narrowing.
                 for loop_var in loop_variables {
                     self.widen(*loop_var, BitWidth::I256);
                 }
                 for post_var in post_input_variables {
                     self.widen(*post_var, BitWidth::I256);
                 }
-                // Loop outputs receive loop_var values when the loop exits,
-                // so they must be at least as wide as loop_variables.
                 for output in outputs {
                     self.widen(*output, BitWidth::I256);
                 }
 
-                // Infer widths for condition_statements (Let bindings in the loop header).
                 for statement in condition_statements {
                     self.infer_statement_forward(statement);
                 }
@@ -1475,7 +1323,6 @@ impl TypeInference {
                 self.widen(args_length.id, BitWidth::I64);
                 self.widen(ret_offset.id, BitWidth::I64);
                 self.widen(ret_length.id, BitWidth::I64);
-                // Result is boolean success/failure
                 self.widen(*result, BitWidth::I1);
             }
 
@@ -1489,7 +1336,6 @@ impl TypeInference {
                 self.widen(value.id, BitWidth::I256);
                 self.widen(offset.id, BitWidth::I64);
                 self.widen(length.id, BitWidth::I64);
-                // Result is address or 0
                 self.widen(*result, BitWidth::I160);
             }
 
@@ -1550,7 +1396,6 @@ impl TypeInference {
                 let _ = self.infer_expression_width(expression);
             }
 
-            // These don't define or use values
             Statement::Break { .. }
             | Statement::Continue { .. }
             | Statement::Leave { .. }
@@ -1561,7 +1406,6 @@ impl TypeInference {
             | Statement::CustomErrorRevert { .. } => {}
 
             Statement::SetImmutable { value, .. } => {
-                // Immutable values are 256-bit
                 self.widen(value.id, BitWidth::I256);
             }
         }
@@ -1570,10 +1414,7 @@ impl TypeInference {
     /// Infers the minimum bit width for an expression result.
     fn infer_expression_width(&mut self, expression: &Expression) -> BitWidth {
         match expression {
-            Expression::Literal { value, .. } => {
-                // Use the minimum width that can hold this literal
-                BitWidth::from_max_value(value)
-            }
+            Expression::Literal { value, .. } => BitWidth::from_max_value(value),
 
             Expression::Var(id) => self.get(*id).min_width,
 
@@ -1585,62 +1426,35 @@ impl TypeInference {
                 let lhs_width = self.get(lhs.id).min_width;
                 let rhs_width = self.get(rhs.id).min_width;
 
-                // Operand widening: widen both operands to match each other.
-                // This propagates meaningful widths from literals/known-width values
-                // to function parameters. Capped at I64 to prevent mload-I256 pollution
-                // (mload returns I256 but most values fit in I64 for memory ops).
                 let capped_operand_width = lhs_width.max(rhs_width).min(BitWidth::I64);
 
                 match operation {
-                    // Arithmetic ops: result can be wider.
                     BinaryOperation::Add => {
                         self.widen(lhs.id, capped_operand_width);
                         self.widen(rhs.id, capped_operand_width);
-                        // Addition can overflow by 1 bit
                         widen_by_one(lhs_width.max(rhs_width))
                     }
-                    BinaryOperation::Sub => {
-                        // Subtraction wraps modular 2^256 when a < b,
-                        // producing a full 256-bit result.
-                        BitWidth::I256
-                    }
+                    BinaryOperation::Sub => BitWidth::I256,
                     BinaryOperation::Mul => {
                         self.widen(lhs.id, capped_operand_width);
                         self.widen(rhs.id, capped_operand_width);
-                        // Multiplication doubles width
                         double_width(lhs_width.max(rhs_width))
                     }
                     BinaryOperation::Div
                     | BinaryOperation::SDiv
                     | BinaryOperation::Mod
-                    | BinaryOperation::SMod => {
-                        // Division/modulo result fits in dividend width
-                        lhs_width
-                    }
-                    BinaryOperation::Exp => {
-                        // Exponentiation can grow arbitrarily - assume full width
-                        BitWidth::I256
-                    }
+                    | BinaryOperation::SMod => lhs_width,
+                    BinaryOperation::Exp => BitWidth::I256,
 
-                    // Bitwise ops: preserve width
-                    BinaryOperation::And => lhs_width.min(rhs_width), // AND shrinks to smaller
+                    BinaryOperation::And => lhs_width.min(rhs_width),
                     BinaryOperation::Or | BinaryOperation::Xor => {
                         self.widen(lhs.id, capped_operand_width);
                         self.widen(rhs.id, capped_operand_width);
                         lhs_width.max(rhs_width)
                     }
 
-                    // Shifts
-                    BinaryOperation::Shl => {
-                        // Shift left can grow the value
-                        BitWidth::I256 // Conservative
-                    }
+                    BinaryOperation::Shl => BitWidth::I256,
                     BinaryOperation::Shr | BinaryOperation::Sar => {
-                        // Shift right shrinks the value. In EVM, SHR(amount, value),
-                        // lhs is shift amount, rhs is the value being shifted.
-                        // When the shift amount is a known constant, the result fits
-                        // in (256 - shift) bits. For shr(224, calldataload(0)), this
-                        // gives I32, enabling narrow switch dispatch comparisons.
                         if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
                             if shift >= 256 {
                                 BitWidth::I1
@@ -1653,15 +1467,11 @@ impl TypeInference {
                         }
                     }
 
-                    // Comparisons: result is boolean.
-                    // Don't widen operands - comparisons can compare values of
-                    // different widths (the codegen zero-extends as needed).
                     BinaryOperation::Lt
                     | BinaryOperation::Gt
                     | BinaryOperation::Slt
                     | BinaryOperation::Sgt
                     | BinaryOperation::Eq => {
-                        // Mark signed ops
                         if matches!(operation, BinaryOperation::Slt | BinaryOperation::Sgt) {
                             self.mark_signed(lhs.id);
                             self.mark_signed(rhs.id);
@@ -1669,39 +1479,29 @@ impl TypeInference {
                         BitWidth::I1
                     }
 
-                    // Byte extraction
                     BinaryOperation::Byte => BitWidth::I8,
 
-                    // Sign extension: can grow width
                     BinaryOperation::SignExtend => BitWidth::I256,
 
-                    // These are ternary ops, shouldn't be here
                     BinaryOperation::AddMod | BinaryOperation::MulMod => BitWidth::I256,
                 }
             }
 
-            Expression::Ternary { operation, .. } => {
-                match operation {
-                    // AddMod and MulMod results are bounded by the modulus
-                    BinaryOperation::AddMod | BinaryOperation::MulMod => BitWidth::I256,
-                    _ => BitWidth::I256,
-                }
-            }
+            Expression::Ternary { operation, .. } => match operation {
+                BinaryOperation::AddMod | BinaryOperation::MulMod => BitWidth::I256,
+                _ => BitWidth::I256,
+            },
 
             Expression::Unary { operation, operand } => match operation {
                 crate::ir::UnaryOperation::IsZero => BitWidth::I1,
                 crate::ir::UnaryOperation::Not => {
-                    // NOT flips all 256 bits, producing a full-width result
                     let _ = operand;
                     BitWidth::I256
                 }
-                crate::ir::UnaryOperation::Clz => BitWidth::I256, // CLZ returns up to 256
+                crate::ir::UnaryOperation::Clz => BitWidth::I256,
             },
 
-            // EVM builtins that return specific sizes
             Expression::CallDataLoad { offset } => {
-                // The offset must stay at full 256-bit width so that clip_to_xlen
-                // can correctly clamp out-of-range offsets to 0xFFFFFFFF.
                 self.widen(offset.id, BitWidth::I256);
                 BitWidth::I256
             }
@@ -1741,11 +1541,6 @@ impl TypeInference {
 
             Expression::MLoad { offset, region } => {
                 self.widen(offset.id, BitWidth::I64);
-                // The free memory pointer (mload(64)) is bounded by the heap size.
-                // On PolkaVM with a 128KB heap, the FMP value fits in I32 (actually I17).
-                // Returning I32 here enables interprocedural narrowing: functions that
-                // receive FMP-derived values get narrower parameters, eliminating
-                // overflow checks in callees like abi_encode_string_memory_ptr_runtime.
                 if *region == MemoryRegion::FreePointerSlot {
                     BitWidth::I32
                 } else {
@@ -1765,26 +1560,12 @@ impl TypeInference {
                 function,
                 arguments: _,
             } => {
-                // Parameter widths are determined by the function body's own forward
-                // pass (how parameters are used internally), NOT by caller argument widths.
-                // Propagating caller argument widths is unsound: the same SSA value may be
-                // used in both narrow (e.g., memory offset) and wide (e.g., call value)
-                // contexts, and the wider use pollutes the param constraint.
-
-                // Propagate callee return value widths to call result.
-                // If the callee's return values have known narrow widths (from the
-                // forward pass over the callee body), use the widest return value's
-                // width instead of I256. This narrows downstream operations at
-                // call sites (e.g., sub(call_result, fmp) can become i64 arithmetic).
                 if let Some(ret_ids) = self.function_returns.get(&function.0).cloned() {
                     let mut max_ret_width = BitWidth::I1;
                     for ret_id in &ret_ids {
                         let ret_width = self.get(*ret_id).min_width;
                         max_ret_width = max_ret_width.max(ret_width);
                     }
-                    // Only narrow if we have meaningful return width info.
-                    // Default (I1) means we haven't analyzed the callee yet;
-                    // wait for the next iteration.
                     if max_ret_width > BitWidth::I1 {
                         max_ret_width
                     } else {
@@ -1809,14 +1590,12 @@ impl TypeInference {
             | Expression::Keccak256Single { .. }
             | Expression::MappingSLoad { .. } => BitWidth::I256,
 
-            // DataOffset returns a contract code hash (256-bit), not an actual offset.
             Expression::DataOffset { .. } => BitWidth::I256,
-            // DataSize returns header size (small value, fits in 64 bits).
             Expression::DataSize { .. } => BitWidth::I64,
 
-            Expression::LoadImmutable { .. } => BitWidth::I256, // Immutables are 256-bit
+            Expression::LoadImmutable { .. } => BitWidth::I256,
 
-            Expression::LinkerSymbol { .. } => BitWidth::I160, // LinkerSymbol returns an address
+            Expression::LinkerSymbol { .. } => BitWidth::I160,
         }
     }
 
@@ -1873,7 +1652,6 @@ mod tests {
     fn test_literal_width_inference() {
         let mut inference = TypeInference::new();
 
-        // Small literal
         let expression = Expression::Literal {
             value: BigUint::from(42u32),
             value_type: Type::default(),
@@ -1881,7 +1659,6 @@ mod tests {
         let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I8);
 
-        // Large literal (fits in 128 bits)
         let expression = Expression::Literal {
             value: BigUint::from(1u128) << 100,
             value_type: Type::default(),
@@ -1889,7 +1666,6 @@ mod tests {
         let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I128);
 
-        // Very large literal (needs > 128 bits)
         let expression = Expression::Literal {
             value: BigUint::from(1u128) << 140,
             value_type: Type::default(),
@@ -1902,7 +1678,6 @@ mod tests {
     fn test_comparison_returns_boolean() {
         let mut inference = TypeInference::new();
 
-        // Set up some values
         inference.widen(ValueId(0), BitWidth::I64);
         inference.widen(ValueId(1), BitWidth::I64);
 

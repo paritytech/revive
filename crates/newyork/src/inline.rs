@@ -95,23 +95,19 @@ pub fn analyze_call_graph(object: &Object) -> CallGraphAnalysis {
     let mut call_edges: BTreeMap<FunctionId, BTreeSet<FunctionId>> = BTreeMap::new();
     let mut top_level_calls: BTreeSet<FunctionId> = BTreeSet::new();
 
-    // Initialize all functions with zero call counts
     for &func_id in object.functions.keys() {
         call_counts.insert(func_id, 0);
         call_edges.insert(func_id, BTreeSet::new());
     }
 
-    // Count calls from top-level code
     count_calls_in_block(&object.code, &mut call_counts, &mut top_level_calls);
 
-    // Count calls from each function body
     for (&func_id, function) in &object.functions {
         let mut callee_set = BTreeSet::new();
         count_calls_in_block(&function.body, &mut call_counts, &mut callee_set);
         call_edges.insert(func_id, callee_set);
     }
 
-    // Detect recursive functions using Tarjan's SCC algorithm
     let recursive_functions = find_recursive_functions(&call_edges);
 
     CallGraphAnalysis {
@@ -147,21 +143,17 @@ fn find_recursive_functions(
 ) -> BTreeSet<FunctionId> {
     let mut recursive = BTreeSet::new();
 
-    // Check for direct recursion
     for (&func_id, callees) in call_edges {
         if callees.contains(&func_id) {
             recursive.insert(func_id);
         }
     }
 
-    // Check for mutual recursion via reachability
-    // For each function, check if there's a path back to itself
     let all_functions: Vec<FunctionId> = call_edges.keys().copied().collect();
     for &start in &all_functions {
         if recursive.contains(&start) {
             continue;
         }
-        // BFS/DFS from start's callees to see if we can reach start
         let mut visited = BTreeSet::new();
         let mut stack: Vec<FunctionId> = call_edges
             .get(&start)
@@ -171,7 +163,6 @@ fn find_recursive_functions(
         while let Some(current) = stack.pop() {
             if current == start {
                 recursive.insert(start);
-                // Also mark all functions in this cycle
                 break;
             }
             if !visited.insert(current) {
@@ -222,42 +213,25 @@ pub fn make_inline_decisions(
         let is_recursive = analysis.recursive_functions.contains(&func_id);
         let leave_count = count_leaves(&function.body);
 
-        let decision = if is_recursive {
-            InlineDecision::NeverInline
-        } else if call_count == 0 {
-            // Dead function - don't bother inlining, will be removed
-            InlineDecision::NeverInline
-        } else if size >= NEVER_INLINE_SIZE_THRESHOLD {
-            // Very large functions: never inline regardless of call count
+        let decision = if is_recursive || call_count == 0 || size >= NEVER_INLINE_SIZE_THRESHOLD {
             InlineDecision::NeverInline
         } else if call_count == 1 && size <= SINGLE_CALL_INLINE_SIZE_THRESHOLD {
-            // Small single-call functions: inline at IR level (eliminates function entirely)
             InlineDecision::AlwaysInline
         } else if call_count == 1 {
-            // Large single-call functions: defer to LLVM's inliner.
-            // IR-level inlining of many large functions creates monolithic functions
-            // that LLVM cannot optimize well (register pressure, code layout).
             InlineDecision::CostBenefit
         } else if size <= ALWAYS_INLINE_SIZE_THRESHOLD && leave_count == 0 {
-            // Very small functions without Leave: always inline
             InlineDecision::AlwaysInline
         } else if call_count >= NEVER_INLINE_CALL_COUNT_THRESHOLD {
-            // Called from too many sites: never inline
             InlineDecision::NeverInline
         } else {
-            // Cost-benefit analysis accounting for Leave elimination overhead.
-            // Use quadratic penalty: N Leaves create N levels of nested guards,
-            // each wrapping all subsequent code, so overhead scales as N^2.
             let leave_overhead = leave_count * leave_count * LEAVE_OVERHEAD_PER_SITE * call_count;
             let cost = (call_count - 1) * size * CODE_SIZE_COST_MULTIPLIER + leave_overhead;
             let mut benefit = 0;
 
-            // Small function bonus (only for Leave-free functions)
             if size <= 15 && leave_count == 0 {
                 benefit += SMALL_FUNCTION_BONUS;
             }
 
-            // Bonus for having few call sites (code bloat is manageable)
             if call_count <= 3 && leave_count <= 1 {
                 benefit += 10;
             }
@@ -333,7 +307,6 @@ fn can_inline(function: &Function) -> bool {
     fn check_stmt_for_break_continue(statement: &Statement) -> bool {
         match statement {
             Statement::Break { .. } | Statement::Continue { .. } => true,
-            // Recurse into non-loop control flow (break/continue in a For is fine)
             Statement::If {
                 then_region,
                 else_region,
@@ -346,7 +319,6 @@ fn can_inline(function: &Function) -> bool {
                 cases.iter().any(|c| region_has_break_continue(&c.body))
                     || default.as_ref().is_some_and(region_has_break_continue)
             }
-            // Break/Continue inside For are fine - they refer to that For
             Statement::For { .. } => false,
             Statement::Block(region) => region_has_break_continue(region),
             _ => false,
@@ -427,7 +399,6 @@ fn eliminate_leaves(
     let mut done_id: Option<ValueId> = None;
 
     for (index, statement) in statements.iter().enumerate() {
-        // Once done flag is set, guard all remaining statements
         if let Some(done) = done_id {
             let remaining = &statements[index..];
             if !remaining.is_empty() {
@@ -443,7 +414,6 @@ fn eliminate_leaves(
         }
 
         match statement {
-            // Direct Leave: copy values to accumulators, skip remaining
             Statement::Leave { return_values } => {
                 let new_accums: Vec<ValueId> = return_values
                     .iter()
@@ -466,12 +436,9 @@ fn eliminate_leaves(
                 });
                 current_accums = new_accums;
                 done_id = Some(done);
-                // Remaining statements are dead at this level, but we still
-                // need to guard them in case there's more processing
                 continue;
             }
 
-            // Statement contains Leave in sub-structure
             _ if statement_has_leave_recursive(statement) => {
                 let transformed = transform_leave_statement(statement, &current_accums, next_id);
                 result_statements.extend(transformed.statements);
@@ -479,7 +446,6 @@ fn eliminate_leaves(
                 done_id = transformed.done_id;
             }
 
-            // Normal statement
             _ => {
                 result_statements.push(statement.clone());
             }
@@ -516,7 +482,6 @@ fn wrap_remaining_in_guard(
         },
     });
 
-    // Recursively process remaining statements
     let inner = eliminate_leaves(statements, accum_ids, next_id);
 
     let new_accums: Vec<ValueId> = accum_ids.iter().map(|_| fresh_id(next_id)).collect();
@@ -672,9 +637,8 @@ fn promote_yields_from_guards(
 ) {
     for yield_val in yields.iter_mut() {
         if top_defs.contains(&yield_val.id) {
-            continue; // Already in scope
+            continue;
         }
-        // Find the guard If that contains this value and promote it
         for statement in statements.iter_mut() {
             if let Statement::If {
                 ref mut then_region,
@@ -684,16 +648,11 @@ fn promote_yields_from_guards(
             } = statement
             {
                 if region_defines_value(then_region, yield_val.id) {
-                    // Add the value as an additional yield of the then_region
                     then_region.yields.push(*yield_val);
-                    // Add a new output for the promoted value
                     let new_out = fresh_id(next_id);
                     outputs.push(new_out);
-                    // Add an input for the false case (when done=true, value is dead)
-                    // Use any existing input as placeholder since the value won't be used
                     let placeholder = inputs.first().copied().unwrap_or(*yield_val);
                     inputs.push(placeholder);
-                    // Update the yield to reference the new output
                     yield_val.id = new_out;
                     break;
                 }
@@ -727,7 +686,6 @@ fn transform_leave_statement(
                 },
             });
 
-            // Process then branch
             let then_result = if statements_have_leave(&then_region.statements) {
                 eliminate_leaves(&then_region.statements, accum_ids, next_id)
             } else {
@@ -739,11 +697,9 @@ fn transform_leave_statement(
             };
             let then_done = then_result.done_id.unwrap_or(done_false_id);
 
-            // Build then yields: original yields first, then accums + done
             let mut then_stmts = then_result.statements;
             let mut then_yields: Vec<Value> = then_region.yields.clone();
 
-            // Fix: promote any out-of-scope yield values from guard Ifs
             let then_top_defs = collect_top_scope_defs(&then_stmts);
             promote_yields_from_guards(&mut then_stmts, &mut then_yields, &then_top_defs, next_id);
 
@@ -756,7 +712,6 @@ fn transform_leave_statement(
                 value_type: Type::Int(BitWidth::I256),
             });
 
-            // Build outputs: original outputs first, then new accums + done
             let new_accums: Vec<ValueId> = accum_ids.iter().map(|_| fresh_id(next_id)).collect();
             let new_done = fresh_id(next_id);
             let mut all_outputs: Vec<ValueId> = orig_outputs.clone();
@@ -764,7 +719,6 @@ fn transform_leave_statement(
             all_outputs.push(new_done);
 
             if let Some(else_r) = else_region {
-                // Has explicit else branch
                 let else_result = if statements_have_leave(&else_r.statements) {
                     eliminate_leaves(&else_r.statements, accum_ids, next_id)
                 } else {
@@ -776,11 +730,9 @@ fn transform_leave_statement(
                 };
                 let else_done = else_result.done_id.unwrap_or(done_false_id);
 
-                // Build else yields: original yields first, then accums + done
                 let mut else_stmts = else_result.statements;
                 let mut else_yields: Vec<Value> = else_r.yields.clone();
 
-                // Fix: promote any out-of-scope yield values from guard Ifs
                 let else_top_defs = collect_top_scope_defs(&else_stmts);
                 promote_yields_from_guards(
                     &mut else_stmts,
@@ -798,7 +750,6 @@ fn transform_leave_statement(
                     value_type: Type::Int(BitWidth::I256),
                 });
 
-                // With else: extend inputs to match outputs length
                 let mut inputs: Vec<Value> = orig_inputs.clone();
                 inputs.extend(accum_ids.iter().map(|&id| Value {
                     id,
@@ -823,7 +774,6 @@ fn transform_leave_statement(
                     outputs: all_outputs,
                 });
             } else {
-                // No else: inputs serve as fallback yields when condition is false
                 let mut inputs: Vec<Value> = orig_inputs.clone();
                 inputs.extend(accum_ids.iter().map(|&id| Value {
                     id,
@@ -885,11 +835,9 @@ fn transform_leave_statement(
                     };
                     let case_done = case_result.done_id.unwrap_or(done_false_id);
 
-                    // Original yields first, then accums + done
                     let mut statements = case_result.statements;
                     let mut yields: Vec<Value> = c.body.yields.clone();
 
-                    // Fix: promote any out-of-scope yield values from guard Ifs
                     let top_defs = collect_top_scope_defs(&statements);
                     promote_yields_from_guards(&mut statements, &mut yields, &top_defs, next_id);
 
@@ -920,11 +868,9 @@ fn transform_leave_statement(
                 };
                 let def_done = def_result.done_id.unwrap_or(done_false_id);
 
-                // Original yields first, then accums + done
                 let mut statements = def_result.statements;
                 let mut yields: Vec<Value> = d.yields.clone();
 
-                // Fix: promote any out-of-scope yield values from guard Ifs
                 let top_defs = collect_top_scope_defs(&statements);
                 promote_yields_from_guards(&mut statements, &mut yields, &top_defs, next_id);
 
@@ -939,14 +885,12 @@ fn transform_leave_statement(
                 Region { statements, yields }
             });
 
-            // Outputs: original first, then new accums + done
             let new_accums: Vec<ValueId> = accum_ids.iter().map(|_| fresh_id(next_id)).collect();
             let new_done = fresh_id(next_id);
             let mut all_outputs: Vec<ValueId> = orig_outputs.clone();
             all_outputs.extend(new_accums.iter());
             all_outputs.push(new_done);
 
-            // Inputs: original first, then accum + done fallbacks
             let mut inputs: Vec<Value> = orig_inputs.clone();
             inputs.extend(accum_ids.iter().map(|&id| Value {
                 id,
@@ -972,19 +916,13 @@ fn transform_leave_statement(
             }
         }
 
-        Statement::Block(region) => {
-            // Flatten: process block contents at current level
-            eliminate_leaves(&region.statements, accum_ids, next_id)
-        }
+        Statement::Block(region) => eliminate_leaves(&region.statements, accum_ids, next_id),
 
-        _ => {
-            // Shouldn't reach here; emit as-is as fallback
-            LeaveElimResult {
-                statements: vec![statement.clone()],
-                accum_ids: accum_ids.to_vec(),
-                done_id: None,
-            }
-        }
+        _ => LeaveElimResult {
+            statements: vec![statement.clone()],
+            accum_ids: accum_ids.to_vec(),
+            done_id: None,
+        },
     }
 }
 
@@ -999,26 +937,19 @@ fn transform_leave_statement(
 pub fn inline_functions(object: &mut Object) -> InlineResults {
     let mut results = InlineResults::default();
 
-    // Analyze call graph
     let analysis = analyze_call_graph(object);
 
-    // Update call_count on Function structs
     for (&func_id, function) in object.functions.iter_mut() {
         function.call_count = analysis.call_counts.get(&func_id).copied().unwrap_or(0);
     }
 
-    // Make decisions
     let decisions = make_inline_decisions(object, &analysis);
     results.decisions = decisions.clone();
 
-    // Find max value ID for fresh ID allocation
     let mut next_value_id = object.find_max_value_id() + 1;
 
-    // Collect functions to inline (we need to clone them since we'll mutate the object)
     let functions_snapshot: BTreeMap<FunctionId, Function> = object.functions.clone();
 
-    // Determine which functions should actually be inlined at the IR level.
-    // Functions with Leave inside For loops are deferred to LLVM's inliner.
     let inlineable: BTreeSet<FunctionId> = decisions
         .iter()
         .filter_map(|(&func_id, &decision)| {
@@ -1037,7 +968,6 @@ pub fn inline_functions(object: &mut Object) -> InlineResults {
         return results;
     }
 
-    // Perform inlining in top-level code
     let new_code_stmts = inline_in_statements(
         &object.code.statements,
         &inlineable,
@@ -1047,11 +977,8 @@ pub fn inline_functions(object: &mut Object) -> InlineResults {
     );
     object.code.statements = new_code_stmts;
 
-    // Perform inlining in function bodies
     let func_ids: Vec<FunctionId> = object.functions.keys().copied().collect();
     for func_id in func_ids {
-        // Don't inline within functions that are themselves being inlined everywhere
-        // (they'll be removed anyway)
         let function = object.functions.get(&func_id).unwrap().clone();
         let new_body_stmts = inline_in_statements(
             &function.body.statements,
@@ -1065,7 +992,6 @@ pub fn inline_functions(object: &mut Object) -> InlineResults {
         }
     }
 
-    // Re-analyze to find dead functions (call_count dropped to 0)
     let new_analysis = analyze_call_graph(object);
     let mut to_remove = Vec::new();
     for (&func_id, &count) in &new_analysis.call_counts {
@@ -1078,7 +1004,6 @@ pub fn inline_functions(object: &mut Object) -> InlineResults {
         object.functions.remove(func_id);
     }
 
-    // Update remaining functions with new call counts and size estimates
     for (&func_id, function) in object.functions.iter_mut() {
         function.call_count = new_analysis.call_counts.get(&func_id).copied().unwrap_or(0);
         function.size_estimate = estimate_block_size(&function.body);
@@ -1100,7 +1025,6 @@ fn inline_in_statements(
 
     for statement in statements {
         match statement {
-            // Let binding with a function call - prime inlining target
             Statement::Let {
                 bindings,
                 value:
@@ -1119,7 +1043,6 @@ fn inline_in_statements(
                 }
             }
 
-            // Expression statement with a function call (result discarded)
             Statement::Expression(Expression::Call {
                 function,
                 arguments,
@@ -1133,7 +1056,6 @@ fn inline_in_statements(
                 }
             }
 
-            // Recurse into control flow
             Statement::If {
                 condition,
                 inputs,
@@ -1239,7 +1161,6 @@ fn inline_in_statements(
                 )));
             }
 
-            // Everything else: pass through
             other => result.push(other.clone()),
         }
     }
@@ -1280,7 +1201,6 @@ fn inline_call_with_results(
     let mut remapper = InlineRemapper::new(*next_value_id);
     let mut statements = Vec::new();
 
-    // Bind parameters
     debug_assert_eq!(
         function.parameters.len(),
         arguments.len(),
@@ -1296,7 +1216,6 @@ fn inline_call_with_results(
         });
     }
 
-    // Initialize return variables
     for &ret_init_id in &function.return_values_initial {
         let new_ret_id = remapper.remap_value_id(ret_init_id);
         statements.push(Statement::Let {
@@ -1308,11 +1227,9 @@ fn inline_call_with_results(
         });
     }
 
-    // Remap the body
     let remapped_body = remapper.remap_statements(&function.body.statements);
     *next_value_id = remapper.next_value_id;
 
-    // Get remapped accumulator and fallthrough IDs
     let initial_accums: Vec<ValueId> = function
         .return_values_initial
         .iter()
@@ -1324,8 +1241,6 @@ fn inline_call_with_results(
         .filter_map(|id| remapper.value_map.get(&id.0).copied())
         .collect();
 
-    // Add an explicit Leave at the end for uniform handling.
-    // This represents the fall-through return path.
     let mut body_with_leave = remapped_body;
     body_with_leave.push(Statement::Leave {
         return_values: fallthrough_ids
@@ -1337,11 +1252,9 @@ fn inline_call_with_results(
             .collect(),
     });
 
-    // Eliminate all Leave statements
     let elim = eliminate_leaves(&body_with_leave, &initial_accums, next_value_id);
     statements.extend(elim.statements);
 
-    // Bind results from final accumulators
     for (result_binding, final_ret) in result_bindings.iter().zip(elim.accum_ids.iter()) {
         statements.push(Statement::Let {
             bindings: vec![*result_binding],
@@ -1361,7 +1274,6 @@ fn inline_call_void(
     let mut remapper = InlineRemapper::new(*next_value_id);
     let mut statements = Vec::new();
 
-    // Bind parameters
     for ((parameter_id, _), argument) in function.parameters.iter().zip(arguments.iter()) {
         let new_parameter_id = remapper.remap_value_id(*parameter_id);
         statements.push(Statement::Let {
@@ -1370,7 +1282,6 @@ fn inline_call_void(
         });
     }
 
-    // Initialize return variables
     for &ret_init_id in &function.return_values_initial {
         let new_ret_id = remapper.remap_value_id(ret_init_id);
         statements.push(Statement::Let {
@@ -1382,11 +1293,9 @@ fn inline_call_void(
         });
     }
 
-    // Remap the body
     let remapped_body = remapper.remap_statements(&function.body.statements);
     *next_value_id = remapper.next_value_id;
 
-    // If body has Leave, handle it (even for void functions, Leave skips remaining code)
     if statements_have_leave(&remapped_body) {
         let initial_accums: Vec<ValueId> = function
             .return_values_initial
@@ -1458,7 +1367,6 @@ mod tests {
     ) -> Function {
         let mut function = Function::new(FunctionId::new(id), name.to_string());
 
-        // Add parameters
         let mut next_id = id * 1000;
         for _ in 0..num_params {
             function
@@ -1467,14 +1375,12 @@ mod tests {
             next_id += 1;
         }
 
-        // Add return types and initial return values
         for _ in 0..num_returns {
             function.returns.push(Type::Int(BitWidth::I256));
             function.return_values_initial.push(ValueId::new(next_id));
             next_id += 1;
         }
 
-        // Add statements
         for i in 0..num_stmts {
             function.body.push(Statement::Let {
                 bindings: vec![ValueId::new(next_id)],
@@ -1486,9 +1392,7 @@ mod tests {
             next_id += 1;
         }
 
-        // Set final return values
         if num_returns > 0 {
-            // Last N value IDs are the return values
             let first_ret = next_id - num_stmts as u32;
             for i in 0..num_returns {
                 function
@@ -1503,7 +1407,6 @@ mod tests {
 
     #[test]
     fn test_call_count_analysis() {
-        // Create an object with two functions where f calls g twice
         let mut object = Object::new("test".to_string());
 
         let g = make_simple_function(1, "g", 3, 0, 1);
@@ -1530,7 +1433,6 @@ mod tests {
         object.functions.insert(f_id, f);
         object.functions.insert(g_id, g);
 
-        // Call f from top-level
         object.code.push(Statement::Expression(Expression::Call {
             function: f_id,
             arguments: vec![],
@@ -1548,7 +1450,6 @@ mod tests {
     fn test_recursion_detection() {
         let mut object = Object::new("test".to_string());
 
-        // Direct recursion: f calls itself
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
         f.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
@@ -1565,7 +1466,6 @@ mod tests {
     fn test_mutual_recursion_detection() {
         let mut object = Object::new("test".to_string());
 
-        // Mutual recursion: f calls g, g calls f
         let mut f = Function::new(FunctionId::new(0), "f".to_string());
         f.body.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(1),
@@ -1592,7 +1492,6 @@ mod tests {
     fn test_inline_single_call_function() {
         let mut object = Object::new("test".to_string());
 
-        // Create function g that returns a literal
         let mut g = Function::new(FunctionId::new(1), "g".to_string());
         let g_ret_init = ValueId::new(1000);
         let g_ret_final = ValueId::new(1001);
@@ -1611,7 +1510,6 @@ mod tests {
 
         object.functions.insert(g.id, g);
 
-        // Call g from top-level
         object.code.push(Statement::Let {
             bindings: vec![ValueId::new(99)],
             value: Expression::Call {
@@ -1622,14 +1520,11 @@ mod tests {
 
         let results = inline_functions(&mut object);
 
-        // g should have been inlined and removed
         assert_eq!(results.inlined_call_sites, 1);
         assert!(results.removed_functions.contains(&FunctionId::new(1)));
         assert!(!object.functions.contains_key(&FunctionId::new(1)));
 
-        // Top-level code should now have the inlined body instead of a call
         assert!(object.code.statements.len() > 1);
-        // Verify no Call expressions remain
         let has_call = object.code.statements.iter().any(|s| {
             matches!(
                 s,
@@ -1661,7 +1556,6 @@ mod tests {
 
         let results = inline_functions(&mut object);
 
-        // Recursive function should not be inlined
         assert_eq!(results.inlined_call_sites, 0);
         assert!(object.functions.contains_key(&FunctionId::new(0)));
     }
@@ -1670,19 +1564,15 @@ mod tests {
     fn test_inline_decisions() {
         let mut object = Object::new("test".to_string());
 
-        // Small function called once -> AlwaysInline
         let small = make_simple_function(0, "small", 3, 0, 0);
         object.functions.insert(small.id, small);
 
-        // Medium function called many times -> NeverInline
         let medium = make_simple_function(1, "medium", 50, 0, 0);
         object.functions.insert(medium.id, medium);
 
-        // Large function -> NeverInline
         let large = make_simple_function(2, "large", 150, 0, 0);
         object.functions.insert(large.id, large);
 
-        // Call small once, medium 15 times
         object.code.push(Statement::Expression(Expression::Call {
             function: FunctionId::new(0),
             arguments: vec![],

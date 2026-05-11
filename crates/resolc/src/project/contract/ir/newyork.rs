@@ -75,8 +75,9 @@ const KECCAK_SINGLE_THRESHOLD: usize = 8;
 /// sites bloats the binary beyond the call-overhead savings on PolkaVM.
 const SBRK_NOINLINE_THRESHOLD: usize = 30;
 
-/// Path of the heap-analysis log emitted when [`crate::RESOLC_DEBUG_HEAP_ENV`] is set.
-const HEAP_DEBUG_LOG_PATH: &str = "/tmp/resolc_heap_debug.log";
+/// File name of the heap-analysis log appended inside the debug output directory
+/// when [`crate::RESOLC_DEBUG_HEAP_ENV`] is set.
+const HEAP_DEBUG_LOG_FILE: &str = "resolc_heap_debug.log";
 
 impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
@@ -98,11 +99,14 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let ir_object = translation_result.object;
 
         if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
-            use std::io::Write;
-            let ir_text = revive_newyork::print_object(&ir_object);
-            let debug_file = format!("/tmp/newyork_ir_{}.txt", ir_object.name.replace('/', "_"));
-            if let Ok(mut f) = std::fs::File::create(&debug_file) {
-                let _ = writeln!(f, "{}", ir_text);
+            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
+                use std::io::Write;
+                let ir_text = revive_newyork::print_object(&ir_object);
+                let mut file_path = output_directory.to_owned();
+                file_path.push(format!("{}.newyork.txt", ir_object.name.replace('/', "_")));
+                if let Ok(mut f) = std::fs::File::create(&file_path) {
+                    let _ = writeln!(f, "{}", ir_text);
+                }
             }
         }
         let heap_opt = translation_result.heap_opt;
@@ -121,26 +125,30 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let use_native_heap = heap_opt.all_native();
 
         if std::env::var(crate::RESOLC_DEBUG_HEAP_ENV).is_ok() {
-            use std::io::Write;
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(HEAP_DEBUG_LOG_PATH)
-            {
-                let _ = writeln!(
-                    file,
-                    "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={:?}, native_offsets={:?}, dynamic_escapes={}, dynamic_accesses={}",
-                    ir_object.name,
-                    use_native_heap,
-                    heap_opt.total_accesses,
-                    heap_opt.unknown_accesses,
-                    heap_opt.tainted_count,
-                    heap_opt.escaping_count,
-                    heap_opt.native_safe_regions,
-                    heap_opt.native_safe_offsets,
-                    heap_opt.has_dynamic_escapes,
-                    heap_opt.has_dynamic_accesses,
-                );
+            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
+                use std::io::Write;
+                let mut log_path = output_directory.to_owned();
+                log_path.push(HEAP_DEBUG_LOG_FILE);
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    let _ = writeln!(
+                        file,
+                        "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={:?}, native_offsets={:?}, dynamic_escapes={}, dynamic_accesses={}",
+                        ir_object.name,
+                        use_native_heap,
+                        heap_opt.total_accesses,
+                        heap_opt.unknown_accesses,
+                        heap_opt.tainted_count,
+                        heap_opt.escaping_count,
+                        heap_opt.native_safe_regions,
+                        heap_opt.native_safe_offsets,
+                        heap_opt.has_dynamic_escapes,
+                        heap_opt.has_dynamic_accesses,
+                    );
+                }
             }
         }
 

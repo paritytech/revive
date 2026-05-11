@@ -91,7 +91,6 @@ impl<'a> Printer<'a> {
         self.indent = 0;
         self.function_names.clear();
 
-        // Build function name lookup
         for (id, function) in &object.functions {
             self.function_names.insert(*id, &function.name);
         }
@@ -123,10 +122,6 @@ impl<'a> Printer<'a> {
         std::mem::take(&mut self.output)
     }
 
-    // -------------------------------------------------------------------------
-    // Internal writing methods
-    // -------------------------------------------------------------------------
-
     fn write_indent(&mut self) {
         for _ in 0..self.indent * self.config.indent_size {
             self.output.push(' ');
@@ -144,7 +139,6 @@ impl<'a> Printer<'a> {
 
         self.indent += 1;
 
-        // Print code block
         self.write_indent();
         self.output.push_str("code {");
         self.write_newline();
@@ -157,13 +151,11 @@ impl<'a> Printer<'a> {
         self.output.push('}');
         self.write_newline();
 
-        // Print functions
         for function in object.functions.values() {
             self.write_newline();
             self.write_function(function);
         }
 
-        // Print data sections
         for (name, data) in &object.data {
             self.write_newline();
             self.write_indent();
@@ -175,7 +167,6 @@ impl<'a> Printer<'a> {
             self.write_newline();
         }
 
-        // Print subobjects recursively
         for subobject in &object.subobjects {
             self.write_newline();
             self.write_object(subobject);
@@ -191,7 +182,6 @@ impl<'a> Printer<'a> {
         self.write_indent();
         let _ = write!(self.output, "function {}(", function.name);
 
-        // Parameters
         for (i, (id, value_type)) in function.parameters.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
@@ -204,7 +194,6 @@ impl<'a> Printer<'a> {
         }
         self.output.push(')');
 
-        // Return types
         if !function.returns.is_empty() {
             self.output.push_str(" -> (");
             for (i, (id, value_type)) in function
@@ -225,7 +214,6 @@ impl<'a> Printer<'a> {
             self.output.push(')');
         }
 
-        // Print additional metadata
         if function.call_count > 0 || function.size_estimate > 0 {
             let _ = write!(
                 self.output,
@@ -240,7 +228,6 @@ impl<'a> Printer<'a> {
         self.indent += 1;
         self.write_block(&function.body);
 
-        // Print final return values if different from initial
         if function.return_values != function.return_values_initial {
             self.write_indent();
             self.output.push_str("// final return values: ");
@@ -394,7 +381,6 @@ impl<'a> Printer<'a> {
             } => {
                 self.write_indent();
 
-                // Output bindings
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
                     for (i, id) in outputs.iter().enumerate() {
@@ -409,7 +395,6 @@ impl<'a> Printer<'a> {
                 self.output.push_str("if ");
                 self.write_value(condition);
 
-                // Show inputs if any
                 if !inputs.is_empty() {
                     self.output.push_str(" [");
                     for (i, v) in inputs.iter().enumerate() {
@@ -454,7 +439,6 @@ impl<'a> Printer<'a> {
             } => {
                 self.write_indent();
 
-                // Output bindings
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
                     for (i, id) in outputs.iter().enumerate() {
@@ -469,7 +453,6 @@ impl<'a> Printer<'a> {
                 self.output.push_str("switch ");
                 self.write_value(scrutinee);
 
-                // Show inputs if any
                 if !inputs.is_empty() {
                     self.output.push_str(" [");
                     for (i, v) in inputs.iter().enumerate() {
@@ -513,7 +496,6 @@ impl<'a> Printer<'a> {
             } => {
                 self.write_indent();
 
-                // Output bindings
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
                     for (i, id) in outputs.iter().enumerate() {
@@ -527,7 +509,6 @@ impl<'a> Printer<'a> {
 
                 self.output.push_str("for { ");
 
-                // Init values -> loop variables
                 for (i, (init, variable)) in
                     initial_values.iter().zip(loop_variables.iter()).enumerate()
                 {
@@ -542,7 +523,6 @@ impl<'a> Printer<'a> {
                 self.output.push_str(" }");
                 self.write_newline();
 
-                // Condition statements
                 if !condition_statements.is_empty() {
                     self.indent += 1;
                     self.write_indent();
@@ -559,7 +539,6 @@ impl<'a> Printer<'a> {
                 self.write_expression(condition);
                 self.write_newline();
 
-                // Post region
                 self.write_indent();
                 self.output.push_str("  { // post");
                 self.write_newline();
@@ -570,7 +549,6 @@ impl<'a> Printer<'a> {
                 self.output.push('}');
                 self.write_newline();
 
-                // Body region
                 self.write_indent();
                 self.output.push('{');
                 self.write_newline();

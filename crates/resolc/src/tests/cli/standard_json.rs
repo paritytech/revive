@@ -188,10 +188,7 @@ fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_me
 /// Asserts that the standard JSON output has no errors with severity `error`.
 fn assert_no_errors(output: &SolcStandardJsonOutput) {
     let mut has_errors = false;
-    for error in &output.errors {
-        if !error.is_error() {
-            continue;
-        }
+    for error in output.errors.iter().filter(|error| error.is_error()) {
         eprintln!(
             "ERROR in {}: {}",
             error

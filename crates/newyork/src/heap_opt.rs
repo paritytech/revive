@@ -132,7 +132,7 @@ impl Default for OffsetInfo {
     fn default() -> Self {
         OffsetInfo {
             static_value: None,
-            alignment: 1, // Assume no alignment by default
+            alignment: 1,
             from_literal: false,
         }
     }
@@ -156,26 +156,17 @@ impl HeapAnalysis {
 
     /// Runs heap analysis on an object.
     pub fn analyze_object(&mut self, object: &Object) {
-        // Analyze main code block (constructor — its return(0, size) returns bytecode,
-        // not user data, so we don't track FMP return coverage here)
         self.analyze_block(&object.code, false);
 
-        // Analyze all functions (track FMP return coverage here)
         for function in object.functions.values() {
             self.analyze_block(&function.body, true);
         }
 
-        // Recursively handle subobjects.
-        // Each subobject has its own ValueId namespace (SSA counters restart from 0),
-        // so we must clear the offset_values map to avoid stale lookups that could
-        // confuse runtime values (e.g., returndatasize()) with static constants
-        // from the parent object that happened to share the same ValueId.
         for subobject in &object.subobjects {
             self.offset_values.clear();
             self.analyze_object(subobject);
         }
 
-        // Post-process: determine which regions need big-endian emulation
         self.compute_tainted_regions();
     }
 
@@ -193,13 +184,11 @@ impl HeapAnalysis {
     fn analyze_statement(&mut self, statement: &Statement, in_function: bool) {
         match statement {
             Statement::Let { bindings, value } => {
-                // Track offset information for bindings
                 if let Some(offset_info) = self.analyze_expression_offset(value) {
                     for binding in bindings {
                         self.offset_values.insert(binding.0, offset_info.clone());
                     }
                 }
-                // Also check for memory side effects in the expression
                 self.analyze_expression_side_effects(value);
             }
 
@@ -211,10 +200,8 @@ impl HeapAnalysis {
                 } else {
                     self.has_dynamic_accesses = true;
                 }
-                // If region is known scratch or free pointer, it's more likely aligned
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
                     if let Some(addr) = self.extract_static_offset(offset) {
-                        // Word-aligned addresses in EVM are at offsets 0, 32, 64, ...
                         if addr % 32 != 0 {
                             self.tainted_regions.insert(addr / 32 * 32);
                         }
@@ -223,7 +210,6 @@ impl HeapAnalysis {
             }
 
             Statement::MStore8 { offset, .. } => {
-                // Single byte stores always create unaligned access
                 let pattern = AccessPattern::Unknown;
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
@@ -234,19 +220,13 @@ impl HeapAnalysis {
             }
 
             Statement::MCopy { dest, src, length } => {
-                // MCopy transfers raw bytes without byte-swapping.
-                // Both source and destination ranges must use big-endian byte order
-                // to maintain consistency with surrounding mstore/mload operations.
                 let dest_start = self.extract_static_offset(dest);
                 let src_start = self.extract_static_offset(src);
                 let len = self.extract_static_offset(length);
-                // Taint the full destination range
                 self.taint_range(dest_start, len);
-                // Taint the full source range
                 self.taint_range(src_start, len);
             }
 
-            // Memory escaping to external calls
             Statement::ExternalCall {
                 args_offset,
                 args_length,
@@ -254,67 +234,45 @@ impl HeapAnalysis {
                 ret_length,
                 ..
             } => {
-                // Mark input region as escaping (full range)
                 self.mark_escaping_range(args_offset, args_length);
-                // Mark return region as escaping and tainted (written by external code)
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
             }
 
             Statement::Revert { offset, length } => {
-                // Revert data escapes to the caller — mark all covered regions
                 self.mark_escaping_range(offset, length);
             }
 
             Statement::Return { offset, length } => {
-                // Return data escapes to the caller — mark all covered regions
                 self.mark_escaping_range(offset, length);
-                // Check if this return covers the FMP slot at 0x40.
-                // Only check in function bodies — top-level constructor code always
-                // has return(0, bytecodeSize) which returns bytecode, not user data
-                // (codecopy overwrites 0x40 before the return).
                 if in_function {
                     let start = self.extract_static_offset(offset);
                     let len = self.extract_static_offset(length);
                     match (start, len) {
                         (Some(s), Some(l)) => {
-                            // Static return: check if it covers the FMP slot
                             if s <= 0x40 && s.saturating_add(l) >= 0x60 {
                                 self.has_return_covering_fmp = true;
                             }
                         }
                         (Some(s), None) => {
-                            // Known start, dynamic length: the return could cover
-                            // any offset from s onwards. Track the minimum start
-                            // so we can block native mode for affected offsets.
                             let word_start = s / 32 * 32;
                             self.min_dynamic_escape_start = Some(
                                 self.min_dynamic_escape_start
                                     .map_or(word_start, |prev| prev.min(word_start)),
                             );
                         }
-                        _ => {
-                            // Fully dynamic return (e.g., return(mload(0x40), size)):
-                            // Solidity convention means start >= 0x80, so scratch
-                            // memory and FMP slot are safe.
-                        }
+                        _ => {}
                     }
                 }
             }
 
             Statement::Log { offset, length, .. } => {
-                // Log data escapes — mark all covered regions
                 self.mark_escaping_range(offset, length);
             }
 
             Statement::Create { offset, length, .. } => {
-                // Create data escapes — mark all covered regions
                 self.mark_escaping_range(offset, length);
             }
 
-            // Control flow: nested regions (and `For::condition_statements`) are
-            // walked by `analyze_block`'s `for_each_statement`. We only need the
-            // per-statement setup here — propagating offset info from initial_values
-            // to loop_variables/outputs in `For` (those become PHI nodes in LLVM).
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
             Statement::For {
@@ -338,11 +296,9 @@ impl HeapAnalysis {
             }
 
             Statement::Expression(expression) => {
-                // Check for memory loads that might affect analysis
                 self.analyze_expression_side_effects(expression);
             }
 
-            // ReturnDataCopy writes ABI-encoded big-endian data that needs byte-swapping.
             Statement::ReturnDataCopy { dest, .. } => {
                 if let Some(addr) = self.extract_static_offset(dest) {
                     self.tainted_regions.insert(addr / 32 * 32);
@@ -351,10 +307,6 @@ impl HeapAnalysis {
                 }
             }
 
-            // CodeCopy, DataCopy, CallDataCopy, and ExtCodeCopy write external data
-            // into memory. When this data is subsequently read via mload, it must be
-            // byte-swapped since the source data is in big-endian ABI encoding.
-            // Taint the destination to prevent native mode for these regions.
             Statement::CodeCopy { dest, .. }
             | Statement::ExtCodeCopy { dest, .. }
             | Statement::DataCopy { dest, .. }
@@ -369,7 +321,6 @@ impl HeapAnalysis {
                 }
             }
 
-            // These don't affect memory analysis
             Statement::SStore { .. }
             | Statement::TStore { .. }
             | Statement::MappingSStore { .. }
@@ -388,7 +339,6 @@ impl HeapAnalysis {
 
     /// Classifies a memory access based on the offset value.
     fn classify_access(&self, offset: &Value) -> AccessPattern {
-        // Check if we know this value's offset info
         if let Some(info) = self.offset_values.get(&offset.id.0) {
             if let Some(static_val) = info.static_value {
                 if static_val % 32 == 0 {
@@ -429,16 +379,13 @@ impl HeapAnalysis {
         let start = self.extract_static_offset(offset);
         let len = self.extract_static_offset(length);
         match (start, len) {
-            (Some(_), Some(0)) => {
-                // Zero-length range: nothing escapes
-            }
+            (Some(_), Some(0)) => {}
             (Some(addr), Some(size)) => {
                 let end = addr.saturating_add(size);
                 let first_word = addr / 32 * 32;
                 let range = end.saturating_sub(first_word);
                 let num_words = range.saturating_add(31) / 32;
                 if num_words > MAX_RANGE_WORDS {
-                    // Range too large to enumerate; treat as dynamic escape
                     self.escaping_regions.insert(first_word);
                     self.has_dynamic_escapes = true;
                 } else {
@@ -531,7 +478,6 @@ impl HeapAnalysis {
                 } else if digits.len() == 1 {
                     digits[0]
                 } else {
-                    // Value is too large
                     return None;
                 };
                 Some(OffsetInfo {
@@ -542,8 +488,6 @@ impl HeapAnalysis {
             }
 
             Expression::Var(id) => self.offset_values.get(&id.0).cloned().map(|mut info| {
-                // A variable reference may not be a constant in LLVM IR,
-                // even if the newyork analysis knows its static value.
                 info.from_literal = false;
                 info
             }),
@@ -558,12 +502,10 @@ impl HeapAnalysis {
 
                 match operation {
                     crate::ir::BinaryOperation::Add => {
-                        // Adding two values: alignment is GCD of alignments
                         let lhs_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
                         let rhs_align = rhs_info.map(|i| i.alignment).unwrap_or(1);
                         let result_align = gcd(lhs_align, rhs_align);
 
-                        // If both static, compute result
                         let static_val = match (
                             lhs_info.and_then(|i| i.static_value),
                             rhs_info.and_then(|i| i.static_value),
@@ -580,7 +522,6 @@ impl HeapAnalysis {
                     }
 
                     crate::ir::BinaryOperation::Mul => {
-                        // Multiplying by constant affects alignment
                         let static_val = match (
                             lhs_info.and_then(|i| i.static_value),
                             rhs_info.and_then(|i| i.static_value),
@@ -589,7 +530,6 @@ impl HeapAnalysis {
                             _ => None,
                         };
 
-                        // If multiplying by 32, alignment is at least 32
                         let mult_align = match (
                             rhs_info.and_then(|i| i.static_value),
                             lhs_info.and_then(|i| i.static_value),
@@ -607,8 +547,6 @@ impl HeapAnalysis {
                     }
 
                     crate::ir::BinaryOperation::And => {
-                        // AND with mask can improve alignment knowledge
-                        // e.g., x & 0xFFFFFFE0 ensures 32-byte alignment
                         if let Some(mask) = rhs_info.and_then(|i| i.static_value) {
                             let align = compute_alignment((!mask).wrapping_add(1));
                             Some(OffsetInfo {
@@ -622,7 +560,6 @@ impl HeapAnalysis {
                     }
 
                     crate::ir::BinaryOperation::Shl => {
-                        // Shift left increases alignment
                         if let Some(shift) = rhs_info.and_then(|i| i.static_value) {
                             if shift < 32 {
                                 let base_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
@@ -643,10 +580,8 @@ impl HeapAnalysis {
                 }
             }
 
-            // MLoad returns memory content, not useful for offset analysis
             Expression::MLoad { .. } => None,
 
-            // CallDataLoad could be any value
             Expression::CallDataLoad { .. } => None,
 
             _ => None,
@@ -655,7 +590,6 @@ impl HeapAnalysis {
 
     /// Analyzes expression side effects on memory.
     fn analyze_expression_side_effects(&mut self, expression: &Expression) {
-        // MLoad doesn't have side effects but we track what regions are read
         match expression {
             Expression::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
@@ -669,23 +603,16 @@ impl HeapAnalysis {
                 if self.extract_static_offset(offset).is_none() {
                     self.has_dynamic_accesses = true;
                 }
-                // Keccak256 reads raw bytes from memory, so the memory region
-                // must be in big-endian format. Mark it as escaping.
                 self.mark_escaping_range(offset, length);
             }
-            Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {
-                // Keccak256Pair/Single use scratch memory internally; nothing to classify
-            }
-            Expression::MappingSLoad { .. } => {
-                // MappingSLoad is a compound keccak256+sload; no heap memory effects
-            }
+            Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {}
+            Expression::MappingSLoad { .. } => {}
             _ => {}
         }
     }
 
     /// Computes which regions need big-endian emulation.
     fn compute_tainted_regions(&mut self) {
-        // Regions that escape always need big-endian for EVM compatibility
         for &region in &self.escaping_regions {
             self.tainted_regions.insert(region);
         }
@@ -827,7 +754,6 @@ impl HeapOptResults {
         let mut native_safe_offsets = BTreeSet::new();
         let mut unknown_accesses = 0;
 
-        // Find all accessed addresses that are aligned and not tainted/escaping
         for (&addr, pattern) in &analysis.memory_accesses {
             if matches!(pattern, AccessPattern::Unknown) {
                 unknown_accesses += 1;
@@ -857,43 +783,24 @@ impl HeapOptResults {
 
     /// Checks if a static offset can use native byte order.
     pub fn can_use_native(&self, offset: u64) -> bool {
-        // Any fully dynamic mload/mstore may hit this offset in ByteSwap mode
-        // while a literal access here uses native (little-endian) storage.
-        // The dynamic read/write would disagree on byte order. Inline asm like
-        // `mload(calldataload(4))` is the canonical trigger — the fuzzer caught
-        // this on MLoad.loadAt where Solidity's prelude stores FMP at 0x40 in
-        // native mode and a dynamic mload(0x40) misinterprets the bytes as BE.
         if self.has_dynamic_accesses {
             return false;
         }
-        // When a static offset is also accessed via a non-literal expression
-        // (e.g., `let size := 64; mload(size)`), LLVM may not see it as a constant.
-        // The literal access would get InlineNative, but the variable access would
-        // get ByteSwap, causing a store/load mode mismatch. Disable native mode.
         if self.variable_accessed_offsets.contains(&offset) {
             return false;
         }
-        // When there are dynamic-length return statements with known start,
-        // any offset at or above that start could escape via the return.
         if let Some(min_start) = self.min_dynamic_escape_start {
             let word_offset = offset / 32 * 32;
             if word_offset >= min_start {
                 return false;
             }
         }
-        // When there are fully dynamic escapes (e.g., return(mload(0x40), size)),
-        // any region beyond the Solidity reserved area could potentially escape.
-        // The Solidity free memory pointer starts at 0x80, so only offsets in the
-        // reserved area (0x00-0x5F) are provably safe. The FMP slot (0x40-0x5F)
-        // is handled separately by the fmp_native_safe() check in native_memory_mode().
         if self.has_dynamic_escapes && offset >= 0x60 {
             return false;
         }
-        // Check if this specific offset is safe
         if self.native_safe_offsets.contains(&offset) {
             return true;
         }
-        // Check if the word region is safe
         let word_addr = offset / 32 * 32;
         self.native_safe_regions.contains(&word_addr)
     }
@@ -910,22 +817,15 @@ impl HeapOptResults {
     /// - Offset 0x40 is accessed via a non-literal expression (LLVM won't see a constant)
     /// - Any memory access uses a fully dynamic offset (could touch 0x40)
     pub fn fmp_native_safe(&self) -> bool {
-        // If 0x40 is accessed via a variable, LLVM won't see a constant and will
-        // use ByteSwap mode, mismatching with literal InlineNative stores.
         if self.variable_accessed_offsets.contains(&0x40) {
             return false;
         }
-        // A fully dynamic mload/mstore (offset unknown at compile time) may hit
-        // 0x40 using ByteSwap mode while the literal Solidity-prelude store at
-        // 0x40 uses InlineNative. The two disagree on byte order. See the
-        // matching check in `can_use_native`.
         if self.has_dynamic_accesses {
             return false;
         }
         if self.has_return_covering_fmp {
             return false;
         }
-        // A dynamic-length escape starting at <= 0x40 could cover the FMP slot
         if let Some(min_start) = self.min_dynamic_escape_start {
             if min_start <= 0x40 {
                 return false;
@@ -947,13 +847,6 @@ impl HeapOptResults {
     /// 3. No memory escapes to external code (calls, returns, logs)
     /// 4. No tainted regions (unaligned writes)
     pub fn all_native(&self) -> bool {
-        // Conditions for native-only mode:
-        // 1. We must have analyzed at least one access
-        // 2. No unknown/dynamic accesses
-        // 3. No tainted regions (unaligned writes)
-        // 4. No escaping regions (external interfaces)
-        // 5. No dynamic escapes (return/revert/call/log/create with unresolved offsets)
-        // 6. No dynamic memory accesses (mstore/mload with unresolved offsets)
         self.total_accesses > 0
             && self.unknown_accesses == 0
             && self.tainted_count == 0
@@ -973,7 +866,7 @@ impl HeapOptResults {
 /// Computes the alignment of a value (highest power of 2 that divides it).
 fn compute_alignment(value: u64) -> u32 {
     if value == 0 {
-        return 32; // Zero is aligned to everything
+        return 32;
     }
     value.trailing_zeros().min(5)
 }
@@ -995,12 +888,12 @@ mod tests {
     #[test]
     fn test_alignment_computation() {
         assert_eq!(compute_alignment(0), 32);
-        assert_eq!(compute_alignment(1), 0); // 2^0 = 1
-        assert_eq!(compute_alignment(2), 1); // 2^1 = 2
-        assert_eq!(compute_alignment(4), 2); // 2^2 = 4
-        assert_eq!(compute_alignment(32), 5); // 2^5 = 32
-        assert_eq!(compute_alignment(64), 5); // capped at 32
-        assert_eq!(compute_alignment(33), 0); // odd
+        assert_eq!(compute_alignment(1), 0);
+        assert_eq!(compute_alignment(2), 1);
+        assert_eq!(compute_alignment(4), 2);
+        assert_eq!(compute_alignment(32), 5);
+        assert_eq!(compute_alignment(64), 5);
+        assert_eq!(compute_alignment(33), 0);
     }
 
     #[test]
@@ -1029,23 +922,20 @@ mod tests {
     fn test_offset_info_from_literal() {
         let analysis = HeapAnalysis::new();
 
-        // Zero literal
         let expression = Expression::Literal {
             value: BigUint::from(0u32),
             value_type: crate::ir::Type::default(),
         };
         let info = analysis.analyze_expression_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(0));
-        assert_eq!(info.alignment, 32); // Zero is maximally aligned
+        assert_eq!(info.alignment, 32);
 
-        // Word-aligned literal (0x40 = 64)
         let expression = Expression::Literal {
             value: BigUint::from(64u32),
             value_type: crate::ir::Type::default(),
         };
         let info = analysis.analyze_expression_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(64));
-        // 64 = 2^6, so alignment is capped at 32
         assert_eq!(info.alignment, 5);
     }
 }

@@ -1,10 +1,7 @@
 //! LLVM code generation for the newyork IR.
 //!
-//! This module implements translation from newyork IR to LLVM IR via inkwell,
-//! reusing the PolkaVM context infrastructure from revive-llvm-context.
-//!
-//! NOTE: This is a work-in-progress implementation. Many functions are stubbed
-//! or simplified for initial development.
+//! Translates newyork IR to LLVM IR via inkwell, reusing the PolkaVM context
+//! infrastructure from revive-llvm-context.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -79,6 +76,28 @@ const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
 /// Functions with size_estimate at or below this threshold get AlwaysInline when no
 /// IR-level decision was made. Very small functions benefit from inlining.
 const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
+
+/// Solidity convention: the free memory pointer is stored at this heap offset.
+const FREE_MEMORY_POINTER_SLOT: u64 = 0x40;
+
+/// Default initial value of the free memory pointer — the start of the dynamic
+/// heap region above Solidity's scratch space and the FMP slot itself.
+const DYNAMIC_HEAP_BASE: u64 = 0x80;
+
+/// Length in bytes of an EVM ABI function selector.
+const ABI_SELECTOR_LENGTH: u64 = 4;
+
+/// Byte offset (inside an `Error(string)` ABI-encoded revert payload, relative to
+/// the start of the payload) at which the string length word is stored.
+/// Equals `selector (4) + offset word (32)`.
+const ERROR_STRING_LENGTH_FIELD_OFFSET: u64 =
+    ABI_SELECTOR_LENGTH + revive_common::BYTE_LENGTH_WORD as u64;
+
+/// Byte offset (inside an `Error(string)` ABI-encoded revert payload, relative to
+/// the start of the payload) at which the first string-data word begins.
+/// Equals `selector (4) + offset word (32) + length word (32)`.
+const ERROR_STRING_FIRST_DATA_WORD_OFFSET: u64 =
+    ABI_SELECTOR_LENGTH + 2 * revive_common::BYTE_LENGTH_WORD as u64;
 
 /// LLVM code generator for newyork IR.
 /// Tracks phi nodes at the continue-landing block of a for loop.
@@ -485,7 +504,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// The free memory pointer is a Solidity convention where mload(64) returns
     /// the next free heap address. This value is always < 2^32 on PolkaVM.
     fn is_free_pointer_load(offset: IntValue<'ctx>) -> bool {
-        Self::try_extract_const_u64(offset) == Some(0x40)
+        Self::try_extract_const_u64(offset) == Some(FREE_MEMORY_POINTER_SLOT)
     }
 
     /// Applies a range proof to a value by truncating to a narrower type and zero-extending
@@ -541,7 +560,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             // value gets overwritten by ABI-encoded error data before the escape.
             // This optimization is ONLY safe when no `return` statement covers 0x40 —
             // inline assembly like `return(0, 96)` would return the native FMP value.
-            if static_val == 0x40 && self.heap_opt.fmp_native_safe() {
+            if static_val == FREE_MEMORY_POINTER_SLOT && self.heap_opt.fmp_native_safe() {
                 return NativeMemoryMode::InlineNative;
             }
             // For constant offsets that need byte-swapping (escaping/tainted), use
@@ -1270,7 +1289,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let word_type = context.word_type();
-        let fn_name = format!("__revive_error_string_revert_{num_words}");
+        let function_name = format!("__revive_error_string_revert_{num_words}");
 
         // Build function type: void(i256 length, i256 word0, ..., i256 wordN-1)
         let mut parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
@@ -1278,15 +1297,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
         for _ in 0..num_words {
             parameter_types.push(word_type.into());
         }
-        let fn_type = context.llvm().void_type().fn_type(&parameter_types, false);
+        let function_type = context.llvm().void_type().fn_type(&parameter_types, false);
 
         let function = context.module().add_function(
-            &fn_name,
-            fn_type,
+            &function_name,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
-        // Set noinline + noreturn + minsize attributes
         let noinline_attr = context
             .llvm()
             .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
@@ -1300,16 +1318,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         function.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
         function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
 
-        // Save current builder position
         let saved_block = context.basic_block();
 
-        // Build the function body
         let entry_block = context.llvm().append_basic_block(function, "entry");
         context.set_basic_block(entry_block);
 
-        // Get parameters
-        let length_param = function.get_nth_param(0).unwrap().into_int_value();
-        let word_params: Vec<_> = (0..num_words)
+        let length_parameter = function.get_nth_param(0).unwrap().into_int_value();
+        let word_parameters: Vec<_> = (0..num_words)
             .map(|i| {
                 function
                     .get_nth_param((i + 1) as u32)
@@ -1318,8 +1333,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             })
             .collect();
 
-        // Load free memory pointer: mload(0x40)
-        let fmp_offset = context.word_const(0x40);
+        let fmp_offset = context.word_const(FREE_MEMORY_POINTER_SLOT);
         let fmp = revive_llvm_context::polkavm_evm_memory::load(context, fmp_offset)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
             .into_int_value();
@@ -1329,42 +1343,59 @@ impl<'ctx> LlvmCodegen<'ctx> {
         revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_selector)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // mstore(fmp + 4, 0x20) — string data offset
-        let fmp_plus_4 = context
+        let fmp_plus_offset_field = context
             .builder()
-            .build_int_add(fmp, context.word_const(4), "fmp_4")
+            .build_int_add(
+                fmp,
+                context.word_const(ABI_SELECTOR_LENGTH),
+                "fmp_offset_field",
+            )
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        let offset_val = context.word_const(0x20);
-        revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_4, offset_val)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let string_data_offset = context.word_const(revive_common::BYTE_LENGTH_WORD as u64);
+        revive_llvm_context::polkavm_evm_memory::store(
+            context,
+            fmp_plus_offset_field,
+            string_data_offset,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // mstore(fmp + 0x24, length)
-        let fmp_plus_0x24 = context
+        let fmp_plus_length_field = context
             .builder()
-            .build_int_add(fmp, context.word_const(0x24), "fmp_24")
+            .build_int_add(
+                fmp,
+                context.word_const(ERROR_STRING_LENGTH_FIELD_OFFSET),
+                "fmp_length_field",
+            )
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_0x24, length_param)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        revive_llvm_context::polkavm_evm_memory::store(
+            context,
+            fmp_plus_length_field,
+            length_parameter,
+        )
+        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // mstore(fmp + 0x44, word0), mstore(fmp + 0x64, word1), ...
-        for (i, word_param) in word_params.iter().enumerate() {
-            let offset = 0x44 + (i as u64) * 0x20;
+        for (i, word_parameter) in word_parameters.iter().enumerate() {
+            let offset = ERROR_STRING_FIRST_DATA_WORD_OFFSET
+                + (i as u64) * revive_common::BYTE_LENGTH_WORD as u64;
             let fmp_plus_offset = context
                 .builder()
                 .build_int_add(fmp, context.word_const(offset), &format!("fmp_{offset:x}"))
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-            revive_llvm_context::polkavm_evm_memory::store(context, fmp_plus_offset, *word_param)
-                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+            revive_llvm_context::polkavm_evm_memory::store(
+                context,
+                fmp_plus_offset,
+                *word_parameter,
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         }
 
-        // revert(fmp, total_length)
-        let total_length = 0x44 + (num_words as u64) * 0x20;
+        let total_length = ERROR_STRING_FIRST_DATA_WORD_OFFSET
+            + (num_words as u64) * revive_common::BYTE_LENGTH_WORD as u64;
         let total_length_val = context.word_const(total_length);
         revive_llvm_context::polkavm_evm_return::revert(context, fmp, total_length_val)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context.build_unreachable();
 
-        // Restore builder position
         context.set_basic_block(saved_block);
 
         self.error_string_revert_fns.insert(num_words, function);
@@ -1388,21 +1419,20 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let word_type = context.word_type();
-        let fn_name = format!("__revive_custom_error_{num_args}");
+        let function_name = format!("__revive_custom_error_{num_args}");
 
         // Build function type: void(i256 selector, i256 arg0, ..., i256 argN-1)
         // Selector is passed as the first parameter
         let parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
             (0..=num_args).map(|_| word_type.into()).collect();
-        let fn_type = context.llvm().void_type().fn_type(&parameter_types, false);
+        let function_type = context.llvm().void_type().fn_type(&parameter_types, false);
 
         let function = context.module().add_function(
-            &fn_name,
-            fn_type,
+            &function_name,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
-        // Set noinline + noreturn + minsize attributes
         let noinline_attr = context
             .llvm()
             .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
@@ -1416,16 +1446,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
         function.add_attribute(inkwell::attributes::AttributeLoc::Function, noreturn_attr);
         function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
 
-        // Save current builder position
         let saved_block = context.basic_block();
 
-        // Build the function body
         let entry_block = context.llvm().append_basic_block(function, "entry");
         context.set_basic_block(entry_block);
 
         // param 0 = selector, parameters 1..=num_args = dynamic arguments
-        let selector_param = function.get_nth_param(0).unwrap().into_int_value();
-        let arg_params: Vec<_> = (1..=num_args)
+        let selector_parameter = function.get_nth_param(0).unwrap().into_int_value();
+        let argument_parameters: Vec<_> = (1..=num_args)
             .map(|i| function.get_nth_param(i as u32).unwrap().into_int_value())
             .collect();
 
@@ -1434,28 +1462,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
         revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
             context,
             offset_0,
-            selector_param,
+            selector_parameter,
         )
         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // mstore(4, arg0), mstore(0x24, arg1), ...
-        for (i, arg_param) in arg_params.iter().enumerate() {
-            let byte_offset = 4 + (i as u64) * 0x20;
+        for (i, argument_parameter) in argument_parameters.iter().enumerate() {
+            let byte_offset =
+                ABI_SELECTOR_LENGTH + (i as u64) * revive_common::BYTE_LENGTH_WORD as u64;
             let offset_val = context.xlen_type().const_int(byte_offset, false);
             revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-                context, offset_val, *arg_param,
+                context,
+                offset_val,
+                *argument_parameter,
             )
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         }
 
-        // revert(0, 4 + 32*num_args) - use outlined revert to avoid duplicating exit sequence
-        let const_len = 4 + (num_args as u64) * 0x20;
+        let const_len =
+            ABI_SELECTOR_LENGTH + (num_args as u64) * revive_common::BYTE_LENGTH_WORD as u64;
         let length_xlen = context.xlen_type().const_int(const_len, false);
         revive_llvm_context::polkavm_evm_return::revert_outlined(context, length_xlen)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context.build_unreachable();
 
-        // Restore builder position
         context.set_basic_block(saved_block);
 
         self.custom_error_revert_fns.insert(num_args, function);
@@ -1475,13 +1504,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let word_type = context.word_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into(), word_type.into()], false);
         let function = context.module().add_function(
             "__revive_store_bswap",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -1533,13 +1562,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let word_type = context.word_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into(), word_type.into()], false);
         let function = context.module().add_function(
             "__revive_store_bswap_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -1621,13 +1650,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let xlen_type = context.xlen_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into()], false);
         let function = context.module().add_function(
             "__revive_store_zero_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -1718,13 +1747,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let i64_type = context.llvm().i64_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into(), i64_type.into()], false);
         let function = context.module().add_function(
             "__revive_store_low_word_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -1850,13 +1879,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let i32_type = context.llvm().i32_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into(), i32_type.into()], false);
         let function = context.module().add_function(
             "__revive_store_high_word_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -1876,7 +1905,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
-        let selector_param = function.get_nth_param(1).unwrap().into_int_value();
+        let selector_parameter = function.get_nth_param(1).unwrap().into_int_value();
         let heap_size = context.heap_size();
         let max_offset = context
             .builder()
@@ -1924,7 +1953,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .expect("bswap.i32 declaration");
         let swapped_selector = context
             .builder()
-            .build_call(bswap32_decl, &[selector_param.into()], "swapped_sel")
+            .build_call(bswap32_decl, &[selector_parameter.into()], "swapped_sel")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?
             .try_as_basic_value()
             .unwrap_basic()
@@ -1960,13 +1989,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let word_type = context.word_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[xlen_type.into(), word_type.into()], false);
         let function = context.module().add_function(
             "__revive_return_word",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2070,10 +2099,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let xlen_type = context.xlen_type();
         let word_type = context.word_type();
-        let fn_type = word_type.fn_type(&[xlen_type.into()], false);
+        let function_type = word_type.fn_type(&[xlen_type.into()], false);
         let function = context.module().add_function(
             "__revive_load_bswap_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2152,13 +2181,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let xlen_type = context.xlen_type();
-        let fn_type = context.llvm().void_type().fn_type(
+        let function_type = context.llvm().void_type().fn_type(
             &[xlen_type.into(), xlen_type.into(), xlen_type.into()],
             false,
         );
         let function = context.module().add_function(
             "__revive_exit_checked",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2184,7 +2213,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_basic_block(entry_block);
         let flags_param = function.get_nth_param(0).unwrap().into_int_value();
         let offset_param = function.get_nth_param(1).unwrap().into_int_value();
-        let length_param = function.get_nth_param(2).unwrap().into_int_value();
+        let length_parameter = function.get_nth_param(2).unwrap().into_int_value();
 
         let heap_size = context.heap_size();
         // Check offset >= heap_size first to avoid wrapping in the subtraction below
@@ -2213,7 +2242,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .builder()
             .build_int_compare(
                 inkwell::IntPredicate::UGT,
-                length_param,
+                length_parameter,
                 remaining,
                 "exit_oob",
             )
@@ -2242,7 +2271,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             &[
                 flags_param.into(),
                 offset_pointer.into(),
-                length_param.into(),
+                length_parameter.into(),
             ],
         );
         context.build_unreachable();
@@ -2266,10 +2295,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let word_type = context.word_type();
         let xlen_type = context.xlen_type();
-        let fn_type = word_type.fn_type(&[word_type.into()], false);
+        let function_type = word_type.fn_type(&[word_type.into()], false);
         let function = context.module().add_function(
             "__revive_sload_word",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2344,13 +2373,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let word_type = context.word_type();
         let xlen_type = context.xlen_type();
-        let fn_type = context
+        let function_type = context
             .llvm()
             .void_type()
             .fn_type(&[word_type.into(), word_type.into()], false);
         let function = context.module().add_function(
             "__revive_sstore_word",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2426,10 +2455,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let word_type = context.word_type();
         let xlen_type = context.xlen_type();
-        let fn_type = word_type.fn_type(&[word_type.into(), word_type.into()], false);
+        let function_type = word_type.fn_type(&[word_type.into(), word_type.into()], false);
         let function = context.module().add_function(
             "__revive_mapping_sload",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2461,7 +2490,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         )
         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Get heap pointer at offset 0 for keccak input
         let input_pointer = context
             .build_heap_gep_unchecked(offset0)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2526,13 +2554,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let word_type = context.word_type();
         let xlen_type = context.xlen_type();
-        let fn_type = context.llvm().void_type().fn_type(
+        let function_type = context.llvm().void_type().fn_type(
             &[word_type.into(), word_type.into(), word_type.into()],
             false,
         );
         let function = context.module().add_function(
             "__revive_mapping_sstore",
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -2574,7 +2602,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_store(value_pointer.value, value_bswap)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Get heap pointer at offset 0 for keccak input
         let input_pointer = context
             .build_heap_gep_unchecked(offset0)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2655,10 +2682,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let void_type = context.llvm().void_type();
-        let fn_type = void_type.fn_type(&[], false);
-        let function = context
-            .module()
-            .add_function("__revive_callvalue_check", fn_type, None);
+        let function_type = void_type.fn_type(&[], false);
+        let function =
+            context
+                .module()
+                .add_function("__revive_callvalue_check", function_type, None);
 
         // noinline + minsize: don't inline this, optimize for size
         let noinline_attr = context.llvm().create_enum_attribute(
@@ -3155,7 +3183,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// bytes in body overhead, so we only emit it when there are enough
     /// call sites to amortise that cost (per-site savings are ~3 inst).
     fn count_constant_mstore_patterns(object: &Object) -> (usize, usize) {
-        use crate::ir::for_each_stmt;
+        use crate::ir::for_each_statement;
         use num::Zero;
 
         // Build a map of ValueId -> literal constant in one pass over the
@@ -3170,9 +3198,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
         };
-        for_each_stmt(&object.code.statements, &mut record);
+        for_each_statement(&object.code.statements, &mut record);
         for function in object.functions.values() {
-            for_each_stmt(&function.body.statements, &mut record);
+            for_each_statement(&function.body.statements, &mut record);
         }
 
         let classify = |value: &Value| -> Option<bool> {
@@ -3207,9 +3235,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
         };
-        for_each_stmt(&object.code.statements, &mut count);
+        for_each_statement(&object.code.statements, &mut count);
         for function in object.functions.values() {
-            for_each_stmt(&function.body.statements, &mut count);
+            for_each_statement(&function.body.statements, &mut count);
         }
         (low_total, high_total)
     }
@@ -3315,21 +3343,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
             PolkaVMFunctionDeployCode
         };
 
-        // Set the current function and basic block
         context
             .set_current_function(function_name, None, false)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        // Generate the main code block
         self.generate_block(&object.code, context)?;
 
-        // Reset debug location and handle function return
         context
             .set_debug_location(0, 0, None)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        // Check if block ends with a terminator, if not add branch to return
+        // Append a branch to the return block when the body falls through without one.
         match context
             .basic_block()
             .get_last_instruction()
@@ -3386,7 +3411,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        // Check if function already exists (handles shared utility functions)
         if context.get_function(&function.name, true).is_some() {
             return Ok(());
         }
@@ -3397,7 +3421,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .map(|(_, value_type)| self.ir_type_to_llvm(*value_type, context))
             .collect();
 
-        // Check if any return types are narrowed from I256
         let has_narrow_returns = function.returns.iter().any(
             |value_type| matches!(value_type, Type::Int(bit_width) if *bit_width < BitWidth::I256),
         );
@@ -3532,27 +3555,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_current_function(&function.name, None, true)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
-        // Set up parameters. For narrowed parameters, zero-extend back to word type.
-        // This creates an implicit range proof: LLVM knows the value fits in the
-        // narrower type, which eliminates overflow checks downstream.
-        for (index, (param_id, parameter_type)) in function.parameters.iter().enumerate() {
-            let param_value = context.current_function().borrow().get_nth_param(index);
+        // Zero-extending narrowed parameters back to the word type acts as an implicit
+        // range proof so LLVM can eliminate overflow checks against the narrow value.
+        for (index, (parameter_id, parameter_type)) in function.parameters.iter().enumerate() {
+            let parameter_value = context.current_function().borrow().get_nth_param(index);
             let stored_value = match parameter_type {
                 Type::Int(width) if *width < BitWidth::I256 => {
-                    let narrow_val = param_value.into_int_value();
+                    let narrow_value = parameter_value.into_int_value();
                     context
                         .builder()
                         .build_int_z_extend(
-                            narrow_val,
+                            narrow_value,
                             context.word_type(),
-                            &format!("param_{}_extend", index),
+                            &format!("parameter_{}_extend", index),
                         )
                         .map_err(|e| anyhow::anyhow!("LLVM error: {e}"))?
                         .as_basic_value_enum()
                 }
-                _ => param_value,
+                _ => parameter_value,
             };
-            self.set_value(*param_id, stored_value);
+            self.set_value(*parameter_id, stored_value);
         }
 
         // Initialize return values to zero
@@ -3891,7 +3913,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
         // Track which statement we're processing for better error messages
-        let stmt_kind = match statement {
+        let statement_kind = match statement {
             Statement::Let { .. } => "Let",
             Statement::MStore { .. } => "MStore",
             Statement::MStore8 { .. } => "MStore8",
@@ -3929,7 +3951,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         if let Err(e) = self.generate_statement_inner(statement, context) {
             return Err(CodegenError::Llvm(format!(
                 "Error in {} statement: {}",
-                stmt_kind, e
+                statement_kind, e
             )));
         }
         Ok(())
@@ -3955,7 +3977,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
 
                 // Compute demand hint for single-binding Lets: if every use site
-                // only needs ≤64 bits, tell generate_expr so modular BinOps can
+                // only needs ≤64 bits, tell generate_expression so modular BinOps can
                 // operate at i64 directly instead of i256+trunc.
                 let demand = if bindings.len() == 1 {
                     let binding_id = bindings[0];
@@ -3975,7 +3997,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     None
                 };
 
-                let llvm_value = self.generate_expr(value, context, demand)?;
+                let llvm_value = self.generate_expression(value, context, demand)?;
                 if bindings.len() == 1 {
                     let binding_id = bindings[0];
                     let llvm_value =
@@ -4047,7 +4069,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // The free memory pointer (offset 0x40) only holds heap offsets
                         // bounded by the static heap size (≤131072). Store as i32 to
                         // eliminate 7/8 of the store width on 32-bit PVM.
-                        let is_fmp_store = Self::try_extract_const_u64(offset_val) == Some(0x40)
+                        let is_fmp_store = Self::try_extract_const_u64(offset_val)
+                            == Some(FREE_MEMORY_POINTER_SLOT)
                             && matches!(region, MemoryRegion::FreePointerSlot);
                         let store_val: inkwell::values::BasicValueEnum = if is_fmp_store {
                             context
@@ -4072,8 +4095,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         // which normally tracks the heap size.
                         // Skip when the contract doesn't use msize() to save code.
                         if self.has_msize {
-                            let static_off =
-                                Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
+                            let static_off = Self::try_extract_const_u64(offset_val)
+                                .unwrap_or(DYNAMIC_HEAP_BASE);
                             let min_size = context.xlen_type().const_int(
                                 static_off + revive_common::BYTE_LENGTH_WORD as u64,
                                 false,
@@ -4113,8 +4136,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         }
                         if self.has_msize {
-                            let static_off =
-                                Self::try_extract_const_u64(offset_val).unwrap_or(0x80);
+                            let static_off = Self::try_extract_const_u64(offset_val)
+                                .unwrap_or(DYNAMIC_HEAP_BASE);
                             let min_size = context.xlen_type().const_int(
                                 static_off + revive_common::BYTE_LENGTH_WORD as u64,
                                 false,
@@ -4801,7 +4824,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 // Evaluate condition
                 let cond_val = self
-                    .generate_expr(condition, context, None)?
+                    .generate_expression(condition, context, None)?
                     .into_int_value();
                 // Compare at native width - no need to extend to word type
                 let cond_zero = cond_val.get_type().const_zero();
@@ -5297,55 +5320,72 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     context.build_unreachable();
                 } else {
-                    // Emit inline: same code as the outlined function body
-                    let fmp_offset = context.word_const(0x40);
+                    let fmp_offset = context.word_const(FREE_MEMORY_POINTER_SLOT);
                     let fmp = revive_llvm_context::polkavm_evm_memory::load(context, fmp_offset)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?
                         .into_int_value();
 
-                    let error_sel =
+                    let error_selector =
                         context.word_const_str_hex(revive_common::ERROR_STRING_SELECTOR_WORD_HEX);
-                    revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_sel)
+                    revive_llvm_context::polkavm_evm_memory::store(context, fmp, error_selector)
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                    let fmp_4 = context
+                    let fmp_plus_offset_field = context
                         .builder()
-                        .build_int_add(fmp, context.word_const(4), "fmp_4")
+                        .build_int_add(
+                            fmp,
+                            context.word_const(ABI_SELECTOR_LENGTH),
+                            "fmp_offset_field",
+                        )
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     revive_llvm_context::polkavm_evm_memory::store(
                         context,
-                        fmp_4,
-                        context.word_const(0x20),
+                        fmp_plus_offset_field,
+                        context.word_const(revive_common::BYTE_LENGTH_WORD as u64),
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-                    let fmp_24 = context
+                    let fmp_plus_length_field = context
                         .builder()
-                        .build_int_add(fmp, context.word_const(0x24), "fmp_24")
+                        .build_int_add(
+                            fmp,
+                            context.word_const(ERROR_STRING_LENGTH_FIELD_OFFSET),
+                            "fmp_length_field",
+                        )
                         .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     revive_llvm_context::polkavm_evm_memory::store(
                         context,
-                        fmp_24,
+                        fmp_plus_length_field,
                         context.word_const(*length as u64),
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
                     for (i, word) in data.iter().enumerate() {
-                        let off = 0x44 + (i as u64) * 0x20;
-                        let fmp_off = context
+                        let offset = ERROR_STRING_FIRST_DATA_WORD_OFFSET
+                            + (i as u64) * revive_common::BYTE_LENGTH_WORD as u64;
+                        let fmp_plus_offset = context
                             .builder()
-                            .build_int_add(fmp, context.word_const(off), &format!("fmp_{off:x}"))
+                            .build_int_add(
+                                fmp,
+                                context.word_const(offset),
+                                &format!("fmp_{offset:x}"),
+                            )
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         let word_val = context.word_const_str_hex(&word.to_str_radix(16));
-                        revive_llvm_context::polkavm_evm_memory::store(context, fmp_off, word_val)
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                        revive_llvm_context::polkavm_evm_memory::store(
+                            context,
+                            fmp_plus_offset,
+                            word_val,
+                        )
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     }
 
-                    let total_len = 0x44 + (num_words as u64) * 0x20;
+                    let total_length = ERROR_STRING_FIRST_DATA_WORD_OFFSET
+                        + (num_words as u64) * revive_common::BYTE_LENGTH_WORD as u64;
                     revive_llvm_context::polkavm_evm_return::revert(
                         context,
                         fmp,
-                        context.word_const(total_len),
+                        context.word_const(total_length),
                     )
                     .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                     context.build_unreachable();
@@ -5774,7 +5814,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Statement::Expression(expression) => {
                 // Evaluate for side effects, discard result
-                let _ = self.generate_expr(expression, context, None)?;
+                let _ = self.generate_expression(expression, context, None)?;
             }
 
             Statement::MappingSStore { key, slot, value } => {
@@ -5804,13 +5844,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
                             let wrapper_fn =
                                 self.get_or_create_keccak256_slot_wrapper(slot_val, context)?;
-                            let fn_type = context
+                            let function_type = context
                                 .word_type()
                                 .fn_type(&[context.word_type().into()], false);
                             context
                                 .builder()
                                 .build_indirect_call(
-                                    fn_type,
+                                    function_type,
                                     wrapper_fn.as_global_value().as_pointer_value(),
                                     &[key_val.into()],
                                     "keccak256_slot_call",
@@ -5857,7 +5897,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// the low `demand_bits` bits of the result. For modular/bitwise BinOps
     /// (Add, Sub, Mul, And, Or, Xor) this allows generating narrow operations
     /// directly instead of computing at i256 and truncating afterward.
-    fn generate_expr(
+    fn generate_expression(
         &mut self,
         expression: &Expression,
         context: &mut PolkaVMContext<'ctx>,
@@ -6644,13 +6684,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if word1_val.is_const() && Self::try_extract_const_u64(word1_val).is_none() {
                     let wrapper_fn =
                         self.get_or_create_keccak256_slot_wrapper(word1_val, context)?;
-                    let fn_type = context
+                    let function_type = context
                         .word_type()
                         .fn_type(&[context.word_type().into()], false);
                     let result = context
                         .builder()
                         .build_indirect_call(
-                            fn_type,
+                            function_type,
                             wrapper_fn.as_global_value().as_pointer_value(),
                             &[word0_val.into()],
                             "keccak256_slot_call",
@@ -6734,13 +6774,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         if slot_val.is_const() && Self::try_extract_const_u64(slot_val).is_none() {
                             let wrapper_fn =
                                 self.get_or_create_keccak256_slot_wrapper(slot_val, context)?;
-                            let fn_type = context
+                            let function_type = context
                                 .word_type()
                                 .fn_type(&[context.word_type().into()], false);
                             context
                                 .builder()
                                 .build_indirect_call(
-                                    fn_type,
+                                    function_type,
                                     wrapper_fn.as_global_value().as_pointer_value(),
                                     &[key_val.into()],
                                     "keccak256_slot_call",
@@ -7003,11 +7043,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         // Create the wrapper function type: (i256) -> i256
         let word_type = context.word_type();
-        let fn_type = word_type.fn_type(&[word_type.into()], false);
+        let function_type = word_type.fn_type(&[word_type.into()], false);
 
         let wrapper_fn = context.module().add_function(
             &wrapper_name,
-            fn_type,
+            function_type,
             Some(inkwell::module::Linkage::Internal),
         );
 
@@ -7053,7 +7093,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.build_return(Some(&result));
 
-        // Restore builder position
         context.set_basic_block(saved_block);
 
         self.keccak256_slot_wrappers.insert(const_str, wrapper_fn);

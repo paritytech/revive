@@ -216,7 +216,7 @@ impl Validator {
         match statement {
             Statement::Let { bindings, value } => {
                 // First validate the expression (uses)
-                self.validate_expr(value, context);
+                self.validate_expression(value, context);
 
                 // Then define the bindings
                 for id in bindings {
@@ -402,7 +402,7 @@ impl Validator {
                 }
 
                 // Validate condition expression
-                self.validate_expr(condition, &format!("{} condition", context));
+                self.validate_expression(condition, &format!("{} condition", context));
 
                 // Validate body
                 self.validate_region(body, &format!("{} body", context));
@@ -580,7 +580,7 @@ impl Validator {
             }
 
             Statement::Expression(expression) => {
-                self.validate_expr(expression, context);
+                self.validate_expression(expression, context);
             }
 
             Statement::SetImmutable { value, .. } => {
@@ -589,7 +589,7 @@ impl Validator {
         }
     }
 
-    fn validate_expr(&mut self, expression: &Expression, context: &str) {
+    fn validate_expression(&mut self, expression: &Expression, context: &str) {
         match expression {
             Expression::Literal { .. } => {}
 

@@ -2,7 +2,7 @@
 //!
 //! This module implements the visitor that translates Yul AST into SSA form IR.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use num::BigUint;
 
@@ -59,8 +59,6 @@ pub struct YulTranslator {
     next_function_id: u32,
     /// Collected functions.
     functions: BTreeMap<FunctionId, Function>,
-    /// Factory dependencies.
-    factory_dependencies: HashSet<String>,
     /// Return variable names for the current function being translated.
     /// Used to look up current SSA values when translating `leave` statements.
     current_return_variable_names: Vec<String>,
@@ -83,7 +81,6 @@ impl YulTranslator {
             function_ids: BTreeMap::new(),
             next_function_id: 0,
             functions: BTreeMap::new(),
-            factory_dependencies: HashSet::new(),
             current_return_variable_names: Vec::new(),
             loop_variable_names_stack: Vec::new(),
         }
@@ -94,7 +91,6 @@ impl YulTranslator {
         &mut self,
         yul_object: &YulObject,
     ) -> std::result::Result<Object, TranslationError> {
-        self.factory_dependencies = yul_object.factory_dependencies.clone();
         self.collect_functions(&yul_object.code.block)?;
         let code = self.translate_block(&yul_object.code.block)?;
         let functions = std::mem::take(&mut self.functions);
@@ -519,7 +515,6 @@ impl YulTranslator {
         statements: &mut Vec<Statement>,
     ) -> std::result::Result<Expression, TranslationError> {
         match name {
-            // Arithmetic operations
             FunctionName::Add => Ok(binary_op(BinaryOperation::Add, &arguments)),
             FunctionName::Sub => Ok(binary_op(BinaryOperation::Sub, &arguments)),
             FunctionName::Mul => Ok(binary_op(BinaryOperation::Mul, &arguments)),
@@ -531,7 +526,6 @@ impl YulTranslator {
             FunctionName::AddMod => Ok(ternary_op(BinaryOperation::AddMod, &arguments)),
             FunctionName::MulMod => Ok(ternary_op(BinaryOperation::MulMod, &arguments)),
 
-            // Comparison operations
             FunctionName::Lt => Ok(binary_op(BinaryOperation::Lt, &arguments)),
             FunctionName::Gt => Ok(binary_op(BinaryOperation::Gt, &arguments)),
             FunctionName::Slt => Ok(binary_op(BinaryOperation::Slt, &arguments)),
@@ -539,7 +533,6 @@ impl YulTranslator {
             FunctionName::Eq => Ok(binary_op(BinaryOperation::Eq, &arguments)),
             FunctionName::IsZero => Ok(unary_op(UnaryOperation::IsZero, &arguments)),
 
-            // Bitwise operations
             FunctionName::And => Ok(binary_op(BinaryOperation::And, &arguments)),
             FunctionName::Or => Ok(binary_op(BinaryOperation::Or, &arguments)),
             FunctionName::Xor => Ok(binary_op(BinaryOperation::Xor, &arguments)),
@@ -550,7 +543,6 @@ impl YulTranslator {
             FunctionName::Byte => Ok(binary_op(BinaryOperation::Byte, &arguments)),
             FunctionName::SignExtend => Ok(binary_op(BinaryOperation::SignExtend, &arguments)),
 
-            // Memory operations
             FunctionName::MLoad => Ok(Expression::MLoad {
                 offset: arguments[0],
                 region: MemoryRegion::Unknown,
@@ -589,7 +581,6 @@ impl YulTranslator {
                 })
             }
 
-            // Storage operations
             FunctionName::SLoad => Ok(Expression::SLoad {
                 key: arguments[0],
                 static_slot: None,
@@ -617,7 +608,6 @@ impl YulTranslator {
                 })
             }
 
-            // Context getters
             FunctionName::CallDataLoad => Ok(Expression::CallDataLoad {
                 offset: arguments[0],
             }),
@@ -656,7 +646,6 @@ impl YulTranslator {
             }),
             FunctionName::ReturnDataSize => Ok(Expression::ReturnDataSize),
 
-            // Control flow / termination
             FunctionName::Return => {
                 statements.push(Statement::Return {
                     offset: arguments[0],
@@ -701,13 +690,11 @@ impl YulTranslator {
                 })
             }
 
-            // Hashing
             FunctionName::Keccak256 => Ok(Expression::Keccak256 {
                 offset: arguments[0],
                 length: arguments[1],
             }),
 
-            // External calls
             FunctionName::Call => {
                 let result_id = self.ssa.fresh_value();
                 statements.push(Statement::ExternalCall {
@@ -769,7 +756,6 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
 
-            // Contract creation
             FunctionName::Create => {
                 let result_id = self.ssa.fresh_value();
                 statements.push(Statement::Create {
@@ -795,7 +781,6 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
 
-            // Logging
             FunctionName::Log0 => {
                 statements.push(Statement::Log {
                     offset: arguments[0],
@@ -852,7 +837,6 @@ impl YulTranslator {
                 })
             }
 
-            // Data operations
             FunctionName::CodeCopy => {
                 statements.push(Statement::CodeCopy {
                     dest: arguments[0],
@@ -910,21 +894,15 @@ impl YulTranslator {
                 })
             }
 
-            // Data size and offset are handled in translate_function_call
             FunctionName::DataSize | FunctionName::DataOffset => {
-                unreachable!("DataSize/DataOffset handled in translate_function_call")
+                unreachable!("ICE: DataSize/DataOffset handled in translate_function_call")
             }
 
-            // Special builtins
-            FunctionName::Pop => {
-                // Pop just discards the value, return a void literal
-                Ok(Expression::Literal {
-                    value: BigUint::from(0u32),
-                    value_type: Type::Void,
-                })
-            }
+            FunctionName::Pop => Ok(Expression::Literal {
+                value: BigUint::from(0u32),
+                value_type: Type::Void,
+            }),
             FunctionName::MemoryGuard => {
-                // MemoryGuard is an optimization hint, pass through the argument
                 if !arguments.is_empty() {
                     Ok(Expression::Var(arguments[0].id))
                 } else {
@@ -935,8 +913,7 @@ impl YulTranslator {
                 }
             }
             FunctionName::LinkerSymbol => {
-                // LinkerSymbol is handled in translate_function_call before arguments are evaluated
-                unreachable!("LinkerSymbol handled in translate_function_call")
+                unreachable!("ICE: LinkerSymbol handled in translate_function_call")
             }
 
             // PC is not supported on PolkaVM
@@ -1309,10 +1286,8 @@ impl YulTranslator {
             output_values.push((name.clone(), Value::new(output_id, value_type)));
         }
 
-        // Exit the loop scope first, then define outputs in the parent scope
         self.ssa.exit_scope();
 
-        // Define output values in the parent scope (which is now current)
         for (name, value) in output_values {
             self.ssa.define(&name, value);
         }

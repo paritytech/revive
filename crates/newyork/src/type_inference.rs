@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::ToPrimitive;
 
 use crate::ir::{
-    for_each_stmt, BinaryOperation, BitWidth, Block, Expression, Function, MemoryRegion, Object,
-    Region, Statement, Type, UnaryOperation, ValueId,
+    for_each_statement, BinaryOperation, BitWidth, Block, Expression, Function, MemoryRegion,
+    Object, Region, Statement, Type, UnaryOperation, ValueId,
 };
 
 /// Type constraint representing the width bounds for a value.
@@ -291,10 +291,10 @@ impl TypeInference {
     pub fn infer_object(&mut self, object: &Object) {
         // Pre-populate function_returns so the forward pass can propagate
         // return value widths to call sites interprocedurally.
-        for (func_id, function) in &object.functions {
+        for (function_id, function) in &object.functions {
             if !function.return_values.is_empty() {
                 self.function_returns
-                    .insert(func_id.0, function.return_values.clone());
+                    .insert(function_id.0, function.return_values.clone());
             }
         }
 
@@ -357,9 +357,9 @@ impl TypeInference {
         //
         // Note: param NARROWING is driven by the backward max_width (Phase 2.5),
         // not the forward min_width. So this does not prevent narrowing.
-        for (param_id, parameter_type) in &function.parameters {
+        for (parameter_id, parameter_type) in &function.parameters {
             if let Type::Int(width) = parameter_type {
-                self.widen(*param_id, *width);
+                self.widen(*parameter_id, *width);
             }
         }
 
@@ -467,7 +467,7 @@ impl TypeInference {
     fn propagate_demands_block(&mut self, block: &Block) -> bool {
         let mut changed = false;
         let mut snapshot: Vec<UseContext> = Vec::new();
-        for_each_stmt(&block.statements, &mut |statement| {
+        for_each_statement(&block.statements, &mut |statement| {
             if let Statement::Let { bindings, value } = statement {
                 if bindings.len() == 1 {
                     let result_id = bindings[0];
@@ -482,7 +482,7 @@ impl TypeInference {
                         // (reused across iterations) keeps the read borrow
                         // disjoint from those writes without per-iteration
                         // BTreeSet clones.
-                        changed |= self.propagate_demand_to_expr(value, &snapshot);
+                        changed |= self.propagate_demand_to_expression(value, &snapshot);
                     }
                 }
             }
@@ -491,7 +491,7 @@ impl TypeInference {
     }
 
     /// Propagates result uses to operands of transparent expressions.
-    fn propagate_demand_to_expr(
+    fn propagate_demand_to_expression(
         &mut self,
         expression: &Expression,
         result_uses: &[UseContext],
@@ -579,8 +579,8 @@ impl TypeInference {
     pub fn narrow_function_params(&self, object: &mut Object) -> bool {
         let mut changed = false;
         for function in object.functions.values_mut() {
-            for (param_id, parameter_type) in &mut function.parameters {
-                let constraint = self.get(*param_id);
+            for (parameter_id, parameter_type) in &mut function.parameters {
+                let constraint = self.get(*parameter_id);
 
                 // Only narrow I256 integer parameters
                 if !matches!(parameter_type, Type::Int(BitWidth::I256)) {
@@ -632,28 +632,36 @@ impl TypeInference {
     /// that ALL callers provide I160 values and narrows the parameter to I160.
     pub fn narrow_function_params_from_callers(&self, object: &mut Object) -> bool {
         // Collect the widest min_width for each parameter across all call sites.
-        // Key: (func_id, param_index) → widest min_width seen across all callers.
+        // Key: (function_id, param_index) → widest min_width seen across all callers.
         let mut argument_widths: BTreeMap<(u32, usize), BitWidth> = BTreeMap::new();
         // Track which functions are called at all.
-        let mut called_funcs: BTreeSet<u32> = BTreeSet::new();
+        let mut called_functions: BTreeSet<u32> = BTreeSet::new();
 
         // Walk all code and function bodies to find call sites.
-        self.collect_arg_widths_block(&object.code, &mut argument_widths, &mut called_funcs);
+        self.collect_argument_widths_block(
+            &object.code,
+            &mut argument_widths,
+            &mut called_functions,
+        );
         for function in object.functions.values() {
-            self.collect_arg_widths_block(&function.body, &mut argument_widths, &mut called_funcs);
+            self.collect_argument_widths_block(
+                &function.body,
+                &mut argument_widths,
+                &mut called_functions,
+            );
         }
 
         let mut changed = false;
-        for (&func_id, function) in &mut object.functions {
+        for (&function_id, function) in &mut object.functions {
             // Only narrow functions that have at least one call site.
-            if !called_funcs.contains(&func_id.0) {
+            if !called_functions.contains(&function_id.0) {
                 continue;
             }
             for (i, (_, parameter_type)) in function.parameters.iter_mut().enumerate() {
                 if !matches!(parameter_type, Type::Int(BitWidth::I256)) {
                     continue;
                 }
-                if let Some(&width) = argument_widths.get(&(func_id.0, i)) {
+                if let Some(&width) = argument_widths.get(&(function_id.0, i)) {
                     if width < BitWidth::I256 {
                         let clamped = width.max(BitWidth::I32);
                         *parameter_type = Type::Int(clamped);
@@ -673,13 +681,13 @@ impl TypeInference {
     /// Walks a block (and all nested regions) collecting argument min_widths
     /// at call sites. For each call to a function, records the widest argument
     /// seen across all callers — caller-driven narrowing uses the maximum.
-    fn collect_arg_widths_block(
+    fn collect_argument_widths_block(
         &self,
         block: &Block,
         argument_widths: &mut BTreeMap<(u32, usize), BitWidth>,
-        called_funcs: &mut BTreeSet<u32>,
+        called_functions: &mut BTreeSet<u32>,
     ) {
-        for_each_stmt(&block.statements, &mut |statement| {
+        for_each_statement(&block.statements, &mut |statement| {
             let call = match statement {
                 Statement::Let {
                     value:
@@ -696,7 +704,7 @@ impl TypeInference {
                 _ => None,
             };
             if let Some((fid, arguments)) = call {
-                called_funcs.insert(fid.0);
+                called_functions.insert(fid.0);
                 for (i, argument) in arguments.iter().enumerate() {
                     let arg_width = self.get(argument.id).min_width;
                     let entry = argument_widths.entry((fid.0, i)).or_insert(arg_width);
@@ -829,7 +837,7 @@ impl TypeInference {
         block: &Block,
         demands: &mut BTreeMap<u32, Vec<BitWidth>>,
     ) {
-        for_each_stmt(&block.statements, &mut |statement| {
+        for_each_statement(&block.statements, &mut |statement| {
             if let Statement::Let {
                 bindings,
                 value: Expression::Call { function, .. },
@@ -860,10 +868,10 @@ impl TypeInference {
     /// FunctionArg (which defaults to I256).
     pub fn refine_demands_from_params(&mut self, object: &Object) {
         // Build a map from FunctionId -> parameter widths (after narrowing)
-        let param_widths: BTreeMap<u32, Vec<BitWidth>> = object
+        let parameter_widths: BTreeMap<u32, Vec<BitWidth>> = object
             .functions
             .iter()
-            .map(|(func_id, function)| {
+            .map(|(function_id, function)| {
                 let widths: Vec<BitWidth> = function
                     .parameters
                     .iter()
@@ -872,14 +880,14 @@ impl TypeInference {
                         _ => BitWidth::I256,
                     })
                     .collect();
-                (func_id.0, widths)
+                (function_id.0, widths)
             })
             .collect();
 
         // Walk all code and find Expression::Call sites, updating argument demands
-        self.refine_demands_in_block(&object.code, &param_widths);
+        self.refine_demands_in_block(&object.code, &parameter_widths);
         for function in object.functions.values() {
-            self.refine_demands_in_block(&function.body, &param_widths);
+            self.refine_demands_in_block(&function.body, &parameter_widths);
         }
 
         // Re-run demand propagation through transparent ops with updated demands
@@ -899,27 +907,27 @@ impl TypeInference {
     fn refine_demands_in_block(
         &mut self,
         block: &Block,
-        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
+        parameter_widths: &BTreeMap<u32, Vec<BitWidth>>,
     ) {
-        for_each_stmt(&block.statements, &mut |statement| {
-            statement.for_each_expr(&mut |expression| {
-                self.refine_demands_in_expr(expression, param_widths);
+        for_each_statement(&block.statements, &mut |statement| {
+            statement.for_each_expression(&mut |expression| {
+                self.refine_demands_in_expression(expression, parameter_widths);
             });
         });
     }
 
     /// Checks an expression for Call and updates argument demands.
-    fn refine_demands_in_expr(
+    fn refine_demands_in_expression(
         &mut self,
         expression: &Expression,
-        param_widths: &BTreeMap<u32, Vec<BitWidth>>,
+        parameter_widths: &BTreeMap<u32, Vec<BitWidth>>,
     ) {
         if let Expression::Call {
             function,
             arguments,
         } = expression
         {
-            if let Some(widths) = param_widths.get(&function.0) {
+            if let Some(widths) = parameter_widths.get(&function.0) {
                 // Check if ALL parameters are narrowed (< I256)
                 let all_narrow = arguments
                     .iter()
@@ -930,14 +938,14 @@ impl TypeInference {
                     // for this specific call. But we still refine individual arguments below.
                 }
 
-                for (argument, param_width) in arguments.iter().zip(widths.iter()) {
+                for (argument, parameter_width) in arguments.iter().zip(widths.iter()) {
                     // Track the widest narrowed parameter demand for this argument value.
                     // A value may be passed as argument to multiple functions - we take the widest.
                     let entry = self
                         .fn_arg_demand
                         .entry(argument.id.0)
                         .or_insert(BitWidth::I1);
-                    *entry = (*entry).max(*param_width);
+                    *entry = (*entry).max(*parameter_width);
                 }
             } else {
                 // Unknown function (possibly a call to a function not in our object)
@@ -970,13 +978,13 @@ impl TypeInference {
     /// Collects uses from a block (recursing through nested regions and
     /// `For::condition_statements`) for backward propagation.
     fn collect_uses_block(&mut self, block: &Block) {
-        for_each_stmt(&block.statements, &mut |statement| {
+        for_each_statement(&block.statements, &mut |statement| {
             self.collect_uses_statement(statement);
         });
     }
 
     /// Collects uses from a single statement (no recursion — caller is
-    /// responsible for walking nested regions, e.g. via `for_each_stmt`).
+    /// responsible for walking nested regions, e.g. via `for_each_statement`).
     fn collect_uses_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::MStore {
@@ -1016,7 +1024,7 @@ impl TypeInference {
 
             Statement::If { condition, .. } => {
                 // Condition only needs to be non-zero, can stay narrow.
-                // Nested regions are walked by `collect_uses_block`'s `for_each_stmt`.
+                // Nested regions are walked by `collect_uses_block`'s `for_each_statement`.
                 self.record_use(condition.id, UseContext::Comparison);
             }
 
@@ -1130,15 +1138,15 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            // `Statement::Block`'s region is walked by `for_each_stmt` recursion.
+            // `Statement::Block`'s region is walked by `for_each_statement` recursion.
             Statement::Block(_) => {}
 
             Statement::Let { value, .. } => {
-                self.collect_uses_expr(value);
+                self.collect_uses_expression(value);
             }
 
             Statement::Expression(expression) => {
-                self.collect_uses_expr(expression);
+                self.collect_uses_expression(expression);
             }
 
             // Create operations: value is ETH sent, offset/length are memory pointers
@@ -1194,7 +1202,7 @@ impl TypeInference {
     }
 
     /// Collects uses from an expression.
-    fn collect_uses_expr(&mut self, expression: &Expression) {
+    fn collect_uses_expression(&mut self, expression: &Expression) {
         match expression {
             Expression::Binary {
                 lhs,
@@ -1315,7 +1323,7 @@ impl TypeInference {
                         }
                     }
                 }
-                let expr_width = self.infer_expr_width(value);
+                let expr_width = self.infer_expression_width(value);
                 for binding in bindings {
                     self.widen(*binding, expr_width);
                 }
@@ -1431,7 +1439,7 @@ impl TypeInference {
                 for statement in condition_statements {
                     self.infer_statement_forward(statement);
                 }
-                let cond_width = self.infer_expr_width(condition);
+                let cond_width = self.infer_expression_width(condition);
                 let _ = cond_width;
 
                 self.infer_region_forward(body);
@@ -1539,7 +1547,7 @@ impl TypeInference {
             }
 
             Statement::Expression(expression) => {
-                let _ = self.infer_expr_width(expression);
+                let _ = self.infer_expression_width(expression);
             }
 
             // These don't define or use values
@@ -1560,7 +1568,7 @@ impl TypeInference {
     }
 
     /// Infers the minimum bit width for an expression result.
-    fn infer_expr_width(&mut self, expression: &Expression) -> BitWidth {
+    fn infer_expression_width(&mut self, expression: &Expression) -> BitWidth {
         match expression {
             Expression::Literal { value, .. } => {
                 // Use the minimum width that can hold this literal
@@ -1870,7 +1878,7 @@ mod tests {
             value: BigUint::from(42u32),
             value_type: Type::default(),
         };
-        let width = inference.infer_expr_width(&expression);
+        let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I8);
 
         // Large literal (fits in 128 bits)
@@ -1878,7 +1886,7 @@ mod tests {
             value: BigUint::from(1u128) << 100,
             value_type: Type::default(),
         };
-        let width = inference.infer_expr_width(&expression);
+        let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I128);
 
         // Very large literal (needs > 128 bits)
@@ -1886,7 +1894,7 @@ mod tests {
             value: BigUint::from(1u128) << 140,
             value_type: Type::default(),
         };
-        let width = inference.infer_expr_width(&expression);
+        let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I160);
     }
 
@@ -1903,7 +1911,7 @@ mod tests {
             lhs: crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I64)),
             rhs: crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I64)),
         };
-        let width = inference.infer_expr_width(&expression);
+        let width = inference.infer_expression_width(&expression);
         assert_eq!(width, BitWidth::I1);
     }
 

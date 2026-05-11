@@ -144,7 +144,9 @@ impl ValueId {
 /// A typed SSA value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Value {
+    /// SSA identity of the value.
     pub id: ValueId,
+    /// Static type of the value (bit width and integer/pointer kind).
     pub value_type: Type,
 }
 
@@ -397,7 +399,9 @@ pub enum Expression {
 /// Switch case.
 #[derive(Clone, Debug)]
 pub struct SwitchCase {
+    /// Selector value that triggers this case.
     pub value: BigUint,
+    /// Statements executed when the selector matches.
     pub body: Region,
 }
 
@@ -682,9 +686,13 @@ pub enum Statement {
 /// Function definition.
 #[derive(Clone, Debug)]
 pub struct Function {
+    /// Unique identifier within the enclosing object.
     pub id: FunctionId,
+    /// Source-level function name as it appears in Yul.
     pub name: String,
+    /// Formal parameter list as (SSA value id, type) pairs.
     pub parameters: Vec<(ValueId, Type)>,
+    /// Return value types, in declaration order.
     pub returns: Vec<Type>,
     /// Initial SSA value IDs for return variables (allocated at function entry).
     /// These are the IDs that the function body's If statements will reference
@@ -693,6 +701,7 @@ pub struct Function {
     /// Final SSA value IDs for return variables (after body execution).
     /// These are the values that should be stored to the return pointer.
     pub return_values: Vec<ValueId>,
+    /// Function body.
     pub body: Block,
     /// Number of call sites (for inlining decisions).
     pub call_count: usize,
@@ -720,10 +729,15 @@ impl Function {
 /// Top-level object (contract).
 #[derive(Clone, Debug)]
 pub struct Object {
+    /// Yul-level object name (used as the LLVM module identifier).
     pub name: String,
+    /// Top-level code block executed when this object is invoked.
     pub code: Block,
+    /// Functions defined at object scope.
     pub functions: BTreeMap<FunctionId, Function>,
+    /// Nested objects (e.g. the deployed-code object for a contract).
     pub subobjects: Vec<Object>,
+    /// Embedded data sections keyed by Yul `datasize`/`dataoffset` identifier.
     pub data: BTreeMap<String, Vec<u8>>,
 }
 
@@ -823,7 +837,7 @@ impl Object {
             for statement in &block.statements {
                 statement.for_each_value_id(&mut |id| *max_id = (*max_id).max(id.0));
             }
-            for_each_stmt(&block.statements, &mut |statement| {
+            for_each_statement(&block.statements, &mut |statement| {
                 statement.for_each_value_id_def(&mut |id| *max_id = (*max_id).max(id.0));
             });
         }
@@ -831,8 +845,8 @@ impl Object {
         let mut max_id: u32 = 0;
         scan_block(&self.code, &mut max_id);
         for function in self.functions.values() {
-            for (param_id, _) in &function.parameters {
-                max_id = max_id.max(param_id.0);
+            for (parameter_id, _) in &function.parameters {
+                max_id = max_id.max(parameter_id.0);
             }
             for id in &function.return_values_initial {
                 max_id = max_id.max(id.0);
@@ -893,14 +907,14 @@ impl Object {
 impl Statement {
     /// Visits every immediate `Expression` in this statement (NOT recursing into
     /// nested regions, and NOT into `For::condition_statements`). Pair with
-    /// [`for_each_stmt`] to walk all `Expression`s reachable from a statement list:
+    /// [`for_each_statement`] to walk all `Expression`s reachable from a statement list:
     ///
     /// ```ignore
-    /// for_each_stmt(&block.statements, &mut |statement| {
-    ///     statement.for_each_expr(&mut |expression| { /* ... */ });
+    /// for_each_statement(&block.statements, &mut |statement| {
+    ///     statement.for_each_expression(&mut |expression| { /* ... */ });
     /// });
     /// ```
-    pub fn for_each_expr(&self, f: &mut dyn FnMut(&Expression)) {
+    pub fn for_each_expression(&self, f: &mut dyn FnMut(&Expression)) {
         match self {
             Statement::Let { value, .. } | Statement::Expression(value) => f(value),
             Statement::For { condition, .. } => f(condition),
@@ -908,8 +922,8 @@ impl Statement {
         }
     }
 
-    /// Mutating variant of [`Statement::for_each_expr`].
-    pub fn for_each_expr_mut(&mut self, f: &mut dyn FnMut(&mut Expression)) {
+    /// Mutating variant of [`Statement::for_each_expression`].
+    pub fn for_each_expression_mut(&mut self, f: &mut dyn FnMut(&mut Expression)) {
         match self {
             Statement::Let { value, .. } | Statement::Expression(value) => f(value),
             Statement::For { condition, .. } => f(condition),
@@ -1296,7 +1310,7 @@ impl Statement {
 
     /// Visits every `ValueId` *defined* by this statement (NOT used by it).
     /// This is the dual of [`Statement::for_each_value_id`]. Does not recurse
-    /// into nested regions — for that, use [`for_each_stmt`] to walk and call
+    /// into nested regions — for that, use [`for_each_statement`] to walk and call
     /// this on each statement.
     pub fn for_each_value_id_def(&self, f: &mut dyn FnMut(ValueId)) {
         match self {
@@ -1529,12 +1543,12 @@ impl Expression {
     }
 }
 
-/// Mutating variant of [`for_each_stmt`]. Visits every statement in a slice
+/// Mutating variant of [`for_each_statement`]. Visits every statement in a slice
 /// recursively. `f` is called on each statement *before* recursion into its
 /// nested regions, so a callback that swaps a statement's variant will not
 /// have its new nested regions re-visited. For our use cases the callback
 /// only mutates inner fields, never changes the variant.
-pub fn for_each_stmt_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
+pub fn for_each_statement_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
     for statement in statements.iter_mut() {
         f(statement);
         match statement {
@@ -1543,17 +1557,17 @@ pub fn for_each_stmt_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut St
                 else_region,
                 ..
             } => {
-                for_each_stmt_mut(&mut then_region.statements, f);
+                for_each_statement_mut(&mut then_region.statements, f);
                 if let Some(r) = else_region {
-                    for_each_stmt_mut(&mut r.statements, f);
+                    for_each_statement_mut(&mut r.statements, f);
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases {
-                    for_each_stmt_mut(&mut case.body.statements, f);
+                    for_each_statement_mut(&mut case.body.statements, f);
                 }
                 if let Some(r) = default {
-                    for_each_stmt_mut(&mut r.statements, f);
+                    for_each_statement_mut(&mut r.statements, f);
                 }
             }
             Statement::For {
@@ -1562,11 +1576,11 @@ pub fn for_each_stmt_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut St
                 post,
                 ..
             } => {
-                for_each_stmt_mut(condition_statements, f);
-                for_each_stmt_mut(&mut body.statements, f);
-                for_each_stmt_mut(&mut post.statements, f);
+                for_each_statement_mut(condition_statements, f);
+                for_each_statement_mut(&mut body.statements, f);
+                for_each_statement_mut(&mut post.statements, f);
             }
-            Statement::Block(region) => for_each_stmt_mut(&mut region.statements, f),
+            Statement::Block(region) => for_each_statement_mut(&mut region.statements, f),
             _ => {}
         }
     }
@@ -1574,7 +1588,7 @@ pub fn for_each_stmt_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut St
 
 /// Visits every statement in a slice recursively, calling `f` on each one.
 /// Handles structural recursion into If/Switch/For/Block regions.
-pub fn for_each_stmt(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
+pub fn for_each_statement(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
     for statement in statements {
         f(statement);
         match statement {
@@ -1583,17 +1597,17 @@ pub fn for_each_stmt(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
                 else_region,
                 ..
             } => {
-                for_each_stmt(&then_region.statements, f);
+                for_each_statement(&then_region.statements, f);
                 if let Some(r) = else_region {
-                    for_each_stmt(&r.statements, f);
+                    for_each_statement(&r.statements, f);
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases {
-                    for_each_stmt(&case.body.statements, f);
+                    for_each_statement(&case.body.statements, f);
                 }
                 if let Some(r) = default {
-                    for_each_stmt(&r.statements, f);
+                    for_each_statement(&r.statements, f);
                 }
             }
             Statement::For {
@@ -1602,11 +1616,11 @@ pub fn for_each_stmt(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
                 post,
                 ..
             } => {
-                for_each_stmt(condition_statements, f);
-                for_each_stmt(&body.statements, f);
-                for_each_stmt(&post.statements, f);
+                for_each_statement(condition_statements, f);
+                for_each_statement(&body.statements, f);
+                for_each_statement(&post.statements, f);
             }
-            Statement::Block(region) => for_each_stmt(&region.statements, f),
+            Statement::Block(region) => for_each_statement(&region.statements, f),
             _ => {}
         }
     }
@@ -1614,7 +1628,7 @@ pub fn for_each_stmt(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
 
 fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
     let mut counts = SyscallCounts::default();
-    for_each_stmt(&block.statements, &mut |statement| match statement {
+    for_each_statement(&block.statements, &mut |statement| match statement {
         Statement::Let { value, .. } | Statement::Expression(value) => match value {
             Expression::CallValue => counts.callvalue += 1,
             Expression::CallDataLoad { .. } => counts.calldataload += 1,
@@ -1647,7 +1661,7 @@ fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
 
 fn count_heap_ops_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |statement| match statement {
+    for_each_statement(&block.statements, &mut |statement| match statement {
         Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
             count += 1;
         }
@@ -1662,7 +1676,7 @@ fn count_heap_ops_in_block(block: &Block) -> usize {
 
 fn count_exit_ops_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if matches!(
             statement,
             Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop
@@ -1675,7 +1689,7 @@ fn count_exit_ops_in_block(block: &Block) -> usize {
 
 fn count_keccak_single_in_block(block: &Block) -> usize {
     let mut count = 0usize;
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
             if matches!(value, Expression::Keccak256Single { .. }) {
                 count += 1;
@@ -1686,7 +1700,7 @@ fn count_keccak_single_in_block(block: &Block) -> usize {
 }
 
 fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if let Statement::ErrorStringRevert { data, .. } = statement {
             *counts.entry(data.len()).or_insert(0) += 1;
         }
@@ -1694,7 +1708,7 @@ fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usiz
 }
 
 fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if let Statement::CustomErrorRevert { arguments, .. } = statement {
             *counts.entry(arguments.len()).or_insert(0) += 1;
         }
@@ -1703,7 +1717,7 @@ fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usiz
 
 fn has_msize_in_block(block: &Block) -> bool {
     let mut found = false;
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
             if matches!(value, Expression::MSize) {
                 found = true;

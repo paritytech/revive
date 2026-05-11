@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    for_each_stmt_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, FunctionId,
+    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
 };
 
@@ -85,7 +85,7 @@ pub struct Simplifier {
     /// a binding from one branch must not be referenced from a sibling branch.
     env_reads: BTreeMap<EnvRead, ValueId>,
     /// Statistics.
-    stats: SimplifyResults,
+    statistics: SimplifyResults,
 }
 
 impl Default for Simplifier {
@@ -103,7 +103,7 @@ impl Simplifier {
             unary_defs: BTreeMap::new(),
             next_value_id: 0,
             env_reads: BTreeMap::new(),
-            stats: SimplifyResults::default(),
+            statistics: SimplifyResults::default(),
         }
     }
 
@@ -131,7 +131,7 @@ impl Simplifier {
         // Simplify main code block
         self.simplify_block(&mut object.code);
         // DCE on main code block (no explicit return values)
-        self.stats.dead_bindings_removed +=
+        self.statistics.dead_bindings_removed +=
             eliminate_dead_code_in_stmts(&mut object.code.statements, &BTreeSet::new());
 
         for function in object.functions.values_mut() {
@@ -147,7 +147,7 @@ impl Simplifier {
             for ret_id in &function.return_values {
                 extra_used.insert(ret_id.0);
             }
-            self.stats.dead_bindings_removed +=
+            self.statistics.dead_bindings_removed +=
                 eliminate_dead_code_in_stmts(&mut function.body.statements, &extra_used);
         }
 
@@ -156,7 +156,7 @@ impl Simplifier {
         // cause them to be simplified BEFORE inlining runs on them, breaking the
         // required pass ordering (inline -> simplify -> mem_opt).
 
-        std::mem::take(&mut self.stats)
+        std::mem::take(&mut self.statistics)
     }
 
     /// Runs only DCE (dead code elimination) on an object without the full simplification pass.
@@ -209,7 +209,7 @@ impl Simplifier {
     fn simplify_statement(&mut self, statement: Statement) -> Vec<Statement> {
         match statement {
             Statement::Let { bindings, value } => {
-                let simplified_expr = self.simplify_expr(value);
+                let simplified_expr = self.simplify_expression(value);
 
                 // Strength reduction: mul(x, 2^k) → shl(k, x), div(x, 2^k) → shr(k, x)
                 // We need to emit: let shift_id = k; let result = shl(shift_id, x)
@@ -305,7 +305,7 @@ impl Simplifier {
                 // then assign outputs OUTSIDE the block so DCE can see them.
                 if let Some(cond_const) = cond_val {
                     let is_true = !cond_const.is_zero();
-                    self.stats.branches_eliminated += 1;
+                    self.statistics.branches_eliminated += 1;
 
                     if is_true {
                         let then_region = self.simplify_region(then_region);
@@ -393,7 +393,7 @@ impl Simplifier {
                                 value: Expression::Var(input_val.id),
                             });
                         }
-                        self.stats.branches_eliminated += 1;
+                        self.statistics.branches_eliminated += 1;
                         return result;
                     };
 
@@ -408,7 +408,7 @@ impl Simplifier {
                             value: Expression::Var(yield_val.id),
                         });
                     }
-                    self.stats.branches_eliminated += 1;
+                    self.statistics.branches_eliminated += 1;
                     return result;
                 }
 
@@ -526,7 +526,7 @@ impl Simplifier {
                 let saved_copies = self.copies.clone();
 
                 let condition_statements = self.simplify_statements(condition_statements);
-                let condition = self.simplify_expr(condition);
+                let condition = self.simplify_expression(condition);
                 let body = self.simplify_region(body);
                 let post = self.simplify_region(post);
 
@@ -548,7 +548,7 @@ impl Simplifier {
             Statement::Block(region) => vec![Statement::Block(self.simplify_region(region))],
 
             Statement::Expression(expression) => {
-                vec![Statement::Expression(self.simplify_expr(expression))]
+                vec![Statement::Expression(self.simplify_expression(expression))]
             }
 
             // Statements with no Value fields — copy through unchanged.
@@ -631,7 +631,7 @@ impl Simplifier {
 
     /// Simplifies an expression, performing constant folding, algebraic identities,
     /// and copy propagation on operands.
-    fn simplify_expr(&mut self, expression: Expression) -> Expression {
+    fn simplify_expression(&mut self, expression: Expression) -> Expression {
         match expression {
             Expression::Binary {
                 operation,
@@ -646,7 +646,7 @@ impl Simplifier {
                 // Constant folding: both operands are constants
                 if let (Some(a), Some(b)) = (&lhs_val, &rhs_val) {
                     if let Some(result) = fold_binary(operation, a, b) {
-                        self.stats.constants_folded += 1;
+                        self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
                             value_type: result_type(operation),
@@ -657,7 +657,7 @@ impl Simplifier {
                 // Algebraic identities (safe: just rewrites the expression)
                 if let Some(simplified) = simplify_binary(operation, &lhs, &rhs, &lhs_val, &rhs_val)
                 {
-                    self.stats.identities_simplified += 1;
+                    self.statistics.identities_simplified += 1;
                     return simplified;
                 }
 
@@ -680,7 +680,7 @@ impl Simplifier {
 
                 if let Some(c) = &operand_val {
                     if let Some(result) = fold_unary(operation, c) {
-                        self.stats.constants_folded += 1;
+                        self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
                             value_type: unary_result_type(operation),
@@ -691,7 +691,7 @@ impl Simplifier {
                 // Algebraic identity: not(not(x)) = x (double bitwise negation)
                 if operation == UnaryOperation::Not {
                     if let Some((UnaryOperation::Not, inner)) = self.unary_defs.get(&operand.id.0) {
-                        self.stats.identities_simplified += 1;
+                        self.statistics.identities_simplified += 1;
                         return Expression::Var(*inner);
                     }
                 }
@@ -709,7 +709,7 @@ impl Simplifier {
 
                 if let (Some(av), Some(bv), Some(nv)) = (&a_val, &b_val, &n_val) {
                     if let Some(result) = fold_ternary(operation, av, bv, nv) {
-                        self.stats.constants_folded += 1;
+                        self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
                             value_type: Type::Int(BitWidth::I256),
@@ -750,7 +750,7 @@ impl Simplifier {
                 let word0 = self.resolve_value(word0);
                 if let Some(c) = self.try_get_const(&word0) {
                     let result = fold_keccak256_single(&c);
-                    self.stats.constants_folded += 1;
+                    self.statistics.constants_folded += 1;
                     Expression::Literal {
                         value: result,
                         value_type: Type::Int(BitWidth::I256),
@@ -767,7 +767,7 @@ impl Simplifier {
                     (self.try_get_const(&word0), self.try_get_const(&word1))
                 {
                     let result = fold_keccak256_pair(&c0, &c1);
-                    self.stats.constants_folded += 1;
+                    self.statistics.constants_folded += 1;
                     Expression::Literal {
                         value: result,
                         value_type: Type::Int(BitWidth::I256),
@@ -791,7 +791,7 @@ impl Simplifier {
     /// to the first binding if so. Otherwise returns the original expression.
     fn cse_env_read(&mut self, kind: EnvRead, original: Expression) -> Expression {
         if let Some(&cached_id) = self.env_reads.get(&kind) {
-            self.stats.env_reads_eliminated += 1;
+            self.statistics.env_reads_eliminated += 1;
             Expression::Var(cached_id)
         } else {
             original
@@ -848,7 +848,7 @@ impl Simplifier {
     ) -> Vec<Statement> {
         let helper_id = self.fresh_id();
         self.constants.insert(helper_id.0, const_value.clone());
-        self.stats.identities_simplified += 1;
+        self.statistics.identities_simplified += 1;
         let helper_val = Value::int(helper_id);
         let (lhs, rhs) = if helper_on_lhs {
             (helper_val, other_operand)
@@ -1988,8 +1988,8 @@ fn canonicalize_function(
     }
 
     // Register parameters in canonical order
-    for (param_id, _) in &function.parameters {
-        canon.get_or_insert(*param_id);
+    for (parameter_id, _) in &function.parameters {
+        canon.get_or_insert(*parameter_id);
     }
     // Register return value initials
     for rv in &function.return_values_initial {
@@ -1998,7 +1998,7 @@ fn canonicalize_function(
 
     // Encode body
     for statement in &function.body.statements {
-        canon.encode_stmt(statement, &mut buf);
+        canon.encode_statement(statement, &mut buf);
     }
 
     // Encode return values
@@ -2041,7 +2041,7 @@ impl Canonicalizer {
         buf.push(type_tag(&value.value_type));
     }
 
-    fn encode_expr(&mut self, expression: &Expression, buf: &mut Vec<u8>) {
+    fn encode_expression(&mut self, expression: &Expression, buf: &mut Vec<u8>) {
         match expression {
             Expression::Literal { value, value_type } => {
                 buf.push(0x01);
@@ -2196,7 +2196,7 @@ impl Canonicalizer {
     fn encode_region(&mut self, region: &Region, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
         for statement in &region.statements {
-            self.encode_stmt(statement, buf);
+            self.encode_statement(statement, buf);
         }
         buf.push(region.yields.len() as u8);
         for y in &region.yields {
@@ -2204,7 +2204,7 @@ impl Canonicalizer {
         }
     }
 
-    fn encode_stmt(&mut self, statement: &Statement, buf: &mut Vec<u8>) {
+    fn encode_statement(&mut self, statement: &Statement, buf: &mut Vec<u8>) {
         match statement {
             Statement::Let { bindings, value } => {
                 buf.push(0x80);
@@ -2212,7 +2212,7 @@ impl Canonicalizer {
                 for b in bindings {
                     self.encode_value_id(*b, buf);
                 }
-                self.encode_expr(value, buf);
+                self.encode_expression(value, buf);
             }
             Statement::MStore {
                 offset,
@@ -2345,9 +2345,9 @@ impl Canonicalizer {
                 }
                 buf.extend_from_slice(&(condition_statements.len() as u32).to_le_bytes());
                 for s in condition_statements {
-                    self.encode_stmt(s, buf);
+                    self.encode_statement(s, buf);
                 }
-                self.encode_expr(condition, buf);
+                self.encode_expression(condition, buf);
                 self.encode_region(body, buf);
                 buf.push(post_input_variables.len() as u8);
                 for pv in post_input_variables {
@@ -2530,7 +2530,7 @@ impl Canonicalizer {
             }
             Statement::Expression(expression) => {
                 buf.push(0x9E);
-                self.encode_expr(expression, buf);
+                self.encode_expression(expression, buf);
             }
             Statement::SelfDestruct { address } => {
                 buf.push(0x9F);
@@ -2767,12 +2767,12 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         // Build mapping: for each differing position, which unique parameter index?
         // Sorted by first position in each group for deterministic ordering.
-        let mut param_groups: Vec<Vec<usize>> = value_sig_to_group.into_values().collect();
-        param_groups.sort_by_key(|g| g[0]);
-        let mut pos_to_param_idx: BTreeMap<usize, usize> = BTreeMap::new();
-        for (param_idx, positions) in param_groups.iter().enumerate() {
+        let mut parameter_groups: Vec<Vec<usize>> = value_sig_to_group.into_values().collect();
+        parameter_groups.sort_by_key(|g| g[0]);
+        let mut position_to_parameter_index: BTreeMap<usize, usize> = BTreeMap::new();
+        for (parameter_index, positions) in parameter_groups.iter().enumerate() {
             for &pos in positions {
-                pos_to_param_idx.insert(pos, param_idx);
+                position_to_parameter_index.insert(pos, parameter_index);
             }
         }
 
@@ -2799,22 +2799,22 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         // Build the parameterized canonical function:
         // Add one i256 parameter for each unique differing value group
-        let mut new_param_ids: Vec<ValueId> = Vec::new();
+        let mut new_parameter_ids: Vec<ValueId> = Vec::new();
         for _ in 0..unique_param_count {
             let vid = ValueId(next_value_id);
             next_value_id += 1;
-            new_param_ids.push(vid);
+            new_parameter_ids.push(vid);
         }
 
         // Build the per-position param ID mapping for replacement
-        let position_param_ids: Vec<(usize, ValueId)> = differing_positions
+        let position_parameter_ids: Vec<(usize, ValueId)> = differing_positions
             .iter()
-            .map(|&pos| (pos, new_param_ids[pos_to_param_idx[&pos]]))
+            .map(|&pos| (pos, new_parameter_ids[position_to_parameter_index[&pos]]))
             .collect();
 
         // Clone canonical function and add new parameters
         let mut parameterized = canonical_func.clone();
-        for &vid in &new_param_ids {
+        for &vid in &new_parameter_ids {
             parameterized
                 .parameters
                 .push((vid, Type::Int(BitWidth::I256)));
@@ -2823,7 +2823,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         // Replace the differing literals in the parameterized body with Var references
         let canonical_lits = &group_literals[0].1;
 
-        replace_literals_with_params(&mut parameterized.body, &position_param_ids);
+        replace_literals_with_params(&mut parameterized.body, &position_parameter_ids);
 
         // Replace canonical function with parameterized version
         object.functions.insert(canonical_id, parameterized);
@@ -2831,7 +2831,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         // Build call-site redirects and argument mappings
         // For the canonical function's own call sites, add its original literals as arguments
         // (one argument per unique parameter, using the first position in each group)
-        let canonical_extra_args: Vec<BigUint> = param_groups
+        let canonical_extra_args: Vec<BigUint> = parameter_groups
             .iter()
             .map(|positions| canonical_lits[positions[0]].clone())
             .collect();
@@ -2842,7 +2842,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                 canonical_extra_args.clone()
             } else {
                 let lits = &group_literals.iter().find(|(id, _)| *id == fid).unwrap().1;
-                param_groups
+                parameter_groups
                     .iter()
                     .map(|positions| lits[positions[0]].clone())
                     .collect()
@@ -2896,8 +2896,8 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     }
 
     // Register parameters
-    for (param_id, _) in &function.parameters {
-        canon.get_or_insert(*param_id);
+    for (parameter_id, _) in &function.parameters {
+        canon.get_or_insert(*parameter_id);
     }
     for rv in &function.return_values_initial {
         canon.get_or_insert(*rv);
@@ -2906,7 +2906,7 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     // Encode body with literals replaced by placeholder
     let mut lit_counter = 0u32;
     for statement in &function.body.statements {
-        fuzzy_encode_stmt(&mut canon, statement, &mut buf, &mut lit_counter);
+        fuzzy_encode_statement(&mut canon, statement, &mut buf, &mut lit_counter);
     }
 
     buf.push(0xFE);
@@ -2917,7 +2917,7 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     buf
 }
 
-fn fuzzy_encode_expr(
+fn fuzzy_encode_expressionession(
     canon: &mut Canonicalizer,
     expression: &Expression,
     buf: &mut Vec<u8>,
@@ -2986,12 +2986,12 @@ fn fuzzy_encode_expr(
         }
         // For all other expressions, delegate to exact encoding
         _ => {
-            canon.encode_expr(expression, buf);
+            canon.encode_expression(expression, buf);
         }
     }
 }
 
-fn fuzzy_encode_stmt(
+fn fuzzy_encode_statement(
     canon: &mut Canonicalizer,
     statement: &Statement,
     buf: &mut Vec<u8>,
@@ -3004,7 +3004,7 @@ fn fuzzy_encode_stmt(
             for b in bindings {
                 canon.encode_value_id(*b, buf);
             }
-            fuzzy_encode_expr(canon, value, buf, lit_counter);
+            fuzzy_encode_expressionession(canon, value, buf, lit_counter);
         }
         Statement::SStore {
             key,
@@ -3101,9 +3101,9 @@ fn fuzzy_encode_stmt(
             }
             buf.push(condition_statements.len() as u8);
             for s in condition_statements {
-                fuzzy_encode_stmt(canon, s, buf, lit_counter);
+                fuzzy_encode_statement(canon, s, buf, lit_counter);
             }
-            fuzzy_encode_expr(canon, condition, buf, lit_counter);
+            fuzzy_encode_expressionession(canon, condition, buf, lit_counter);
             fuzzy_encode_region(canon, body, buf, lit_counter);
             fuzzy_encode_region(canon, post, buf, lit_counter);
             buf.push(outputs.len() as u8);
@@ -3117,11 +3117,11 @@ fn fuzzy_encode_stmt(
         }
         Statement::Expression(expression) => {
             buf.push(0x89);
-            fuzzy_encode_expr(canon, expression, buf, lit_counter);
+            fuzzy_encode_expressionession(canon, expression, buf, lit_counter);
         }
         // For all other statements, delegate to exact encoding
         _ => {
-            canon.encode_stmt(statement, buf);
+            canon.encode_statement(statement, buf);
         }
     }
 }
@@ -3134,7 +3134,7 @@ fn fuzzy_encode_region(
 ) {
     buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
     for statement in &region.statements {
-        fuzzy_encode_stmt(canon, statement, buf, lit_counter);
+        fuzzy_encode_statement(canon, statement, buf, lit_counter);
     }
     buf.push(region.yields.len() as u8);
     for y in &region.yields {
@@ -3213,7 +3213,7 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
 /// Replaces literal values at differing positions with `Var` references to new
 /// parameters. Walk order **must** match [`collect_literals_ordered`] so the
 /// position indices align.
-fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize, ValueId)]) {
+fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(usize, ValueId)]) {
     fn from_expr(
         expression: &mut Expression,
         positions: &BTreeMap<usize, ValueId>,
@@ -3221,8 +3221,8 @@ fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize,
     ) {
         match expression {
             Expression::Literal { .. } => {
-                if let Some(&param_vid) = positions.get(counter) {
-                    *expression = Expression::Var(param_vid);
+                if let Some(&parameter_value_id) = positions.get(counter) {
+                    *expression = Expression::Var(parameter_value_id);
                 }
                 *counter += 1;
             }
@@ -3293,7 +3293,7 @@ fn replace_literals_with_params(block: &mut Block, position_param_ids: &[(usize,
             }
         }
     }
-    let positions: BTreeMap<usize, ValueId> = position_param_ids.iter().copied().collect();
+    let positions: BTreeMap<usize, ValueId> = position_parameter_ids.iter().copied().collect();
     let mut counter = 0usize;
     walk(&mut block.statements, &positions, &mut counter);
 }
@@ -3420,8 +3420,8 @@ fn update_call_sites_with_extra_args(
 
 /// Redirects function calls in a block, replacing old function IDs with new ones.
 fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, FunctionId>) {
-    for_each_stmt_mut(&mut block.statements, &mut |statement| {
-        statement.for_each_expr_mut(&mut |expression| {
+    for_each_statement_mut(&mut block.statements, &mut |statement| {
+        statement.for_each_expression_mut(&mut |expression| {
             if let Expression::Call { function, .. } = expression {
                 if let Some(&new_id) = redirects.get(function) {
                     *function = new_id;
@@ -3758,7 +3758,7 @@ mod tests {
                 _ => panic!("Expected Var after algebraic simplification, got: {value:?}"),
             }
         }
-        assert!(simplifier.stats.identities_simplified > 0);
+        assert!(simplifier.statistics.identities_simplified > 0);
     }
 
     #[test]

@@ -30,7 +30,7 @@ pub struct GuardNarrowStats {
 /// Runs guard narrowing on an entire object tree (including subobjects).
 pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
-    let mut stats = GuardNarrowStats::default();
+    let mut statistics = GuardNarrowStats::default();
 
     // Pre-scan: detect functions that always terminate (panic helpers, etc.).
     // The narrower needs to recognize `if guard { panic_call() }` as a guard
@@ -50,7 +50,7 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let _ = narrow_block(
         &mut object.code,
         &mut next_id,
-        &mut stats,
+        &mut statistics,
         &validators,
         &noreturn,
     );
@@ -58,7 +58,7 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
         let replacements = narrow_block(
             &mut function.body,
             &mut next_id,
-            &mut stats,
+            &mut statistics,
             &validators,
             &noreturn,
         );
@@ -97,13 +97,13 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     // truncation happens in the caller's frame.
     narrow_allocator_param_types(object, &noreturn);
 
-    for sub in &mut object.subobjects {
-        let sub_stats = narrow_guards_in_object(sub);
-        stats.guards_narrowed += sub_stats.guards_narrowed;
-        stats.uses_replaced += sub_stats.uses_replaced;
+    for subobject in &mut object.subobjects {
+        let subobject_statistics = narrow_guards_in_object(subobject);
+        statistics.guards_narrowed += subobject_statistics.guards_narrowed;
+        statistics.uses_replaced += subobject_statistics.uses_replaced;
     }
 
-    stats
+    statistics
 }
 
 /// Narrows function parameters that are provably bounded by UINT64_MAX
@@ -142,7 +142,7 @@ fn rewrite_allocator_p1_with_early_check(
     _noreturn: &std::collections::BTreeSet<u32>,
 ) {
     let mut to_rewrite: Vec<u32> = Vec::new();
-    for (func_id, function) in &object.functions {
+    for (function_id, function) in &object.functions {
         if function.parameters.len() != 2 || !function.returns.is_empty() {
             continue;
         }
@@ -156,13 +156,13 @@ fn rewrite_allocator_p1_with_early_check(
         let p0 = function.parameters[0].0;
         let p1 = function.parameters[1].0;
         if has_allocator_shape(&function.body, p0, p1) {
-            to_rewrite.push(func_id.0);
+            to_rewrite.push(function_id.0);
         }
     }
 
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - BigUint::from(1u32);
-    for func_id in to_rewrite {
-        let Some(function) = object.functions.get_mut(&FunctionId(func_id)) else {
+    for function_id in to_rewrite {
+        let Some(function) = object.functions.get_mut(&FunctionId(function_id)) else {
             continue;
         };
         let p1 = function.parameters[1].0;
@@ -213,7 +213,7 @@ fn rewrite_allocator_p1_with_early_check(
         let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
         replacements.insert(p1.0, p1_narrow);
         for statement in original_stmts {
-            new_stmts.push(replace_value_ids_in_stmt(statement, &replacements));
+            new_stmts.push(replace_value_ids_in_statement(statement, &replacements));
         }
         function.body.statements = new_stmts;
     }
@@ -222,7 +222,7 @@ fn rewrite_allocator_p1_with_early_check(
 fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
-    for (func_id, function) in &object.functions {
+    for (function_id, function) in &object.functions {
         if function.parameters.is_empty() {
             continue;
         }
@@ -245,7 +245,7 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
             let p0 = function.parameters[0].0;
             let p1 = function.parameters[1].0;
             if has_allocator_shape(&function.body, p0, p1) {
-                narrow_params.insert(func_id.0, vec![0]);
+                narrow_params.insert(function_id.0, vec![0]);
                 continue;
             }
         }
@@ -263,8 +263,8 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
         // signature.
     }
 
-    for (func_id, indices) in narrow_params {
-        if let Some(function) = object.functions.get_mut(&FunctionId(func_id)) {
+    for (function_id, indices) in narrow_params {
+        if let Some(function) = object.functions.get_mut(&FunctionId(function_id)) {
             for i in indices {
                 if let Some((_, value_type)) = function.parameters.get_mut(i) {
                     *value_type = Type::Int(BitWidth::I64);
@@ -435,8 +435,8 @@ fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32>
     let mut noreturn = std::collections::BTreeSet::new();
     loop {
         let before = noreturn.len();
-        for (func_id, function) in &object.functions {
-            if noreturn.contains(&func_id.0) || function.body.statements.len() != 1 {
+        for (function_id, function) in &object.functions {
+            if noreturn.contains(&function_id.0) || function.body.statements.len() != 1 {
                 continue;
             }
             let terminates = match &function.body.statements[0] {
@@ -454,7 +454,7 @@ fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32>
                 _ => false,
             };
             if terminates {
-                noreturn.insert(func_id.0);
+                noreturn.insert(function_id.0);
             }
         }
         if noreturn.len() == before {
@@ -481,15 +481,15 @@ fn detect_validator_functions(
 ) -> BTreeMap<u32, BigUint> {
     let mut validators = BTreeMap::new();
 
-    for (func_id, function) in &object.functions {
+    for (function_id, function) in &object.functions {
         // Must be void (no return values) with exactly one parameter
         if !function.returns.is_empty() || function.parameters.len() != 1 {
             continue;
         }
 
-        let param_id = function.parameters[0].0;
-        if let Some(mask) = detect_validator_mask(&function.body, param_id, noreturn) {
-            validators.insert(func_id.0, mask);
+        let parameter_id = function.parameters[0].0;
+        if let Some(mask) = detect_validator_mask(&function.body, parameter_id, noreturn) {
+            validators.insert(function_id.0, mask);
         }
     }
 
@@ -500,7 +500,7 @@ fn detect_validator_functions(
 /// Returns the boundary mask if found.
 fn detect_validator_mask(
     block: &Block,
-    param_id: ValueId,
+    parameter_id: ValueId,
     noreturn: &std::collections::BTreeSet<u32>,
 ) -> Option<BigUint> {
     let statements = &block.statements;
@@ -537,13 +537,13 @@ fn detect_validator_mask(
             } = value
             {
                 let (val_id, mask_id) = (lhs.id.0, rhs.id.0);
-                if val_id == param_id.0 {
+                if val_id == parameter_id.0 {
                     if let Some(mask) = constants.get(&mask_id) {
                         if is_wide_boundary_mask(mask) {
                             and_defs.insert(bid, (val_id, mask.clone()));
                         }
                     }
-                } else if mask_id == param_id.0 {
+                } else if mask_id == parameter_id.0 {
                     if let Some(mask) = constants.get(&val_id) {
                         if is_wide_boundary_mask(mask) {
                             and_defs.insert(bid, (mask_id, mask.clone()));
@@ -611,13 +611,13 @@ fn detect_validator_mask(
 fn narrow_block(
     block: &mut Block,
     next_id: &mut u32,
-    stats: &mut GuardNarrowStats,
+    statistics: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
     noreturn: &std::collections::BTreeSet<u32>,
 ) -> BTreeMap<u32, ValueId> {
     // First, recurse into nested regions within each statement.
     for statement in &mut block.statements {
-        narrow_stmt_regions(statement, next_id, stats, validators, noreturn);
+        narrow_stmt_regions(statement, next_id, statistics, validators, noreturn);
     }
 
     // Now process this block's top-level statements for guard patterns.
@@ -667,7 +667,7 @@ fn narrow_block(
         let statement = if replacements.is_empty() {
             statement
         } else {
-            replace_value_ids_in_stmt(statement, &replacements)
+            replace_value_ids_in_statement(statement, &replacements)
         };
 
         // Track constant definitions (let vN = 0xFFFF...).
@@ -972,12 +972,12 @@ fn narrow_block(
                         });
 
                         replacements.insert(guarded_val.id.0, narrow_id);
-                        stats.guards_narrowed += 1;
+                        statistics.guards_narrowed += 1;
                     }
 
                     for (orig_id, and_val_id) in iszero_eq_guards {
                         replacements.entry(orig_id).or_insert(and_val_id);
-                        stats.guards_narrowed += 1;
+                        statistics.guards_narrowed += 1;
                     }
 
                     continue;
@@ -1032,7 +1032,7 @@ fn narrow_block(
 
                         // Replace subsequent uses of the argument.
                         e.insert(narrow_id);
-                        stats.guards_narrowed += 1;
+                        statistics.guards_narrowed += 1;
                         continue;
                     }
                 }
@@ -1050,7 +1050,7 @@ fn narrow_block(
 fn narrow_stmt_regions(
     statement: &mut Statement,
     next_id: &mut u32,
-    stats: &mut GuardNarrowStats,
+    statistics: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
     noreturn: &std::collections::BTreeSet<u32>,
 ) {
@@ -1060,17 +1060,17 @@ fn narrow_stmt_regions(
             else_region,
             ..
         } => {
-            narrow_region(then_region, next_id, stats, validators, noreturn);
+            narrow_region(then_region, next_id, statistics, validators, noreturn);
             if let Some(r) = else_region {
-                narrow_region(r, next_id, stats, validators, noreturn);
+                narrow_region(r, next_id, statistics, validators, noreturn);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for case in cases {
-                narrow_region(&mut case.body, next_id, stats, validators, noreturn);
+                narrow_region(&mut case.body, next_id, statistics, validators, noreturn);
             }
             if let Some(d) = default {
-                narrow_region(d, next_id, stats, validators, noreturn);
+                narrow_region(d, next_id, statistics, validators, noreturn);
             }
         }
         Statement::For {
@@ -1082,14 +1082,14 @@ fn narrow_stmt_regions(
             let mut cond_block = Block {
                 statements: std::mem::take(condition_statements),
             };
-            narrow_block(&mut cond_block, next_id, stats, validators, noreturn);
+            narrow_block(&mut cond_block, next_id, statistics, validators, noreturn);
             *condition_statements = cond_block.statements;
 
-            narrow_region(body, next_id, stats, validators, noreturn);
-            narrow_region(post, next_id, stats, validators, noreturn);
+            narrow_region(body, next_id, statistics, validators, noreturn);
+            narrow_region(post, next_id, statistics, validators, noreturn);
         }
         Statement::Block(region) => {
-            narrow_region(region, next_id, stats, validators, noreturn);
+            narrow_region(region, next_id, statistics, validators, noreturn);
         }
         _ => {}
     }
@@ -1099,14 +1099,14 @@ fn narrow_stmt_regions(
 fn narrow_region(
     region: &mut Region,
     next_id: &mut u32,
-    stats: &mut GuardNarrowStats,
+    statistics: &mut GuardNarrowStats,
     validators: &BTreeMap<u32, BigUint>,
     noreturn: &std::collections::BTreeSet<u32>,
 ) {
     let mut block = Block {
         statements: std::mem::take(&mut region.statements),
     };
-    narrow_block(&mut block, next_id, stats, validators, noreturn);
+    narrow_block(&mut block, next_id, statistics, validators, noreturn);
     region.statements = block.statements;
 }
 
@@ -1201,7 +1201,7 @@ fn resolve_id(id: ValueId, replacements: &BTreeMap<u32, ValueId>) -> ValueId {
 /// One-step lookup: if A→B is in the map, A becomes B; does not chase B→C.
 /// Definitions (Let bindings, If/Switch/For outputs, loop_variables, ExternalCall/Create
 /// result) are left untouched — only use sites are rewritten.
-fn replace_value_ids_in_stmt(
+fn replace_value_ids_in_statement(
     mut statement: Statement,
     replacements: &BTreeMap<u32, ValueId>,
 ) -> Statement {

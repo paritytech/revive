@@ -55,8 +55,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, Zero};
 
 use crate::ir::{
-    for_each_stmt, BinaryOperation, BitWidth, Block, Expression, FunctionId, MemoryRegion, Object,
-    Region, Statement, Type, Value, ValueId,
+    for_each_statement, BinaryOperation, BitWidth, Block, Expression, FunctionId, MemoryRegion,
+    Object, Region, Statement, Type, Value, ValueId,
 };
 
 /// Results of memory optimization.
@@ -85,7 +85,7 @@ pub struct MemoryOptimizer {
     /// Counter for fresh value IDs when creating new bindings.
     next_value_id: u32,
     /// Statistics about optimizations performed.
-    stats: MemOptResults,
+    statistics: MemOptResults,
     /// Indices of dead stores that should be removed in the current statement list.
     /// A store is dead if it's overwritten before being read.
     dead_store_indices: BTreeSet<usize>,
@@ -112,7 +112,7 @@ impl MemoryOptimizer {
             memory_state: BTreeMap::new(),
             constant_values: BTreeMap::new(),
             next_value_id: 0,
-            stats: MemOptResults::default(),
+            statistics: MemOptResults::default(),
             dead_store_indices: BTreeSet::new(),
             pending_stores: BTreeMap::new(),
         }
@@ -139,7 +139,7 @@ impl MemoryOptimizer {
         // cause them to be optimized BEFORE inlining runs on them, breaking the
         // required pass ordering (inline -> simplify -> mem_opt).
 
-        std::mem::take(&mut self.stats)
+        std::mem::take(&mut self.statistics)
     }
 
     /// Optimizes a block in place.
@@ -180,7 +180,7 @@ impl MemoryOptimizer {
                         // partially overwrite, and the first store is still needed.
                         if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
                             self.dead_store_indices.insert(prev_idx);
-                            self.stats.stores_eliminated += 1;
+                            self.statistics.stores_eliminated += 1;
                             log::trace!(
                                 "Dead store at index {} (offset {}) - overwritten at index {}",
                                 prev_idx,
@@ -200,7 +200,7 @@ impl MemoryOptimizer {
                                 was_read: false,
                             },
                         );
-                        self.stats.values_tracked += 1;
+                        self.statistics.values_tracked += 1;
                     } else {
                         // Unknown offset - invalidate all tracked state and pending stores
                         // Unknown offset store might read from anywhere, so all pending stores
@@ -556,7 +556,7 @@ impl MemoryOptimizer {
 
                             // Forward the stored value instead of loading from memory.
                             let stored = tracked.stored_value;
-                            self.stats.loads_eliminated += 1;
+                            self.statistics.loads_eliminated += 1;
                             log::trace!("Load-after-store forwarding at offset {}", static_offset);
 
                             // If the stored value is narrower than I256, wrap in ZeroExtend
@@ -597,13 +597,13 @@ impl MemoryOptimizer {
                             // handles the stores internally.
                             if let Some(&idx0) = self.pending_stores.get(&0) {
                                 self.dead_store_indices.insert(idx0);
-                                self.stats.stores_eliminated += 1;
+                                self.statistics.stores_eliminated += 1;
                             }
                             if let Some(&idx32) = self.pending_stores.get(&32) {
                                 self.dead_store_indices.insert(idx32);
-                                self.stats.stores_eliminated += 1;
+                                self.statistics.stores_eliminated += 1;
                             }
-                            self.stats.keccak_pairs_fused += 1;
+                            self.statistics.keccak_pairs_fused += 1;
                             self.pending_stores.clear();
                             log::trace!("Fused keccak256(0, 64) into keccak256_pair");
                             return Expression::Keccak256Pair { word0, word1 };
@@ -623,9 +623,9 @@ impl MemoryOptimizer {
                             // handles the store internally.
                             if let Some(&idx0) = self.pending_stores.get(&0) {
                                 self.dead_store_indices.insert(idx0);
-                                self.stats.stores_eliminated += 1;
+                                self.statistics.stores_eliminated += 1;
                             }
-                            self.stats.keccak_singles_fused += 1;
+                            self.statistics.keccak_singles_fused += 1;
                             self.pending_stores.clear();
                             log::trace!("Fused keccak256(0, 32) into keccak256_single");
                             return Expression::Keccak256Single { word0 };
@@ -885,7 +885,7 @@ impl FmpPropagation {
     /// Collects all function IDs called in a statement list, recursing through
     /// nested regions and `For::condition_statements`.
     fn collect_callees(statements: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
-        for_each_stmt(statements, &mut |statement| {
+        for_each_statement(statements, &mut |statement| {
             if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
                 if let Expression::Call { function, .. } = value {
                     cb(*function);
@@ -1161,7 +1161,7 @@ impl FmpPropagation {
     /// and would defeat the optimization for everyone.
     fn statements_write_fmp(statements: &[Statement]) -> bool {
         let mut found = false;
-        for_each_stmt(statements, &mut |statement| {
+        for_each_statement(statements, &mut |statement| {
             if matches!(
                 statement,
                 Statement::MStore {
@@ -1300,11 +1300,11 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let stats = opt.optimize_object(&mut object);
+        let statistics = opt.optimize_object(&mut object);
 
         // Load-after-store elimination should forward the stored value.
         // Since the stored value is I256, it should be replaced with Var.
-        assert_eq!(stats.loads_eliminated, 1);
+        assert_eq!(statistics.loads_eliminated, 1);
 
         // The mload should be replaced with Var (forwarding the stored value)
         if let Statement::Let { value, .. } = &object.code.statements[3] {
@@ -1490,10 +1490,10 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let stats = opt.optimize_object(&mut object);
+        let statistics = opt.optimize_object(&mut object);
 
         // Should have eliminated 1 dead store
-        assert_eq!(stats.stores_eliminated, 1);
+        assert_eq!(statistics.stores_eliminated, 1);
 
         // Should have 4 statements now (3 lets + 1 mstore)
         // The first mstore should be removed
@@ -1590,13 +1590,13 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let stats = opt.optimize_object(&mut object);
+        let statistics = opt.optimize_object(&mut object);
 
         // Should have eliminated 0 stores (the first is read, the second is live at end)
-        assert_eq!(stats.stores_eliminated, 0);
+        assert_eq!(statistics.stores_eliminated, 0);
 
         // Load-after-store elimination should forward the stored value
-        assert_eq!(stats.loads_eliminated, 1);
+        assert_eq!(statistics.loads_eliminated, 1);
 
         // Should have all 6 statements (load is replaced, not removed)
         assert_eq!(object.code.statements.len(), 6);

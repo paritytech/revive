@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ir::{for_each_stmt, Block, Expression, MemoryRegion, Object, Statement, Value};
+use crate::ir::{for_each_statement, Block, Expression, MemoryRegion, Object, Statement, Value};
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -180,27 +180,27 @@ impl HeapAnalysis {
     }
 
     /// Analyzes a block for memory access patterns. Recursion through nested
-    /// regions is handled by `for_each_stmt`; `analyze_statement` only handles
+    /// regions is handled by `for_each_statement`; `analyze_statement` only handles
     /// the per-statement analysis (no longer recursing internally).
     fn analyze_block(&mut self, block: &Block, in_function: bool) {
-        for_each_stmt(&block.statements, &mut |statement| {
+        for_each_statement(&block.statements, &mut |statement| {
             self.analyze_statement(statement, in_function);
         });
     }
 
     /// Analyzes a single statement for memory access patterns. The caller is
-    /// responsible for walking nested regions (use `for_each_stmt`).
+    /// responsible for walking nested regions (use `for_each_statement`).
     fn analyze_statement(&mut self, statement: &Statement, in_function: bool) {
         match statement {
             Statement::Let { bindings, value } => {
                 // Track offset information for bindings
-                if let Some(offset_info) = self.analyze_expr_offset(value) {
+                if let Some(offset_info) = self.analyze_expression_offset(value) {
                     for binding in bindings {
                         self.offset_values.insert(binding.0, offset_info.clone());
                     }
                 }
                 // Also check for memory side effects in the expression
-                self.analyze_expr_side_effects(value);
+                self.analyze_expression_side_effects(value);
             }
 
             Statement::MStore { offset, region, .. } => {
@@ -312,7 +312,7 @@ impl HeapAnalysis {
             }
 
             // Control flow: nested regions (and `For::condition_statements`) are
-            // walked by `analyze_block`'s `for_each_stmt`. We only need the
+            // walked by `analyze_block`'s `for_each_statement`. We only need the
             // per-statement setup here — propagating offset info from initial_values
             // to loop_variables/outputs in `For` (those become PHI nodes in LLVM).
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
@@ -339,7 +339,7 @@ impl HeapAnalysis {
 
             Statement::Expression(expression) => {
                 // Check for memory loads that might affect analysis
-                self.analyze_expr_side_effects(expression);
+                self.analyze_expression_side_effects(expression);
             }
 
             // ReturnDataCopy writes ABI-encoded big-endian data that needs byte-swapping.
@@ -522,7 +522,7 @@ impl HeapAnalysis {
     }
 
     /// Analyzes an expression to extract offset information.
-    fn analyze_expr_offset(&self, expression: &Expression) -> Option<OffsetInfo> {
+    fn analyze_expression_offset(&self, expression: &Expression) -> Option<OffsetInfo> {
         match expression {
             Expression::Literal { value, .. } => {
                 let digits = value.to_u64_digits();
@@ -654,7 +654,7 @@ impl HeapAnalysis {
     }
 
     /// Analyzes expression side effects on memory.
-    fn analyze_expr_side_effects(&mut self, expression: &Expression) {
+    fn analyze_expression_side_effects(&mut self, expression: &Expression) {
         // MLoad doesn't have side effects but we track what regions are read
         match expression {
             Expression::MLoad { offset, .. } => {
@@ -1034,7 +1034,7 @@ mod tests {
             value: BigUint::from(0u32),
             value_type: crate::ir::Type::default(),
         };
-        let info = analysis.analyze_expr_offset(&expression).unwrap();
+        let info = analysis.analyze_expression_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(0));
         assert_eq!(info.alignment, 32); // Zero is maximally aligned
 
@@ -1043,7 +1043,7 @@ mod tests {
             value: BigUint::from(64u32),
             value_type: crate::ir::Type::default(),
         };
-        let info = analysis.analyze_expr_offset(&expression).unwrap();
+        let info = analysis.analyze_expression_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(64));
         // 64 = 2^6, so alignment is capped at 32
         assert_eq!(info.alignment, 5);

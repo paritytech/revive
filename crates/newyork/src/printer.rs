@@ -117,9 +117,9 @@ impl<'a> Printer<'a> {
     }
 
     /// Prints an IR expression and returns the formatted string.
-    pub fn print_expr(&mut self, expression: &Expression) -> String {
+    pub fn print_expression(&mut self, expression: &Expression) -> String {
         self.output.clear();
-        self.write_expr(expression);
+        self.write_expression(expression);
         std::mem::take(&mut self.output)
     }
 
@@ -294,7 +294,7 @@ impl<'a> Printer<'a> {
                     self.write_value_id(*id);
                 }
                 self.output.push_str(" := ");
-                self.write_expr(value);
+                self.write_expression(value);
                 self.write_newline();
             }
 
@@ -556,7 +556,7 @@ impl<'a> Printer<'a> {
 
                 self.write_indent();
                 self.output.push_str("  ");
-                self.write_expr(condition);
+                self.write_expression(condition);
                 self.write_newline();
 
                 // Post region
@@ -870,7 +870,7 @@ impl<'a> Printer<'a> {
 
             Statement::Expression(expression) => {
                 self.write_indent();
-                self.write_expr(expression);
+                self.write_expression(expression);
                 self.write_newline();
             }
 
@@ -898,7 +898,7 @@ impl<'a> Printer<'a> {
         self.write_newline();
     }
 
-    fn write_expr(&mut self, expression: &Expression) {
+    fn write_expression(&mut self, expression: &Expression) {
         match expression {
             Expression::Literal { value, value_type } => {
                 let _ = write!(self.output, "0x{:x}", value);
@@ -1216,8 +1216,8 @@ pub fn print_statement(statement: &Statement) -> String {
 }
 
 /// Convenience function to print an expression to a string.
-pub fn print_expr(expression: &Expression) -> String {
-    Printer::new().print_expr(expression)
+pub fn print_expression(expression: &Expression) -> String {
+    Printer::new().print_expression(expression)
 }
 
 /// Implement Display for Object using the printer.
@@ -1244,7 +1244,7 @@ impl fmt::Display for Statement {
 /// Implement Display for Expression using the printer.
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", print_expr(self))
+        write!(f, "{}", print_expression(self))
     }
 }
 
@@ -1259,7 +1259,7 @@ mod tests {
             value: BigUint::from(42u64),
             value_type: Type::Int(BitWidth::I256),
         };
-        let output = print_expr(&expression);
+        let output = print_expression(&expression);
         assert_eq!(output, "0x2a");
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
             lhs: Value::int(ValueId(0)),
             rhs: Value::int(ValueId(1)),
         };
-        let output = print_expr(&expression);
+        let output = print_expression(&expression);
         assert_eq!(output, "add(v0, v1)");
     }
 

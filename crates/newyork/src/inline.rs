@@ -22,8 +22,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{
-    for_each_stmt, for_each_stmt_mut, BitWidth, Block, Expression, Function, FunctionId, Object,
-    Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
+    for_each_statement, for_each_statement_mut, BitWidth, Block, Expression, Function, FunctionId,
+    Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
@@ -128,8 +128,8 @@ fn count_calls_in_block(
     call_counts: &mut BTreeMap<FunctionId, usize>,
     callees: &mut BTreeSet<FunctionId>,
 ) {
-    for_each_stmt(&block.statements, &mut |statement| {
-        statement.for_each_expr(&mut |expression| {
+    for_each_statement(&block.statements, &mut |statement| {
+        statement.for_each_expression(&mut |expression| {
             if let Expression::Call { function, .. } = expression {
                 *call_counts.entry(*function).or_insert(0) += 1;
                 callees.insert(*function);
@@ -201,7 +201,7 @@ const LEAVE_OVERHEAD_PER_SITE: usize = 6;
 /// regions and `For::condition_statements`, but not into other functions).
 fn count_leaves(block: &Block) -> usize {
     let mut count = 0;
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if matches!(statement, Statement::Leave { .. }) {
             count += 1;
         }
@@ -309,7 +309,7 @@ impl InlineRemapper {
     /// call site with a fresh SSA namespace.
     fn remap_statements(&mut self, source: &[Statement]) -> Vec<Statement> {
         let mut statements = source.to_vec();
-        for_each_stmt_mut(&mut statements, &mut |statement| {
+        for_each_statement_mut(&mut statements, &mut |statement| {
             statement.for_each_value_id_def_mut(&mut |id| *id = self.remap_value_id(*id));
         });
         for statement in &mut statements {
@@ -364,7 +364,7 @@ fn can_inline(function: &Function) -> bool {
 /// nesting level). Leave inside For is not handled by our IR-level inliner.
 fn has_leave_in_for(block: &Block) -> bool {
     let mut found = false;
-    for_each_stmt(&block.statements, &mut |statement| {
+    for_each_statement(&block.statements, &mut |statement| {
         if let Statement::For {
             body,
             post,
@@ -372,9 +372,9 @@ fn has_leave_in_for(block: &Block) -> bool {
             ..
         } = statement
         {
-            if stmts_have_leave(&body.statements)
-                || stmts_have_leave(&post.statements)
-                || stmts_have_leave(condition_statements)
+            if statements_have_leave(&body.statements)
+                || statements_have_leave(&post.statements)
+                || statements_have_leave(condition_statements)
             {
                 found = true;
             }
@@ -384,9 +384,9 @@ fn has_leave_in_for(block: &Block) -> bool {
 }
 
 /// Checks if a slice of statements contains any Leave at any nesting level.
-fn stmts_have_leave(statements: &[Statement]) -> bool {
+fn statements_have_leave(statements: &[Statement]) -> bool {
     let mut found = false;
-    for_each_stmt(statements, &mut |s| {
+    for_each_statement(statements, &mut |s| {
         if matches!(s, Statement::Leave { .. }) {
             found = true;
         }
@@ -394,8 +394,8 @@ fn stmts_have_leave(statements: &[Statement]) -> bool {
     found
 }
 
-fn stmt_has_leave_recursive(statement: &Statement) -> bool {
-    stmts_have_leave(std::slice::from_ref(statement))
+fn statement_has_leave_recursive(statement: &Statement) -> bool {
+    statements_have_leave(std::slice::from_ref(statement))
 }
 
 /// Allocates a fresh ValueId.
@@ -422,7 +422,7 @@ fn eliminate_leaves(
     accum_ids: &[ValueId],
     next_id: &mut u32,
 ) -> LeaveElimResult {
-    let mut result_stmts = Vec::new();
+    let mut result_statements = Vec::new();
     let mut current_accums = accum_ids.to_vec();
     let mut done_id: Option<ValueId> = None;
 
@@ -432,9 +432,9 @@ fn eliminate_leaves(
             let remaining = &statements[index..];
             if !remaining.is_empty() {
                 let guarded = wrap_remaining_in_guard(remaining, &current_accums, done, next_id);
-                result_stmts.extend(guarded.statements);
+                result_statements.extend(guarded.statements);
                 return LeaveElimResult {
-                    statements: result_stmts,
+                    statements: result_statements,
                     accum_ids: guarded.accum_ids,
                     done_id: guarded.done_id,
                 };
@@ -449,7 +449,7 @@ fn eliminate_leaves(
                     .iter()
                     .map(|v| {
                         let id = fresh_id(next_id);
-                        result_stmts.push(Statement::Let {
+                        result_statements.push(Statement::Let {
                             bindings: vec![id],
                             value: Expression::Var(v.id),
                         });
@@ -457,7 +457,7 @@ fn eliminate_leaves(
                     })
                     .collect();
                 let done = fresh_id(next_id);
-                result_stmts.push(Statement::Let {
+                result_statements.push(Statement::Let {
                     bindings: vec![done],
                     value: Expression::Literal {
                         value: num::BigUint::from(1u32),
@@ -472,22 +472,22 @@ fn eliminate_leaves(
             }
 
             // Statement contains Leave in sub-structure
-            _ if stmt_has_leave_recursive(statement) => {
-                let sub = transform_leave_stmt(statement, &current_accums, next_id);
-                result_stmts.extend(sub.statements);
-                current_accums = sub.accum_ids;
-                done_id = sub.done_id;
+            _ if statement_has_leave_recursive(statement) => {
+                let transformed = transform_leave_statement(statement, &current_accums, next_id);
+                result_statements.extend(transformed.statements);
+                current_accums = transformed.accum_ids;
+                done_id = transformed.done_id;
             }
 
             // Normal statement
             _ => {
-                result_stmts.push(statement.clone());
+                result_statements.push(statement.clone());
             }
         }
     }
 
     LeaveElimResult {
-        statements: result_stmts,
+        statements: result_statements,
         accum_ids: current_accums,
         done_id,
     }
@@ -703,7 +703,7 @@ fn promote_yields_from_guards(
 }
 
 /// Transforms a statement that contains Leave in its sub-structure.
-fn transform_leave_stmt(
+fn transform_leave_statement(
     statement: &Statement,
     accum_ids: &[ValueId],
     next_id: &mut u32,
@@ -728,7 +728,7 @@ fn transform_leave_stmt(
             });
 
             // Process then branch
-            let then_result = if stmts_have_leave(&then_region.statements) {
+            let then_result = if statements_have_leave(&then_region.statements) {
                 eliminate_leaves(&then_region.statements, accum_ids, next_id)
             } else {
                 LeaveElimResult {
@@ -765,7 +765,7 @@ fn transform_leave_stmt(
 
             if let Some(else_r) = else_region {
                 // Has explicit else branch
-                let else_result = if stmts_have_leave(&else_r.statements) {
+                let else_result = if statements_have_leave(&else_r.statements) {
                     eliminate_leaves(&else_r.statements, accum_ids, next_id)
                 } else {
                     LeaveElimResult {
@@ -874,7 +874,7 @@ fn transform_leave_stmt(
             let new_cases: Vec<SwitchCase> = cases
                 .iter()
                 .map(|c| {
-                    let case_result = if stmts_have_leave(&c.body.statements) {
+                    let case_result = if statements_have_leave(&c.body.statements) {
                         eliminate_leaves(&c.body.statements, accum_ids, next_id)
                     } else {
                         LeaveElimResult {
@@ -909,7 +909,7 @@ fn transform_leave_stmt(
                 .collect();
 
             let new_default = default.as_ref().map(|d| {
-                let def_result = if stmts_have_leave(&d.statements) {
+                let def_result = if statements_have_leave(&d.statements) {
                     eliminate_leaves(&d.statements, accum_ids, next_id)
                 } else {
                     LeaveElimResult {
@@ -1288,10 +1288,10 @@ fn inline_call_with_results(
         function.parameters.len(),
         arguments.len()
     );
-    for ((param_id, _param_ty), argument) in function.parameters.iter().zip(arguments.iter()) {
-        let new_param_id = remapper.remap_value_id(*param_id);
+    for ((parameter_id, _param_ty), argument) in function.parameters.iter().zip(arguments.iter()) {
+        let new_parameter_id = remapper.remap_value_id(*parameter_id);
         statements.push(Statement::Let {
-            bindings: vec![new_param_id],
+            bindings: vec![new_parameter_id],
             value: Expression::Var(argument.id),
         });
     }
@@ -1362,10 +1362,10 @@ fn inline_call_void(
     let mut statements = Vec::new();
 
     // Bind parameters
-    for ((param_id, _), argument) in function.parameters.iter().zip(arguments.iter()) {
-        let new_param_id = remapper.remap_value_id(*param_id);
+    for ((parameter_id, _), argument) in function.parameters.iter().zip(arguments.iter()) {
+        let new_parameter_id = remapper.remap_value_id(*parameter_id);
         statements.push(Statement::Let {
-            bindings: vec![new_param_id],
+            bindings: vec![new_parameter_id],
             value: Expression::Var(argument.id),
         });
     }
@@ -1387,7 +1387,7 @@ fn inline_call_void(
     *next_value_id = remapper.next_value_id;
 
     // If body has Leave, handle it (even for void functions, Leave skips remaining code)
-    if stmts_have_leave(&remapped_body) {
+    if statements_have_leave(&remapped_body) {
         let initial_accums: Vec<ValueId> = function
             .return_values_initial
             .iter()

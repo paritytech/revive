@@ -67,7 +67,7 @@ pub use ir::{
 };
 pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
-    print_expr, print_function, print_object, print_statement, Printer, PrinterConfig,
+    print_expression, print_function, print_object, print_statement, Printer, PrinterConfig,
 };
 pub use simplify::{
     deduplicate_functions, deduplicate_functions_fuzzy, fold_constant_keccak, Simplifier,

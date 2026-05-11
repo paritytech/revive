@@ -182,7 +182,11 @@ pub fn standard_output<T: Compiler>(
         libraries,
         remappings,
         SolcStandardJsonInputSettingsSelection::new_required_for_codegen_all(),
-        SolcStandardJsonInputSettingsOptimizer::pvm_size(solc_optimizer_enabled),
+        SolcStandardJsonInputSettingsOptimizer::new(
+            solc_optimizer_enabled,
+            SolcStandardJsonInputSettingsOptimizer::default_mode(),
+            Default::default(),
+        ),
         Default::default(),
         suppressed_warnings,
         SolcStandardJsonInputSettingsPolkaVM::new(

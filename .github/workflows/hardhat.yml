@@ -1,22 +1,9 @@
 name: Hardhat Integration
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "**.md"
-  pull_request:
-    branches: ["main"]
-    types: [opened, synchronize]
-    paths-ignore:
-      - "**.md"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 env:
-  CARGO_TERM_COLOR: always
   # Workflow-internal hardhat envs are prefixed with `CI_` to not conflict with the
   # `HARDHAT_*` namespace, which hardhat itself will interpret for its configuration.
   CI_HARDHAT_PROJECT_ROOT: tooling-projects/hardhat/erc20
@@ -28,25 +15,17 @@ jobs:
       - name: Checkout revive
         uses: actions/checkout@v4
 
-      - name: Set Up Rust Toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Download resolc Binary
+        uses: actions/download-artifact@v4
         with:
-          # without this it will override our rust flags
-          rustflags: ""
+          name: resolc-x86_64-unknown-linux-musl
+          path: resolc-bin
 
-      - name: Download LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: x86_64-unknown-linux-gnu
-
-      - name: Set LLVM Environment Variables
-        run: echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-
-      - name: Build resolc
+      - name: Export resolc path
         run: |
-          make install-bin
+          chmod +x resolc-bin/resolc-x86_64-unknown-linux-musl
           # This env is used by `hardhat.config.js`.
-          echo "RESOLC_PATH=$(pwd)/target/release/resolc" >> $GITHUB_ENV
+          echo "RESOLC_PATH=$(pwd)/resolc-bin/resolc-x86_64-unknown-linux-musl" >> $GITHUB_ENV
 
       - name: Set Up Node.js
         uses: actions/setup-node@v6

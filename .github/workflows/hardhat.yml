@@ -21,7 +21,7 @@ jobs:
           name: resolc-x86_64-unknown-linux-musl
           path: resolc-bin
 
-      - name: Export resolc path
+      - name: Export resolc Path
         run: |
           chmod +x resolc-bin/resolc-x86_64-unknown-linux-musl
           # This env is used by `hardhat.config.js`.
@@ -42,4 +42,4 @@ jobs:
 
       - name: Verify Output
         working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
-        run: bash verify-output.sh
+        run: bash verify-compiler-output.sh

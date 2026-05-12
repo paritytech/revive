@@ -42,21 +42,4 @@ jobs:
 
       - name: Verify Output
         working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
-        run: |
-          set -x
-          shopt -s nullglob
-          build_info_files=(artifacts/build-info/*.json)
-          test "${#build_info_files[@]}" -eq 1
-
-          BUILD_INFO="${build_info_files[0]}"
-          CONTRACT='.output.contracts["contracts/MyToken.sol"].MyToken'
-          SOURCE='.output.sources["contracts/MyToken.sol"]'
-
-          jq -er "$CONTRACT.evm.bytecode.object"          "$BUILD_INFO" | grep -q '^50564d'
-          jq -er "$CONTRACT.evm.deployedBytecode.object"  "$BUILD_INFO" | grep -q '^50564d'
-          jq -e  "$CONTRACT.evm.methodIdentifiers         | length > 0"  "$BUILD_INFO" > /dev/null
-          jq -e  "$CONTRACT.abi                           | length > 0"  "$BUILD_INFO" > /dev/null
-          jq -e  "$CONTRACT.storageLayout.storage         | length > 0"  "$BUILD_INFO" > /dev/null
-          jq -e  "$CONTRACT.metadata                      | length > 0"  "$BUILD_INFO" > /dev/null
-          jq -e  "$SOURCE.ast                             | length > 0"  "$BUILD_INFO" > /dev/null
-          jq -e  '.output.sources                         | length > 1'  "$BUILD_INFO" > /dev/null
+        run: bash verify-output.sh

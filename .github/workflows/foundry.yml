@@ -1,19 +1,7 @@
 name: Foundry Integration
 
 on:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "**.md"
-  pull_request:
-    branches: ["main"]
-    types: [opened, synchronize]
-    paths-ignore:
-      - "**.md"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
@@ -43,18 +31,16 @@ jobs:
           target: wasm32-unknown-unknown
           components: rust-src
 
-      - name: Download LLVM
-        uses: ./.github/actions/get-llvm
+      - name: Download resolc Binary
+        uses: actions/download-artifact@v4
         with:
-          target: x86_64-unknown-linux-gnu
+          name: resolc-x86_64-unknown-linux-musl
+          path: resolc-bin
 
-      - name: Set LLVM Environment Variables
-        run: echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-
-      - name: Build resolc
+      - name: Export resolc Path
         run: |
-          make install-bin
-          echo "RESOLC_PATH=$(pwd)/target/release/resolc" >> $GITHUB_ENV
+          chmod +x resolc-bin/resolc-x86_64-unknown-linux-musl
+          echo "RESOLC_PATH=$(pwd)/resolc-bin/resolc-x86_64-unknown-linux-musl" >> $GITHUB_ENV
 
       # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
       - name: Install Build Dependencies

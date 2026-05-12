@@ -65,3 +65,7 @@ jobs:
     # Only run this if `test` successfully completes.
     needs: test
     uses: ./.github/workflows/differential-tests.yml
+
+  run-foundry-tests:
+    needs: run-differential-tests
+    uses: ./.github/workflows/foundry.yml

@@ -1,3 +1,5 @@
+# Tests compilation and E2E integration with hardhat-polkadot, but not runtime correctness.
+
 name: Hardhat Integration
 
 on:

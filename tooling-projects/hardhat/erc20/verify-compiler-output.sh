@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Asserts that the Hardhat build-info file contains the expected compiler output.
+# Asserts that the compiled project contains the expected compiler output.
 # Run from the project's root.
 
 set -euxo pipefail

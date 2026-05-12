@@ -1,3 +1,6 @@
+# Tests compilation and E2E integration with foundry-polkadot, including basic
+# runtime behavior, but not differential runtime correctness.
+
 name: Foundry Integration
 
 on:

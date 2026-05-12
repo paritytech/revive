@@ -81,20 +81,7 @@ jobs:
 
       - name: Verify Output
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
-        run: |
-          inspect() { forge inspect --use-resolc "$RESOLC_PATH" MyToken "$@"; }
-          set -x
-          inspect bytecode          | grep -q '^0x50564d'
-          inspect deployedBytecode  | grep -q '^0x50564d'
-          inspect irOptimized       | grep -q .
-          inspect ir                | grep -q .
-          inspect assembly          | grep -q .
-          inspect abi               --json | jq -e 'length > 0'             > /dev/null
-          inspect methodIdentifiers --json | jq -e 'length > 0'             > /dev/null
-          inspect storageLayout     --json | jq -e '.storage | length > 0'  > /dev/null
-          inspect metadata          --json | jq -e 'length > 0'             > /dev/null
-          inspect devdoc            --json | jq -e 'length > 0'             > /dev/null
-          inspect userdoc           --json | jq -e 'length > 0'             > /dev/null
+        run: bash verify-compiler-output.sh "$RESOLC_PATH"
 
       - name: Test Project
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}

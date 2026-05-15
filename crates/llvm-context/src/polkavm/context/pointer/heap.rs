@@ -6,6 +6,7 @@ use revive_common::BYTE_LENGTH_BYTE;
 use revive_common::BYTE_LENGTH_WORD;
 use revive_common::BYTE_LENGTH_X64;
 
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -352,6 +353,15 @@ impl RuntimeFunction for Keccak256OneWord {
         crate::polkavm::context::Attribute::NoInline,
     ];
 
+    /// The function's only caller-visible effect is the returned hash, which
+    /// depends purely on the i256 argument (see `emit_body`: the keccak
+    /// input lives in a function-local alloca, not on the heap). This lets
+    /// LLVM GVN/CSE merge repeated `keccak256(x)` calls with the same input
+    /// across pure-arithmetic gaps — common when Solidity reads a
+    /// packed-storage slot, recomputes the mapping key, and reads/writes
+    /// that mapping repeatedly.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
@@ -364,10 +374,10 @@ impl RuntimeFunction for Keccak256OneWord {
     ) -> anyhow::Result<Option<BasicValueEnum<'ctx>>> {
         let word0 = Self::paramater(context, 0).into_int_value();
 
-        let offset0 = context.xlen_type().const_int(0, false);
-        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset0, word0)?;
+        let input_pointer = context.build_alloca_at_entry(context.word_type(), "input_pointer");
+        let swapped = context.build_byte_swap(word0.into())?;
+        context.build_store(input_pointer, swapped)?;
 
-        let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(BYTE_LENGTH_WORD as u64, false);
@@ -418,6 +428,16 @@ impl RuntimeFunction for Keccak256TwoWords {
         crate::polkavm::context::Attribute::NoInline,
     ];
 
+    /// Same `memory(none)` rationale as [`Keccak256OneWord`]: the returned
+    /// hash depends purely on the two i256 arguments, with no
+    /// caller-observable side effects. Heap scratch is replaced with
+    /// alloca-based scratch (see `emit_body`) so the function is pure from
+    /// the caller's view, enabling GVN/CSE across pure-arithmetic gaps.
+    /// This is the hot path for mapping accesses
+    /// (`keccak256(abi.encode(key, slot))`), where re-hashing the same
+    /// `(key, slot)` pair on a read-then-write is common.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
@@ -432,15 +452,29 @@ impl RuntimeFunction for Keccak256TwoWords {
         let word0 = Self::paramater(context, 0).into_int_value();
         let word1 = Self::paramater(context, 1).into_int_value();
 
-        let offset0 = context.xlen_type().const_int(0, false);
-        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset0, word0)?;
+        let input_buffer_type = context.byte_type().array_type(2 * BYTE_LENGTH_WORD as u32);
+        let input_pointer = context.build_alloca_at_entry(input_buffer_type, "input_pointer");
+        let word0_pointer = crate::polkavm::context::pointer::Pointer::new(
+            context.word_type(),
+            Default::default(),
+            input_pointer.value,
+        );
+        let word1_pointer = context.build_gep(
+            input_pointer,
+            &[
+                context.xlen_type().const_zero(),
+                context
+                    .xlen_type()
+                    .const_int(BYTE_LENGTH_WORD as u64, false),
+            ],
+            context.word_type(),
+            "word1_gep",
+        );
+        let word0_swapped = context.build_byte_swap(word0.into())?;
+        context.build_store(word0_pointer, word0_swapped)?;
+        let word1_swapped = context.build_byte_swap(word1.into())?;
+        context.build_store(word1_pointer, word1_swapped)?;
 
-        let offset32 = context
-            .xlen_type()
-            .const_int(BYTE_LENGTH_WORD as u64, false);
-        crate::polkavm::evm::memory::store_bswap_unchecked(context, offset32, word1)?;
-
-        let input_pointer = context.build_heap_gep_unchecked(offset0)?;
         let length = context
             .xlen_type()
             .const_int(2 * BYTE_LENGTH_WORD as u64, false);

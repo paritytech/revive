@@ -736,6 +736,42 @@ fn sdiv_narrow_masked() {
     run_differential(actions);
 }
 
+/// Regression: `__revive_caller` must not share `@__address_spill_buffer`
+/// with `tx.origin` / `address(this)`. The helper carries
+/// `memory(inaccessiblemem: read)` so LLVM treats a `__revive_caller()` call
+/// as having no `Other` (heap/global) effect. The previous body wrote the
+/// caller into the shared spill buffer global — which `origin()` and
+/// `build_address` also write — making the attribute a contract violation
+/// from LLVM's point of view. No current Solidity emission pattern triggers
+/// a miscompile, but any optimizer pass that hoisted a load of the spill
+/// buffer past a `__revive_caller()` call would have corrupted the
+/// surrounding `tx.origin` / `address(this)` result. Running the four
+/// interleaved patterns through the differential harness asserts the
+/// PVM-side values match EVM, guarding against future pipeline changes that
+/// could expose the wrong attribute.
+#[test]
+fn caller_origin_aliasing() {
+    let mut actions = instantiate("contracts/CallerOriginAliasing.sol", "CallerOriginAliasing");
+
+    for calldata in [
+        Contract::caller_origin_aliasing_caller_then_origin().calldata,
+        Contract::caller_origin_aliasing_origin_then_caller().calldata,
+        Contract::caller_origin_aliasing_caller_address_origin().calldata,
+        Contract::caller_origin_aliasing_repeated_caller().calldata,
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: calldata,
+        });
+    }
+
+    run_differential(actions);
+}
+
 /// Regression: `mload(huge_offset)` must trap, not silently return zero.
 ///
 /// With the newyork backend, the calldata-loaded `_offset` was demand-narrowed

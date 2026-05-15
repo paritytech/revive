@@ -97,6 +97,12 @@ impl<'ctx> Function<'ctx> {
     }
 
     /// Sets the memory writer function attributes.
+    ///
+    /// `Attribute::Memory` is **not** valid here — it carries a payload that
+    /// this enum-only API cannot express. Use the `MEMORY_EFFECT` associated
+    /// constant on the `RuntimeFunction` trait (or
+    /// `inkwell::attributes::Context::create_enum_attribute` directly when
+    /// not declaring through the trait) instead.
     pub fn set_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -104,17 +110,13 @@ impl<'ctx> Function<'ctx> {
         force: bool,
     ) {
         for attribute_kind in attributes {
+            assert_ne!(
+                *attribute_kind,
+                Attribute::Memory,
+                "Attribute::Memory cannot be set through set_attributes; \
+                 use RuntimeFunction::MEMORY_EFFECT to express the encoding",
+            );
             match attribute_kind {
-                // `Memory` is an integer attribute whose value encodes per-location read/write
-                // effects (Other / ArgMem / InaccessibleMem pairs of bits). The all-zero encoding
-                // is `memory(none)` — the only variant any caller in this crate currently wants —
-                // so we apply it with value 0 here. If a finer-grained memory effect is ever
-                // needed, this arm should grow a dedicated representation rather than accept
-                // arbitrary u64.
-                Attribute::Memory => declaration.value.add_attribute(
-                    inkwell::attributes::AttributeLoc::Function,
-                    llvm.create_enum_attribute(Attribute::Memory as u32, 0),
-                ),
                 attribute_kind @ Attribute::AlwaysInline if force => {
                     declaration.value.remove_enum_attribute(
                         inkwell::attributes::AttributeLoc::Function,

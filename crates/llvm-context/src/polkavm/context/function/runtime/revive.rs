@@ -2,8 +2,8 @@
 
 use inkwell::values::BasicValue;
 
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::function::Attribute;
-use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -146,15 +146,16 @@ pub struct CallValue;
 impl RuntimeFunction for CallValue {
     const NAME: &'static str = "__revive_callvalue";
 
-    /// `Memory` here means `memory(none)`: the call value is constant for the
-    /// duration of a contract invocation, so this helper is effectively pure
-    /// and LLVM can DCE redundant calls and CSE duplicate calls.
     const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
         Attribute::NoRecurse,
         Attribute::WillReturn,
-        Attribute::Memory,
     ];
+
+    /// The call value is constant for the duration of a contract invocation,
+    /// so this helper is effectively pure: LLVM can DCE redundant calls and
+    /// CSE duplicate calls.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(&[], false)
@@ -199,13 +200,14 @@ pub struct CallValueNonzero;
 impl RuntimeFunction for CallValueNonzero {
     const NAME: &'static str = "__revive_callvalue_nonzero";
 
-    /// Same `memory(none)` rationale as [`CallValue`].
     const ATTRIBUTES: &'static [Attribute] = &[
         Attribute::NoFree,
         Attribute::NoRecurse,
         Attribute::WillReturn,
-        Attribute::Memory,
     ];
+
+    /// Same `memory(none)` rationale as [`CallValue`].
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.llvm().bool_type().fn_type(&[], false)
@@ -258,6 +260,13 @@ pub struct CallDataLoad;
 impl RuntimeFunction for CallDataLoad {
     const NAME: &'static str = "__revive_calldataload";
 
+    /// Calldata is immutable for the duration of execution and only
+    /// reachable through the host syscall. The helper's alloca write is
+    /// invisible to callers, so the externally observable effect is a read
+    /// of pallet-revive runtime state — letting LLVM GVN fold repeated
+    /// `__revive_calldataload(offset)` calls even across heap mstores.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::ReadInaccessible;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
             .word_type()
@@ -301,6 +310,16 @@ pub struct Caller;
 impl RuntimeFunction for Caller {
     const NAME: &'static str = "__revive_caller";
 
+    /// The caller is immutable within an execution and the syscall reads it
+    /// from pallet-revive runtime state. The body writes the result into a
+    /// function-local alloca (not the shared `@GLOBAL_ADDRESS_SPILL_BUFFER`,
+    /// which `origin()` and `build_address` also touch — see the
+    /// `caller_origin_aliasing` regression test), so from the caller's view
+    /// only pallet-revive runtime state is read and `ReadInaccessible` is
+    /// sound. This lets GVN deduplicate repeated `__revive_caller()` calls
+    /// across heap mstores.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::ReadInaccessible;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(&[], false)
     }
@@ -309,14 +328,13 @@ impl RuntimeFunction for Caller {
         &self,
         context: &mut Context<'ctx>,
     ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
-        let pointer: Pointer<'_> = context
-            .get_global(crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER)?
-            .into();
+        let address_type = context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS);
+        let output_pointer = context.build_alloca_at_entry(address_type, "caller_output");
         context.build_runtime_call(
             revive_runtime_api::polkavm_imports::CALLER,
-            &[pointer.to_int(context).into()],
+            &[output_pointer.to_int(context).into()],
         );
-        let value = context.build_load_address(pointer)?;
+        let value = context.build_load_address(output_pointer)?;
         Ok(Some(value))
     }
 }
@@ -428,6 +446,68 @@ impl RuntimeFunction for Revert {
 }
 
 impl WriteLLVM for Revert {
+    fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::declare(self, context)
+    }
+
+    fn into_llvm(self, context: &mut Context) -> anyhow::Result<()> {
+        <Self as RuntimeFunction>::emit(&self, context)
+    }
+}
+
+/// Outlined `Panic(uint256)` revert helper: writes the Panic ABI encoding to
+/// scratch memory (selector at offset 0, code at offset 4) and reverts with
+/// length 36. The code is passed as an `i256` argument so a single helper
+/// covers every panic code (0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41).
+/// Replaces the inline two-mstore + revert pattern at every panic site, which
+/// otherwise duplicates ~30+ instructions across every function that traps.
+pub struct RevertPanic;
+
+impl RuntimeFunction for RevertPanic {
+    const NAME: &'static str = "__revive_panic";
+
+    const ATTRIBUTES: &'static [Attribute] = &[Attribute::NoReturn, Attribute::NoFree];
+
+    fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
+        context
+            .void_type()
+            .fn_type(&[context.word_type().into()], false)
+    }
+
+    fn emit_body<'ctx>(
+        &self,
+        context: &mut Context<'ctx>,
+    ) -> anyhow::Result<Option<inkwell::values::BasicValueEnum<'ctx>>> {
+        let code = Self::paramater(context, 0).into_int_value();
+
+        let zero_xlen = context.xlen_type().const_zero();
+        let four_xlen = context.xlen_type().const_int(4, false);
+        let panic_selector =
+            context.word_const_str_hex(revive_common::PANIC_UINT256_SELECTOR_WORD_HEX);
+
+        crate::polkavm::evm::memory::store_bswap_unchecked(context, zero_xlen, panic_selector)?;
+        crate::polkavm::evm::memory::store_bswap_unchecked(context, four_xlen, code)?;
+
+        let length = context.xlen_type().const_int(0x24, false);
+        let heap_pointer = context.build_heap_gep_unchecked(zero_xlen)?;
+        let offset_pointer = context.builder().build_ptr_to_int(
+            heap_pointer.value,
+            context.xlen_type(),
+            "panic_data_ptr_to_int",
+        )?;
+        let flags = context.integer_const(crate::polkavm::XLEN, 1);
+
+        context.build_runtime_call(
+            revive_runtime_api::polkavm_imports::RETURN,
+            &[flags.into(), offset_pointer.into(), length.into()],
+        );
+        context.build_unreachable();
+
+        Ok(None)
+    }
+}
+
+impl WriteLLVM for RevertPanic {
     fn declare(&mut self, context: &mut Context) -> anyhow::Result<()> {
         <Self as RuntimeFunction>::declare(self, context)
     }

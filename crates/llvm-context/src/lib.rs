@@ -14,6 +14,7 @@ pub use self::polkavm::build as polkavm_build;
 pub use self::polkavm::context::address_space::AddressSpace as PolkaVMAddressSpace;
 pub use self::polkavm::context::argument::Argument as PolkaVMArgument;
 pub use self::polkavm::context::attribute::Attribute as PolkaVMAttribute;
+pub use self::polkavm::context::attribute::MemoryEffect as PolkaVMMemoryEffect;
 pub use self::polkavm::context::build::Build as PolkaVMBuild;
 pub use self::polkavm::context::code_type::CodeType as PolkaVMCodeType;
 pub use self::polkavm::context::debug_info::DebugInfo;
@@ -34,6 +35,7 @@ pub use self::polkavm::context::function::runtime::revive::Caller as PolkaVMCall
 pub use self::polkavm::context::function::runtime::revive::Exit as PolkaVMExitFunction;
 pub use self::polkavm::context::function::runtime::revive::Revert as PolkaVMRevertFunction;
 pub use self::polkavm::context::function::runtime::revive::RevertEmpty as PolkaVMRevertEmptyFunction;
+pub use self::polkavm::context::function::runtime::revive::RevertPanic as PolkaVMRevertPanicFunction;
 pub use self::polkavm::context::function::runtime::revive::WordToPointer as PolkaVMWordToPointerFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::sbrk::Sbrk as PolkaVMSbrkFunction;
@@ -111,6 +113,11 @@ pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[Stri
         "--disable-licm-promotion".to_string(),
         "--disable-machine-licm".to_string(),
         "--enable-machine-outliner".to_string(),
+        "--machine-outliner-reruns=2".to_string(),
+        "--disable-early-taildup=true".to_string(),
+        "--apply-ext-tsp-for-size=true".to_string(),
+        "--attributor-allow-deep-wrappers=true".to_string(),
+        "--hoist-common-insts=true".to_string(),
     ];
     let argv = [name.to_string()]
         .iter()

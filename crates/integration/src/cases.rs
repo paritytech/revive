@@ -194,6 +194,39 @@ sol!(
 case!("SDivNarrowBug.sol", SDivNarrowBug, sdiv_maskedCall, sdiv_narrow_bug_masked, a: U256, b: U256);
 
 sol!(
+    contract CallerOriginAliasing {
+        function caller_then_origin() external view returns (address, address);
+        function origin_then_caller() external view returns (address, address);
+        function caller_address_origin() external view returns (address, address, address);
+        function repeated_caller() external view returns (address, address, address);
+    }
+);
+case!(
+    "CallerOriginAliasing.sol",
+    CallerOriginAliasing,
+    caller_then_originCall,
+    caller_origin_aliasing_caller_then_origin,
+);
+case!(
+    "CallerOriginAliasing.sol",
+    CallerOriginAliasing,
+    origin_then_callerCall,
+    caller_origin_aliasing_origin_then_caller,
+);
+case!(
+    "CallerOriginAliasing.sol",
+    CallerOriginAliasing,
+    caller_address_originCall,
+    caller_origin_aliasing_caller_address_origin,
+);
+case!(
+    "CallerOriginAliasing.sol",
+    CallerOriginAliasing,
+    repeated_callerCall,
+    caller_origin_aliasing_repeated_caller,
+);
+
+sol!(
     contract Send {
         function transfer_self(uint _amount) public payable;
     }

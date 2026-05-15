@@ -27,6 +27,7 @@ use crate::PolkaVMStoreHeapWordNativeFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
+use self::attribute::MemoryEffect;
 use self::build::Build;
 use self::code_type::CodeType;
 use self::debug_info::DebugInfo;
@@ -60,6 +61,18 @@ pub mod yul_data;
 
 #[cfg(test)]
 mod tests;
+
+/// Imported host syscalls whose only externally visible effect is a read of
+/// pallet-revive runtime state. Each returns a scalar — no output buffer
+/// argument and no heap traffic from the caller's view — so we can attach
+/// [`MemoryEffect::ReadInaccessible`] and let LLVM GVN dedupe repeated calls
+/// across heap mstores.
+const MEMORY_READ_IMPORTS: &[&str] = &[
+    revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
+    revive_runtime_api::polkavm_imports::CODE_SIZE,
+    revive_runtime_api::polkavm_imports::GAS_LIMIT,
+    revive_runtime_api::polkavm_imports::RETURNDATASIZE,
+];
 
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
@@ -125,8 +138,10 @@ impl<'ctx> Context<'ctx> {
             .expect("the stdlib module should be linkable");
     }
 
-    /// Link in the PolkaVM imports module, containing imported functions,
-    /// and marking them as external (they need to be relocatable as too).
+    /// Link in the PolkaVM imports module, mark host syscall imports as
+    /// `Internal` linkage (they need to be relocatable too), and attach a
+    /// [`MemoryEffect::ReadInaccessible`] attribute to every entry of
+    /// [`MEMORY_READ_IMPORTS`].
     fn link_polkavm_imports(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -142,6 +157,20 @@ impl<'ctx> Context<'ctx> {
                 .get_function(import)
                 .unwrap_or_else(|| panic!("{import} import should be declared"))
                 .set_linkage(inkwell::module::Linkage::Internal);
+        }
+
+        let read_inaccessible_encoding = MemoryEffect::ReadInaccessible
+            .encoding()
+            .expect("ICE: ReadInaccessible always encodes to an integer");
+        let memory_read_attr =
+            llvm.create_enum_attribute(Attribute::Memory as u32, read_inaccessible_encoding);
+        for import in MEMORY_READ_IMPORTS {
+            if let Some(function) = module.get_function(import) {
+                function.add_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    memory_read_attr,
+                );
+            }
         }
     }
 

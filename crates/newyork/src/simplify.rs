@@ -77,6 +77,9 @@ pub struct Simplifier {
     /// Maps ValueId → (UnaryOperation, operand ValueId) for unary expression tracking.
     /// Used to simplify patterns like not(not(x)) → x.
     unary_defs: BTreeMap<u32, (UnaryOperation, ValueId)>,
+    /// Maps ValueId → (BinaryOperation, lhs ValueId, rhs ValueId) for binary
+    /// expression tracking. Used to simplify patterns like `sub(add(x, y), x) → y`.
+    binary_defs: BTreeMap<u32, (BinaryOperation, ValueId, ValueId)>,
     /// Counter for fresh value IDs when creating new bindings (strength reduction).
     next_value_id: u32,
     /// CSE cache for pure environment reads (calldatasize, caller, etc.).
@@ -101,6 +104,7 @@ impl Simplifier {
             constants: BTreeMap::new(),
             copies: BTreeMap::new(),
             unary_defs: BTreeMap::new(),
+            binary_defs: BTreeMap::new(),
             next_value_id: 0,
             env_reads: BTreeMap::new(),
             statistics: SimplifyResults::default(),
@@ -213,6 +217,16 @@ impl Simplifier {
                     if let Expression::Unary { operation, operand } = &simplified_expr {
                         self.unary_defs
                             .insert(bindings[0].0, (*operation, operand.id));
+                    }
+
+                    if let Expression::Binary {
+                        operation,
+                        lhs,
+                        rhs,
+                    } = &simplified_expr
+                    {
+                        self.binary_defs
+                            .insert(bindings[0].0, (*operation, lhs.id, rhs.id));
                     }
                 }
 
@@ -578,6 +592,55 @@ impl Simplifier {
                 {
                     self.statistics.identities_simplified += 1;
                     return simplified;
+                }
+
+                // Simplify identities that recurse through a previously-recorded
+                // binary definition. These come up wherever a helper computes
+                // `tail = base + 32` and the caller takes `length = tail - base`
+                // (or the symmetric forms); recognising them lets the
+                // return_word peephole match against Solidity's inline encode
+                // helper output.
+                if operation == BinaryOperation::Sub {
+                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_defs.get(&lhs.id.0) {
+                        if lhs_op == BinaryOperation::Add {
+                            let resolved_a = self.resolve_copy(lhs_a);
+                            let resolved_b = self.resolve_copy(lhs_b);
+                            // sub(add(a, b), a) → b
+                            if resolved_a == rhs.id {
+                                self.statistics.identities_simplified += 1;
+                                return Expression::Var(resolved_b);
+                            }
+                            // sub(add(a, b), b) → a
+                            if resolved_b == rhs.id {
+                                self.statistics.identities_simplified += 1;
+                                return Expression::Var(resolved_a);
+                            }
+                        }
+                    }
+                }
+                if operation == BinaryOperation::Add {
+                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_defs.get(&lhs.id.0) {
+                        if lhs_op == BinaryOperation::Sub {
+                            let resolved_a = self.resolve_copy(lhs_a);
+                            let resolved_b = self.resolve_copy(lhs_b);
+                            // add(sub(a, b), b) → a
+                            if resolved_b == rhs.id {
+                                self.statistics.identities_simplified += 1;
+                                return Expression::Var(resolved_a);
+                            }
+                        }
+                    }
+                    if let Some(&(rhs_op, rhs_a, rhs_b)) = self.binary_defs.get(&rhs.id.0) {
+                        if rhs_op == BinaryOperation::Sub {
+                            let resolved_a = self.resolve_copy(rhs_a);
+                            let resolved_b = self.resolve_copy(rhs_b);
+                            // add(b, sub(a, b)) → a
+                            if resolved_b == lhs.id {
+                                self.statistics.identities_simplified += 1;
+                                return Expression::Var(resolved_a);
+                            }
+                        }
+                    }
                 }
 
                 Expression::Binary {
@@ -2487,9 +2550,16 @@ fn nullary_expr_tag(expression: &Expression) -> u8 {
 /// Each differing literal becomes a new i256 parameter, so keep this small.
 const MAX_FUZZY_LITERAL_DIFFS: usize = 4;
 
-/// Minimum function size (in IR statements) for fuzzy dedup.
-/// Smaller functions don't save enough to justify the extra parameter overhead.
+/// Minimum function size (in IR statements) for fuzzy dedup when any
+/// differing-literal parameter is wider than `i64`. Wider new parameters
+/// cost more to pass at every call site, so the function body needs to be
+/// large enough that the dedup savings cover that overhead.
 const MIN_FUZZY_DEDUP_SIZE: usize = 20;
+
+/// Minimum function size for fuzzy dedup when every differing-literal
+/// parameter fits in `i64`. Cheap parameters tolerate smaller bodies because
+/// the per-call overhead is a single push on the PolkaVM `rv64e` target.
+const MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS: usize = 10;
 
 /// Deduplicates functions that are structurally identical except for literal constants.
 ///
@@ -2506,7 +2576,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
     let mut fuzzy_groups: BTreeMap<Vec<u8>, Vec<FunctionId>> = BTreeMap::new();
 
     for function in object.functions.values() {
-        if function.size_estimate < MIN_FUZZY_DEDUP_SIZE {
+        if function.size_estimate < MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS {
             continue;
         }
 
@@ -2609,11 +2679,33 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
             .map(|&pos| (pos, new_parameter_ids[position_to_parameter_index[&pos]]))
             .collect();
 
+        let parameter_types: Vec<Type> = parameter_groups
+            .iter()
+            .map(|positions| {
+                let max_val = group_literals
+                    .iter()
+                    .flat_map(|(_, lits)| positions.iter().map(move |&p| lits[p].clone()))
+                    .max()
+                    .unwrap_or_else(BigUint::zero);
+                Type::Int(BitWidth::from_max_value(&max_val))
+            })
+            .collect();
+
+        let all_params_narrow = parameter_types
+            .iter()
+            .all(|t| matches!(t, Type::Int(width) if *width <= BitWidth::I64));
+        let effective_min_size = if all_params_narrow {
+            MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS
+        } else {
+            MIN_FUZZY_DEDUP_SIZE
+        };
+        if canonical_func.size_estimate < effective_min_size {
+            continue;
+        }
+
         let mut parameterized = canonical_func.clone();
-        for &vid in &new_parameter_ids {
-            parameterized
-                .parameters
-                .push((vid, Type::Int(BitWidth::I256)));
+        for (&vid, parameter_type) in new_parameter_ids.iter().zip(parameter_types.iter()) {
+            parameterized.parameters.push((vid, *parameter_type));
         }
 
         let canonical_lits = &group_literals[0].1;
@@ -2643,6 +2735,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                 fid,
                 canonical_id,
                 &extra_args,
+                &parameter_types,
                 &mut next_value_id,
             );
             for function in object.functions.values_mut() {
@@ -2651,6 +2744,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                     fid,
                     canonical_id,
                     &extra_args,
+                    &parameter_types,
                     &mut next_value_id,
                 );
             }
@@ -3084,6 +3178,7 @@ fn update_call_sites_with_extra_args(
     old_id: FunctionId,
     new_id: FunctionId,
     extra_args: &[BigUint],
+    parameter_types: &[Type],
     next_value_id: &mut u32,
 ) {
     fn rewrite(
@@ -3091,6 +3186,7 @@ fn update_call_sites_with_extra_args(
         old_id: FunctionId,
         new_id: FunctionId,
         extra_args: &[BigUint],
+        parameter_types: &[Type],
         next_id: &mut u32,
     ) {
         let mut i = 0;
@@ -3106,18 +3202,40 @@ fn update_call_sites_with_extra_args(
                         old_id,
                         new_id,
                         extra_args,
+                        parameter_types,
                         next_id,
                     );
                     if let Some(r) = else_region {
-                        rewrite(&mut r.statements, old_id, new_id, extra_args, next_id);
+                        rewrite(
+                            &mut r.statements,
+                            old_id,
+                            new_id,
+                            extra_args,
+                            parameter_types,
+                            next_id,
+                        );
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
                     for c in cases.iter_mut() {
-                        rewrite(&mut c.body.statements, old_id, new_id, extra_args, next_id);
+                        rewrite(
+                            &mut c.body.statements,
+                            old_id,
+                            new_id,
+                            extra_args,
+                            parameter_types,
+                            next_id,
+                        );
                     }
                     if let Some(d) = default {
-                        rewrite(&mut d.statements, old_id, new_id, extra_args, next_id);
+                        rewrite(
+                            &mut d.statements,
+                            old_id,
+                            new_id,
+                            extra_args,
+                            parameter_types,
+                            next_id,
+                        );
                     }
                 }
                 Statement::For {
@@ -3126,12 +3244,40 @@ fn update_call_sites_with_extra_args(
                     post,
                     ..
                 } => {
-                    rewrite(condition_statements, old_id, new_id, extra_args, next_id);
-                    rewrite(&mut body.statements, old_id, new_id, extra_args, next_id);
-                    rewrite(&mut post.statements, old_id, new_id, extra_args, next_id);
+                    rewrite(
+                        condition_statements,
+                        old_id,
+                        new_id,
+                        extra_args,
+                        parameter_types,
+                        next_id,
+                    );
+                    rewrite(
+                        &mut body.statements,
+                        old_id,
+                        new_id,
+                        extra_args,
+                        parameter_types,
+                        next_id,
+                    );
+                    rewrite(
+                        &mut post.statements,
+                        old_id,
+                        new_id,
+                        extra_args,
+                        parameter_types,
+                        next_id,
+                    );
                 }
                 Statement::Block(region) => {
-                    rewrite(&mut region.statements, old_id, new_id, extra_args, next_id);
+                    rewrite(
+                        &mut region.statements,
+                        old_id,
+                        new_id,
+                        extra_args,
+                        parameter_types,
+                        next_id,
+                    );
                 }
                 _ => {}
             }
@@ -3141,7 +3287,7 @@ fn update_call_sites_with_extra_args(
                 if *function == old_id);
             if is_target {
                 let mut extra_values = Vec::with_capacity(extra_args.len());
-                for arg_val in extra_args {
+                for (arg_val, parameter_type) in extra_args.iter().zip(parameter_types.iter()) {
                     let vid = ValueId(*next_id);
                     *next_id += 1;
                     statements.insert(
@@ -3150,14 +3296,14 @@ fn update_call_sites_with_extra_args(
                             bindings: vec![vid],
                             value: Expression::Literal {
                                 value: arg_val.clone(),
-                                value_type: Type::Int(BitWidth::I256),
+                                value_type: *parameter_type,
                             },
                         },
                     );
                     i += 1;
                     extra_values.push(Value {
                         id: vid,
-                        value_type: Type::Int(BitWidth::I256),
+                        value_type: *parameter_type,
                     });
                 }
                 match &mut statements[i] {
@@ -3187,6 +3333,7 @@ fn update_call_sites_with_extra_args(
         old_id,
         new_id,
         extra_args,
+        parameter_types,
         next_value_id,
     );
 }

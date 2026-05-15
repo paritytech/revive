@@ -10,6 +10,7 @@ use inkwell::values::{AnyValue, BasicValue, BasicValueEnum, IntValue};
 use num::{ToPrimitive, Zero};
 use revive_llvm_context::{
     PolkaVMArgument, PolkaVMContext, PolkaVMFunctionDeployCode, PolkaVMFunctionRuntimeCode,
+    PolkaVMMemoryEffect,
 };
 
 use crate::heap_opt::HeapOptResults;
@@ -47,6 +48,37 @@ impl From<anyhow::Error> for CodegenError {
 /// Result type for codegen operations.
 pub type Result<T> = std::result::Result<T, CodegenError>;
 
+/// Attaches the standard `noinline` + `minsize` pair to an outlined helper.
+fn add_noinline_minsize_attrs<'ctx>(
+    context: &PolkaVMContext<'ctx>,
+    function: inkwell::values::FunctionValue<'ctx>,
+) {
+    let noinline_attr = context
+        .llvm()
+        .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
+    let minsize_attr = context
+        .llvm()
+        .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
+    function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
+    function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+}
+
+/// Attaches the named `memory(...)` effect to an outlined helper.
+fn add_memory_effect_attr<'ctx>(
+    context: &PolkaVMContext<'ctx>,
+    function: inkwell::values::FunctionValue<'ctx>,
+    effect: PolkaVMMemoryEffect,
+) {
+    let Some(encoding) = effect.encoding() else {
+        return;
+    };
+    let attr = context.llvm().create_enum_attribute(
+        revive_llvm_context::PolkaVMAttribute::Memory as u32,
+        encoding,
+    );
+    function.add_attribute(inkwell::attributes::AttributeLoc::Function, attr);
+}
+
 /// Mode for native memory operations.
 ///
 /// Controls how MLoad/MStore are lowered to LLVM IR:
@@ -69,9 +101,14 @@ enum NativeMemoryMode {
     ByteSwap,
 }
 
-/// Functions with size_estimate at or above this threshold get NoInline when appropriate.
-/// This prevents code bloat from inlining large function bodies at multiple call sites.
-const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 50;
+/// Functions with size_estimate at or above this threshold get NoInline when our
+/// IR-level pass decided not to inline them. This prevents LLVM from undoing the
+/// decision by inlining a large body either at every call site (multi-call) or at
+/// the single site (single-call, where LLVM's MinSize-aware inliner still pulls
+/// in bodies that don't amortize the saved call-instruction overhead on PolkaVM).
+/// Empirical sweep on the OZ corpus settled on 91 — vs. 50: +591 bytes, vs. 100:
+/// +1,481 bytes.
+const LARGE_FUNCTION_NOINLINE_THRESHOLD: usize = 91;
 
 /// Functions with size_estimate at or below this threshold get AlwaysInline when no
 /// IR-level decision was made. Very small functions benefit from inlining.
@@ -190,6 +227,13 @@ pub struct LlvmCodegen<'ctx> {
     /// Maps the string representation of the constant to the global's pointer value.
     /// This avoids materializing the same 256-bit constant at every storage access site.
     storage_key_globals: BTreeMap<String, inkwell::values::PointerValue<'ctx>>,
+    /// Map from validator function id to the asserted-fits-in mask.
+    /// Populated at the start of `generate_object`. Used to emit
+    /// `llvm.assume(value u<= MASK)` after each call to a validator so
+    /// downstream InstCombine can fold the redundant `and(value, MASK)`
+    /// the Solidity emitter places at every caller's post-validator use.
+    validator_masks: BTreeMap<u32, num::BigUint>,
+
     /// Cache of outlined keccak256 slot wrapper functions.
     /// Maps the constant slot hash string to the wrapper `FunctionValue`.
     /// Each wrapper is `noinline (i256) -> i256` calling `__revive_keccak256_two_words(word0, CONST)`.
@@ -303,6 +347,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_value_ids: BTreeSet::new(),
             dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
+            validator_masks: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
             error_string_revert_fns: BTreeMap::new(),
@@ -358,6 +403,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             callvalue_value_ids: BTreeSet::new(),
             dead_callvalue_ids: BTreeSet::new(),
             storage_key_globals: BTreeMap::new(),
+            validator_masks: BTreeMap::new(),
             keccak256_slot_wrappers: BTreeMap::new(),
             has_msize: false,
             error_string_revert_fns: BTreeMap::new(),
@@ -1156,23 +1202,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let panic_block = context.append_basic_block(&block_name);
         context.set_basic_block(panic_block);
 
-        let zero_xlen = context.xlen_type().const_int(0, false);
-        let panic_selector =
-            context.word_const_str_hex(revive_common::PANIC_UINT256_SELECTOR_WORD_HEX);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context,
-            zero_xlen,
-            panic_selector,
-        )?;
-
-        let four_xlen = context.xlen_type().const_int(4, false);
+        let panic_fn = context
+            .get_function("__revive_panic", false)
+            .expect("ICE: __revive_panic should be declared");
         let code_val = context.word_const(error_code as u64);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context, four_xlen, code_val,
-        )?;
-
-        let revert_block = self.get_or_create_revert_block(context, 0x24)?;
-        context.build_unconditional_branch(revert_block);
+        context.build_call(
+            panic_fn.borrow().declaration(),
+            &[code_val.into()],
+            "panic_outlined",
+        );
+        context.build_unreachable();
 
         context.set_basic_block(current_block);
 
@@ -1325,10 +1364,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         let word_type = context.word_type();
+        let xlen_type = context.xlen_type();
         let function_name = format!("__revive_custom_error_{num_args}");
 
-        let parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
-            (0..=num_args).map(|_| word_type.into()).collect();
+        let mut parameter_types: Vec<inkwell::types::BasicMetadataTypeEnum> =
+            Vec::with_capacity(num_args + 1);
+        parameter_types.push(xlen_type.into());
+        for _ in 0..num_args {
+            parameter_types.push(word_type.into());
+        }
         let function_type = context.llvm().void_type().fn_type(&parameter_types, false);
 
         let function = context.module().add_function(
@@ -1361,12 +1405,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .collect();
 
         let offset_0 = context.xlen_type().const_int(0, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context,
-            offset_0,
-            selector_parameter,
-        )
-        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let selector_heap_pointer = context
+            .build_heap_gep_unchecked(offset_0)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .builder()
+            .build_store(selector_heap_pointer.value, selector_parameter)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?
+            .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
+            .expect("ICE: alignment is valid");
 
         for (i, argument_parameter) in argument_parameters.iter().enumerate() {
             let byte_offset =
@@ -1898,40 +1945,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
-        let trap_block = context.llvm().append_basic_block(function, "trap");
-        let store_block = context.llvm().append_basic_block(function, "store");
 
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
-        let heap_size = context.heap_size();
-        let max_offset = context
-            .builder()
-            .build_int_sub(
-                heap_size,
-                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
-                "max_offset",
-            )
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        let out_of_bounds = context
-            .builder()
-            .build_int_compare(
-                inkwell::IntPredicate::UGT,
-                offset_param,
-                max_offset,
-                "out_of_bounds",
-            )
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        context
-            .builder()
-            .build_conditional_branch(out_of_bounds, trap_block, store_block)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-
-        context.set_basic_block(trap_block);
-        context.build_call(context.intrinsics().trap, &[], "heap_trap");
-        context.build_unreachable();
-
-        context.set_basic_block(store_block);
+        // store_bswap_checked already performs the offset bounds check; no need
+        // to duplicate it in this wrapper. After the call returns we know the
+        // offset is in range and can use the unchecked GEP.
         let store_fn = self.get_or_create_store_bswap_checked_fn(context)?;
         context
             .builder()
@@ -1961,10 +1981,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Gets or creates an outlined load_bswap with bounds checking:
-    /// i256(i32 offset).
-    /// Checks `offset > (heap_size - 32)` and traps if out of bounds,
-    /// then uses unchecked GEP + 4× bswap.i64 + load.
-    /// This replaces sbrk-based `__revive_load_heap_word` for non-msize contracts.
+    /// `i256(i32 offset)`. Checks `offset > (heap_size - 32)` and traps if
+    /// out of bounds, then uses unchecked GEP + 4× bswap.i64 + load. Replaces
+    /// sbrk-based `__revive_load_heap_word` for non-msize contracts.
+    ///
+    /// The body reads heap memory exclusively (no syscalls, no globals
+    /// beyond `@__heap_memory`), so we attach
+    /// [`PolkaVMMemoryEffect::ReadOther`] — letting GVN fold repeated
+    /// `load_bswap_checked(off)` calls of the same offset across arithmetic
+    /// gaps while still being invalidated by intervening heap mstores.
     fn get_or_create_load_bswap_checked_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -1982,14 +2007,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(inkwell::module::Linkage::Internal),
         );
 
-        let noinline_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
-        let minsize_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        add_noinline_minsize_attrs(context, function);
+        add_memory_effect_attr(context, function, PolkaVMMemoryEffect::ReadOther);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2149,10 +2168,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(function)
     }
 
-    /// Gets or creates the outlined `__revive_sload_word(i256 key) -> i256` function.
-    /// Takes the storage key as an i256 value (not pointer), internally handles
-    /// bswap, alloca, and the GET_STORAGE syscall. Eliminates alloca+store at
-    /// each call site for runtime-computed keys (e.g. keccak256 mapping results).
+    /// Gets or creates the outlined `__revive_sload_word(i256 key) -> i256`
+    /// function. Takes the storage key as an i256 value (not pointer),
+    /// internally handles bswap, alloca and the GET_STORAGE syscall.
+    /// Eliminates alloca+store at each call site for runtime-computed keys
+    /// (e.g. keccak256 mapping results).
+    ///
+    /// Effect: [`PolkaVMMemoryEffect::ReadInaccessible`]. From the caller's
+    /// perspective the helper only reads pallet-revive storage; the alloca
+    /// writes inside the body are not externally observable and it touches no
+    /// heap or argmem. LLVM GVN can therefore fold repeated
+    /// `__revive_sload_word(key)` calls across heap mstores while still being
+    /// invalidated by sstore wrappers that mark `inaccessiblemem: write`.
     fn get_or_create_sload_word_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2170,14 +2197,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(inkwell::module::Linkage::Internal),
         );
 
-        let noinline_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
-        let minsize_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        add_noinline_minsize_attrs(context, function);
+        add_memory_effect_attr(context, function, PolkaVMMemoryEffect::ReadInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2222,10 +2243,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(function)
     }
 
-    /// Gets or creates the outlined `__revive_sstore_word(i256 key, i256 value)` function.
-    /// Takes key and value as i256 values (not pointers), internally handles
-    /// bswap, alloca, and the SET_STORAGE syscall. Eliminates alloca+store at
-    /// each call site for runtime-computed keys and values.
+    /// Gets or creates the outlined `__revive_sstore_word(i256 key, i256 value)`
+    /// function. Takes key and value as i256 values (not pointers), internally
+    /// handles bswap, alloca and the SET_STORAGE syscall. Eliminates
+    /// alloca+store at each call site for runtime-computed keys and values.
+    ///
+    /// Effect: [`PolkaVMMemoryEffect::WriteInaccessible`]. The only
+    /// caller-visible effect is the storage write; the key/value byte-swap
+    /// allocas are local, heap state is untouched, so heap loads and calldata
+    /// loads survive across an sstore.
     fn get_or_create_sstore_word_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2246,14 +2272,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(inkwell::module::Linkage::Internal),
         );
 
-        let noinline_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
-        let minsize_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        add_noinline_minsize_attrs(context, function);
+        add_memory_effect_attr(context, function, PolkaVMMemoryEffect::WriteInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2392,9 +2412,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Gets or creates `__revive_mapping_sstore(i256 key, i256 slot, i256 value)`.
     /// Combines keccak256_pair + sstore in a single function, eliminating the
-    /// redundant bswap pair between keccak output and sstore key input.
-    /// Uses heap scratch memory for keccak input (same pattern as keccak256_two_words)
-    /// and efficient 4x64-bit bswap to minimize function body size.
+    /// redundant bswap pair between keccak output and sstore key input. Uses
+    /// a local alloca for the keccak input — heap writes would block the
+    /// effect attribute below and prevent heap-load CSE across mapping
+    /// sstores.
+    ///
+    /// Effect: [`PolkaVMMemoryEffect::WriteInaccessible`]. The only
+    /// caller-visible effect is the storage write; heap state is untouched
+    /// so heap and calldata loads survive across this call.
     fn get_or_create_mapping_sstore_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2415,14 +2440,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(inkwell::module::Linkage::Internal),
         );
 
-        let noinline_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::NoInline as u32, 0);
-        let minsize_attr = context
-            .llvm()
-            .create_enum_attribute(revive_llvm_context::PolkaVMAttribute::MinSize as u32, 0);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        add_noinline_minsize_attrs(context, function);
+        add_memory_effect_attr(context, function, PolkaVMMemoryEffect::WriteInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2432,14 +2451,36 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let slot_param = function.get_nth_param(1).unwrap().into_int_value();
         let value_param = function.get_nth_param(2).unwrap().into_int_value();
 
-        let offset0 = xlen_type.const_int(0, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(context, offset0, key_param)
+        let input_buffer_type = context
+            .byte_type()
+            .array_type(2 * revive_common::BYTE_LENGTH_WORD as u32);
+        let input_pointer = context.build_alloca_at_entry(input_buffer_type, "map_sstore_input");
+        let key_pointer = revive_llvm_context::PolkaVMPointer::new(
+            word_type,
+            Default::default(),
+            input_pointer.value,
+        );
+        let slot_pointer = context.build_gep(
+            input_pointer,
+            &[
+                xlen_type.const_zero(),
+                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
+            ],
+            word_type,
+            "slot_gep",
+        );
+        let key_swapped = context
+            .build_byte_swap(key_param.into())
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context, offset32, slot_param,
-        )
-        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .build_store(key_pointer, key_swapped)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let slot_swapped = context
+            .build_byte_swap(slot_param.into())
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        context
+            .build_store(slot_pointer, slot_swapped)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
         let value_bswap = context
             .build_byte_swap(value_param.as_basic_value_enum())
@@ -2451,9 +2492,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_store(value_pointer.value, value_bswap)
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
 
-        let input_pointer = context
-            .build_heap_gep_unchecked(offset0)
-            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
         let hash_output = context.build_alloca_at_entry(word_type, "map_sstore_hash");
@@ -2514,9 +2552,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
         found_revert
     }
 
-    /// Gets or creates an outlined callvalue check + revert function:
+    /// Gets or creates the outlined callvalue check + revert function:
     /// `void __revive_callvalue_check()` that checks if callvalue is nonzero
-    /// and reverts with empty data if so. Returns normally if callvalue is zero.
+    /// and reverts with empty data if so, returning normally otherwise.
+    ///
+    /// Effect: [`PolkaVMMemoryEffect::ReadInaccessible`]. Callvalue is
+    /// immutable for the duration of execution and reachable through
+    /// pallet-revive runtime state; the alloca write inside the body is
+    /// local, with no heap or argmem traffic. CSE is sound because the
+    /// helper either always returns or always reverts for a given execution
+    /// — the visible "effect" is just the read of the callvalue scalar.
     fn get_or_create_callvalue_check_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2527,21 +2572,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         let void_type = context.llvm().void_type();
         let function_type = void_type.fn_type(&[], false);
-        let function =
-            context
-                .module()
-                .add_function("__revive_callvalue_check", function_type, None);
+        let function = context.module().add_function(
+            "__revive_callvalue_check",
+            function_type,
+            Some(inkwell::module::Linkage::Internal),
+        );
 
-        let noinline_attr = context.llvm().create_enum_attribute(
-            inkwell::attributes::Attribute::get_named_enum_kind_id("noinline"),
-            0,
-        );
-        let minsize_attr = context.llvm().create_enum_attribute(
-            inkwell::attributes::Attribute::get_named_enum_kind_id("minsize"),
-            0,
-        );
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, noinline_attr);
-        function.add_attribute(inkwell::attributes::AttributeLoc::Function, minsize_attr);
+        add_noinline_minsize_attrs(context, function);
+        add_memory_effect_attr(context, function, PolkaVMMemoryEffect::ReadInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2643,6 +2681,167 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         self.return_blocks.insert(key, return_block);
         Ok(return_block)
+    }
+
+    /// Detects a Solidity validator: single-param void function whose body is
+    /// `if iszero(eq(v, and(v, M))) { revert/panic }` where `M = 2^N - 1`.
+    /// Returns the mask if the body matches.
+    fn extract_validator_mask(function: &Function) -> Option<num::BigUint> {
+        use num::Zero;
+
+        if function.parameters.len() != 1 || !function.returns.is_empty() {
+            return None;
+        }
+        let param_id = function.parameters[0].0 .0;
+        let stmts = &function.body.statements;
+        if stmts.len() < 5 {
+            return None;
+        }
+
+        let mut constants: BTreeMap<u32, num::BigUint> = BTreeMap::new();
+        let mut and_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+        let mut eq_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+        let mut iszero_results: BTreeMap<u32, u32> = BTreeMap::new();
+
+        for statement in stmts {
+            match statement {
+                Statement::Let { bindings, value } => {
+                    if bindings.len() != 1 {
+                        continue;
+                    }
+                    let bid = bindings[0].0;
+                    match value {
+                        Expression::Literal { value, .. } => {
+                            constants.insert(bid, value.clone());
+                        }
+                        Expression::Binary {
+                            operation: BinaryOperation::And,
+                            lhs,
+                            rhs,
+                        } => {
+                            and_results.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
+                        Expression::Binary {
+                            operation: BinaryOperation::Eq,
+                            lhs,
+                            rhs,
+                        } => {
+                            eq_results.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
+                        Expression::Unary {
+                            operation: UnaryOperation::IsZero,
+                            operand,
+                        } => {
+                            iszero_results.insert(bid, operand.id.0);
+                        }
+                        _ => {}
+                    }
+                }
+                Statement::If {
+                    condition,
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    if else_region.is_some() {
+                        return None;
+                    }
+                    if !Self::then_region_aborts(then_region) {
+                        return None;
+                    }
+                    let neg_id = iszero_results.get(&condition.id.0)?;
+                    let (eq_lhs, eq_rhs) = eq_results.get(neg_id)?;
+                    let &(and_lhs, and_rhs) = if eq_lhs == &param_id {
+                        and_results.get(eq_rhs)?
+                    } else if eq_rhs == &param_id {
+                        and_results.get(eq_lhs)?
+                    } else {
+                        return None;
+                    };
+                    let mask = if and_lhs == param_id {
+                        constants.get(&and_rhs)?
+                    } else if and_rhs == param_id {
+                        constants.get(&and_lhs)?
+                    } else {
+                        return None;
+                    };
+                    if mask.is_zero() {
+                        return None;
+                    }
+                    let next = mask + num::BigUint::from(1u32);
+                    if (&next & mask) != num::BigUint::zero() {
+                        return None;
+                    }
+                    return Some(mask.clone());
+                }
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// Emits `llvm.assume(value u<= MASK)` after a validator call. This
+    /// gives LLVM the range constraint without inlining the validator body.
+    /// `value` is the LLVM value passed as the validator's single argument.
+    fn emit_validator_assume(
+        &self,
+        context: &mut PolkaVMContext<'ctx>,
+        value: BasicValueEnum<'ctx>,
+        mask: &num::BigUint,
+    ) -> Result<()> {
+        let integer_value = match value {
+            BasicValueEnum::IntValue(v) => v,
+            _ => return Ok(()),
+        };
+        let value_width = integer_value.get_type().get_bit_width();
+        let mask_bits = mask.bits() as u32;
+        if mask_bits >= value_width {
+            return Ok(());
+        }
+        let mask_str = mask.to_str_radix(16);
+        let mask_const = integer_value
+            .get_type()
+            .const_int_from_string(&mask_str, inkwell::types::StringRadix::Hexadecimal)
+            .ok_or_else(|| CodegenError::Llvm(format!("invalid validator mask: {mask}")))?;
+        let cmp = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::ULE,
+                integer_value,
+                mask_const,
+                "validator_assume_cmp",
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let assume = inkwell::intrinsics::Intrinsic::find("llvm.assume")
+            .expect("ICE: llvm.assume intrinsic exists");
+        let assume_decl = assume
+            .get_declaration(context.module(), &[])
+            .expect("ICE: llvm.assume declaration");
+        context
+            .builder()
+            .build_call(assume_decl, &[cmp.into()], "validator_assume")
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        Ok(())
+    }
+
+    fn then_region_aborts(region: &crate::ir::Region) -> bool {
+        for statement in &region.statements {
+            match statement {
+                Statement::Revert { .. } | Statement::Return { .. } => return true,
+                Statement::Stop | Statement::Invalid => return true,
+                Statement::Expression(Expression::Call { .. }) => continue,
+                Statement::Let { .. } => continue,
+                _ => return false,
+            }
+        }
+        matches!(
+            region.statements.last(),
+            Some(Statement::Revert { .. })
+                | Some(Statement::Return { .. })
+                | Some(Statement::Stop)
+                | Some(Statement::Invalid)
+                | Some(Statement::Expression(Expression::Call { .. }))
+        )
     }
 
     /// Find callvalue ValueIds that are ONLY used as conditions in
@@ -3103,6 +3302,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         context.push_function_scope();
 
+        self.validator_masks.clear();
+        for (func_id, function) in &object.functions {
+            if let Some(mask) = Self::extract_validator_mask(function) {
+                self.validator_masks.insert(func_id.0, mask);
+            }
+        }
+
         for (func_id, function) in &object.functions {
             self.declare_function(function, context)?;
             self.function_names.insert(func_id.0, function.name.clone());
@@ -3233,13 +3439,20 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Sets LLVM inline attributes on a declared function based on our custom heuristics.
+    /// Sets LLVM inline attributes on a declared function based on our custom
+    /// heuristics.
     ///
-    /// This provides guidance to LLVM's inliner for functions that survived our IR-level
-    /// inlining pass. We use AlwaysInline for functions we know should be inlined, and
-    /// NoInline only for large functions or those called from many sites where inlining
-    /// would cause significant code bloat. For other functions, we let LLVM decide using
-    /// its own heuristics (it already has MinSize/OptimizeForSize from set_default_attributes).
+    /// This provides guidance to LLVM's inliner for functions that survived
+    /// our IR-level inlining pass. We use `AlwaysInline` for functions we
+    /// know should be inlined, and `NoInline` only for large functions or
+    /// those called from many sites where inlining would cause significant
+    /// code bloat. For the `CostBenefit` decision specifically we apply
+    /// `NoInline` whenever the call count is >= 3 or the body exceeds
+    /// [`LARGE_FUNCTION_NOINLINE_THRESHOLD`] — otherwise MinSize-aware LLVM
+    /// inlining can undo the IR-level decision and re-inline the body at
+    /// every site, costing more bytes than the saved call overhead. For
+    /// other functions, we let LLVM decide using its own heuristics (it
+    /// already has MinSize/OptimizeForSize from `set_default_attributes`).
     fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
         let llvm_func = match context.get_function(&function.name, true) {
             Some(func_ref) => func_ref.borrow().declaration().value,
@@ -3262,7 +3475,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
             Some(crate::InlineDecision::CostBenefit) => {
-                if function.call_count >= 2 {
+                let force_noinline = function.call_count >= 3
+                    || function.size_estimate >= LARGE_FUNCTION_NOINLINE_THRESHOLD;
+                if force_noinline {
                     Some(revive_llvm_context::PolkaVMAttribute::NoInline)
                 } else {
                     None
@@ -4968,7 +5183,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 if count >= 3 {
                     let function = self.get_or_create_custom_error_revert_fn(num_args, context)?;
 
-                    let selector_val = context.word_const_str_hex(&selector.to_str_radix(16));
+                    let selector_high32 = (selector >> 224u32)
+                        .iter_u32_digits()
+                        .next()
+                        .unwrap_or(0)
+                        .swap_bytes();
+                    let selector_val = context.xlen_type().const_int(selector_high32 as u64, false);
                     let mut call_args: Vec<inkwell::values::BasicMetadataValueEnum> =
                         vec![selector_val.into()];
                     for argument in arguments {
@@ -5716,22 +5936,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
             }
 
             Expression::Caller => {
-                if self.use_outlined_caller {
-                    Ok(
-                        revive_llvm_context::polkavm_evm_contract_context::caller_outlined(
-                            context,
-                        )?,
-                    )
+                let value = if self.use_outlined_caller {
+                    revive_llvm_context::polkavm_evm_contract_context::caller_outlined(context)?
                 } else {
-                    Ok(revive_llvm_context::polkavm_evm_contract_context::caller(
-                        context,
-                    )?)
-                }
+                    revive_llvm_context::polkavm_evm_contract_context::caller(context)?
+                };
+                let address_max = (num::BigUint::from(1u32) << 160) - num::BigUint::from(1u32);
+                self.emit_validator_assume(context, value, &address_max)?;
+                Ok(value)
             }
 
-            Expression::Origin => Ok(revive_llvm_context::polkavm_evm_contract_context::origin(
-                context,
-            )?),
+            Expression::Origin => {
+                let value = revive_llvm_context::polkavm_evm_contract_context::origin(context)?;
+                let address_max = (num::BigUint::from(1u32) << 160) - num::BigUint::from(1u32);
+                self.emit_validator_assume(context, value, &address_max)?;
+                Ok(value)
+            }
 
             Expression::CallDataSize => {
                 Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
@@ -5784,9 +6004,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 )
             }
 
-            Expression::Coinbase => Ok(
-                revive_llvm_context::polkavm_evm_contract_context::coinbase(context)?,
-            ),
+            Expression::Coinbase => {
+                let value = revive_llvm_context::polkavm_evm_contract_context::coinbase(context)?;
+                let address_max = (num::BigUint::from(1u32) << 160) - num::BigUint::from(1u32);
+                self.emit_validator_assume(context, value, &address_max)?;
+                Ok(value)
+            }
 
             Expression::Timestamp => {
                 let value =
@@ -5830,9 +6053,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expression::MSize => Ok(revive_llvm_context::polkavm_evm_memory::msize(context)?),
 
-            Expression::Address => Ok(revive_llvm_context::polkavm_evm_contract_context::address(
-                context,
-            )?),
+            Expression::Address => {
+                let value = revive_llvm_context::polkavm_evm_contract_context::address(context)?;
+                let address_max = (num::BigUint::from(1u32) << 160) - num::BigUint::from(1u32);
+                self.emit_validator_assume(context, value, &address_max)?;
+                Ok(value)
+            }
 
             Expression::Balance { address } => {
                 let addr_val = self.translate_value(address)?.into_int_value();
@@ -6020,6 +6246,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     &argument_values,
                     &format!("{}_result", function_name),
                 );
+
+                if let Some(mask) = self.validator_masks.get(&function.0) {
+                    if let Some(first_arg) = argument_values.first() {
+                        self.emit_validator_assume(context, *first_arg, mask)?;
+                    }
+                }
 
                 let result = result.unwrap_or_else(|| context.word_const(0).as_basic_value_enum());
 

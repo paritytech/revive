@@ -90,6 +90,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         revive_llvm_context::PolkaVMCallerFunction.declare(context)?;
         revive_llvm_context::PolkaVMRevertEmptyFunction.declare(context)?;
         revive_llvm_context::PolkaVMRevertFunction.declare(context)?;
+        revive_llvm_context::PolkaVMRevertPanicFunction.declare(context)?;
 
         Ok(())
     }
@@ -226,6 +227,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMRevertPanicFunction.into_llvm(context)?;
 
             if heap_op_count > SBRK_NOINLINE_THRESHOLD {
                 if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {

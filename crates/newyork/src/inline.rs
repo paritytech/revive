@@ -14,10 +14,29 @@
 //!
 //! # Inlining Policy
 //!
-//! - **Always inline**: Functions called exactly once, or with size <= 8 IR nodes
-//! - **Never inline**: Recursive functions, functions with size >= 100,
-//!   functions called from >= 10 sites
+//! - **Always inline**: Functions called exactly once with size below
+//!   `SINGLE_CALL_INLINE_SIZE_THRESHOLD`, or any function with size below
+//!   `ALWAYS_INLINE_SIZE_THRESHOLD` and no `Leave` statements
+//! - **Never inline**: Recursive functions, functions with size at or above
+//!   `NEVER_INLINE_SIZE_THRESHOLD`, or functions called from
+//!   `NEVER_INLINE_CALL_COUNT_THRESHOLD`+ sites
 //! - **Cost-benefit**: For everything else, inline if benefit > cost
+//!
+//! # Pipeline position
+//!
+//! `inline_functions` is invoked twice:
+//!
+//! 1. **Early** — at the start of `optimize_object_tree`, before simplify /
+//!    mem_opt / compound_outlining / guard_narrow. The IR is full of redundant
+//!    `Let` bindings and unfolded arithmetic; the thresholds above were
+//!    empirically calibrated to that shape (see `INLINER.md`).
+//! 2. **Late** — after the parameter narrowing fixed point, via
+//!    `run_late_inline_loop` in `lib.rs`. By then every other pass has
+//!    canonicalized the IR; many helper functions have collapsed to a handful
+//!    of statements. Refreshing `size_estimate` with [`estimate_function_sizes`]
+//!    before the call lets the cost model see the post-simplify shape, so the
+//!    same thresholds catch newly tiny wrappers that the early pass left
+//!    behind.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,27 +46,30 @@ use crate::ir::{
 };
 
 /// Maximum function size (in IR nodes) that is always inlined regardless of call count.
-const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 8;
+const ALWAYS_INLINE_SIZE_THRESHOLD: usize = 6;
 
 /// Maximum function size (in IR nodes) beyond which a function is never inlined.
-const NEVER_INLINE_SIZE_THRESHOLD: usize = 70;
+const NEVER_INLINE_SIZE_THRESHOLD: usize = 100;
 
 /// Maximum function size for single-call inlining at IR level.
 /// Since single-call functions are eliminated entirely (zero code duplication),
 /// a higher threshold is justified. The interprocedural optimizations from
 /// inlining (constant propagation, dead code elimination, type narrowing)
 /// usually outweigh the register pressure increase for moderate-sized functions.
-const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 22;
+const SINGLE_CALL_INLINE_SIZE_THRESHOLD: usize = 48;
 
 /// Maximum number of call sites beyond which a function is never inlined.
-const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 10;
-
-/// Cost multiplier: estimated code size increase per additional call site.
-/// When a function is inlined at N call sites, code grows by roughly (N-1) * size.
-const CODE_SIZE_COST_MULTIPLIER: usize = 1;
+const NEVER_INLINE_CALL_COUNT_THRESHOLD: usize = 100;
 
 /// Bonus for inlining a small function (enables further optimization).
-const SMALL_FUNCTION_BONUS: usize = 15;
+const SMALL_FUNCTION_BONUS: usize = 28;
+
+/// Size threshold for receiving the small-function bonus in the cost-benefit
+/// branch. Tightened from 15 to 10 in iter40 after measurement: at size 11–15
+/// the bonus pushes marginal functions over the cost line and the resulting
+/// inlines add more lowered bytes than they save (`+1,296` regression on the
+/// OZ corpus at threshold 15 vs. 10).
+const SMALL_FUNCTION_BONUS_SIZE_THRESHOLD: usize = 10;
 
 /// Results of the call graph analysis.
 #[derive(Debug, Clone)]
@@ -76,11 +98,16 @@ pub struct InlineResults {
 /// The inlining decision for a function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InlineDecision {
-    /// Always inline this function at all call sites.
+    /// Always inline this function at every call site.
     AlwaysInline,
-    /// Never inline this function.
+    /// Never inline this function — emitted as a standalone callable.
     NeverInline,
-    /// Inline based on cost-benefit at each call site.
+    /// The cost-benefit heuristic could not justify inlining. The IR-level pass
+    /// leaves the function intact; downstream codegen also marks multi-call
+    /// `CostBenefit` functions with LLVM `NoInline` so the LLVM inliner does
+    /// not undo the decision by inlining at every call site (a behavior that
+    /// regressed code size on the PolkaVM target — see iter38 in
+    /// `RALPH_TASK.md`).
     CostBenefit,
 }
 
@@ -200,6 +227,17 @@ fn count_leaves(block: &Block) -> usize {
     count
 }
 
+/// Recomputes the `size_estimate` field on every function from its current body.
+///
+/// The initial size estimates are recorded by the Yul translator before any simplification has
+/// occurred. After simplify/narrow passes change the IR, re-estimation is required so the inliner
+/// makes decisions on the post-simplify shape rather than the original pre-simplify shape.
+pub fn estimate_function_sizes(object: &mut Object) {
+    for function in object.functions.values_mut() {
+        function.size_estimate = estimate_block_size(&function.body);
+    }
+}
+
 /// Decides which functions should be inlined.
 pub fn make_inline_decisions(
     object: &Object,
@@ -225,15 +263,15 @@ pub fn make_inline_decisions(
             InlineDecision::NeverInline
         } else {
             let leave_overhead = leave_count * leave_count * LEAVE_OVERHEAD_PER_SITE * call_count;
-            let cost = (call_count - 1) * size * CODE_SIZE_COST_MULTIPLIER + leave_overhead;
+            let cost = (call_count - 1) * size + leave_overhead;
             let mut benefit = 0;
 
-            if size <= 15 && leave_count == 0 {
+            if size <= SMALL_FUNCTION_BONUS_SIZE_THRESHOLD && leave_count == 0 {
                 benefit += SMALL_FUNCTION_BONUS;
             }
 
             if call_count <= 3 && leave_count <= 1 {
-                benefit += 10;
+                benefit += 15;
             }
 
             if benefit > cost {
@@ -1313,7 +1351,7 @@ fn inline_call_void(
 }
 
 /// Estimates the size of a block (same metric used by from_yul.rs).
-fn estimate_block_size(block: &Block) -> usize {
+pub(crate) fn estimate_block_size(block: &Block) -> usize {
     block.statements.iter().map(estimate_statement_size).sum()
 }
 
@@ -1595,9 +1633,14 @@ mod tests {
             decisions.get(&FunctionId::new(0)),
             Some(&InlineDecision::AlwaysInline)
         );
+        // medium (size 50, 15 callers): with NEVER_INLINE_CALL_COUNT_THRESHOLD
+        // now at 100, this drops to the cost-benefit branch which rejects it
+        // (cost 700, benefit 0) so it ends up CostBenefit rather than
+        // NeverInline. Both effectively keep the body intact and tell LLVM
+        // not to inline; the distinction matters only for trace dumps.
         assert_eq!(
             decisions.get(&FunctionId::new(1)),
-            Some(&InlineDecision::NeverInline)
+            Some(&InlineDecision::CostBenefit)
         );
         assert_eq!(
             decisions.get(&FunctionId::new(2)),

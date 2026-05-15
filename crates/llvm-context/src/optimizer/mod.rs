@@ -51,8 +51,9 @@ impl Optimizer {
         module: &inkwell::module::Module,
     ) -> Result<(), inkwell::support::LLVMString> {
         let optimization_level = self.settings.middle_end_as_string();
-        let pass_pipeline =
-            format!("default<O{optimization_level}>,ipsccp,deadargelim,default<O1>");
+        let pass_pipeline = format!(
+            "mergefunc,default<O{optimization_level}>,mergefunc,ipsccp,deadargelim,attributor,default<O1>,mergefunc"
+        );
         target_machine.run_optimization_passes(module, &pass_pipeline)
     }
 

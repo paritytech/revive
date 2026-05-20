@@ -162,6 +162,10 @@ impl MemoryOptimizer {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = static_offset / 32 * 32;
 
+                        // Dead-store elimination: an unread mstore to the
+                        // exact same offset is fully overwritten by this
+                        // one. Check this FIRST, before the overlap-retain
+                        // below drops the matching `pending_stores` entry.
                         if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
                             self.dead_store_indices.insert(prev_idx);
                             self.statistics.stores_eliminated += 1;
@@ -172,6 +176,31 @@ impl MemoryOptimizer {
                                 index
                             );
                         }
+
+                        // Soundness: an `mstore(p, v)` writes 32 bytes at
+                        // `[p, p + 32)`. Forwarding compares the *exact*
+                        // `tracked.offset` against the load's static
+                        // offset, so any tracked entry whose own 32-byte
+                        // write range overlaps `[p, p + 32)` must be
+                        // invalidated — otherwise a later `mload` at the
+                        // stale tracked offset would forward the
+                        // pre-overwrite value while the actual memory has
+                        // been partially overwritten by the new store.
+                        let new_end = static_offset.saturating_add(32);
+                        self.memory_state.retain(|_, tracked| {
+                            let tracked_end = tracked.offset.saturating_add(32);
+                            tracked_end <= static_offset || tracked.offset >= new_end
+                        });
+                        // Same for pending_stores: a partial-overwrite
+                        // doesn't make the prior store dead (its bytes are
+                        // only *partially* covered), but a later `mload`
+                        // won't match the original offset either, so the
+                        // pending entry can never be matched and should
+                        // not be kept.
+                        self.pending_stores.retain(|&k, _| {
+                            let prev_end = k.saturating_add(32);
+                            prev_end <= static_offset || k >= new_end
+                        });
 
                         self.pending_stores.insert(static_offset, index);
 
@@ -201,10 +230,22 @@ impl MemoryOptimizer {
                     region,
                 } => {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                        let word_offset = static_offset / 32 * 32;
-                        self.memory_state.remove(&word_offset);
-                        self.pending_stores
-                            .retain(|&k, _| k < word_offset || k >= word_offset + 32);
+                        // Soundness: `mstore8(p, _)` overwrites the single
+                        // byte at `p`. Any tracked entry from an earlier
+                        // `mstore` whose 32-byte write range
+                        // `[tracked.offset, tracked.offset + 32)` covers
+                        // `p` becomes stale — `mload` at the still-cached
+                        // exact tracked offset would forward the
+                        // pre-overwrite value. Invalidate every such
+                        // entry and the matching `pending_stores` key.
+                        self.memory_state.retain(|_, tracked| {
+                            let tracked_end = tracked.offset.saturating_add(32);
+                            tracked.offset > static_offset || tracked_end <= static_offset
+                        });
+                        self.pending_stores.retain(|&k, _| {
+                            let prev_end = k.saturating_add(32);
+                            k > static_offset || prev_end <= static_offset
+                        });
                     } else {
                         self.memory_state.clear();
                         self.pending_stores.clear();
@@ -400,16 +441,68 @@ impl MemoryOptimizer {
                     processed.push(statement);
                 }
 
-                Statement::CodeCopy { dest, .. }
-                | Statement::ExtCodeCopy { dest, .. }
-                | Statement::ReturnDataCopy { dest, .. }
-                | Statement::DataCopy { dest, .. }
-                | Statement::CallDataCopy { dest, .. } => {
-                    if let Some(static_offset) = self.try_get_static_offset(&dest) {
-                        let word_offset = static_offset / 32 * 32;
-                        self.memory_state.remove(&word_offset);
-                        self.pending_stores.remove(&word_offset);
+                Statement::CodeCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::ExtCodeCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::ReturnDataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::DataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::CallDataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                } => {
+                    // Soundness: a `*copy(dest, _, length)` writes
+                    // `length` bytes at `[dest, dest + length)`. Any
+                    // tracked entry whose own 32-byte write range
+                    // overlaps that range must be invalidated —
+                    // otherwise a later `mload` at the still-cached
+                    // exact tracked offset would forward the
+                    // pre-overwrite value while actual memory has been
+                    // overwritten by the copy.
+                    //
+                    // Three cases, in priority order:
+                    //
+                    // 1. `length == Some(0)`: zero-byte copy is a
+                    //    no-op regardless of whether `dest` is known —
+                    //    nothing to invalidate.
+                    // 2. `dest == Some(start)` and `length == Some(size)`
+                    //    with `size > 0`: known write range, retain
+                    //    only entries that don't overlap.
+                    // 3. anything else (dynamic dest with nonzero or
+                    //    unknown length, dynamic length with known
+                    //    dest): conservatively clear all tracking.
+                    let copy_length = self.try_get_static_offset(length);
+                    let copy_dest = self.try_get_static_offset(dest);
+                    if matches!(copy_length, Some(0)) {
+                        // case 1: no bytes written
+                    } else if let (Some(start), Some(size)) = (copy_dest, copy_length) {
+                        // case 2: known [start, start + size) range
+                        let end = start.saturating_add(size);
+                        self.memory_state.retain(|_, tracked| {
+                            let tracked_end = tracked.offset.saturating_add(32);
+                            tracked_end <= start || tracked.offset >= end
+                        });
+                        self.pending_stores.retain(|&k, _| {
+                            let prev_end = k.saturating_add(32);
+                            prev_end <= start || k >= end
+                        });
                     } else {
+                        // case 3: dynamic — pessimistic clear
                         self.memory_state.clear();
                         self.pending_stores.clear();
                     }
@@ -513,6 +606,16 @@ impl MemoryOptimizer {
                 let static_offset = self.try_get_static_offset(&offset);
                 let static_length = self.try_get_static_offset(&length);
 
+                // Fusion soundness: the `Keccak256Pair` / `Keccak256Single`
+                // helper functions write their input back to heap[0..N]
+                // (see `Keccak256OneWord::emit_body` /
+                // `Keccak256TwoWords::emit_body`), so the post-call heap
+                // state matches what EVM's `mstore(...); keccak256(...)`
+                // would have produced. That lets us safely dead-eliminate
+                // the prior mstores — a later `mload` (even one that
+                // mem_opt's forwarding can't reach because of an
+                // intervening clearing event) reads the helper's heap
+                // write and gets the same value EVM would.
                 if static_offset == Some(0) && static_length == Some(64) {
                     if let (Some(tracked0), Some(tracked32)) =
                         (self.memory_state.get(&0), self.memory_state.get(&32))

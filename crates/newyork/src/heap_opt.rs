@@ -102,11 +102,14 @@ pub struct HeapAnalysis {
     /// (non-static) offset that we cannot track. When true, some accesses are invisible
     /// to the analysis.
     has_dynamic_accesses: bool,
-    /// Whether any `return` statement (not revert) covers the FMP slot at 0x40.
-    /// When true, user data stored at 0x40 could escape via return, making the
-    /// FMP native-mode optimization unsafe. Normal Solidity returns from free_ptr
-    /// (>= 0x80) so this is only set for inline assembly patterns like `return(0, 96)`.
-    has_return_covering_fmp: bool,
+    /// Whether any statement sends memory to external code over a static range
+    /// that covers the FMP word at 0x40 (`return`, `revert`, `log*`, external
+    /// calls, `create*`, `keccak256`). When true, user data stored at 0x40
+    /// would be observed by the caller in BE format, so the FMP native-mode
+    /// optimization is unsafe. Normal Solidity returns and reverts from
+    /// `free_ptr (>= 0x80)` so this fires only for inline-assembly patterns
+    /// like `return(0, 96)` / `revert(0, 96)`.
+    fmp_word_escapes: bool,
     /// Static offsets that are accessed via non-literal (variable) expressions.
     /// When the solc M3 optimizer turns literal offsets into variables
     /// (e.g., `let size := 64; mload(size)`), the LLVM IR value won't be a constant.
@@ -149,7 +152,7 @@ impl HeapAnalysis {
             has_dynamic_escapes: false,
             min_dynamic_escape_start: None,
             has_dynamic_accesses: false,
-            has_return_covering_fmp: false,
+            fmp_word_escapes: false,
             variable_accessed_offsets: BTreeSet::new(),
         }
     }
@@ -235,42 +238,31 @@ impl HeapAnalysis {
                 ..
             } => {
                 self.mark_escaping_range(args_offset, args_length);
+                self.note_fmp_coverage(args_offset, args_length);
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
+                self.note_fmp_coverage(ret_offset, ret_length);
             }
 
             Statement::Revert { offset, length } => {
                 self.mark_escaping_range(offset, length);
+                self.note_fmp_coverage(offset, length);
             }
 
             Statement::Return { offset, length } => {
                 self.mark_escaping_range(offset, length);
                 if in_function {
-                    let start = self.extract_static_offset(offset);
-                    let len = self.extract_static_offset(length);
-                    match (start, len) {
-                        (Some(s), Some(l)) => {
-                            if s <= 0x40 && s.saturating_add(l) >= 0x60 {
-                                self.has_return_covering_fmp = true;
-                            }
-                        }
-                        (Some(s), None) => {
-                            let word_start = s / 32 * 32;
-                            self.min_dynamic_escape_start = Some(
-                                self.min_dynamic_escape_start
-                                    .map_or(word_start, |prev| prev.min(word_start)),
-                            );
-                        }
-                        _ => {}
-                    }
+                    self.note_fmp_coverage(offset, length);
                 }
             }
 
             Statement::Log { offset, length, .. } => {
                 self.mark_escaping_range(offset, length);
+                self.note_fmp_coverage(offset, length);
             }
 
             Statement::Create { offset, length, .. } => {
                 self.mark_escaping_range(offset, length);
+                self.note_fmp_coverage(offset, length);
             }
 
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
@@ -375,6 +367,41 @@ impl HeapAnalysis {
     }
 
     /// Marks all word-aligned memory regions in [offset, offset+length) as escaping.
+    /// Notes a static escape range that may cover the FMP word at 0x40.
+    /// Each external escape statement (`revert`, `return` in a function,
+    /// `log*`, external `call`, `create*`, `keccak256`) must call this so
+    /// `fmp_native_safe()` can disable the FMP native-mode encoding when
+    /// the FMP value would be observed externally in BE format.
+    ///
+    /// - `(static_start, static_len)` covering `[0x40, 0x60)` → set
+    ///   `fmp_word_escapes`.
+    /// - `(static_start, dynamic_len)` with `start <= 0x40` → could cover
+    ///   FMP, set `min_dynamic_escape_start` to that word.
+    /// - `(dynamic, _)` → offset is unknown so the escape could start
+    ///   anywhere including at/below 0x40; lower `min_dynamic_escape_start`
+    ///   to 0 so `fmp_native_safe()` rejects.
+    fn note_fmp_coverage(&mut self, offset: &Value, length: &Value) {
+        let start = self.extract_static_offset(offset);
+        let len = self.extract_static_offset(length);
+        match (start, len) {
+            (Some(s), Some(l)) => {
+                if s <= 0x40 && s.saturating_add(l) >= 0x60 {
+                    self.fmp_word_escapes = true;
+                }
+            }
+            (Some(s), None) => {
+                let word_start = s / 32 * 32;
+                self.min_dynamic_escape_start = Some(
+                    self.min_dynamic_escape_start
+                        .map_or(word_start, |prev| prev.min(word_start)),
+                );
+            }
+            (None, _) => {
+                self.min_dynamic_escape_start = Some(0);
+            }
+        }
+    }
+
     fn mark_escaping_range(&mut self, offset: &Value, length: &Value) {
         let start = self.extract_static_offset(offset);
         let len = self.extract_static_offset(length);
@@ -604,6 +631,7 @@ impl HeapAnalysis {
                     self.has_dynamic_accesses = true;
                 }
                 self.mark_escaping_range(offset, length);
+                self.note_fmp_coverage(offset, length);
             }
             Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {}
             Expression::MappingSLoad { .. } => {}
@@ -656,8 +684,8 @@ impl HeapAnalysis {
     }
 
     /// Returns whether any `return` statement covers the FMP slot at 0x40.
-    pub fn has_return_covering_fmp(&self) -> bool {
-        self.has_return_covering_fmp
+    pub fn fmp_word_escapes(&self) -> bool {
+        self.fmp_word_escapes
     }
 
     /// Returns the set of static offsets accessed via non-literal expressions.
@@ -740,7 +768,7 @@ pub struct HeapOptResults {
     pub has_dynamic_accesses: bool,
     /// Whether any `return` statement covers the FMP slot at 0x40.
     /// When true, the FMP native-mode optimization is unsafe.
-    has_return_covering_fmp: bool,
+    fmp_word_escapes: bool,
     /// Static offsets that are accessed via non-literal (variable) expressions.
     /// These offsets may not be LLVM constants, so native mode would cause
     /// a store/load mode mismatch with literal accesses to the same offset.
@@ -776,7 +804,7 @@ impl HeapOptResults {
             has_dynamic_escapes: analysis.has_dynamic_escapes(),
             min_dynamic_escape_start: analysis.min_dynamic_escape_start(),
             has_dynamic_accesses: analysis.has_dynamic_accesses(),
-            has_return_covering_fmp: analysis.has_return_covering_fmp(),
+            fmp_word_escapes: analysis.fmp_word_escapes(),
             variable_accessed_offsets: analysis.variable_accessed_offsets().clone(),
         }
     }
@@ -812,7 +840,8 @@ impl HeapOptResults {
 
     /// Returns true if the FMP slot at 0x40 is safe for native-mode optimization.
     /// This is false when:
-    /// - A static `return` covers offset 0x40 (e.g., `return(0, 96)`)
+    /// - A static escape covers offset 0x40 (e.g., `return(0, 96)`,
+    ///   `revert(0, 96)`, `log0(0, 96)`, `call(.., 0, 96, ..)`, `keccak256(0, 96)`)
     /// - A dynamic-length escape starts at or before 0x40 (e.g., `return(0, dynamic)`)
     /// - Offset 0x40 is accessed via a non-literal expression (LLVM won't see a constant)
     /// - Any memory access uses a fully dynamic offset (could touch 0x40)
@@ -823,7 +852,7 @@ impl HeapOptResults {
         if self.has_dynamic_accesses {
             return false;
         }
-        if self.has_return_covering_fmp {
+        if self.fmp_word_escapes {
             return false;
         }
         if let Some(min_start) = self.min_dynamic_escape_start {

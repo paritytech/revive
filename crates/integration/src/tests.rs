@@ -284,6 +284,328 @@ fn signed_remainder() {
     run_differential(actions);
 }
 
+/// Regression: `div(x, x)` (and `sdiv(x, x)`) must return 0 when `x == 0`.
+///
+/// EVM defines `DIV` / `SDIV` to return 0 when the denominator is zero, so
+/// `div(0, 0) == 0`. The newyork simplifier in `simplify.rs` previously
+/// folded `div(x, x) → 1` and `sdiv(x, x) → 1` based on operand-identity
+/// alone, which is only correct when `x != 0`. For `x == 0`, EVM returns 0
+/// but PVM returned 1 — a semantic divergence visible to any contract that
+/// passes 0 (intentionally or via uninitialised state) to such an
+/// expression in inline assembly.
+///
+/// `mod(x, x)` is sound (mod by zero in EVM is also 0).
+#[test]
+fn div_self_zero_returns_zero() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for x in [U256::ZERO, U256::from(1u64), U256::from(5u64), U256::MAX] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_div_self(x).calldata,
+        });
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn sdiv_self_zero_returns_zero() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for x in [
+        I256::ZERO,
+        I256::try_from(1).unwrap(),
+        I256::MINUS_ONE,
+        I256::MIN,
+        I256::MAX,
+    ] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_sdiv_self(x).calldata,
+        });
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn mod_self_zero_returns_zero() {
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for x in [U256::ZERO, U256::from(7u64), U256::MAX] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::division_arithmetics_mod_self(x).calldata,
+        });
+    }
+    run_differential(actions);
+}
+
+/// Regression: `narrow_function_params` narrows a function parameter that is
+/// only used as a `MemoryOffset` (e.g. as `mload` offset) from `i256` to
+/// `i64`. The call site emits a bare `trunc i256 → i64`, so an i256
+/// argument with bits above 64 (e.g. `2^64`) silently aliases to `0`. The
+/// use-site `safe_truncate_int_to_xlen` (i64 → i32) only sees the already-
+/// truncated value and can't observe the discarded high bits.
+///
+/// Commit ccca38df fixed the same class of issue for `try_narrow_let_binding`
+/// (let-binding demand narrowing) but parameter narrowing still uses
+/// `constraint.max_width` directly, which `narrow_from_use(offset.id, I64)`
+/// pulls down to I64. Differential mode catches the mismatch: EVM OOGs on
+/// memory expansion, PVM returns 0 from the zero-initialised scratch slot.
+#[test]
+fn param_mload_huge_offset_traps() {
+    for shift in [64u32, 128, 200] {
+        let huge = U256::from(1u64) << shift;
+        let mut actions = instantiate("contracts/ParamMload.sol", "ParamMload");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::param_mload_try_fetch(huge).calldata,
+        });
+        Specs {
+            actions,
+            differential: true,
+            ..Default::default()
+        }
+        .run();
+    }
+}
+
+/// Regression: the panic-pattern outliner in `simplify.rs` extracts a
+/// panic code via `to_u64_digits().first()` (lowest u64 digit), then
+/// gates on `<= 0xFF`. A 256-bit code value with non-zero high bits but a
+/// low byte `<= 0xFF` passes the check; codegen for the synthesised
+/// `Statement::PanicRevert { code }` emits Solidity's canonical 36-byte
+/// panic encoding with `code` zero-padded — the original high bits of the
+/// mstored value are silently dropped from the revert data. EVM emits the
+/// original bytes.
+#[test]
+fn panic_code_high_bits_preserved() {
+    let mut actions = instantiate("contracts/PanicCodeBug.sol", "PanicCodeBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::panic_code_bug_trigger().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `mem_opt::optimize_statements` records each `mstore` at the
+/// *aligned* word offset (`static_offset / 32 * 32`) but doesn't invalidate
+/// adjacent words that an *unaligned* store partially overwrites. An
+/// `mstore(0x70, v)` writes bytes [0x70, 0x90) — the lower half of the
+/// word at 0x80 — yet the entry tracked at `memory_state[0x80]` (from a
+/// previous aligned `mstore(0x80, …)`) survives untouched. A later
+/// `mload(0x80)` matches that stale entry by exact-offset comparison and
+/// is forwarded to the pre-overwrite value, dropping the bytes from the
+/// unaligned write. EVM reads the actual mixed memory.
+#[test]
+fn unaligned_mstore_forwarding() {
+    let mut actions = instantiate("contracts/UnalignedMStoreBug.sol", "UnalignedMStoreBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::unaligned_mstore_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `to_llvm.rs::get_or_create_return_block` (and revert / Stop
+/// siblings) build the constant offset/length via
+/// `context.xlen_type().const_int(const_offset, false)`, which silently
+/// truncates a `u64` to `i32`. A constant offset like `0x100000000000000`
+/// (`2^56`) fits in `u64` so `try_extract_const_u64` returns `Some`, the
+/// shared block path is taken, and the truncated offset (`0`) is fed to
+/// `emit_exit_unchecked` — the return reads from `heap[0]` instead of
+/// trapping on the out-of-bounds offset. EVM OOGs on memory expansion.
+#[test]
+fn const_return_offset_overflow_traps() {
+    let mut actions = instantiate(
+        "contracts/ConstReturnOverflowBug.sol",
+        "ConstReturnOverflowBug",
+    );
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::const_return_overflow_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `simplify.rs::find_panic_pattern_backwards` walks the
+/// statement list backwards from `revert(0, 0x24)` and accepts an
+/// `mstore` at offsets ≠ 0 / 4 as "safe filler" — it skips it in the
+/// backward search and the `only_safe` gate only restricts statement
+/// kinds, not memory regions touched. An intermediate `mstore(p, v)`
+/// with `p` inside the panic encoding region (e.g. `p = 7`) partially
+/// overwrites the EVM revert bytes EVM caller sees, but the
+/// simplifier still matches the canonical panic shape and replaces
+/// the whole sequence with `Statement::PanicRevert { code }` —
+/// codegen then emits Solidity's canonical panic encoding without
+/// the corrupting mstore. The caller observes different revert data
+/// on PVM vs EVM.
+#[test]
+fn panic_pattern_intervening_mstore_preserved() {
+    let mut actions = instantiate("contracts/PanicInterveneBug.sol", "PanicInterveneBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::panic_intervene_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `heap_opt::fmp_native_safe()` does not check
+/// `tainted_regions` or `escaping_regions`. A static `revert(0, 96)`
+/// marks the FMP word (0x40) as escaping via `mark_escaping_range`,
+/// but `Statement::Revert` (unlike `Statement::Return`) doesn't set
+/// `has_return_covering_fmp`. The four flags `fmp_native_safe()` reads
+/// stay false, so it returns true and `mstore(0x40, …)` is encoded as
+/// a 4-byte i32 LE native store. The revert data bytes [0x40..0x60)
+/// then carry the LE-encoded i32 followed by 28 stale bytes instead
+/// of the BE 32-byte word EVM emits.
+#[test]
+fn fmp_revert_native_mode_corrupts_revert_data() {
+    let mut actions = instantiate("contracts/FmpRevertBug.sol", "FmpRevertBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_revert_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `mem_opt::optimize_expr_with_read_tracking` fuses
+/// `mstore(0, k); keccak256(0, 32)` into `Keccak256Single { k }` and
+/// marks the prior mstore *dead*. The Keccak256Single lowering uses
+/// the `__revive_keccak256_one_word` helper (declared when there are
+/// `KECCAK_SINGLE_THRESHOLD = 8`+ Keccak256Single sites), which writes
+/// to a stack-alloca'd scratch — NOT heap[0..32]. So a later `mload(0)`
+/// whose mem_opt forwarding has been invalidated by an intervening
+/// external call returns the *un-stored* value, while EVM still has
+/// `k` at memory[0..32].
+#[test]
+fn keccak_fuse_preserves_scratch_observable_via_mload() {
+    let mut actions = instantiate("contracts/KeccakFuseBug.sol", "KeccakFuseBug");
+    let seeds = [
+        U256::from(0xaa01u64),
+        U256::from(0xaa02u64),
+        U256::from(0xaa03u64),
+        U256::from(0xaa04u64),
+        U256::from(0xaa05u64),
+        U256::from(0xaa06u64),
+        U256::from(0xaa07u64),
+        U256::from(0xaa08u64),
+    ];
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::keccak_fuse_bug_probe(seeds).calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: same FMP-native-mode mismatch as
+/// `fmp_revert_native_mode_corrupts_revert_data`, but the revert
+/// uses *dynamic* offset and length read from calldata. The
+/// `(None, _)` arm of `mark_escaping_range` only flips
+/// `has_dynamic_escapes`; without lowering `min_dynamic_escape_start`
+/// the FMP-native guard misses this case too. Fixed by
+/// `note_fmp_coverage` lowering `min_dynamic_escape_start` to 0
+/// for fully-dynamic escapes.
+#[test]
+fn fmp_dyn_revert_native_mode_corrupts_revert_data() {
+    let mut actions = instantiate("contracts/FmpDynRevertBug.sol", "FmpDynRevertBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_dyn_revert_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: same shape as `unaligned_mstore_forwarding` (Bug #6),
+/// but the second store is `mstore8` instead of `mstore`. mem_opt's
+/// MStore8 handler removes only `memory_state[word(offset)]` and
+/// doesn't invalidate the overlapping tracked entry from an earlier
+/// *unaligned* `mstore` whose 32-byte write range covers the single
+/// byte. A later `mload` matching the stale tracked offset gets
+/// forwarded to the pre-overwrite value, dropping the byte overwrite.
+#[test]
+fn unaligned_mstore8_forwarding() {
+    let mut actions = instantiate("contracts/UnalignedMStore8Bug.sol", "UnalignedMStore8Bug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::unaligned_mstore8_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Regression: `mem_opt::optimize_statements` `*Copy` handler
+/// (CodeCopy / ExtCodeCopy / ReturnDataCopy / DataCopy / CallDataCopy)
+/// removes only `memory_state[word(dest)]` when `dest` is statically
+/// known. It ignores the copy's *length*, so additional words inside
+/// `[dest, dest + length)` keep their stale tracked entries. A
+/// subsequent `mload` matching the stale tracked offset is forwarded
+/// to the pre-overwrite value while EVM reads the bytes that the copy
+/// actually wrote.
+///
+/// The dynamic `length` argument defeats solc's dead-store
+/// elimination of the sentinel mstore — solc can't prove that
+/// `calldatacopy(0xc0, 0, length)` overwrites the sentinel at
+/// `mstore(0xe0, …)` without knowing `length >= 0x40`.
+#[test]
+fn copy_length_invalidates_tracked_overlap() {
+    use alloy_primitives::U256;
+    let mut actions = instantiate("contracts/CopyOverlapBug.sol", "CopyOverlapBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::copy_overlap_bug(U256::from(64u64)).calldata,
+    });
+    run_differential(actions);
+}
+
 #[test]
 fn ext_code_hash() {
     let mut actions = instantiate("contracts/ExtCode.sol", "ExtCode");

@@ -991,16 +991,20 @@ fn find_panic_pattern_backwards(
             Statement::MStore { offset, value, .. } => {
                 if is_const_value(offset.id, 4, constants) {
                     if let Some(code_val) = constants.get(&value.id.0) {
-                        if let Some(code_u8) = code_val.to_u64_digits().first() {
-                            if *code_u8 <= 0xFF {
-                                mstore4_idx = Some(j);
-                                error_code = Some(*code_u8 as u8);
-                                break;
-                            }
-                        }
-                        if code_val.is_zero() {
+                        // The simplifier emits `Statement::PanicRevert { code: u8 }` which
+                        // encodes Solidity's canonical 36-byte panic revert with `code`
+                        // zero-padded into the last byte. Only fold when the original
+                        // mstored value actually fits in `u8` — i.e. ALL bits above the
+                        // low byte are zero. Using `to_u64_digits().first()` here was
+                        // unsound: it returned only the lowest u64 digit, so values like
+                        // `2^124 + 0x42` were mis-classified as `code = 0x42` and the
+                        // high bits (which the EVM emits literally into the revert data)
+                        // were silently dropped.
+                        if code_val.bits() <= 8 {
+                            let code_u8 =
+                                code_val.to_u64_digits().first().copied().unwrap_or(0) as u8;
                             mstore4_idx = Some(j);
-                            error_code = Some(0u8);
+                            error_code = Some(code_u8);
                             break;
                         }
                     }
@@ -1022,13 +1026,28 @@ fn find_panic_pattern_backwards(
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
                         if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX {
-                            let only_safe = statements[j..].iter().all(|s| {
-                                matches!(
-                                    s,
-                                    Statement::Let { .. }
-                                        | Statement::MStore { .. }
-                                        | Statement::Expression(..)
-                                )
+                            // Soundness: every `mstore(p, …)` between the
+                            // panic-selector store and the revert writes 32
+                            // bytes at `[p, p + 32)`. If `p < 0x24`, those
+                            // bytes overlap the revert range `[0, 0x24)` and
+                            // EVM will emit them in the revert data. The
+                            // canonical Solidity panic shape has exactly
+                            // two such mstores — `p = 0` (selector) and
+                            // `p = 4` (code). Any other in-range mstore
+                            // (e.g. `mstore(7, garbage)`) corrupts the
+                            // revert payload, so we must NOT collapse the
+                            // sequence into the canonical
+                            // `PanicRevert { code }` form.
+                            let only_safe = statements[j..].iter().all(|s| match s {
+                                Statement::MStore { offset, .. } => {
+                                    is_const_value(offset.id, 0, constants)
+                                        || is_const_value(offset.id, 4, constants)
+                                        || constants
+                                            .get(&offset.id.0)
+                                            .is_some_and(|v| v.to_u64().is_some_and(|o| o >= 0x24))
+                                }
+                                Statement::Let { .. } | Statement::Expression(..) => true,
+                                _ => false,
                             });
                             if only_safe {
                                 return Some((j, error_code));
@@ -1187,11 +1206,31 @@ fn find_custom_error_pattern_backwards(
     let selector = found_selector?;
     let arguments: Vec<Value> = arguments.into_iter().collect::<Option<Vec<_>>>()?;
 
-    let all_safe = statements[earliest_idx..].iter().all(|s| {
-        matches!(
-            s,
-            Statement::Let { .. } | Statement::MStore { .. } | Statement::Expression(..)
-        )
+    // Soundness: see the analogous comment in
+    // `find_panic_pattern_backwards`. The revert range is
+    // `[0, 4 + 32 * num_args)`. The canonical Solidity custom-error
+    // shape writes at exactly the offsets `0`, `4`, `0x24`, …
+    // `4 + 32 * (num_args - 1)`. Any in-range mstore at a different
+    // offset corrupts the revert payload — we must NOT collapse the
+    // sequence into `Statement::CustomErrorRevert`. Out-of-range
+    // mstores (offset ≥ revert_length) are fine; they don't escape.
+    let revert_length = 4 + (num_args as u64) * 0x20;
+    let all_safe = statements[earliest_idx..].iter().all(|s| match s {
+        Statement::MStore { offset, .. } => constants.get(&offset.id.0).is_some_and(|off_val| {
+            if let Some(off_u64) = off_val.to_u64() {
+                if off_u64 >= revert_length {
+                    return true;
+                }
+                if off_u64 == 0 {
+                    return true;
+                }
+                off_u64 >= 4 && (off_u64 - 4) % 0x20 == 0
+            } else {
+                false
+            }
+        }),
+        Statement::Let { .. } | Statement::Expression(..) => true,
+        _ => false,
     });
     if !all_safe {
         return None;
@@ -1431,7 +1470,14 @@ fn simplify_binary(
 
         BinaryOperation::Div | BinaryOperation::SDiv if r_is(&one) => Some(var_l()),
         BinaryOperation::Div | BinaryOperation::SDiv if l_is(&zero) => Some(literal(zero)),
-        BinaryOperation::Div | BinaryOperation::SDiv if same => Some(literal(one)),
+        // NOTE: `div(x, x) → 1` and `sdiv(x, x) → 1` are unsound when `x == 0`.
+        // EVM defines division by zero to return 0, so `div(0, 0) = 0`, not 1.
+        // We can only fold the same-operand case when we statically know `x != 0`.
+        BinaryOperation::Div | BinaryOperation::SDiv
+            if same && lhs_val.as_ref().is_some_and(|v| !v.is_zero()) =>
+        {
+            Some(literal(one))
+        }
         BinaryOperation::Div | BinaryOperation::SDiv => None,
 
         BinaryOperation::Mod | BinaryOperation::SMod if r_is(&one) || l_is(&zero) || same => {

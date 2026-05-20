@@ -1080,6 +1080,71 @@ impl<'ctx> LlvmCodegen<'ctx> {
         None
     }
 
+    /// Returns true when forward type inference or LLVM-IR-level structural
+    /// analysis proves the argument fits in `target_bits`. Used by the Call
+    /// codegen to decide between a bare truncate (when provably narrow) and a
+    /// checked truncate (when the high bits might be non-zero).
+    fn argument_provably_fits(
+        &self,
+        integer_value: IntValue<'ctx>,
+        argument: Value,
+        target_bits: u32,
+    ) -> bool {
+        let inferred = self.inferred_width(argument.id);
+        if inferred.bits() <= target_bits {
+            return true;
+        }
+        if let Some(width) = Self::provable_narrow_width(integer_value) {
+            if width <= target_bits {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Emits a `trunc value, target_type` guarded by a `value != zext(trunc)`
+    /// overflow check. If overflow is detected, traps via `consume_all_gas`
+    /// (the same trap path `safe_truncate_int_to_xlen` uses for the i256→i32
+    /// case). LLVM's instcombine folds the check away when the value is
+    /// already provably narrow, so emitting it unconditionally on the
+    /// not-provably-fits path costs nothing on those paths.
+    fn checked_truncate_to(
+        &self,
+        context: &mut PolkaVMContext<'ctx>,
+        value: IntValue<'ctx>,
+        target_type: inkwell::types::IntType<'ctx>,
+        name: &str,
+    ) -> Result<IntValue<'ctx>> {
+        let value_type = value.get_type();
+        let truncated = context
+            .builder()
+            .build_int_truncate(value, target_type, name)
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let extended = context
+            .builder()
+            .build_int_z_extend(truncated, value_type, &format!("{name}_extended"))
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let is_overflow = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::NE,
+                value,
+                extended,
+                &format!("{name}_overflow"),
+            )
+            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        let block_continue = context.append_basic_block(&format!("{name}_ok"));
+        let block_invalid = context.append_basic_block(&format!("{name}_overflow_trap"));
+        context.build_conditional_branch(is_overflow, block_invalid, block_continue)?;
+
+        context.set_basic_block(block_invalid);
+        context.build_runtime_call("consume_all_gas", &[]);
+        context.build_unreachable();
+
+        context.set_basic_block(block_continue);
+        Ok(truncated)
+    }
+
     /// Narrows a memory offset or length value to i64 when type inference
     /// proves the value fits. This eliminates the expensive 3-basic-block
     /// overflow check in `safe_truncate_int_to_xlen` (which converts i256→xlen)
@@ -1167,12 +1232,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let revert_block = context.append_basic_block(&block_name);
         context.set_basic_block(revert_block);
 
+        // Soundness: `xlen_type().const_int(u64_value, false)` silently
+        // truncates the length to xlen. A constant length above `u32::MAX`
+        // would wrap and the revert would carry the wrong byte count
+        // instead of trapping on the out-of-bounds memory expansion. Fall
+        // back to the i256 + safe-truncate path in that case.
+        let xlen_bits = context.xlen_type().get_bit_width();
+        let length_fits_in_xlen =
+            xlen_bits >= 64 || (xlen_bits > 0 && const_length >> xlen_bits == 0);
+
         if const_length == 0 {
             revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        } else {
+        } else if length_fits_in_xlen {
             let length_xlen = context.xlen_type().const_int(const_length, false);
             revive_llvm_context::polkavm_evm_return::revert_outlined(context, length_xlen)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        } else {
+            let offset_val = context.word_const(0);
+            let length_val = context.word_const(const_length);
+            revive_llvm_context::polkavm_evm_return::revert(context, offset_val, length_val)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         }
 
@@ -2664,7 +2743,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(revive_llvm_context::PolkaVMCodeType::Deploy)
         );
 
-        if !self.has_msize && !is_deploy {
+        // Soundness: `xlen_type().const_int(u64_value, false)` silently
+        // truncates the value to xlen (i32 here). A constant offset or
+        // length above `u32::MAX` would wrap mod `2^32` before reaching
+        // `emit_exit_unchecked` and the return would access the wrong
+        // (in-heap) bytes instead of trapping. Fall back to the i256 +
+        // safe-truncate path for any constant that doesn't fit in xlen.
+        let xlen_bits = context.xlen_type().get_bit_width();
+        let fits_in_xlen = |v: u64| xlen_bits >= 64 || (xlen_bits > 0 && v >> xlen_bits == 0);
+
+        if !self.has_msize && !is_deploy && fits_in_xlen(const_offset) && fits_in_xlen(const_length)
+        {
             let offset_xlen = context.xlen_type().const_int(const_offset, false);
             let length_xlen = context.xlen_type().const_int(const_length, false);
             self.emit_exit_unchecked(context, offset_xlen, length_xlen, false)?;
@@ -6191,11 +6280,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     .ok_or(CodegenError::UndefinedFunction(*function))?
                     .clone();
 
-                let parameter_types = self.function_param_types.get(&function.0);
+                let parameter_types = self.function_param_types.get(&function.0).cloned();
                 let mut argument_values = Vec::new();
                 for (i, argument) in arguments.iter().enumerate() {
-                    let parameter_type =
-                        parameter_types.and_then(|parameter_types| parameter_types.get(i));
+                    let parameter_type = parameter_types
+                        .as_ref()
+                        .and_then(|parameter_types| parameter_types.get(i));
                     let value = match parameter_type {
                         Some(Type::Int(width)) if *width < BitWidth::I256 => {
                             let llvm_val = self.translate_value(argument)?;
@@ -6204,15 +6294,37 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             let argument_bits = integer_value.get_type().get_bit_width();
                             let target_bits = target_type.get_bit_width();
                             if argument_bits > target_bits {
-                                context
-                                    .builder()
-                                    .build_int_truncate(
+                                // Soundness: `narrow_function_params` may narrow a
+                                // parameter to I64/I32 based purely on use-site
+                                // demand (e.g. the callee uses the value only as an
+                                // mload offset). A bare `trunc i256 → iN` would
+                                // silently drop bits and bypass the use-site
+                                // `safe_truncate_int_to_xlen`. If forward type
+                                // inference can't prove the argument fits, emit a
+                                // checked truncate that traps on overflow.
+                                if self.argument_provably_fits(
+                                    integer_value,
+                                    *argument,
+                                    target_bits,
+                                ) {
+                                    context
+                                        .builder()
+                                        .build_int_truncate(
+                                            integer_value,
+                                            target_type,
+                                            &format!("call_arg_narrow_{}", i),
+                                        )
+                                        .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                        .as_basic_value_enum()
+                                } else {
+                                    self.checked_truncate_to(
+                                        context,
                                         integer_value,
                                         target_type,
                                         &format!("call_arg_narrow_{}", i),
-                                    )
-                                    .map_err(|e| CodegenError::Llvm(e.to_string()))?
+                                    )?
                                     .as_basic_value_enum()
+                                }
                             } else if argument_bits < target_bits {
                                 context
                                     .builder()

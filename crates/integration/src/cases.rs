@@ -179,12 +179,19 @@ sol!(
         function mod(uint n, uint d) public pure returns (uint r);
 
         function smod(int n, int d) public pure returns (int r);
+
+        function divSelf(uint256 x) external pure returns (uint256 r);
+        function sdivSelf(int256 x) external pure returns (int256 r);
+        function modSelf(uint256 x) external pure returns (uint256 r);
     }
 );
 case!("DivisionArithmetics.sol", DivisionArithmetics, divCall, division_arithmetics_div, n: U256, d: U256);
 case!("DivisionArithmetics.sol", DivisionArithmetics, sdivCall, division_arithmetics_sdiv, n: I256, d: I256);
 case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmetics_mod, n: U256, d: U256);
 case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, divSelfCall, division_arithmetics_div_self, x: U256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, sdivSelfCall, division_arithmetics_sdiv_self, x: I256);
+case!("DivisionArithmetics.sol", DivisionArithmetics, modSelfCall, division_arithmetics_mod_self, x: U256);
 
 sol!(
     contract SDivNarrowBug {
@@ -192,6 +199,111 @@ sol!(
     }
 );
 case!("SDivNarrowBug.sol", SDivNarrowBug, sdiv_maskedCall, sdiv_narrow_bug_masked, a: U256, b: U256);
+
+sol!(
+    contract KeccakFuseBug {
+        function probe(uint256[8] calldata seeds) external view returns (uint256 r, bytes32 sink_out);
+    }
+);
+case!(
+    "KeccakFuseBug.sol",
+    KeccakFuseBug,
+    probeCall,
+    keccak_fuse_bug_probe,
+    seeds: [U256; 8]
+);
+
+sol!(
+    contract ParamMload {
+        function tryFetch(uint256 x) external pure returns (uint256);
+    }
+);
+case!("ParamMload.sol", ParamMload, tryFetchCall, param_mload_try_fetch, x: U256);
+
+// `PanicCodeBug` has only a `fallback()` — invoked by sending raw
+// calldata that doesn't match any function selector. Empty calldata
+// suffices.
+case!(
+    "PanicCodeBug.sol",
+    "PanicCodeBug",
+    vec![],
+    panic_code_bug_trigger
+);
+
+// `FmpRevertBug` is invoked via empty calldata into its `fallback()`.
+case!("FmpRevertBug.sol", "FmpRevertBug", vec![], fmp_revert_bug);
+
+// `FmpDynRevertBug` reads `offset` and `length` from calldata: pass
+// 64 bytes encoding `offset=0`, `length=96` so the dynamic revert
+// covers the FMP slot.
+case!(
+    "FmpDynRevertBug.sol",
+    "FmpDynRevertBug",
+    {
+        let mut bytes = vec![0u8; 64];
+        bytes[63] = 96;
+        bytes
+    },
+    fmp_dyn_revert_bug
+);
+
+sol!(
+    contract UnalignedMStoreBug {
+        function bug() external pure returns (bytes32);
+    }
+);
+case!(
+    "UnalignedMStoreBug.sol",
+    UnalignedMStoreBug,
+    bugCall,
+    unaligned_mstore_bug,
+);
+
+sol!(
+    contract ConstReturnOverflowBug {
+        function bug() external pure returns (uint256);
+    }
+);
+case!(
+    "ConstReturnOverflowBug.sol",
+    ConstReturnOverflowBug,
+    bugCall,
+    const_return_overflow_bug,
+);
+
+// `PanicInterveneBug` has only a `fallback()` — invoked by sending
+// raw calldata that doesn't match any selector. Empty calldata works.
+case!(
+    "PanicInterveneBug.sol",
+    "PanicInterveneBug",
+    vec![],
+    panic_intervene_bug
+);
+
+sol!(
+    contract UnalignedMStore8Bug {
+        function bug() external pure returns (bytes32);
+    }
+);
+case!(
+    "UnalignedMStore8Bug.sol",
+    UnalignedMStore8Bug,
+    bugCall,
+    unaligned_mstore8_bug,
+);
+
+sol!(
+    contract CopyOverlapBug {
+        function bug(uint256 length) external pure returns (bytes32);
+    }
+);
+case!(
+    "CopyOverlapBug.sol",
+    CopyOverlapBug,
+    bugCall,
+    copy_overlap_bug,
+    length: U256
+);
 
 sol!(
     contract CallerOriginAliasing {

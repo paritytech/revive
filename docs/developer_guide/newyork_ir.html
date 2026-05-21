@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cfbfcc89.js";
+            window.path_to_searchindex_js = "../searchindex-93b463e0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -3175,6 +3175,282 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
+<h2 id="structured-control-flow-1"><a class="header" href="#structured-control-flow-1">Structured control flow</a></h2>
+<p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
+<h3 id="if"><a class="header" href="#if"><code>if</code></a></h3>
+<p>(<code>Statement::If</code>)</p>
+<h4 id="description-82"><a class="header" href="#description-82">Description</a></h4>
+<p>Conditional execution with optional value yields. The <code>then</code> region runs when <code>condition</code> is non-zero; the <code>else</code> region runs otherwise. If <code>outputs</code> is non-empty, both regions must yield the same number of values and the statement is bound by a <code>let</code>.</p>
+<h4 id="syntax-82"><a class="header" href="#syntax-82">Syntax</a></h4>
+<pre><code class="language-text">if $condition[: &lt;type&gt;] [[$input_0, $input_1, …]] { … } [else { … }]
+</code></pre>
+<h4 id="example-82"><a class="header" href="#example-82">Example</a></h4>
+<pre><code class="language-text">if v0 {
+    sstore(v1, v2)
+}
+
+let v5, v6 := if v3 [v1, v2] {
+    let v7 := add(v2, 0x1)
+    yield v1, v7
+} else {
+    yield v1, v2
+}
+</code></pre>
+<h4 id="operands-82"><a class="header" href="#operands-82">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>condition</code></td><td><code>i256</code></td><td>Branch selector; non-zero takes the <code>then</code> region. Often narrowed to <code>i1</code>.</td></tr>
+<tr><td><code>inputs</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Values threaded into both regions, printed in square brackets after the condition.</td></tr>
+<tr><td>(regions)</td><td>—</td><td>The <code>then_region</code> is mandatory; the <code>else_region</code> is optional and, when absent, implicitly yields the inputs unchanged.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-82"><a class="header" href="#result-and-purity-82">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None for the statement form; for the value-yielding form, one value per <code>outputs</code> binding, types taken from the yielded values</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-82"><a class="header" href="#annotations-82">Annotations</a></h4>
+<p>None.</p>
+<h3 id="switch"><a class="header" href="#switch"><code>switch</code></a></h3>
+<p>(<code>Statement::Switch</code>)</p>
+<h4 id="description-83"><a class="header" href="#description-83">Description</a></h4>
+<p>Multi-way dispatch on a scrutinee value. Each case matches a specific constant and runs its region; an optional <code>default</code> region catches non-matching values. Like <code>if</code>, switch may yield values via <code>outputs</code> and accept thread-through values via <code>inputs</code>.</p>
+<h4 id="syntax-83"><a class="header" href="#syntax-83">Syntax</a></h4>
+<pre><code class="language-text">switch $scrutinee[: &lt;type&gt;] [[$input_0, …]]
+case 0x&lt;hex&gt; {
+    …
+}
+[case 0x&lt;hex&gt; {
+    …
+} …]
+[default {
+    …
+}]
+</code></pre>
+<h4 id="example-83"><a class="header" href="#example-83">Example</a></h4>
+<pre><code class="language-text">switch v0
+case 0x0 {
+    sstore(v1, v2)
+}
+case 0x1 {
+    sstore(v1, v3)
+}
+default {
+    invalid()
+}
+</code></pre>
+<h4 id="operands-83"><a class="header" href="#operands-83">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>scrutinee</code></td><td><code>i256</code></td><td>The value to compare against each case.</td></tr>
+<tr><td><code>inputs</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Values threaded into every case and default region.</td></tr>
+<tr><td><code>cases</code></td><td><code>Vec&lt;SwitchCase&gt;</code></td><td>Each case carries a constant <code>value: BigUint</code> and a region.</td></tr>
+<tr><td>(default)</td><td>—</td><td>Optional fall-through region.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-83"><a class="header" href="#result-and-purity-83">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None for the statement form; one value per <code>outputs</code> binding for the value-yielding form</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-83"><a class="header" href="#annotations-83">Annotations</a></h4>
+<p>None.</p>
+<h3 id="for"><a class="header" href="#for"><code>for</code></a></h3>
+<p>(<code>Statement::For</code>)</p>
+<h4 id="description-84"><a class="header" href="#description-84">Description</a></h4>
+<p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
+<h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
+<pre><code class="language-text">for { $variable_0 := $initial_0[, …] }
+    [// condition_statements:
+        …]
+    $condition
+    { // post
+        …
+    }
+{
+    … body …
+}
+</code></pre>
+<h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
+<pre><code class="language-text">for { v1 := 0x0 }
+    lt(v1, 0xa)
+    { // post
+        let v3 := add(v1, 0x1)
+        yield v3
+    }
+{
+    sstore(v1, v2)
+    yield v1
+}
+</code></pre>
+<h4 id="operands-84"><a class="header" href="#operands-84">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>initial_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Starting values for the loop-carried variables.</td></tr>
+<tr><td><code>loop_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>SSA ids visible inside condition, body, and post.</td></tr>
+<tr><td><code>condition_statements</code></td><td><code>Vec&lt;Statement&gt;</code></td><td>Statements evaluated each iteration <em>before</em> the condition expression; emitted into the loop header block. Printed only when non-empty, behind a <code>// condition_statements:</code> comment.</td></tr>
+<tr><td><code>condition</code></td><td><code>Expression</code></td><td>Re-evaluated each iteration; non-zero continues, zero exits.</td></tr>
+<tr><td><code>body</code></td><td><code>Region</code></td><td>Loop body; yields current loop-carried values.</td></tr>
+<tr><td><code>post_input_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>Input SSA ids for the post region (one per loop-carried variable); receive the body’s yielded values merged with continue-site values via phi nodes in the LLVM codegen.</td></tr>
+<tr><td><code>post</code></td><td><code>Region</code></td><td>Runs after each body iteration (and after <code>continue</code>); yields updated loop-carried values.</td></tr>
+<tr><td><code>outputs</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>Final loop-carried values after exit.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-84"><a class="header" href="#result-and-purity-84">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None for the statement form; one value per <code>outputs</code> binding for the value-yielding form</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-84"><a class="header" href="#annotations-84">Annotations</a></h4>
+<p>None.</p>
+<h3 id="break"><a class="header" href="#break"><code>break</code></a></h3>
+<p>(<code>Statement::Break</code>)</p>
+<h4 id="description-85"><a class="header" href="#description-85">Description</a></h4>
+<p>Exit the innermost enclosing <code>for</code> loop. Carries the current values of loop-carried variables at the break point; these become the loop’s outputs.</p>
+<h4 id="syntax-85"><a class="header" href="#syntax-85">Syntax</a></h4>
+<pre><code class="language-text">break
+</code></pre>
+<h4 id="example-85"><a class="header" href="#example-85">Example</a></h4>
+<pre><code class="language-text">if v0 { break }
+</code></pre>
+<h4 id="operands-85"><a class="header" href="#operands-85">Operands</a></h4>
+<p>None in the printed form; the IR’s <code>values: Vec&lt;Value&gt;</code> field carries the loop-carried values internally.</p>
+<h4 id="result-and-purity-85"><a class="header" href="#result-and-purity-85">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-85"><a class="header" href="#annotations-85">Annotations</a></h4>
+<p>None.</p>
+<h3 id="continue"><a class="header" href="#continue"><code>continue</code></a></h3>
+<p>(<code>Statement::Continue</code>)</p>
+<h4 id="description-86"><a class="header" href="#description-86">Description</a></h4>
+<p>Skip to the post region of the innermost enclosing <code>for</code> loop. Like <code>break</code>, carries the current values of loop-carried variables internally.</p>
+<h4 id="syntax-86"><a class="header" href="#syntax-86">Syntax</a></h4>
+<pre><code class="language-text">continue
+</code></pre>
+<h4 id="example-86"><a class="header" href="#example-86">Example</a></h4>
+<pre><code class="language-text">if v0 { continue }
+</code></pre>
+<h4 id="operands-86"><a class="header" href="#operands-86">Operands</a></h4>
+<p>None in the printed form; the IR’s <code>values</code> field carries the loop-carried values internally.</p>
+<h4 id="result-and-purity-86"><a class="header" href="#result-and-purity-86">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-86"><a class="header" href="#annotations-86">Annotations</a></h4>
+<p>None.</p>
+<h3 id="leave"><a class="header" href="#leave"><code>leave</code></a></h3>
+<p>(<code>Statement::Leave</code>)</p>
+<h4 id="description-87"><a class="header" href="#description-87">Description</a></h4>
+<p>Exit the current function, returning the listed values as the function’s return values. The Yul-level <code>leave</code> keyword translates directly to this statement; the inlining pass eliminates intra-function <code>leave</code>s where possible via the exit-flag transformation.</p>
+<h4 id="syntax-87"><a class="header" href="#syntax-87">Syntax</a></h4>
+<pre><code class="language-text">leave [[$value_0[: &lt;type&gt;], $value_1[: &lt;type&gt;], …]]
+</code></pre>
+<h4 id="example-87"><a class="header" href="#example-87">Example</a></h4>
+<pre><code class="language-text">leave [v0, v1]              // returns v0 and v1 from the function
+leave                       // returns nothing (void function)
+</code></pre>
+<h4 id="operands-87"><a class="header" href="#operands-87">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>return_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Empty for void functions; otherwise one entry per declared return.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-87"><a class="header" href="#result-and-purity-87">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-87"><a class="header" href="#annotations-87">Annotations</a></h4>
+<p>None.</p>
+<h3 id="nested-block"><a class="header" href="#nested-block">Nested block</a></h3>
+<p>(<code>Statement::Block</code>)</p>
+<h4 id="description-88"><a class="header" href="#description-88">Description</a></h4>
+<p>A lexical scope without conditional or iterative behavior. The body is a region; control falls through after the region’s statements complete. Used to bound the visibility of inner bindings.</p>
+<h4 id="syntax-88"><a class="header" href="#syntax-88">Syntax</a></h4>
+<pre><code class="language-text">{
+    …
+}
+</code></pre>
+<h4 id="example-88"><a class="header" href="#example-88">Example</a></h4>
+<pre><code class="language-text">{
+    let v0 := add(v1, v2)
+    sstore(v3, v0)
+}                           // v0 is no longer in scope here
+</code></pre>
+<h4 id="operands-88"><a class="header" href="#operands-88">Operands</a></h4>
+<p>None — the body is a region, not an operand.</p>
+<h4 id="result-and-purity-88"><a class="header" href="#result-and-purity-88">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (per the body’s contents)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
+<p>None.</p>
 
                     </main>
 

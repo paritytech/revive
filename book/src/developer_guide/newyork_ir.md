@@ -3252,3 +3252,316 @@ setimmutable("MyContract.owner", v0: i160)
 | Source field | Printed as |
 |---|---|
 | `key: String` | The quoted identifier in the syntax position. |
+
+## Structured control flow
+
+The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
+
+### `if`
+
+(`Statement::If`)
+
+#### Description
+
+Conditional execution with optional value yields. The `then` region runs when `condition` is non-zero; the `else` region runs otherwise. If `outputs` is non-empty, both regions must yield the same number of values and the statement is bound by a `let`.
+
+#### Syntax
+
+```text
+if $condition[: <type>] [[$input_0, $input_1, …]] { … } [else { … }]
+```
+
+#### Example
+
+```text
+if v0 {
+    sstore(v1, v2)
+}
+
+let v5, v6 := if v3 [v1, v2] {
+    let v7 := add(v2, 0x1)
+    yield v1, v7
+} else {
+    yield v1, v2
+}
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `condition` | `i256` | Branch selector; non-zero takes the `then` region. Often narrowed to `i1`. |
+| `inputs` | `Vec<Value>` | Values threaded into both regions, printed in square brackets after the condition. |
+| (regions) | — | The `then_region` is mandatory; the `else_region` is optional and, when absent, implicitly yields the inputs unchanged. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None for the statement form; for the value-yielding form, one value per `outputs` binding, types taken from the yielded values | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### `switch`
+
+(`Statement::Switch`)
+
+#### Description
+
+Multi-way dispatch on a scrutinee value. Each case matches a specific constant and runs its region; an optional `default` region catches non-matching values. Like `if`, switch may yield values via `outputs` and accept thread-through values via `inputs`.
+
+#### Syntax
+
+```text
+switch $scrutinee[: <type>] [[$input_0, …]]
+case 0x<hex> {
+    …
+}
+[case 0x<hex> {
+    …
+} …]
+[default {
+    …
+}]
+```
+
+#### Example
+
+```text
+switch v0
+case 0x0 {
+    sstore(v1, v2)
+}
+case 0x1 {
+    sstore(v1, v3)
+}
+default {
+    invalid()
+}
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `scrutinee` | `i256` | The value to compare against each case. |
+| `inputs` | `Vec<Value>` | Values threaded into every case and default region. |
+| `cases` | `Vec<SwitchCase>` | Each case carries a constant `value: BigUint` and a region. |
+| (default) | — | Optional fall-through region. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None for the statement form; one value per `outputs` binding for the value-yielding form | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### `for`
+
+(`Statement::For`)
+
+#### Description
+
+Structured loop with explicit loop-carried variables. Each iteration evaluates `condition_statements` followed by `condition`; if the condition is non-zero, the `body` region runs, then the `post` region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. `break` exits the loop and `continue` jumps to the post region.
+
+#### Syntax
+
+```text
+for { $variable_0 := $initial_0[, …] }
+    [// condition_statements:
+        …]
+    $condition
+    { // post
+        …
+    }
+{
+    … body …
+}
+```
+
+#### Example
+
+```text
+for { v1 := 0x0 }
+    lt(v1, 0xa)
+    { // post
+        let v3 := add(v1, 0x1)
+        yield v3
+    }
+{
+    sstore(v1, v2)
+    yield v1
+}
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `initial_values` | `Vec<Value>` | Starting values for the loop-carried variables. |
+| `loop_variables` | `Vec<ValueId>` | SSA ids visible inside condition, body, and post. |
+| `condition_statements` | `Vec<Statement>` | Statements evaluated each iteration *before* the condition expression; emitted into the loop header block. Printed only when non-empty, behind a `// condition_statements:` comment. |
+| `condition` | `Expression` | Re-evaluated each iteration; non-zero continues, zero exits. |
+| `body` | `Region` | Loop body; yields current loop-carried values. |
+| `post_input_variables` | `Vec<ValueId>` | Input SSA ids for the post region (one per loop-carried variable); receive the body's yielded values merged with continue-site values via phi nodes in the LLVM codegen. |
+| `post` | `Region` | Runs after each body iteration (and after `continue`); yields updated loop-carried values. |
+| `outputs` | `Vec<ValueId>` | Final loop-carried values after exit. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None for the statement form; one value per `outputs` binding for the value-yielding form | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### `break`
+
+(`Statement::Break`)
+
+#### Description
+
+Exit the innermost enclosing `for` loop. Carries the current values of loop-carried variables at the break point; these become the loop's outputs.
+
+#### Syntax
+
+```text
+break
+```
+
+#### Example
+
+```text
+if v0 { break }
+```
+
+#### Operands
+
+None in the printed form; the IR's `values: Vec<Value>` field carries the loop-carried values internally.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### `continue`
+
+(`Statement::Continue`)
+
+#### Description
+
+Skip to the post region of the innermost enclosing `for` loop. Like `break`, carries the current values of loop-carried variables internally.
+
+#### Syntax
+
+```text
+continue
+```
+
+#### Example
+
+```text
+if v0 { continue }
+```
+
+#### Operands
+
+None in the printed form; the IR's `values` field carries the loop-carried values internally.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### `leave`
+
+(`Statement::Leave`)
+
+#### Description
+
+Exit the current function, returning the listed values as the function's return values. The Yul-level `leave` keyword translates directly to this statement; the inlining pass eliminates intra-function `leave`s where possible via the exit-flag transformation.
+
+#### Syntax
+
+```text
+leave [[$value_0[: <type>], $value_1[: <type>], …]]
+```
+
+#### Example
+
+```text
+leave [v0, v1]              // returns v0 and v1 from the function
+leave                       // returns nothing (void function)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `return_values` | `Vec<Value>` | Empty for void functions; otherwise one entry per declared return. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (control flow) |
+
+#### Annotations
+
+None.
+
+### Nested block
+
+(`Statement::Block`)
+
+#### Description
+
+A lexical scope without conditional or iterative behavior. The body is a region; control falls through after the region's statements complete. Used to bound the visibility of inner bindings.
+
+#### Syntax
+
+```text
+{
+    …
+}
+```
+
+#### Example
+
+```text
+{
+    let v0 := add(v1, v2)
+    sstore(v3, v0)
+}                           // v0 is no longer in scope here
+```
+
+#### Operands
+
+None — the body is a region, not an operand.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (per the body's contents) |
+
+#### Annotations
+
+None.

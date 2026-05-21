@@ -2698,3 +2698,246 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 | Source field | Printed as |
 |---|---|
 | `function: FunctionId` | The callee's name in the syntax position (or `func_<id>` if the printer has no name registered). |
+
+## Memory and storage writes
+
+The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.
+
+### `mstore`
+
+(`Statement::MStore`)
+
+#### Description
+
+Write a 32-byte word to emulated EVM linear memory at `offset`. The word is stored big-endian, matching EVM semantics; the codegen handles the byte swap on PolkaVM's little-endian RISC-V target.
+
+#### Syntax
+
+```text
+mstore($offset[: <type>], $value[: <type>]) [/* <region> */]
+```
+
+#### Example
+
+```text
+mstore(v0, v1)                    // Unknown region; no annotation printed
+mstore(v2, v3) /* scratch */      // offset proven to land in 0x00..0x3f
+mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `offset` | `i256` | Byte offset into linear memory; forward analysis widens to at least `i64`. |
+| `value` | `i256` | The 32-byte word to store. Narrower values are zero-extended at codegen time. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `region:` [`MemoryRegion`](#memoryregion) | `/* scratch */` · `/* free_ptr */` · `/* dynamic */` (`Unknown` is suppressed) |
+
+Assigned at translation time from the constant offset (if any); consumed by mem_opt, FMP propagation, and byte-swap mode selection.
+
+### `mstore8`
+
+(`Statement::MStore8`)
+
+#### Description
+
+Write a single byte to emulated EVM linear memory at `offset`. The low 8 bits of `value` are stored; the upper bits are ignored. The operation is otherwise identical to `mstore`: same operand shape, same region tag, same side-effect classification.
+
+#### Syntax
+
+```text
+mstore8($offset[: <type>], $value[: <type>]) [/* <region> */]
+```
+
+#### Example
+
+```text
+mstore8(v0, v1: i8)             // value narrowed to i8 by type inference
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `offset` | `i256` | Byte offset into linear memory; forward analysis widens to at least `i64`. |
+| `value` | `i256` | Only the low 8 bits are stored. Often narrowed to `i8` by type inference. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `region:` [`MemoryRegion`](#memoryregion) | `/* scratch */` · `/* free_ptr */` · `/* dynamic */` (`Unknown` is suppressed) |
+
+Same tagging rules as [`mstore`](#mstore). Most `mstore8`s carry an `Unknown` region in practice because single-byte writes typically target offsets the translator cannot prove constant.
+
+### `mcopy`
+
+(`Statement::MCopy`)
+
+#### Description
+
+Copy `length` bytes from `src` to `dest` within emulated EVM linear memory. The Yul builtin `mcopy` maps directly onto this statement; unlike `mstore`, it does not carry a region tag because the source and destination ranges may straddle multiple regions.
+
+#### Syntax
+
+```text
+mcopy($dest[: <type>], $src[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+mcopy(v0, v1, v2)               // dest, src, length
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `src` | `i256` | Source byte offset in linear memory. |
+| `length` | `i256` | Number of bytes to copy. Overlapping ranges follow EVM-defined memmove semantics. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None. `mcopy` carries no region tag because the source and destination ranges may straddle multiple regions, and no static-slot hint because the copy is not storage-bound.
+
+### `sstore`
+
+(`Statement::SStore`)
+
+#### Description
+
+Write a 32-byte word to persistent contract storage at `key`. The operation is the durable counterpart of `mstore`: the value survives across transactions and is observable to subsequent calls to the contract.
+
+#### Syntax
+
+```text
+sstore($key[: <type>], $value[: <type>]) [/* slot: 0x<hex> */]
+```
+
+#### Example
+
+```text
+sstore(v0, v1)
+sstore(v2, v3) /* slot: 0x0 */
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `key` | `i256` | Storage slot. May be a constant slot, a keccak-derived slot for mappings or dynamic arrays, or an arbitrary expression. |
+| `value` | `i256` | The 256-bit word to store. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `static_slot: Option<BigUint>` | `/* slot: 0x<hex> */` when set; suppressed otherwise |
+
+The printer renders the annotation whenever the field is `Some`, and the deduplicator's canonicalizer and mapping-fusion analyses consume it as part of the signature. No pass currently writes `Some(...)`, so the annotation is dormant in present-day dumps; when absent, alias and dedup analyses fall back to the conservative "may alias any slot" assumption.
+
+### `tstore`
+
+(`Statement::TStore`)
+
+#### Description
+
+Write a 32-byte word to transient storage at `key`. Transient storage is wiped at the end of the transaction, so `tstore` is the right primitive for per-transaction bookkeeping (reentrancy guards, cached results) without the gas cost of `sstore` on EVM. On PolkaVM the transient backing store is provided by pallet-revive.
+
+#### Syntax
+
+```text
+tstore($key[: <type>], $value[: <type>])
+```
+
+#### Example
+
+```text
+tstore(v0, v1)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `key` | `i256` | Transient storage slot. |
+| `value` | `i256` | The 256-bit word to store. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None. Unlike `sstore`, the IR does not track a static slot for `tstore`: transient storage's short-lived lifetime makes the slot-aware optimizations less valuable, and the translator does not produce the annotation.
+
+### `mapping_sstore`
+
+(`Statement::MappingSStore`)
+
+#### Description
+
+Compound store for a Solidity mapping element. Equivalent to the three-operation sequence `mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)` but emitted as a single outlined statement after the `compound_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` followed by an `sstore` whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.
+
+#### Syntax
+
+```text
+mapping_sstore($key[: <type>], $slot[: <type>], $value[: <type>])
+```
+
+#### Example
+
+```text
+mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `key` | `i256` | Mapping key. Often narrowed to `i160` for address keys. |
+| `slot` | `i256` | The mapping's declared storage slot. Typically a small constant. |
+| `value` | `i256` | The value to store at the computed storage location. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None. `mapping_sstore` deliberately drops the `static_slot` annotation that the original `sstore` may have carried, because the fused statement's effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.

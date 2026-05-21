@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c77a3461.js";
+            window.path_to_searchindex_js = "searchindex-bf23bcbc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -3375,6 +3375,253 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </tbody>
 </table>
 </div>
+<h2 id="memory-and-storage-writes-1"><a class="header" href="#memory-and-storage-writes-1">Memory and storage writes</a></h2>
+<p>The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
+<h3 id="mstore"><a class="header" href="#mstore"><code>mstore</code></a></h3>
+<p>(<code>Statement::MStore</code>)</p>
+<h4 id="description-68"><a class="header" href="#description-68">Description</a></h4>
+<p>Write a 32-byte word to emulated EVM linear memory at <code>offset</code>. The word is stored big-endian, matching EVM semantics; the codegen handles the byte swap on PolkaVM’s little-endian RISC-V target.</p>
+<h4 id="syntax-68"><a class="header" href="#syntax-68">Syntax</a></h4>
+<pre><code class="language-text">mstore($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
+</code></pre>
+<h4 id="example-68"><a class="header" href="#example-68">Example</a></h4>
+<pre><code class="language-text">mstore(v0, v1)                    // Unknown region; no annotation printed
+mstore(v2, v3) /* scratch */      // offset proven to land in 0x00..0x3f
+mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
+</code></pre>
+<h4 id="operands-68"><a class="header" href="#operands-68">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The 32-byte word to store. Narrower values are zero-extended at codegen time.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-68"><a class="header" href="#result-and-purity-68">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-68"><a class="header" href="#annotations-68">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Assigned at translation time from the constant offset (if any); consumed by mem_opt, FMP propagation, and byte-swap mode selection.</p>
+<h3 id="mstore8"><a class="header" href="#mstore8"><code>mstore8</code></a></h3>
+<p>(<code>Statement::MStore8</code>)</p>
+<h4 id="description-69"><a class="header" href="#description-69">Description</a></h4>
+<p>Write a single byte to emulated EVM linear memory at <code>offset</code>. The low 8 bits of <code>value</code> are stored; the upper bits are ignored. The operation is otherwise identical to <code>mstore</code>: same operand shape, same region tag, same side-effect classification.</p>
+<h4 id="syntax-69"><a class="header" href="#syntax-69">Syntax</a></h4>
+<pre><code class="language-text">mstore8($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
+</code></pre>
+<h4 id="example-69"><a class="header" href="#example-69">Example</a></h4>
+<pre><code class="language-text">mstore8(v0, v1: i8)             // value narrowed to i8 by type inference
+</code></pre>
+<h4 id="operands-69"><a class="header" href="#operands-69">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Only the low 8 bits are stored. Often narrowed to <code>i8</code> by type inference.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-69"><a class="header" href="#result-and-purity-69">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-69"><a class="header" href="#annotations-69">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Same tagging rules as <a href="#mstore"><code>mstore</code></a>. Most <code>mstore8</code>s carry an <code>Unknown</code> region in practice because single-byte writes typically target offsets the translator cannot prove constant.</p>
+<h3 id="mcopy"><a class="header" href="#mcopy"><code>mcopy</code></a></h3>
+<p>(<code>Statement::MCopy</code>)</p>
+<h4 id="description-70"><a class="header" href="#description-70">Description</a></h4>
+<p>Copy <code>length</code> bytes from <code>src</code> to <code>dest</code> within emulated EVM linear memory. The Yul builtin <code>mcopy</code> maps directly onto this statement; unlike <code>mstore</code>, it does not carry a region tag because the source and destination ranges may straddle multiple regions.</p>
+<h4 id="syntax-70"><a class="header" href="#syntax-70">Syntax</a></h4>
+<pre><code class="language-text">mcopy($dest[: &lt;type&gt;], $src[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-70"><a class="header" href="#example-70">Example</a></h4>
+<pre><code class="language-text">mcopy(v0, v1, v2)               // dest, src, length
+</code></pre>
+<h4 id="operands-70"><a class="header" href="#operands-70">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>src</code></td><td><code>i256</code></td><td>Source byte offset in linear memory.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy. Overlapping ranges follow EVM-defined memmove semantics.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-70"><a class="header" href="#result-and-purity-70">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-70"><a class="header" href="#annotations-70">Annotations</a></h4>
+<p>None. <code>mcopy</code> carries no region tag because the source and destination ranges may straddle multiple regions, and no static-slot hint because the copy is not storage-bound.</p>
+<h3 id="sstore"><a class="header" href="#sstore"><code>sstore</code></a></h3>
+<p>(<code>Statement::SStore</code>)</p>
+<h4 id="description-71"><a class="header" href="#description-71">Description</a></h4>
+<p>Write a 32-byte word to persistent contract storage at <code>key</code>. The operation is the durable counterpart of <code>mstore</code>: the value survives across transactions and is observable to subsequent calls to the contract.</p>
+<h4 id="syntax-71"><a class="header" href="#syntax-71">Syntax</a></h4>
+<pre><code class="language-text">sstore($key[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* slot: 0x&lt;hex&gt; */]
+</code></pre>
+<h4 id="example-71"><a class="header" href="#example-71">Example</a></h4>
+<pre><code class="language-text">sstore(v0, v1)
+sstore(v2, v3) /* slot: 0x0 */
+</code></pre>
+<h4 id="operands-71"><a class="header" href="#operands-71">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Storage slot. May be a constant slot, a keccak-derived slot for mappings or dynamic arrays, or an arbitrary expression.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-71"><a class="header" href="#result-and-purity-71">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-71"><a class="header" href="#annotations-71">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>static_slot: Option&lt;BigUint&gt;</code></td><td><code>/* slot: 0x&lt;hex&gt; */</code> when set; suppressed otherwise</td></tr>
+</tbody>
+</table>
+</div>
+<p>The printer renders the annotation whenever the field is <code>Some</code>, and the deduplicator’s canonicalizer and mapping-fusion analyses consume it as part of the signature. No pass currently writes <code>Some(...)</code>, so the annotation is dormant in present-day dumps; when absent, alias and dedup analyses fall back to the conservative “may alias any slot” assumption.</p>
+<h3 id="tstore"><a class="header" href="#tstore"><code>tstore</code></a></h3>
+<p>(<code>Statement::TStore</code>)</p>
+<h4 id="description-72"><a class="header" href="#description-72">Description</a></h4>
+<p>Write a 32-byte word to transient storage at <code>key</code>. Transient storage is wiped at the end of the transaction, so <code>tstore</code> is the right primitive for per-transaction bookkeeping (reentrancy guards, cached results) without the gas cost of <code>sstore</code> on EVM. On PolkaVM the transient backing store is provided by pallet-revive.</p>
+<h4 id="syntax-72"><a class="header" href="#syntax-72">Syntax</a></h4>
+<pre><code class="language-text">tstore($key[: &lt;type&gt;], $value[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-72"><a class="header" href="#example-72">Example</a></h4>
+<pre><code class="language-text">tstore(v0, v1)
+</code></pre>
+<h4 id="operands-72"><a class="header" href="#operands-72">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Transient storage slot.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-72"><a class="header" href="#result-and-purity-72">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-72"><a class="header" href="#annotations-72">Annotations</a></h4>
+<p>None. Unlike <code>sstore</code>, the IR does not track a static slot for <code>tstore</code>: transient storage’s short-lived lifetime makes the slot-aware optimizations less valuable, and the translator does not produce the annotation.</p>
+<h3 id="mapping_sstore"><a class="header" href="#mapping_sstore"><code>mapping_sstore</code></a></h3>
+<p>(<code>Statement::MappingSStore</code>)</p>
+<h4 id="description-73"><a class="header" href="#description-73">Description</a></h4>
+<p>Compound store for a Solidity mapping element. Equivalent to the three-operation sequence <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>compound_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
+<h4 id="syntax-73"><a class="header" href="#syntax-73">Syntax</a></h4>
+<pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-73"><a class="header" href="#example-73">Example</a></h4>
+<pre><code class="language-text">mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
+</code></pre>
+<h4 id="operands-73"><a class="header" href="#operands-73">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key. Often narrowed to <code>i160</code> for address keys.</td></tr>
+<tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot. Typically a small constant.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The value to store at the computed storage location.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-73"><a class="header" href="#result-and-purity-73">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-73"><a class="header" href="#annotations-73">Annotations</a></h4>
+<p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

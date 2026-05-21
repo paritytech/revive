@@ -230,6 +230,64 @@ case!(
     panic_code_bug_trigger
 );
 
+// `FmpDynStoreBug` is invoked via empty fallback, passing 0x40 as the
+// only calldata word so the inline-asm `calldataload(0)` resolves to
+// 0x40 at runtime but stays opaque to the simplifier.
+case!(
+    "FmpDynStoreBug.sol",
+    "FmpDynStoreBug",
+    {
+        let mut bytes = vec![0u8; 32];
+        bytes[31] = 0x40;
+        bytes
+    },
+    fmp_dyn_store_bug
+);
+
+// `FmpRangeProofBug` reads the 32-byte calldata as the value to put
+// into the FMP slot. Use `0x100000007 = 2^32 + 7` (well beyond the
+// 17-bit heap-size range) to make the range-proof truncation visible.
+case!(
+    "FmpRangeProofBug.sol",
+    "FmpRangeProofBug",
+    {
+        let mut bytes = vec![0u8; 32];
+        bytes[31] = 0x07;
+        bytes[27] = 0x01;
+        bytes
+    },
+    fmp_range_proof_bug
+);
+
+// `FmpNativeStoreBug` calldata: first word = FMP value `0x100000007`,
+// second word = non-zero condition to force the if-branch.
+case!(
+    "FmpNativeStoreBug.sol",
+    "FmpNativeStoreBug",
+    {
+        let mut bytes = vec![0u8; 64];
+        bytes[31] = 0x07;
+        bytes[27] = 0x01;
+        bytes[63] = 0x01;
+        bytes
+    },
+    fmp_native_store_bug
+);
+
+// `FmpCrossObjectBug` calldata: first word = FMP value `0x100000007`,
+// second word = recursion depth (0 to hit the inner inline-asm branch).
+case!(
+    "FmpCrossObjectBug.sol",
+    "FmpCrossObjectBug",
+    {
+        let mut bytes = vec![0u8; 64];
+        bytes[31] = 0x07;
+        bytes[27] = 0x01;
+        bytes
+    },
+    fmp_cross_object_bug
+);
+
 // `FmpRevertBug` is invoked via empty calldata into its `fallback()`.
 case!("FmpRevertBug.sol", "FmpRevertBug", vec![], fmp_revert_bug);
 

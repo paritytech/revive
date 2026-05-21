@@ -4090,7 +4090,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
                         let is_fmp_store = Self::try_extract_const_u64(offset_val)
                             == Some(FREE_MEMORY_POINTER_SLOT)
-                            && matches!(region, MemoryRegion::FreePointerSlot);
+                            && matches!(region, MemoryRegion::FreePointerSlot)
+                            && !self.heap_opt.fmp_could_be_unbounded();
                         let store_val: inkwell::values::BasicValueEnum = if is_fmp_store {
                             context
                                 .builder()
@@ -6172,7 +6173,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;
                         let pointer = context.build_heap_gep_unchecked(offset_xlen)?;
-                        if is_free_pointer {
+                        if is_free_pointer && !self.heap_opt.fmp_could_be_unbounded() {
                             let narrow = context
                                 .builder()
                                 .build_load(context.xlen_type(), pointer.value, "fmp_load")
@@ -6224,7 +6225,19 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         }
                     }
                 };
-                if is_free_pointer {
+                if is_free_pointer && !self.heap_opt.fmp_could_be_unbounded() {
+                    // Soundness gate: the post-MLoad range proof asserts
+                    // `FMP < heap_size`. Iter36's win (-31k bytes on OZ)
+                    // relies on this holding when Solidity's allocator
+                    // updates the FMP via sbrk-style `mstore(0x40,
+                    // add(mload(0x40), bounded))` or a literal initial
+                    // value. Hand-written Yul / inline asm that writes
+                    // a non-bounded value to 0x40 violates the
+                    // assumption. `fmp_could_be_unbounded` is set by
+                    // `heap_opt::analyze_statement` when any FMP store
+                    // uses a value whose source isn't a recognized
+                    // allocator pattern, so the proof stays sound and
+                    // OZ contracts keep their codesize wins.
                     let heap_size = context
                         .heap_size()
                         .get_zero_extended_constant()

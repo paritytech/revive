@@ -502,15 +502,89 @@ fn fmp_revert_native_mode_corrupts_revert_data() {
     run_differential(actions);
 }
 
-/// Regression: `mem_opt::optimize_expr_with_read_tracking` fuses
-/// `mstore(0, k); keccak256(0, 32)` into `Keccak256Single { k }` and
-/// marks the prior mstore *dead*. The Keccak256Single lowering uses
-/// the `__revive_keccak256_one_word` helper (declared when there are
-/// `KECCAK_SINGLE_THRESHOLD = 8`+ Keccak256Single sites), which writes
-/// to a stack-alloca'd scratch — NOT heap[0..32]. So a later `mload(0)`
-/// whose mem_opt forwarding has been invalidated by an intervening
-/// external call returns the *un-stored* value, while EVM still has
-/// `k` at memory[0..32].
+/// Bug #15a regression test: `to_llvm.rs::Expression::MLoad` applies
+/// a range-proof truncation on any FMP-slot mload, assuming
+/// `FMP < heap_size`. Sound for Solidity-convention FMP updates via
+/// sbrk-style allocations but unsound for inline asm that puts an
+/// arbitrary i256 at memory[0x40..0x60]. Fixed by gating on
+/// `!heap_opt.fmp_could_be_unbounded()`, a precise static detector
+/// that only trips when an `mstore(0x40, _)` writes from a source
+/// `is_trusted_fmp_source` cannot prove sbrk-bounded. See
+/// `project_round3_fmp_native_bugs.md` Bug #15a.
+#[test]
+fn fmp_load_range_proof_corrupts_non_bounded_value() {
+    let mut actions = instantiate("contracts/FmpRangeProofBug.sol", "FmpRangeProofBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_range_proof_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Bug #15b regression test: when `fmp_native_safe()` returns true,
+/// the InlineNative-mode MStore at `to_llvm.rs` previously truncated
+/// any `mstore(0x40, _)` value to i32 unconditionally. Fixed by
+/// gating the i32 truncation on `!heap_opt.fmp_could_be_unbounded()`,
+/// the same precise static gate used for Bug #15a's range proof. See
+/// `project_round3_fmp_native_bugs.md` Bug #15b.
+#[test]
+fn fmp_native_store_truncates_non_bounded_value() {
+    let mut actions = instantiate("contracts/FmpNativeStoreBug.sol", "FmpNativeStoreBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_native_store_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+/// Cross-subobject ValueId collision regression test: `HeapAnalysis`
+/// shares its `value_expressions` map across deploy and deployed
+/// objects, but `from_yul.rs` constructs a fresh `SsaBuilder` per
+/// subobject so ValueIds restart at 0 inside each subobject. Before
+/// the fix, the deploy code's `Let v0 := 0x80` (trusted Literal)
+/// poisoned `value_expressions[0]`; the deployed object's recursive
+/// `fun_rec(v0, v1)` then reused id 0 for its first parameter, and
+/// `is_trusted_fmp_source(0)` returned the parent's trusted entry —
+/// silently disabling the `fmp_could_be_unbounded` flag for the
+/// `mstore(0x40, param)` inside the function. Fixed by clearing
+/// `value_expressions` alongside `offset_values` when recursing into
+/// subobjects in `HeapAnalysis::analyze_object`.
+#[test]
+fn fmp_cross_object_value_id_collision_corrupts_fmp() {
+    let mut actions = instantiate("contracts/FmpCrossObjectBug.sol", "FmpCrossObjectBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_cross_object_bug().calldata,
+    });
+    run_differential(actions);
+}
+
+#[test]
+fn fmp_propagation_misses_dynamic_offset_mstore() {
+    let mut actions = instantiate("contracts/FmpDynStoreBug.sol", "FmpDynStoreBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::fmp_dyn_store_bug().calldata,
+    });
+    run_differential(actions);
+}
+
 #[test]
 fn keccak_fuse_preserves_scratch_observable_via_mload() {
     let mut actions = instantiate("contracts/KeccakFuseBug.sol", "KeccakFuseBug");

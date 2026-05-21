@@ -116,6 +116,22 @@ pub struct HeapAnalysis {
     /// Native mode requires LLVM constant detection, so these offsets must use
     /// byte-swap mode to avoid store/load mode mismatches.
     variable_accessed_offsets: BTreeSet<u64>,
+    /// Whether the FMP slot at 0x40 is written from a value that is not
+    /// provably sbrk-bounded. Solidity's allocator only ever writes
+    /// either a literal initial value (`0x80` from `memoryguard`) or
+    /// `add(mload(0x40), bounded_size)` — both keep the FMP < heap_size
+    /// in practice. Inline asm such as `mstore(0x40, calldataload(0))`
+    /// can put any 256-bit value at 0x40. When true, downstream
+    /// optimizations that assume `FMP < heap_size` (e.g. the post-MLoad
+    /// range proof) must skip the optimization to preserve EVM
+    /// semantics. Conservatively starts false; set by inspecting every
+    /// `MStore` whose target is the FMP slot.
+    fmp_could_be_unbounded: bool,
+    /// Per-`Let`-binding source expression, used by
+    /// `is_trusted_fmp_source` to decide whether an mstore's value
+    /// comes from a sbrk-style allocator pattern. Only populated for
+    /// bindings of size 1.
+    value_expressions: BTreeMap<u32, Expression>,
 }
 
 /// Information about a value used as a memory offset.
@@ -154,6 +170,8 @@ impl HeapAnalysis {
             has_dynamic_accesses: false,
             fmp_word_escapes: false,
             variable_accessed_offsets: BTreeSet::new(),
+            fmp_could_be_unbounded: false,
+            value_expressions: BTreeMap::new(),
         }
     }
 
@@ -167,6 +185,7 @@ impl HeapAnalysis {
 
         for subobject in &object.subobjects {
             self.offset_values.clear();
+            self.value_expressions.clear();
             self.analyze_object(subobject);
         }
 
@@ -192,23 +211,42 @@ impl HeapAnalysis {
                         self.offset_values.insert(binding.0, offset_info.clone());
                     }
                 }
+                if bindings.len() == 1 {
+                    self.value_expressions.insert(bindings[0].0, value.clone());
+                }
                 self.analyze_expression_side_effects(value);
             }
 
-            Statement::MStore { offset, region, .. } => {
+            Statement::MStore {
+                offset,
+                value,
+                region,
+            } => {
                 let pattern = self.classify_access(offset);
                 self.track_variable_access(offset);
-                if let Some(addr) = self.extract_static_offset(offset) {
+                let static_offset = self.extract_static_offset(offset);
+                if let Some(addr) = static_offset {
                     self.memory_accesses.insert(addr, pattern);
                 } else {
                     self.has_dynamic_accesses = true;
                 }
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
-                    if let Some(addr) = self.extract_static_offset(offset) {
+                    if let Some(addr) = static_offset {
                         if addr % 32 != 0 {
                             self.tainted_regions.insert(addr / 32 * 32);
                         }
                     }
+                }
+                // FMP unboundedness tracking: any `mstore(0x40, value)`
+                // whose value isn't a recognized sbrk-allocator pattern
+                // means the FMP could hold a non-Solidity-convention
+                // value at runtime. Downstream `mload(0x40)` range
+                // proofs / native-mode truncations assume `FMP <
+                // heap_size`; those assumptions break here.
+                let is_fmp_store =
+                    *region == MemoryRegion::FreePointerSlot || static_offset == Some(0x40);
+                if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
+                    self.fmp_could_be_unbounded = true;
                 }
             }
 
@@ -688,6 +726,88 @@ impl HeapAnalysis {
         self.fmp_word_escapes
     }
 
+    /// Returns whether any FMP write uses a value that is not provably
+    /// sbrk-bounded. See `fmp_could_be_unbounded` field doc.
+    pub fn fmp_could_be_unbounded(&self) -> bool {
+        self.fmp_could_be_unbounded
+    }
+
+    /// Walks the (possibly transitive) `Let` chain for `value_id` and
+    /// returns true iff its source expression matches a Solidity-allocator
+    /// pattern that keeps the FMP < heap_size at runtime. Recognized
+    /// patterns:
+    ///   - Literal (`memoryguard(0x80)` collapses to this; any literal
+    ///     small enough that `mstore(0x40, <literal>)` would have to
+    ///     have been written by the contract author with the allocator
+    ///     invariant in mind — we trust them).
+    ///   - `Var(x)` where `x` itself is trusted (forwarding chain).
+    ///   - `Binary { Add, ... }` where at least one operand is trusted
+    ///     (the canonical `add(mload(0x40), bounded_size)` pattern, or
+    ///     its variants with both operands derived from FMP arithmetic).
+    ///   - `MLoad { offset: 0x40, .. }` — reads the current FMP, which
+    ///     sbrk-style code uses as the base for new allocations.
+    ///   - `Keccak256Single` / `Keccak256Pair` — solc never writes a
+    ///     hash to FMP, but the simplifier does fuse mload(0x40) +
+    ///     keccak in mapping lookups; we don't actually expect this
+    ///     to flow to mstore(0x40), so flagging it would be a false
+    ///     negative. Out of caution we say "not trusted".
+    ///
+    /// Anything else (e.g. `CallDataLoad`, `SLoad`, opaque function
+    /// returns, arithmetic involving untrusted values) is treated as
+    /// potentially-non-bounded.
+    ///
+    /// Walks at most `MAX_FMP_TRUST_DEPTH` `Var` links to avoid loops.
+    fn is_trusted_fmp_source(&self, value_id: u32) -> bool {
+        const MAX_FMP_TRUST_DEPTH: u32 = 32;
+        let mut current = value_id;
+        for _ in 0..MAX_FMP_TRUST_DEPTH {
+            let Some(expression) = self.value_expressions.get(&current) else {
+                // No known Let binding for `current`: it's either a
+                // function parameter or a result whose Let we haven't
+                // visited yet. Either way, we can't prove it's
+                // sbrk-bounded.
+                return false;
+            };
+            match expression {
+                Expression::Literal { .. } => return true,
+                Expression::MLoad { offset, .. } => {
+                    return self.extract_static_offset(offset) == Some(0x40);
+                }
+                Expression::Var(inner) => {
+                    current = inner.0;
+                    continue;
+                }
+                Expression::Binary {
+                    operation: crate::ir::BinaryOperation::Add,
+                    lhs,
+                    rhs,
+                } => {
+                    // `add(trusted, _)` is trusted iff at least one
+                    // operand is trusted. Solidity's allocator emits
+                    // `add(mload(0x40), bounded_size)` which fits this.
+                    return self.is_trusted_fmp_source(lhs.id.0)
+                        || self.is_trusted_fmp_source(rhs.id.0);
+                }
+                Expression::Binary {
+                    operation: crate::ir::BinaryOperation::And,
+                    lhs,
+                    rhs,
+                } => {
+                    // `and(trusted, _)` is trusted. `guard_narrow.rs`'s
+                    // body-rewrite synthesizes `mstore(0x40, and(sum,
+                    // max_const))` for any allocator that matches
+                    // `has_allocator_shape`. The `sum` chain leads back
+                    // through `add(mload(0x40), aligned_size)`, which
+                    // recurses to trusted via the `Add` arm above.
+                    return self.is_trusted_fmp_source(lhs.id.0)
+                        || self.is_trusted_fmp_source(rhs.id.0);
+                }
+                _ => return false,
+            }
+        }
+        false
+    }
+
     /// Returns the set of static offsets accessed via non-literal expressions.
     pub fn variable_accessed_offsets(&self) -> &BTreeSet<u64> {
         &self.variable_accessed_offsets
@@ -773,6 +893,9 @@ pub struct HeapOptResults {
     /// These offsets may not be LLVM constants, so native mode would cause
     /// a store/load mode mismatch with literal accesses to the same offset.
     variable_accessed_offsets: BTreeSet<u64>,
+    /// Whether some `mstore(0x40, value)` in the program writes a value
+    /// that isn't provably sbrk-bounded. See HeapAnalysis docs.
+    fmp_could_be_unbounded: bool,
 }
 
 impl HeapOptResults {
@@ -806,7 +929,17 @@ impl HeapOptResults {
             has_dynamic_accesses: analysis.has_dynamic_accesses(),
             fmp_word_escapes: analysis.fmp_word_escapes(),
             variable_accessed_offsets: analysis.variable_accessed_offsets().clone(),
+            fmp_could_be_unbounded: analysis.fmp_could_be_unbounded(),
         }
+    }
+
+    /// Returns whether any FMP write writes a value not provably bounded
+    /// by heap_size. When true, codegen optimizations that rely on
+    /// `FMP < heap_size` (the post-MLoad range proof, InlineNative
+    /// truncations on the FMP slot) must be skipped — those
+    /// assumptions hold only for the Solidity allocator pattern.
+    pub fn fmp_could_be_unbounded(&self) -> bool {
+        self.fmp_could_be_unbounded
     }
 
     /// Checks if a static offset can use native byte order.

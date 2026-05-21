@@ -937,6 +937,19 @@ impl FmpPropagation {
                     if is_fmp_store {
                         let new_fmp = Self::resolve_value(&constants, &value);
                         fmp_value = new_fmp;
+                    } else if resolved_offset.is_none()
+                        && region != MemoryRegion::Dynamic
+                        && region != MemoryRegion::Scratch
+                    {
+                        // Soundness: a dynamic-offset mstore whose offset we
+                        // can't resolve statically could land on 0x40 at
+                        // runtime (e.g. `mstore(calldataload(p), v)`). The
+                        // simplifier leaves `region == Unknown` for any
+                        // non-literal offset, so the only safe move is to
+                        // invalidate the tracked FMP. `Dynamic` (offset
+                        // proven `>= 0x80`) and `Scratch` (`< 0x40`) regions
+                        // can't reach 0x40 even at runtime, so we keep them.
+                        fmp_value = None;
                     }
 
                     result.push(Statement::MStore {

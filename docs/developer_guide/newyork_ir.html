@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Testing strategy - revive compiler book</title>
+        <title>IR reference - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,67 +174,209 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="testing-strategy"><a class="header" href="#testing-strategy">Testing strategy</a></h1>
-<p>Contributors are encouraged to implement some appropriate unit and integration tests together with any bug fixes or new feature implementations. However, when it comes to testing the code generation logic, our testing strategy goes way beyond simple unit and integration tests. This chapter explains how the <code>revive</code> compiler implementation is tested for correctness and how we define correctness.</p>
-<blockquote class="blockquote-tag blockquote-tag-tip">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
-<p>Running the integration tests require the <code>evm</code> tool from <code>go-ethereum</code> in your <code>$PATH</code>.</p>
-<p>Either install it using your package manager or to build it from source:</p>
-<pre><code class="language-bash">git clone https://github.com/ethereum/go-ethereum/
-cd go-ethereum
-make all
-export PATH=/path/to/go-ethereum/build/bin/:$PATH
-</code></pre>
-</blockquote>
-<h2 id="bug-compatibility-with-ethereum-solidity"><a class="header" href="#bug-compatibility-with-ethereum-solidity">Bug compatibility with Ethereum Solidity</a></h2>
-<p>As a Solidity compiler, we aim to preserve contract code semantics as close as possible to Solidity compiled to EVM with the <code>solc</code> reference implementation. As highlighted in the user guide, due to the underlying target difference, this isn’t always possible. However, wherever it is possible, we follow the philosophy of <a href="https://en.wikipedia.org/wiki/Bug_compatibility"><strong>bug compatibility</strong></a> with the Ethereum contracts stack.</p>
-<h2 id="differential-integration-tests"><a class="header" href="#differential-integration-tests">Differential integration tests</a></h2>
-<p>A high level of bug compatibility with Ethereum is ensured through <a href="https://en.wikipedia.org/wiki/Differential_testing"><strong>differential testing</strong></a> with the Ethereum <code>solc</code> and EVM contracts stack. The <a href="https://crates.io/crates/revive-integration">revive-integration</a> library is the central integration test utility, providing a set of Solidity integration test cases. Further, it implements differential tests against the reference implementation by combining the <a href="https://crates.io/crates/revive-runner">revive-runner</a> sandbox, the <a href="https://github.com/ethereum/go-ethereum/tree/master/cmd/evm">go-ethereum EVM tool</a> and the <a href="https://crates.io/crates/revive-differential">revive-differential</a>.</p>
-<p>The <code>revive-runner</code> library provides a <a href="https://en.wikipedia.org/wiki/Declarative_programming"><strong>declarative</strong></a> test <a href="https://github.com/paritytech/revive/blob/main/crates/runner/src/specs.rs">specification format</a>. This vastly simplifies writing differential test cases and removes a lot of room for errors in test logic. Example:</p>
-<pre><code class="language-json">{
-    "differential": true,
-    "actions": [
-        {
-            "Instantiate": {
-                "code": {
-                    "Solidity": {
-                        "contract": "Bitwise"
-                    }
-                }
-            }
-        },
-        {
-            "Call": {
-                "dest": {
-                    "Instantiated": 0
-                },
-                "data": "3fa4f245"
-            }
-        }
-    ]
-}
-</code></pre>
-<p>Above example instantiates the <code>Bitwise</code> contract and calls it with some defined calldata. The <code>revive-runner</code> library implements a helper wrapper to execute test specs on the go-ethereum standalone <code>evm</code> tool. This allows the <code>revive-runner</code> to execute specs against the EVM and the <code>pallet-revive</code> runtime. Key to differential testing is setting <code>"differential": true</code>, resulting in the following:</p>
-<ol>
-<li>The <code>Bitwise</code> contract is compiled to EVM and PVM code.</li>
-<li>The runner executes the defined <code>actions</code> on the EVM and collects all state changes (storage, balance) and execution results.</li>
-<li>The runner executes each action on the PVM. Observed state changes <em>after each step</em> as well as the final execution result is asserted to  match the EVM counterparts <strong>exactly</strong>.</li>
-</ol>
-<p><strong>Note how we never defined any expected outcome manually.</strong> Instead, we simply observe and collect the data defining the “correct” outcome.</p>
-<p>Differential testing in combination with declarative test specifications proved to be simple, yet very effective, in ensuring expected Ethereum Solidity semantics on <code>pallet-revive</code>.</p>
-<h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
-<p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus, we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
-<p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
+                        <h1 id="newyork-ir-reference"><a class="header" href="#newyork-ir-reference">newyork IR reference</a></h1>
+<p>A per-operation reference for the newyork IR: textual syntax, operand and result types, purity, region and static-slot annotations, and examples.</p>
+<h2 id="how-to-read-this-reference"><a class="header" href="#how-to-read-this-reference">How to read this reference</a></h2>
+<p>This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
+<p>Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the <a href="#operation-index">operation index</a> below, or use the sidebar.</p>
+<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this appendix is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+<h3 id="entry-format"><a class="header" href="#entry-format">Entry format</a></h3>
+<p>Each operation entry has the same shape:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>What it shows</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Heading</strong></td><td>The printed operation name (e.g. <code>mstore</code>) followed by the <code>Expression</code> or <code>Statement</code> variant it corresponds to in <code>ir.rs</code>.</td></tr>
+<tr><td><strong>Description</strong></td><td>A short prose summary of what the operation does and any semantic notes worth knowing before reading the rest of the entry.</td></tr>
+<tr><td><strong>Syntax</strong></td><td>The literal printer output, including any optional debug annotations (region tags, static-slot comments). Anything inside <code>/* ... */</code> is a debug-only annotation and is not part of the operation itself.</td></tr>
+<tr><td><strong>Example</strong></td><td>A minimal printed snippet, using the printer’s actual <code>v0</code>/<code>v1</code>/… naming.</td></tr>
+<tr><td><strong>Operands</strong></td><td>One row per input or structural participant in the printed syntax. Value operands list the narrowest type the operation guarantees (default <code>i256</code>; narrower widths only appear when type inference has narrowed an upstream definition). Vector-of-operands fields show <code>Vec&lt;…&gt;</code> as the type. Non-value participants such as nested regions are listed with an em-dash type to mark them as structural rather than as operands.</td></tr>
+<tr><td><strong>Result and purity</strong></td><td>The type the operation produces (or <em>none</em> for statements that bind no value), followed by a purity label, either <em>Pure</em> or <em>Effectful</em>. Pure operations may be reordered, deduplicated, or eliminated by the simplifier; effectful ones may not. Effectful entries may carry a parenthetical describing the nature of the side effect when informative (e.g. “control flow”, “terminator”, or a note about revert/trap behavior).</td></tr>
+<tr><td><strong>Annotations</strong></td><td>Operation-specific fields the printer surfaces as <code>/* ... */</code> comments in the dump (region tag for memory ops, static-slot hint for storage ops, type suffix for non-default widths). Listed here as a table of <em>source field</em> → <em>printed form</em>.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="syntax-notation"><a class="header" href="#syntax-notation">Syntax notation</a></h3>
+<p>Syntax templates in each entry use the following conventions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Notation</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>add</code>, <code>mload</code>, <code>if</code>, <code>else</code>, <code>case</code>, <code>let</code>, <code>yield</code>, …</td><td>Literal printer tokens: bare lowercase identifiers and keywords that the printer emits verbatim.</td></tr>
+<tr><td><code>$offset</code>, <code>$value</code>, <code>$key</code>, <code>$lhs</code>, <code>$rhs</code>, …</td><td>Role names (<code>$</code>-prefixed): placeholders for SSA value references the printer renders as <code>v</code> followed by a decimal id (<code>v0</code>, <code>v1</code>, …).</td></tr>
+<tr><td><code>&lt;type&gt;</code>, <code>&lt;region&gt;</code>, <code>&lt;hex&gt;</code>, <code>&lt;id&gt;</code>, <code>&lt;bits&gt;</code>, <code>&lt;func_name&gt;</code>, <code>&lt;N&gt;</code>, <code>&lt;length&gt;</code>, …</td><td>Metavariables: stand for compile-time fields (type tags, hex values, identifier strings, integer counts), not SSA values. The concrete values they take are enumerated in the Annotations section of each entry or in the type system reference.</td></tr>
+<tr><td><code>[…]</code></td><td>Optional parts. Anything inside the brackets may or may not appear in any given dump, depending on the conditions described in the operation’s Annotations section.</td></tr>
+<tr><td><code>[: &lt;type&gt;]</code></td><td>Optional type suffix on a value reference. Suppressed when the value’s type is the default <code>i256</code> integer; present otherwise (<code>: i32</code>, <code>: ptr&lt;heap&gt;</code>, …).</td></tr>
+<tr><td><code>/* … */</code></td><td>Debug-only annotations the printer attaches to certain operations (memory region tag, static-slot hint, etc.).</td></tr>
+<tr><td><code>…</code></td><td>Repetition: “more entries of the same shape.” Used in vector operand lists (<code>$arg_0, $arg_1, …</code>) and in multi-line block bodies (<code>{ … }</code>).</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="operation-index"><a class="header" href="#operation-index">Operation index</a></h3>
+<h4 id="pure-expressions"><a class="header" href="#pure-expressions">Pure expressions</a></h4>
+<h5 id="constants-and-variables"><a class="header" href="#constants-and-variables">Constants and variables</a></h5>
+<ul>
+<li><a href="#0xhex"><code>0x&lt;hex&gt;</code></a></li>
+<li><a href="#vid"><code>v&lt;id&gt;</code></a></li>
+</ul>
+<h5 id="arithmetic"><a class="header" href="#arithmetic">Arithmetic</a></h5>
+<ul>
+<li><a href="#add"><code>add</code></a></li>
+<li><a href="#sub"><code>sub</code></a></li>
+<li><a href="#mul"><code>mul</code></a></li>
+<li><a href="#div"><code>div</code></a></li>
+<li><a href="#sdiv"><code>sdiv</code></a></li>
+<li><a href="#mod"><code>mod</code></a></li>
+<li><a href="#smod"><code>smod</code></a></li>
+<li><a href="#exp"><code>exp</code></a></li>
+<li><a href="#and"><code>and</code></a></li>
+<li><a href="#or"><code>or</code></a></li>
+<li><a href="#xor"><code>xor</code></a></li>
+<li><a href="#shl"><code>shl</code></a></li>
+<li><a href="#shr"><code>shr</code></a></li>
+<li><a href="#sar"><code>sar</code></a></li>
+<li><a href="#lt"><code>lt</code></a></li>
+<li><a href="#gt"><code>gt</code></a></li>
+<li><a href="#slt"><code>slt</code></a></li>
+<li><a href="#sgt"><code>sgt</code></a></li>
+<li><a href="#eq"><code>eq</code></a></li>
+<li><a href="#byte"><code>byte</code></a></li>
+<li><a href="#signextend"><code>signextend</code></a></li>
+<li><a href="#addmod"><code>addmod</code></a></li>
+<li><a href="#mulmod"><code>mulmod</code></a></li>
+<li><a href="#iszero"><code>iszero</code></a></li>
+<li><a href="#not"><code>not</code></a></li>
+<li><a href="#clz"><code>clz</code></a></li>
+</ul>
+<h5 id="bit-width-conversions"><a class="header" href="#bit-width-conversions">Bit-width conversions</a></h5>
+<ul>
+<li><a href="#truncateibits"><code>truncate&lt;i&lt;bits&gt;&gt;</code></a></li>
+<li><a href="#zextibits"><code>zext&lt;i&lt;bits&gt;&gt;</code></a></li>
+<li><a href="#sextibits"><code>sext&lt;i&lt;bits&gt;&gt;</code></a></li>
+</ul>
+<h5 id="hashing"><a class="header" href="#hashing">Hashing</a></h5>
+<ul>
+<li><a href="#keccak256"><code>keccak256</code></a></li>
+<li><a href="#keccak256_pair"><code>keccak256_pair</code></a></li>
+<li><a href="#keccak256_single"><code>keccak256_single</code></a></li>
+</ul>
+<h5 id="environment-reads"><a class="header" href="#environment-reads">Environment reads</a></h5>
+<ul>
+<li><a href="#caller"><code>caller</code></a></li>
+<li><a href="#callvalue"><code>callvalue</code></a></li>
+<li><a href="#origin"><code>origin</code></a></li>
+<li><a href="#address"><code>address</code></a></li>
+<li><a href="#chainid"><code>chainid</code></a></li>
+<li><a href="#gas"><code>gas</code></a></li>
+<li><a href="#msize"><code>msize</code></a></li>
+<li><a href="#coinbase"><code>coinbase</code></a></li>
+<li><a href="#timestamp"><code>timestamp</code></a></li>
+<li><a href="#number"><code>number</code></a></li>
+<li><a href="#difficulty"><code>difficulty</code></a></li>
+<li><a href="#gaslimit"><code>gaslimit</code></a></li>
+<li><a href="#basefee"><code>basefee</code></a></li>
+<li><a href="#blobbasefee"><code>blobbasefee</code></a></li>
+<li><a href="#blobhash"><code>blobhash</code></a></li>
+<li><a href="#blockhash"><code>blockhash</code></a></li>
+<li><a href="#selfbalance"><code>selfbalance</code></a></li>
+<li><a href="#gasprice"><code>gasprice</code></a></li>
+</ul>
+<h5 id="calldata-returndata-and-code"><a class="header" href="#calldata-returndata-and-code">Calldata, returndata, and code</a></h5>
+<ul>
+<li><a href="#calldataload"><code>calldataload</code></a></li>
+<li><a href="#calldatasize"><code>calldatasize</code></a></li>
+<li><a href="#returndatasize"><code>returndatasize</code></a></li>
+<li><a href="#codesize"><code>codesize</code></a></li>
+<li><a href="#extcodesize"><code>extcodesize</code></a></li>
+<li><a href="#extcodehash"><code>extcodehash</code></a></li>
+<li><a href="#balance"><code>balance</code></a></li>
+</ul>
+<h5 id="memory-and-storage-loads"><a class="header" href="#memory-and-storage-loads">Memory and storage loads</a></h5>
+<ul>
+<li><a href="#mload"><code>mload</code></a></li>
+<li><a href="#sload"><code>sload</code></a></li>
+<li><a href="#tload"><code>tload</code></a></li>
+<li><a href="#mapping_sload"><code>mapping_sload</code></a></li>
+</ul>
+<h5 id="linker"><a class="header" href="#linker">Linker</a></h5>
+<ul>
+<li><a href="#dataoffset"><code>dataoffset</code></a></li>
+<li><a href="#datasize"><code>datasize</code></a></li>
+<li><a href="#loadimmutable"><code>loadimmutable</code></a></li>
+<li><a href="#linkersymbol"><code>linkersymbol</code></a></li>
+</ul>
+<h5 id="function-call"><a class="header" href="#function-call">Function call</a></h5>
+<ul>
+<li><a href="#func_name"><code>&lt;func_name&gt;</code></a></li>
+</ul>
+<h4 id="memory-and-storage-writes"><a class="header" href="#memory-and-storage-writes">Memory and storage writes</a></h4>
+<ul>
+<li><a href="#mstore"><code>mstore</code></a></li>
+<li><a href="#mstore8"><code>mstore8</code></a></li>
+<li><a href="#mcopy"><code>mcopy</code></a></li>
+<li><a href="#sstore"><code>sstore</code></a></li>
+<li><a href="#tstore"><code>tstore</code></a></li>
+<li><a href="#mapping_sstore"><code>mapping_sstore</code></a></li>
+</ul>
+<h4 id="bulk-copies"><a class="header" href="#bulk-copies">Bulk copies</a></h4>
+<ul>
+<li><a href="#codecopy"><code>codecopy</code></a></li>
+<li><a href="#extcodecopy"><code>extcodecopy</code></a></li>
+<li><a href="#returndatacopy"><code>returndatacopy</code></a></li>
+<li><a href="#datacopy"><code>datacopy</code></a></li>
+<li><a href="#calldatacopy"><code>calldatacopy</code></a></li>
+</ul>
+<h4 id="bindings-and-wrappers"><a class="header" href="#bindings-and-wrappers">Bindings and wrappers</a></h4>
+<ul>
+<li><a href="#let"><code>let</code></a></li>
+<li><a href="#expression-statement">expression statement</a></li>
+<li><a href="#setimmutable"><code>setimmutable</code></a></li>
+</ul>
+<h4 id="structured-control-flow"><a class="header" href="#structured-control-flow">Structured control flow</a></h4>
+<ul>
+<li><a href="#if"><code>if</code></a></li>
+<li><a href="#switch"><code>switch</code></a></li>
+<li><a href="#for"><code>for</code></a></li>
+<li><a href="#break"><code>break</code></a></li>
+<li><a href="#continue"><code>continue</code></a></li>
+<li><a href="#leave"><code>leave</code></a></li>
+<li><a href="#nested-block">nested block</a></li>
+</ul>
+<h4 id="external-interaction"><a class="header" href="#external-interaction">External interaction</a></h4>
+<ul>
+<li><a href="#call"><code>call</code></a></li>
+<li><a href="#callcode"><code>callcode</code></a></li>
+<li><a href="#delegatecall"><code>delegatecall</code></a></li>
+<li><a href="#staticcall"><code>staticcall</code></a></li>
+<li><a href="#create"><code>create</code></a></li>
+<li><a href="#create2"><code>create2</code></a></li>
+<li><a href="#logn"><code>log&lt;N&gt;</code></a></li>
+</ul>
+<h4 id="termination"><a class="header" href="#termination">Termination</a></h4>
+<ul>
+<li><a href="#return"><code>return</code></a></li>
+<li><a href="#revert"><code>revert</code></a></li>
+<li><a href="#stop"><code>stop</code></a></li>
+<li><a href="#invalid"><code>invalid</code></a></li>
+<li><a href="#selfdestruct"><code>selfdestruct</code></a></li>
+<li><a href="#panic_revert"><code>panic_revert</code></a></li>
+<li><a href="#error_string_revert"><code>error_string_revert</code></a></li>
+<li><a href="#custom_error_revert"><code>custom_error_revert</code></a></li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../developer_guide/target.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../developer_guide/newyork_optimizer.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../developer_guide/cross_compilation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../developer_guide/target.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -244,11 +386,11 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../developer_guide/target.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../developer_guide/newyork_optimizer.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../developer_guide/cross_compilation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../developer_guide/target.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

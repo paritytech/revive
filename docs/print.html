@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-aff292a3.js";
+            window.path_to_searchindex_js = "searchindex-91ab665a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-196b9d9b.js"></script>
+        <script src="toc-1290cc30.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -709,6 +709,7 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Semantic annotations</strong>: Memory operations are tagged with region information (<code>Scratch</code>, <code>FreePointerSlot</code>, <code>Dynamic</code>). Storage operations carry static slot values when known at compile time.</li>
 <li><strong>Structured control flow</strong>: <code>If</code>, <code>Switch</code>, and <code>For</code> nodes preserve the high-level structure from Yul, with explicit region arguments and yields for value flow across control edges.</li>
 </ul>
+<p>For per-operation detail — printed syntax, operand and result types, and more — see the <a href="#newyork-ir-reference">newyork IR reference</a>.</p>
 <h2 id="key-optimizations-explained"><a class="header" href="#key-optimizations-explained">Key optimizations explained</a></h2>
 <h3 id="type-narrowing"><a class="header" href="#type-narrowing">Type narrowing</a></h3>
 <p>EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:</p>
@@ -917,6 +918,200 @@ the low N bits are non-zero).</p>
 </tbody>
 </table>
 </div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="newyork-ir-reference"><a class="header" href="#newyork-ir-reference">newyork IR reference</a></h1>
+<p>A per-operation reference for the newyork IR: textual syntax, operand and result types, purity, region and static-slot annotations, and examples.</p>
+<h2 id="how-to-read-this-reference"><a class="header" href="#how-to-read-this-reference">How to read this reference</a></h2>
+<p>This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
+<p>Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the <a href="#operation-index">operation index</a> below, or use the sidebar.</p>
+<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this appendix is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+<h3 id="entry-format"><a class="header" href="#entry-format">Entry format</a></h3>
+<p>Each operation entry has the same shape:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>What it shows</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Heading</strong></td><td>The printed operation name (e.g. <code>mstore</code>) followed by the <code>Expression</code> or <code>Statement</code> variant it corresponds to in <code>ir.rs</code>.</td></tr>
+<tr><td><strong>Description</strong></td><td>A short prose summary of what the operation does and any semantic notes worth knowing before reading the rest of the entry.</td></tr>
+<tr><td><strong>Syntax</strong></td><td>The literal printer output, including any optional debug annotations (region tags, static-slot comments). Anything inside <code>/* ... */</code> is a debug-only annotation and is not part of the operation itself.</td></tr>
+<tr><td><strong>Example</strong></td><td>A minimal printed snippet, using the printer’s actual <code>v0</code>/<code>v1</code>/… naming.</td></tr>
+<tr><td><strong>Operands</strong></td><td>One row per input or structural participant in the printed syntax. Value operands list the narrowest type the operation guarantees (default <code>i256</code>; narrower widths only appear when type inference has narrowed an upstream definition). Vector-of-operands fields show <code>Vec&lt;…&gt;</code> as the type. Non-value participants such as nested regions are listed with an em-dash type to mark them as structural rather than as operands.</td></tr>
+<tr><td><strong>Result and purity</strong></td><td>The type the operation produces (or <em>none</em> for statements that bind no value), followed by a purity label, either <em>Pure</em> or <em>Effectful</em>. Pure operations may be reordered, deduplicated, or eliminated by the simplifier; effectful ones may not. Effectful entries may carry a parenthetical describing the nature of the side effect when informative (e.g. “control flow”, “terminator”, or a note about revert/trap behavior).</td></tr>
+<tr><td><strong>Annotations</strong></td><td>Operation-specific fields the printer surfaces as <code>/* ... */</code> comments in the dump (region tag for memory ops, static-slot hint for storage ops, type suffix for non-default widths). Listed here as a table of <em>source field</em> → <em>printed form</em>.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="syntax-notation"><a class="header" href="#syntax-notation">Syntax notation</a></h3>
+<p>Syntax templates in each entry use the following conventions:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Notation</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>add</code>, <code>mload</code>, <code>if</code>, <code>else</code>, <code>case</code>, <code>let</code>, <code>yield</code>, …</td><td>Literal printer tokens: bare lowercase identifiers and keywords that the printer emits verbatim.</td></tr>
+<tr><td><code>$offset</code>, <code>$value</code>, <code>$key</code>, <code>$lhs</code>, <code>$rhs</code>, …</td><td>Role names (<code>$</code>-prefixed): placeholders for SSA value references the printer renders as <code>v</code> followed by a decimal id (<code>v0</code>, <code>v1</code>, …).</td></tr>
+<tr><td><code>&lt;type&gt;</code>, <code>&lt;region&gt;</code>, <code>&lt;hex&gt;</code>, <code>&lt;id&gt;</code>, <code>&lt;bits&gt;</code>, <code>&lt;func_name&gt;</code>, <code>&lt;N&gt;</code>, <code>&lt;length&gt;</code>, …</td><td>Metavariables: stand for compile-time fields (type tags, hex values, identifier strings, integer counts), not SSA values. The concrete values they take are enumerated in the Annotations section of each entry or in the type system reference.</td></tr>
+<tr><td><code>[…]</code></td><td>Optional parts. Anything inside the brackets may or may not appear in any given dump, depending on the conditions described in the operation’s Annotations section.</td></tr>
+<tr><td><code>[: &lt;type&gt;]</code></td><td>Optional type suffix on a value reference. Suppressed when the value’s type is the default <code>i256</code> integer; present otherwise (<code>: i32</code>, <code>: ptr&lt;heap&gt;</code>, …).</td></tr>
+<tr><td><code>/* … */</code></td><td>Debug-only annotations the printer attaches to certain operations (memory region tag, static-slot hint, etc.).</td></tr>
+<tr><td><code>…</code></td><td>Repetition: “more entries of the same shape.” Used in vector operand lists (<code>$arg_0, $arg_1, …</code>) and in multi-line block bodies (<code>{ … }</code>).</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="operation-index"><a class="header" href="#operation-index">Operation index</a></h3>
+<h4 id="pure-expressions"><a class="header" href="#pure-expressions">Pure expressions</a></h4>
+<h5 id="constants-and-variables"><a class="header" href="#constants-and-variables">Constants and variables</a></h5>
+<ul>
+<li><a href="#0xhex"><code>0x&lt;hex&gt;</code></a></li>
+<li><a href="#vid"><code>v&lt;id&gt;</code></a></li>
+</ul>
+<h5 id="arithmetic"><a class="header" href="#arithmetic">Arithmetic</a></h5>
+<ul>
+<li><a href="#add"><code>add</code></a></li>
+<li><a href="#sub"><code>sub</code></a></li>
+<li><a href="#mul"><code>mul</code></a></li>
+<li><a href="#div"><code>div</code></a></li>
+<li><a href="#sdiv"><code>sdiv</code></a></li>
+<li><a href="#mod"><code>mod</code></a></li>
+<li><a href="#smod"><code>smod</code></a></li>
+<li><a href="#exp"><code>exp</code></a></li>
+<li><a href="#and"><code>and</code></a></li>
+<li><a href="#or"><code>or</code></a></li>
+<li><a href="#xor"><code>xor</code></a></li>
+<li><a href="#shl"><code>shl</code></a></li>
+<li><a href="#shr"><code>shr</code></a></li>
+<li><a href="#sar"><code>sar</code></a></li>
+<li><a href="#lt"><code>lt</code></a></li>
+<li><a href="#gt"><code>gt</code></a></li>
+<li><a href="#slt"><code>slt</code></a></li>
+<li><a href="#sgt"><code>sgt</code></a></li>
+<li><a href="#eq"><code>eq</code></a></li>
+<li><a href="#byte"><code>byte</code></a></li>
+<li><a href="#signextend"><code>signextend</code></a></li>
+<li><a href="#addmod"><code>addmod</code></a></li>
+<li><a href="#mulmod"><code>mulmod</code></a></li>
+<li><a href="#iszero"><code>iszero</code></a></li>
+<li><a href="#not"><code>not</code></a></li>
+<li><a href="#clz"><code>clz</code></a></li>
+</ul>
+<h5 id="bit-width-conversions"><a class="header" href="#bit-width-conversions">Bit-width conversions</a></h5>
+<ul>
+<li><a href="#truncateibits"><code>truncate&lt;i&lt;bits&gt;&gt;</code></a></li>
+<li><a href="#zextibits"><code>zext&lt;i&lt;bits&gt;&gt;</code></a></li>
+<li><a href="#sextibits"><code>sext&lt;i&lt;bits&gt;&gt;</code></a></li>
+</ul>
+<h5 id="hashing"><a class="header" href="#hashing">Hashing</a></h5>
+<ul>
+<li><a href="#keccak256"><code>keccak256</code></a></li>
+<li><a href="#keccak256_pair"><code>keccak256_pair</code></a></li>
+<li><a href="#keccak256_single"><code>keccak256_single</code></a></li>
+</ul>
+<h5 id="environment-reads"><a class="header" href="#environment-reads">Environment reads</a></h5>
+<ul>
+<li><a href="#caller"><code>caller</code></a></li>
+<li><a href="#callvalue"><code>callvalue</code></a></li>
+<li><a href="#origin"><code>origin</code></a></li>
+<li><a href="#address"><code>address</code></a></li>
+<li><a href="#chainid"><code>chainid</code></a></li>
+<li><a href="#gas"><code>gas</code></a></li>
+<li><a href="#msize"><code>msize</code></a></li>
+<li><a href="#coinbase"><code>coinbase</code></a></li>
+<li><a href="#timestamp"><code>timestamp</code></a></li>
+<li><a href="#number"><code>number</code></a></li>
+<li><a href="#difficulty"><code>difficulty</code></a></li>
+<li><a href="#gaslimit"><code>gaslimit</code></a></li>
+<li><a href="#basefee"><code>basefee</code></a></li>
+<li><a href="#blobbasefee"><code>blobbasefee</code></a></li>
+<li><a href="#blobhash"><code>blobhash</code></a></li>
+<li><a href="#blockhash"><code>blockhash</code></a></li>
+<li><a href="#selfbalance"><code>selfbalance</code></a></li>
+<li><a href="#gasprice"><code>gasprice</code></a></li>
+</ul>
+<h5 id="calldata-returndata-and-code"><a class="header" href="#calldata-returndata-and-code">Calldata, returndata, and code</a></h5>
+<ul>
+<li><a href="#calldataload"><code>calldataload</code></a></li>
+<li><a href="#calldatasize"><code>calldatasize</code></a></li>
+<li><a href="#returndatasize"><code>returndatasize</code></a></li>
+<li><a href="#codesize"><code>codesize</code></a></li>
+<li><a href="#extcodesize"><code>extcodesize</code></a></li>
+<li><a href="#extcodehash"><code>extcodehash</code></a></li>
+<li><a href="#balance"><code>balance</code></a></li>
+</ul>
+<h5 id="memory-and-storage-loads"><a class="header" href="#memory-and-storage-loads">Memory and storage loads</a></h5>
+<ul>
+<li><a href="#mload"><code>mload</code></a></li>
+<li><a href="#sload"><code>sload</code></a></li>
+<li><a href="#tload"><code>tload</code></a></li>
+<li><a href="#mapping_sload"><code>mapping_sload</code></a></li>
+</ul>
+<h5 id="linker"><a class="header" href="#linker">Linker</a></h5>
+<ul>
+<li><a href="#dataoffset"><code>dataoffset</code></a></li>
+<li><a href="#datasize"><code>datasize</code></a></li>
+<li><a href="#loadimmutable"><code>loadimmutable</code></a></li>
+<li><a href="#linkersymbol"><code>linkersymbol</code></a></li>
+</ul>
+<h5 id="function-call"><a class="header" href="#function-call">Function call</a></h5>
+<ul>
+<li><a href="#func_name"><code>&lt;func_name&gt;</code></a></li>
+</ul>
+<h4 id="memory-and-storage-writes"><a class="header" href="#memory-and-storage-writes">Memory and storage writes</a></h4>
+<ul>
+<li><a href="#mstore"><code>mstore</code></a></li>
+<li><a href="#mstore8"><code>mstore8</code></a></li>
+<li><a href="#mcopy"><code>mcopy</code></a></li>
+<li><a href="#sstore"><code>sstore</code></a></li>
+<li><a href="#tstore"><code>tstore</code></a></li>
+<li><a href="#mapping_sstore"><code>mapping_sstore</code></a></li>
+</ul>
+<h4 id="bulk-copies"><a class="header" href="#bulk-copies">Bulk copies</a></h4>
+<ul>
+<li><a href="#codecopy"><code>codecopy</code></a></li>
+<li><a href="#extcodecopy"><code>extcodecopy</code></a></li>
+<li><a href="#returndatacopy"><code>returndatacopy</code></a></li>
+<li><a href="#datacopy"><code>datacopy</code></a></li>
+<li><a href="#calldatacopy"><code>calldatacopy</code></a></li>
+</ul>
+<h4 id="bindings-and-wrappers"><a class="header" href="#bindings-and-wrappers">Bindings and wrappers</a></h4>
+<ul>
+<li><a href="#let"><code>let</code></a></li>
+<li><a href="#expression-statement">expression statement</a></li>
+<li><a href="#setimmutable"><code>setimmutable</code></a></li>
+</ul>
+<h4 id="structured-control-flow"><a class="header" href="#structured-control-flow">Structured control flow</a></h4>
+<ul>
+<li><a href="#if"><code>if</code></a></li>
+<li><a href="#switch"><code>switch</code></a></li>
+<li><a href="#for"><code>for</code></a></li>
+<li><a href="#break"><code>break</code></a></li>
+<li><a href="#continue"><code>continue</code></a></li>
+<li><a href="#leave"><code>leave</code></a></li>
+<li><a href="#nested-block">nested block</a></li>
+</ul>
+<h4 id="external-interaction"><a class="header" href="#external-interaction">External interaction</a></h4>
+<ul>
+<li><a href="#call"><code>call</code></a></li>
+<li><a href="#callcode"><code>callcode</code></a></li>
+<li><a href="#delegatecall"><code>delegatecall</code></a></li>
+<li><a href="#staticcall"><code>staticcall</code></a></li>
+<li><a href="#create"><code>create</code></a></li>
+<li><a href="#create2"><code>create2</code></a></li>
+<li><a href="#logn"><code>log&lt;N&gt;</code></a></li>
+</ul>
+<h4 id="termination"><a class="header" href="#termination">Termination</a></h4>
+<ul>
+<li><a href="#return"><code>return</code></a></li>
+<li><a href="#revert"><code>revert</code></a></li>
+<li><a href="#stop"><code>stop</code></a></li>
+<li><a href="#invalid"><code>invalid</code></a></li>
+<li><a href="#selfdestruct"><code>selfdestruct</code></a></li>
+<li><a href="#panic_revert"><code>panic_revert</code></a></li>
+<li><a href="#error_string_revert"><code>error_string_revert</code></a></li>
+<li><a href="#custom_error_revert"><code>custom_error_revert</code></a></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bf23bcbc.js";
+            window.path_to_searchindex_js = "searchindex-98ffaedf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -1069,7 +1069,7 @@ the low N bits are non-zero).</p>
 </ul>
 <h4 id="bulk-copies"><a class="header" href="#bulk-copies">Bulk copies</a></h4>
 <ul>
-<li><a href="#codecopy"><code>codecopy</code></a></li>
+<li><a href="#codecopy-1"><code>codecopy</code></a></li>
 <li><a href="#extcodecopy"><code>extcodecopy</code></a></li>
 <li><a href="#returndatacopy"><code>returndatacopy</code></a></li>
 <li><a href="#datacopy"><code>datacopy</code></a></li>
@@ -3622,6 +3622,189 @@ sstore(v2, v3) /* slot: 0x0 */
 </div>
 <h4 id="annotations-73"><a class="header" href="#annotations-73">Annotations</a></h4>
 <p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
+<h2 id="bulk-copies-1"><a class="header" href="#bulk-copies-1">Bulk copies</a></h2>
+<p>Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
+<h3 id="codecopy-1"><a class="header" href="#codecopy-1"><code>codecopy</code></a></h3>
+<p>(<code>Statement::CodeCopy</code>)</p>
+<h4 id="description-74"><a class="header" href="#description-74">Description</a></h4>
+<p>Copy <code>length</code> bytes from the currently executing code at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads past the end of code yield zero bytes.</p>
+<h4 id="syntax-74"><a class="header" href="#syntax-74">Syntax</a></h4>
+<pre><code class="language-text">codecopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-74"><a class="header" href="#example-74">Example</a></h4>
+<pre><code class="language-text">codecopy(v0, v1, v2)
+</code></pre>
+<h4 id="operands-74"><a class="header" href="#operands-74">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the executing code.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-74"><a class="header" href="#result-and-purity-74">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-74"><a class="header" href="#annotations-74">Annotations</a></h4>
+<p>None.</p>
+<h3 id="extcodecopy"><a class="header" href="#extcodecopy"><code>extcodecopy</code></a></h3>
+<p>(<code>Statement::ExtCodeCopy</code>)</p>
+<h4 id="description-75"><a class="header" href="#description-75">Description</a></h4>
+<p>Copy <code>length</code> bytes from the code at <code>address</code> starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads beyond the code yield zero bytes; non-existent accounts yield all zeros.</p>
+<h4 id="syntax-75"><a class="header" href="#syntax-75">Syntax</a></h4>
+<pre><code class="language-text">extcodecopy($address[: &lt;type&gt;], $dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-75"><a class="header" href="#example-75">Example</a></h4>
+<pre><code class="language-text">extcodecopy(v0: i160, v1, v2, v3)
+</code></pre>
+<h4 id="operands-75"><a class="header" href="#operands-75">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Account whose code to read; narrows to <code>i160</code>.</td></tr>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the external code.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-75"><a class="header" href="#result-and-purity-75">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-75"><a class="header" href="#annotations-75">Annotations</a></h4>
+<p>None.</p>
+<h3 id="returndatacopy"><a class="header" href="#returndatacopy"><code>returndatacopy</code></a></h3>
+<p>(<code>Statement::ReturnDataCopy</code>)</p>
+<h4 id="description-76"><a class="header" href="#description-76">Description</a></h4>
+<p>Copy <code>length</code> bytes from the most recent sub-call’s return data starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Per EVM, reads past the return data’s end revert; the memory passes treat this as a potential trap site.</p>
+<h4 id="syntax-76"><a class="header" href="#syntax-76">Syntax</a></h4>
+<pre><code class="language-text">returndatacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-76"><a class="header" href="#example-76">Example</a></h4>
+<pre><code class="language-text">returndatacopy(v0, v1, v2)
+</code></pre>
+<h4 id="operands-76"><a class="header" href="#operands-76">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the return-data buffer.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-76"><a class="header" href="#result-and-purity-76">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (may revert on out-of-range reads, per EVM)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-76"><a class="header" href="#annotations-76">Annotations</a></h4>
+<p>None.</p>
+<h3 id="datacopy"><a class="header" href="#datacopy"><code>datacopy</code></a></h3>
+<p>(<code>Statement::DataCopy</code>)</p>
+<h4 id="description-77"><a class="header" href="#description-77">Description</a></h4>
+<p>Copy <code>length</code> bytes from an embedded data segment starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. The source segment is resolved by the linker, typically used to pull constants compiled into the bytecode into runtime memory.</p>
+<h4 id="syntax-77"><a class="header" href="#syntax-77">Syntax</a></h4>
+<pre><code class="language-text">datacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-77"><a class="header" href="#example-77">Example</a></h4>
+<pre><code class="language-text">datacopy(v0, v1, v2)
+</code></pre>
+<h4 id="operands-77"><a class="header" href="#operands-77">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the data segment.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-77"><a class="header" href="#result-and-purity-77">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-77"><a class="header" href="#annotations-77">Annotations</a></h4>
+<p>None.</p>
+<h3 id="calldatacopy"><a class="header" href="#calldatacopy"><code>calldatacopy</code></a></h3>
+<p>(<code>Statement::CallDataCopy</code>)</p>
+<h4 id="description-78"><a class="header" href="#description-78">Description</a></h4>
+<p>Copy <code>length</code> bytes from the current call’s calldata starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads past the end of calldata yield zero bytes.</p>
+<h4 id="syntax-78"><a class="header" href="#syntax-78">Syntax</a></h4>
+<pre><code class="language-text">calldatacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-78"><a class="header" href="#example-78">Example</a></h4>
+<pre><code class="language-text">calldatacopy(v0, v1, v2)
+</code></pre>
+<h4 id="operands-78"><a class="header" href="#operands-78">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in calldata.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-78"><a class="header" href="#result-and-purity-78">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
+<p>None.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

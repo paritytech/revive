@@ -2941,3 +2941,198 @@ mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
 #### Annotations
 
 None. `mapping_sstore` deliberately drops the `static_slot` annotation that the original `sstore` may have carried, because the fused statement's effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.
+
+## Bulk copies
+
+Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.
+
+### `codecopy`
+
+(`Statement::CodeCopy`)
+
+#### Description
+
+Copy `length` bytes from the currently executing code at `offset` into emulated EVM linear memory at `dest`. Reads past the end of code yield zero bytes.
+
+#### Syntax
+
+```text
+codecopy($dest[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+codecopy(v0, v1, v2)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `offset` | `i256` | Source byte offset in the executing code. |
+| `length` | `i256` | Number of bytes to copy. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None.
+
+### `extcodecopy`
+
+(`Statement::ExtCodeCopy`)
+
+#### Description
+
+Copy `length` bytes from the code at `address` starting at `offset` into emulated EVM linear memory at `dest`. Reads beyond the code yield zero bytes; non-existent accounts yield all zeros.
+
+#### Syntax
+
+```text
+extcodecopy($address[: <type>], $dest[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+extcodecopy(v0: i160, v1, v2, v3)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `address` | `i256` | Account whose code to read; narrows to `i160`. |
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `offset` | `i256` | Source byte offset in the external code. |
+| `length` | `i256` | Number of bytes to copy. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None.
+
+### `returndatacopy`
+
+(`Statement::ReturnDataCopy`)
+
+#### Description
+
+Copy `length` bytes from the most recent sub-call's return data starting at `offset` into emulated EVM linear memory at `dest`. Per EVM, reads past the return data's end revert; the memory passes treat this as a potential trap site.
+
+#### Syntax
+
+```text
+returndatacopy($dest[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+returndatacopy(v0, v1, v2)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `offset` | `i256` | Source byte offset in the return-data buffer. |
+| `length` | `i256` | Number of bytes to copy. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (may revert on out-of-range reads, per EVM) |
+
+#### Annotations
+
+None.
+
+### `datacopy`
+
+(`Statement::DataCopy`)
+
+#### Description
+
+Copy `length` bytes from an embedded data segment starting at `offset` into emulated EVM linear memory at `dest`. The source segment is resolved by the linker, typically used to pull constants compiled into the bytecode into runtime memory.
+
+#### Syntax
+
+```text
+datacopy($dest[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+datacopy(v0, v1, v2)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `offset` | `i256` | Source byte offset in the data segment. |
+| `length` | `i256` | Number of bytes to copy. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None.
+
+### `calldatacopy`
+
+(`Statement::CallDataCopy`)
+
+#### Description
+
+Copy `length` bytes from the current call's calldata starting at `offset` into emulated EVM linear memory at `dest`. Reads past the end of calldata yield zero bytes.
+
+#### Syntax
+
+```text
+calldatacopy($dest[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+calldatacopy(v0, v1, v2)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `dest` | `i256` | Destination byte offset in linear memory. |
+| `offset` | `i256` | Source byte offset in calldata. |
+| `length` | `i256` | Number of bytes to copy. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None.

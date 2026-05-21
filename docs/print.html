@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bd864ca2.js";
+            window.path_to_searchindex_js = "searchindex-8da8f91a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -4411,6 +4411,274 @@ log2(v0, v1, v2, v3)            // two topics
 </div>
 <h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
 <p>None.</p>
+<h2 id="termination-1"><a class="header" href="#termination-1">Termination</a></h2>
+<p>Statements that end the current call frame. Three plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), two unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
+<h3 id="return"><a class="header" href="#return"><code>return</code></a></h3>
+<p>(<code>Statement::Return</code>)</p>
+<h4 id="description-96"><a class="header" href="#description-96">Description</a></h4>
+<p>End the current call frame successfully, returning <code>length</code> bytes from emulated EVM linear memory at <code>offset</code> as the return data.</p>
+<h4 id="syntax-96"><a class="header" href="#syntax-96">Syntax</a></h4>
+<pre><code class="language-text">return($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-96"><a class="header" href="#example-96">Example</a></h4>
+<pre><code class="language-text">return(v0, v1)
+</code></pre>
+<h4 id="operands-96"><a class="header" href="#operands-96">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Return-data source offset.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Return-data length.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-96"><a class="header" href="#result-and-purity-96">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-96"><a class="header" href="#annotations-96">Annotations</a></h4>
+<p>None.</p>
+<h3 id="revert"><a class="header" href="#revert"><code>revert</code></a></h3>
+<p>(<code>Statement::Revert</code>)</p>
+<h4 id="description-97"><a class="header" href="#description-97">Description</a></h4>
+<p>End the current call frame with a revert, undoing all state changes made during the call, and returning <code>length</code> bytes of revert data from emulated EVM linear memory at <code>offset</code>.</p>
+<h4 id="syntax-97"><a class="header" href="#syntax-97">Syntax</a></h4>
+<pre><code class="language-text">revert($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-97"><a class="header" href="#example-97">Example</a></h4>
+<pre><code class="language-text">revert(v0, v1)
+</code></pre>
+<h4 id="operands-97"><a class="header" href="#operands-97">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-97"><a class="header" href="#result-and-purity-97">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-97"><a class="header" href="#annotations-97">Annotations</a></h4>
+<p>None.</p>
+<h3 id="stop"><a class="header" href="#stop"><code>stop</code></a></h3>
+<p>(<code>Statement::Stop</code>)</p>
+<h4 id="description-98"><a class="header" href="#description-98">Description</a></h4>
+<p>End the current call frame successfully with empty return data.</p>
+<h4 id="syntax-98"><a class="header" href="#syntax-98">Syntax</a></h4>
+<pre><code class="language-text">stop()
+</code></pre>
+<h4 id="example-98"><a class="header" href="#example-98">Example</a></h4>
+<pre><code class="language-text">stop()
+</code></pre>
+<h4 id="operands-98"><a class="header" href="#operands-98">Operands</a></h4>
+<p>None.</p>
+<h4 id="result-and-purity-98"><a class="header" href="#result-and-purity-98">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-98"><a class="header" href="#annotations-98">Annotations</a></h4>
+<p>None.</p>
+<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
+<p>(<code>Statement::Invalid</code>)</p>
+<h4 id="description-99"><a class="header" href="#description-99">Description</a></h4>
+<p>Unconditional invalid-opcode trap. Consumes all remaining gas and reverts. Used for unreachable branches and assertion failures.</p>
+<h4 id="syntax-99"><a class="header" href="#syntax-99">Syntax</a></h4>
+<pre><code class="language-text">invalid()
+</code></pre>
+<h4 id="example-99"><a class="header" href="#example-99">Example</a></h4>
+<pre><code class="language-text">invalid()
+</code></pre>
+<h4 id="operands-99"><a class="header" href="#operands-99">Operands</a></h4>
+<p>None.</p>
+<h4 id="result-and-purity-99"><a class="header" href="#result-and-purity-99">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-99"><a class="header" href="#annotations-99">Annotations</a></h4>
+<p>None.</p>
+<h3 id="selfdestruct"><a class="header" href="#selfdestruct"><code>selfdestruct</code></a></h3>
+<p>(<code>Statement::SelfDestruct</code>)</p>
+<h4 id="description-100"><a class="header" href="#description-100">Description</a></h4>
+<p>End the current call frame and transfer the contract’s remaining balance to <code>address</code>. Post-Cancun, the contract storage is not deleted (selfdestruct is effectively deprecated; the opcode still exists for legacy compatibility).</p>
+<h4 id="syntax-100"><a class="header" href="#syntax-100">Syntax</a></h4>
+<pre><code class="language-text">selfdestruct($address[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-100"><a class="header" href="#example-100">Example</a></h4>
+<pre><code class="language-text">selfdestruct(v0: i160)
+</code></pre>
+<h4 id="operands-100"><a class="header" href="#operands-100">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Recipient of the contract’s balance; narrows to <code>i160</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-100"><a class="header" href="#result-and-purity-100">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-100"><a class="header" href="#annotations-100">Annotations</a></h4>
+<p>None.</p>
+<h3 id="panic_revert"><a class="header" href="#panic_revert"><code>panic_revert</code></a></h3>
+<p>(<code>Statement::PanicRevert</code>)</p>
+<h4 id="description-101"><a class="header" href="#description-101">Description</a></h4>
+<p>Outlined Solidity panic revert. Equivalent to writing the <code>Panic(uint256)</code> ABI encoding (selector <code>0x4e487b71</code> plus the panic code) into emulated EVM linear memory and reverting, but emitted as a single statement that lowers to one outlined helper call. Common panic codes: <code>0x01</code> assertion failure, <code>0x11</code> arithmetic overflow, <code>0x12</code> division by zero, <code>0x32</code> array-out-of-bounds, <code>0x41</code> memory overflow.</p>
+<h4 id="syntax-101"><a class="header" href="#syntax-101">Syntax</a></h4>
+<pre><code class="language-text">panic_revert(0x&lt;hex&gt;)
+</code></pre>
+<h4 id="example-101"><a class="header" href="#example-101">Example</a></h4>
+<pre><code class="language-text">panic_revert(0x11)              // arithmetic overflow
+</code></pre>
+<h4 id="operands-101"><a class="header" href="#operands-101">Operands</a></h4>
+<p>None — the panic code is stored as a <code>u8</code> field on the IR, not an SSA operand.</p>
+<h4 id="result-and-purity-101"><a class="header" href="#result-and-purity-101">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-101"><a class="header" href="#annotations-101">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>code: u8</code></td><td>The panic code in <code>0x&lt;hex&gt;</code> form (two hex digits, zero-padded).</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="error_string_revert"><a class="header" href="#error_string_revert"><code>error_string_revert</code></a></h3>
+<p>(<code>Statement::ErrorStringRevert</code>)</p>
+<h4 id="description-102"><a class="header" href="#description-102">Description</a></h4>
+<p>Outlined Solidity <code>Error(string)</code> revert. Equivalent to writing the <code>Error</code> selector (<code>0x08c379a0</code>), the string offset and length, and up to four 32-byte data words into emulated EVM linear memory and reverting. The string length and the data words are stored as compile-time fields; no SSA operands.</p>
+<h4 id="syntax-102"><a class="header" href="#syntax-102">Syntax</a></h4>
+<pre><code class="language-text">error_string_revert(&lt;length&gt;, &lt;N&gt;_words)
+</code></pre>
+<h4 id="example-102"><a class="header" href="#example-102">Example</a></h4>
+<pre><code class="language-text">error_string_revert(12, 1_words)        // 12-byte string in one 32-byte word
+</code></pre>
+<h4 id="operands-102"><a class="header" href="#operands-102">Operands</a></h4>
+<p>None — the string length and data are compile-time fields, not SSA operands.</p>
+<h4 id="result-and-purity-102"><a class="header" href="#result-and-purity-102">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-102"><a class="header" href="#annotations-102">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>length: u8</code></td><td>The string length in bytes, in the first syntax position.</td></tr>
+<tr><td><code>data: Vec&lt;BigUint&gt;</code></td><td>The number of 32-byte data words (1–4), printed as <code>&lt;N&gt;_words</code> in the second syntax position. The actual data is stored separately and not shown in the printed form.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="custom_error_revert"><a class="header" href="#custom_error_revert"><code>custom_error_revert</code></a></h3>
+<p>(<code>Statement::CustomErrorRevert</code>)</p>
+<h4 id="description-103"><a class="header" href="#description-103">Description</a></h4>
+<p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
+<h4 id="syntax-103"><a class="header" href="#syntax-103">Syntax</a></h4>
+<pre><code class="language-text">custom_error_revert(0x&lt;hex&gt;, [$arg_0, $arg_1, …])
+</code></pre>
+<h4 id="example-103"><a class="header" href="#example-103">Example</a></h4>
+<pre><code class="language-text">custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+</code></pre>
+<h4 id="operands-103"><a class="header" href="#operands-103">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>arguments</code></td><td><code>Vec&lt;Value&gt;</code></td><td>0–3 argument values; the selector is a compile-time field.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-103"><a class="header" href="#result-and-purity-103">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-103"><a class="header" href="#annotations-103">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>selector: BigUint</code></td><td>The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position.</td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

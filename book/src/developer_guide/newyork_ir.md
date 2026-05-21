@@ -3824,3 +3824,296 @@ log2(v0, v1, v2, v3)            // two topics
 #### Annotations
 
 None.
+
+## Termination
+
+Statements that end the current call frame. Three plain forms (`return`, `revert`, `stop`), two unconditional traps (`invalid`, `selfdestruct`), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.
+
+### `return`
+
+(`Statement::Return`)
+
+#### Description
+
+End the current call frame successfully, returning `length` bytes from emulated EVM linear memory at `offset` as the return data.
+
+#### Syntax
+
+```text
+return($offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+return(v0, v1)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `offset` | `i256` | Return-data source offset. |
+| `length` | `i256` | Return-data length. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+None.
+
+### `revert`
+
+(`Statement::Revert`)
+
+#### Description
+
+End the current call frame with a revert, undoing all state changes made during the call, and returning `length` bytes of revert data from emulated EVM linear memory at `offset`.
+
+#### Syntax
+
+```text
+revert($offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+revert(v0, v1)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `offset` | `i256` | Revert-data source offset. |
+| `length` | `i256` | Revert-data length. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+None.
+
+### `stop`
+
+(`Statement::Stop`)
+
+#### Description
+
+End the current call frame successfully with empty return data.
+
+#### Syntax
+
+```text
+stop()
+```
+
+#### Example
+
+```text
+stop()
+```
+
+#### Operands
+
+None.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+None.
+
+### `invalid`
+
+(`Statement::Invalid`)
+
+#### Description
+
+Unconditional invalid-opcode trap. Consumes all remaining gas and reverts. Used for unreachable branches and assertion failures.
+
+#### Syntax
+
+```text
+invalid()
+```
+
+#### Example
+
+```text
+invalid()
+```
+
+#### Operands
+
+None.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+None.
+
+### `selfdestruct`
+
+(`Statement::SelfDestruct`)
+
+#### Description
+
+End the current call frame and transfer the contract's remaining balance to `address`. Post-Cancun, the contract storage is not deleted (selfdestruct is effectively deprecated; the opcode still exists for legacy compatibility).
+
+#### Syntax
+
+```text
+selfdestruct($address[: <type>])
+```
+
+#### Example
+
+```text
+selfdestruct(v0: i160)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `address` | `i256` | Recipient of the contract's balance; narrows to `i160`. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+None.
+
+### `panic_revert`
+
+(`Statement::PanicRevert`)
+
+#### Description
+
+Outlined Solidity panic revert. Equivalent to writing the `Panic(uint256)` ABI encoding (selector `0x4e487b71` plus the panic code) into emulated EVM linear memory and reverting, but emitted as a single statement that lowers to one outlined helper call. Common panic codes: `0x01` assertion failure, `0x11` arithmetic overflow, `0x12` division by zero, `0x32` array-out-of-bounds, `0x41` memory overflow.
+
+#### Syntax
+
+```text
+panic_revert(0x<hex>)
+```
+
+#### Example
+
+```text
+panic_revert(0x11)              // arithmetic overflow
+```
+
+#### Operands
+
+None — the panic code is stored as a `u8` field on the IR, not an SSA operand.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `code: u8` | The panic code in `0x<hex>` form (two hex digits, zero-padded). |
+
+### `error_string_revert`
+
+(`Statement::ErrorStringRevert`)
+
+#### Description
+
+Outlined Solidity `Error(string)` revert. Equivalent to writing the `Error` selector (`0x08c379a0`), the string offset and length, and up to four 32-byte data words into emulated EVM linear memory and reverting. The string length and the data words are stored as compile-time fields; no SSA operands.
+
+#### Syntax
+
+```text
+error_string_revert(<length>, <N>_words)
+```
+
+#### Example
+
+```text
+error_string_revert(12, 1_words)        // 12-byte string in one 32-byte word
+```
+
+#### Operands
+
+None — the string length and data are compile-time fields, not SSA operands.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `length: u8` | The string length in bytes, in the first syntax position. |
+| `data: Vec<BigUint>` | The number of 32-byte data words (1–4), printed as `<N>_words` in the second syntax position. The actual data is stored separately and not shown in the printed form. |
+
+### `custom_error_revert`
+
+(`Statement::CustomErrorRevert`)
+
+#### Description
+
+Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset `0`.
+
+#### Syntax
+
+```text
+custom_error_revert(0x<hex>, [$arg_0, $arg_1, …])
+```
+
+#### Example
+
+```text
+custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `arguments` | `Vec<Value>` | 0–3 argument values; the selector is a compile-time field. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None — terminates the call frame | Effectful (terminator) |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `selector: BigUint` | The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position. |

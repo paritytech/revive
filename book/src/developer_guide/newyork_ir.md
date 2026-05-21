@@ -3565,3 +3565,262 @@ None — the body is a region, not an operand.
 #### Annotations
 
 None.
+
+## External interaction
+
+Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.
+
+### `call`
+
+(`Statement::ExternalCall` with `CallKind::Call`)
+
+#### Description
+
+Standard external call that may transfer value. Reads `args_length` bytes from emulated EVM linear memory at `args_offset` as calldata, executes the target, and writes up to `ret_length` bytes of return data into linear memory at `ret_offset`. The boolean result indicates success.
+
+#### Syntax
+
+```text
+let $result := call($gas[: <type>], $address[: <type>], $value[: <type>], $args_offset[: <type>], $args_length[: <type>], $ret_offset[: <type>], $ret_length[: <type>])
+```
+
+#### Example
+
+```text
+let v8 := call(v0, v1: i160, v2, v3, v4, v5, v6)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `gas` | `i256` | Gas to forward to the target. |
+| `address` | `i256` | Callee address; narrows to `i160`. |
+| `value` | `i256` | Wei to transfer with the call. |
+| `args_offset` | `i256` | Calldata source offset in linear memory. |
+| `args_length` | `i256` | Calldata length in bytes. |
+| `ret_offset` | `i256` | Return-data destination offset in linear memory. |
+| `ret_length` | `i256` | Maximum return-data length. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (success flag: `1` on success, `0` on revert/error; narrowable to `i1`) | Effectful |
+
+#### Annotations
+
+None.
+
+### `callcode`
+
+(`Statement::ExternalCall` with `CallKind::CallCode`)
+
+#### Description
+
+Deprecated EVM opcode that executes the callee's code in the caller's context but with the callee's storage. Preserved for Solidity compatibility; new code should use [`delegatecall`](#delegatecall).
+
+#### Syntax
+
+```text
+let $result := callcode($gas[: <type>], $address[: <type>], $value[: <type>], $args_offset[: <type>], $args_length[: <type>], $ret_offset[: <type>], $ret_length[: <type>])
+```
+
+#### Example
+
+```text
+let v8 := callcode(v0, v1: i160, v2, v3, v4, v5, v6)
+```
+
+#### Operands
+
+Same shape as [`call`](#call).
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (success flag; narrowable to `i1`) | Effectful |
+
+#### Annotations
+
+None.
+
+### `delegatecall`
+
+(`Statement::ExternalCall` with `CallKind::DelegateCall`)
+
+#### Description
+
+Execute the callee's code in the caller's context: same storage, same sender, same call value. The standard mechanism for library calls and proxy patterns. No `value` operand (the caller's call value is inherited).
+
+#### Syntax
+
+```text
+let $result := delegatecall($gas[: <type>], $address[: <type>], $args_offset[: <type>], $args_length[: <type>], $ret_offset[: <type>], $ret_length[: <type>])
+```
+
+#### Example
+
+```text
+let v7 := delegatecall(v0, v1: i160, v2, v3, v4, v5)
+```
+
+#### Operands
+
+Same shape as [`call`](#call) minus the `value` operand.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (success flag; narrowable to `i1`) | Effectful |
+
+#### Annotations
+
+None.
+
+### `staticcall`
+
+(`Statement::ExternalCall` with `CallKind::StaticCall`)
+
+#### Description
+
+Read-only external call. Any state modification in the callee (including nested calls) causes the call to revert. No `value` operand.
+
+#### Syntax
+
+```text
+let $result := staticcall($gas[: <type>], $address[: <type>], $args_offset[: <type>], $args_length[: <type>], $ret_offset[: <type>], $ret_length[: <type>])
+```
+
+#### Example
+
+```text
+let v7 := staticcall(v0, v1: i160, v2, v3, v4, v5)
+```
+
+#### Operands
+
+Same shape as [`call`](#call) minus the `value` operand.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (success flag; narrowable to `i1`) | Effectful (no state writes, but still an external boundary and may revert) |
+
+#### Annotations
+
+None.
+
+### `create`
+
+(`Statement::Create` with `CreateKind::Create`)
+
+#### Description
+
+Deploy a new contract with the given init-code bytes, transferring `value` wei from the caller. The new contract's address is derived from the caller's address and nonce; on failure the result is `0`.
+
+#### Syntax
+
+```text
+let $result := create($value[: <type>], $offset[: <type>], $length[: <type>])
+```
+
+#### Example
+
+```text
+let v4 := create(v0, v1, v2)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `value` | `i256` | Wei to transfer to the new contract. |
+| `offset` | `i256` | Linear-memory offset of the init code. |
+| `length` | `i256` | Length of the init code in bytes. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (created address; narrowable to `i160` on success, `0` on failure) | Effectful |
+
+#### Annotations
+
+None.
+
+### `create2`
+
+(`Statement::Create` with `CreateKind::Create2`)
+
+#### Description
+
+Deploy a new contract with a deterministic address derived from the caller's address, the salt, and the init-code hash. Same operand shape as [`create`](#create) plus an additional `salt`.
+
+#### Syntax
+
+```text
+let $result := create2($value[: <type>], $offset[: <type>], $length[: <type>], $salt[: <type>])
+```
+
+#### Example
+
+```text
+let v5 := create2(v0, v1, v2, v3)
+```
+
+#### Operands
+
+Same as [`create`](#create) plus `salt: i256`.
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| `i256` (created address; narrowable to `i160` on success, `0` on failure) | Effectful |
+
+#### Annotations
+
+None.
+
+### `log<N>`
+
+(`Statement::Log`)
+
+#### Description
+
+Emit an event log entry. The mnemonic suffix `<N>` is the number of indexed topics (`0` through `4`), determined by the length of the IR's `topics` field. The data portion is read from `length` bytes of emulated EVM linear memory at `offset`.
+
+#### Syntax
+
+```text
+log<N>($offset[: <type>], $length[: <type>][, $topic_0[: <type>], …])
+```
+
+#### Example
+
+```text
+log0(v0, v1)
+log2(v0, v1, v2, v3)            // two topics
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `offset` | `i256` | Data source offset in linear memory. |
+| `length` | `i256` | Data length in bytes. |
+| `topics` | `Vec<Value>` | Zero to four indexed topic values; the length determines the mnemonic suffix. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+None.

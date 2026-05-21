@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-93b463e0.js";
+            window.path_to_searchindex_js = "../searchindex-bd864ca2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -3450,6 +3450,221 @@ leave                       // returns nothing (void function)
 </table>
 </div>
 <h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
+<p>None.</p>
+<h2 id="external-interaction-1"><a class="header" href="#external-interaction-1">External interaction</a></h2>
+<p>Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
+<h3 id="call"><a class="header" href="#call"><code>call</code></a></h3>
+<p>(<code>Statement::ExternalCall</code> with <code>CallKind::Call</code>)</p>
+<h4 id="description-89"><a class="header" href="#description-89">Description</a></h4>
+<p>Standard external call that may transfer value. Reads <code>args_length</code> bytes from emulated EVM linear memory at <code>args_offset</code> as calldata, executes the target, and writes up to <code>ret_length</code> bytes of return data into linear memory at <code>ret_offset</code>. The boolean result indicates success.</p>
+<h4 id="syntax-89"><a class="header" href="#syntax-89">Syntax</a></h4>
+<pre><code class="language-text">let $result := call($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-89"><a class="header" href="#example-89">Example</a></h4>
+<pre><code class="language-text">let v8 := call(v0, v1: i160, v2, v3, v4, v5, v6)
+</code></pre>
+<h4 id="operands-89"><a class="header" href="#operands-89">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gas</code></td><td><code>i256</code></td><td>Gas to forward to the target.</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Callee address; narrows to <code>i160</code>.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer with the call.</td></tr>
+<tr><td><code>args_offset</code></td><td><code>i256</code></td><td>Calldata source offset in linear memory.</td></tr>
+<tr><td><code>args_length</code></td><td><code>i256</code></td><td>Calldata length in bytes.</td></tr>
+<tr><td><code>ret_offset</code></td><td><code>i256</code></td><td>Return-data destination offset in linear memory.</td></tr>
+<tr><td><code>ret_length</code></td><td><code>i256</code></td><td>Maximum return-data length.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-89"><a class="header" href="#result-and-purity-89">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (success flag: <code>1</code> on success, <code>0</code> on revert/error; narrowable to <code>i1</code>)</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-89"><a class="header" href="#annotations-89">Annotations</a></h4>
+<p>None.</p>
+<h3 id="callcode"><a class="header" href="#callcode"><code>callcode</code></a></h3>
+<p>(<code>Statement::ExternalCall</code> with <code>CallKind::CallCode</code>)</p>
+<h4 id="description-90"><a class="header" href="#description-90">Description</a></h4>
+<p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Preserved for Solidity compatibility; new code should use <a href="#delegatecall"><code>delegatecall</code></a>.</p>
+<h4 id="syntax-90"><a class="header" href="#syntax-90">Syntax</a></h4>
+<pre><code class="language-text">let $result := callcode($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-90"><a class="header" href="#example-90">Example</a></h4>
+<pre><code class="language-text">let v8 := callcode(v0, v1: i160, v2, v3, v4, v5, v6)
+</code></pre>
+<h4 id="operands-90"><a class="header" href="#operands-90">Operands</a></h4>
+<p>Same shape as <a href="#call"><code>call</code></a>.</p>
+<h4 id="result-and-purity-90"><a class="header" href="#result-and-purity-90">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (success flag; narrowable to <code>i1</code>)</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-90"><a class="header" href="#annotations-90">Annotations</a></h4>
+<p>None.</p>
+<h3 id="delegatecall"><a class="header" href="#delegatecall"><code>delegatecall</code></a></h3>
+<p>(<code>Statement::ExternalCall</code> with <code>CallKind::DelegateCall</code>)</p>
+<h4 id="description-91"><a class="header" href="#description-91">Description</a></h4>
+<p>Execute the callee’s code in the caller’s context: same storage, same sender, same call value. The standard mechanism for library calls and proxy patterns. No <code>value</code> operand (the caller’s call value is inherited).</p>
+<h4 id="syntax-91"><a class="header" href="#syntax-91">Syntax</a></h4>
+<pre><code class="language-text">let $result := delegatecall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-91"><a class="header" href="#example-91">Example</a></h4>
+<pre><code class="language-text">let v7 := delegatecall(v0, v1: i160, v2, v3, v4, v5)
+</code></pre>
+<h4 id="operands-91"><a class="header" href="#operands-91">Operands</a></h4>
+<p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
+<h4 id="result-and-purity-91"><a class="header" href="#result-and-purity-91">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (success flag; narrowable to <code>i1</code>)</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-91"><a class="header" href="#annotations-91">Annotations</a></h4>
+<p>None.</p>
+<h3 id="staticcall"><a class="header" href="#staticcall"><code>staticcall</code></a></h3>
+<p>(<code>Statement::ExternalCall</code> with <code>CallKind::StaticCall</code>)</p>
+<h4 id="description-92"><a class="header" href="#description-92">Description</a></h4>
+<p>Read-only external call. Any state modification in the callee (including nested calls) causes the call to revert. No <code>value</code> operand.</p>
+<h4 id="syntax-92"><a class="header" href="#syntax-92">Syntax</a></h4>
+<pre><code class="language-text">let $result := staticcall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-92"><a class="header" href="#example-92">Example</a></h4>
+<pre><code class="language-text">let v7 := staticcall(v0, v1: i160, v2, v3, v4, v5)
+</code></pre>
+<h4 id="operands-92"><a class="header" href="#operands-92">Operands</a></h4>
+<p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
+<h4 id="result-and-purity-92"><a class="header" href="#result-and-purity-92">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (success flag; narrowable to <code>i1</code>)</td><td>Effectful (no state writes, but still an external boundary and may revert)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-92"><a class="header" href="#annotations-92">Annotations</a></h4>
+<p>None.</p>
+<h3 id="create"><a class="header" href="#create"><code>create</code></a></h3>
+<p>(<code>Statement::Create</code> with <code>CreateKind::Create</code>)</p>
+<h4 id="description-93"><a class="header" href="#description-93">Description</a></h4>
+<p>Deploy a new contract with the given init-code bytes, transferring <code>value</code> wei from the caller. The new contract’s address is derived from the caller’s address and nonce; on failure the result is <code>0</code>.</p>
+<h4 id="syntax-93"><a class="header" href="#syntax-93">Syntax</a></h4>
+<pre><code class="language-text">let $result := create($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-93"><a class="header" href="#example-93">Example</a></h4>
+<pre><code class="language-text">let v4 := create(v0, v1, v2)
+</code></pre>
+<h4 id="operands-93"><a class="header" href="#operands-93">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer to the new contract.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Linear-memory offset of the init code.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Length of the init code in bytes.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-93"><a class="header" href="#result-and-purity-93">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (created address; narrowable to <code>i160</code> on success, <code>0</code> on failure)</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-93"><a class="header" href="#annotations-93">Annotations</a></h4>
+<p>None.</p>
+<h3 id="create2"><a class="header" href="#create2"><code>create2</code></a></h3>
+<p>(<code>Statement::Create</code> with <code>CreateKind::Create2</code>)</p>
+<h4 id="description-94"><a class="header" href="#description-94">Description</a></h4>
+<p>Deploy a new contract with a deterministic address derived from the caller’s address, the salt, and the init-code hash. Same operand shape as <a href="#create"><code>create</code></a> plus an additional <code>salt</code>.</p>
+<h4 id="syntax-94"><a class="header" href="#syntax-94">Syntax</a></h4>
+<pre><code class="language-text">let $result := create2($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;], $salt[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-94"><a class="header" href="#example-94">Example</a></h4>
+<pre><code class="language-text">let v5 := create2(v0, v1, v2, v3)
+</code></pre>
+<h4 id="operands-94"><a class="header" href="#operands-94">Operands</a></h4>
+<p>Same as <a href="#create"><code>create</code></a> plus <code>salt: i256</code>.</p>
+<h4 id="result-and-purity-94"><a class="header" href="#result-and-purity-94">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code> (created address; narrowable to <code>i160</code> on success, <code>0</code> on failure)</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-94"><a class="header" href="#annotations-94">Annotations</a></h4>
+<p>None.</p>
+<h3 id="logn"><a class="header" href="#logn"><code>log&lt;N&gt;</code></a></h3>
+<p>(<code>Statement::Log</code>)</p>
+<h4 id="description-95"><a class="header" href="#description-95">Description</a></h4>
+<p>Emit an event log entry. The mnemonic suffix <code>&lt;N&gt;</code> is the number of indexed topics (<code>0</code> through <code>4</code>), determined by the length of the IR’s <code>topics</code> field. The data portion is read from <code>length</code> bytes of emulated EVM linear memory at <code>offset</code>.</p>
+<h4 id="syntax-95"><a class="header" href="#syntax-95">Syntax</a></h4>
+<pre><code class="language-text">log&lt;N&gt;($offset[: &lt;type&gt;], $length[: &lt;type&gt;][, $topic_0[: &lt;type&gt;], …])
+</code></pre>
+<h4 id="example-95"><a class="header" href="#example-95">Example</a></h4>
+<pre><code class="language-text">log0(v0, v1)
+log2(v0, v1, v2, v3)            // two topics
+</code></pre>
+<h4 id="operands-95"><a class="header" href="#operands-95">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Data source offset in linear memory.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Data length in bytes.</td></tr>
+<tr><td><code>topics</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Zero to four indexed topic values; the length determines the mnemonic suffix.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-95"><a class="header" href="#result-and-purity-95">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
 <p>None.</p>
 
                     </main>

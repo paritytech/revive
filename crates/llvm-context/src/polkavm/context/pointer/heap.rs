@@ -1,5 +1,7 @@
 //! The revive simulated EVM linear memory pointer functions.
 
+use std::num::NonZeroU32;
+
 use inkwell::values::BasicValueEnum;
 
 use revive_common::BYTE_LENGTH_BYTE;
@@ -88,8 +90,14 @@ pub(crate) fn build_efficient_load_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
-    let i64_type = context.llvm().custom_width_int_type(64);
-    let i8_type = context.llvm().custom_width_int_type(8);
+    let i64_type = context
+        .llvm()
+        .custom_width_int_type(NonZeroU32::new(64).expect("const is non-zero"))
+        .expect("valid integer width");
+    let i8_type = context
+        .llvm()
+        .custom_width_int_type(NonZeroU32::new(8).expect("const is non-zero"))
+        .expect("valid integer width");
     let word_type = context.word_type();
 
     let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")
@@ -174,8 +182,14 @@ pub(crate) fn build_efficient_store_swap<'ctx>(
     pointer: inkwell::values::PointerValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
-    let i64_type = context.llvm().custom_width_int_type(64);
-    let i8_type = context.llvm().custom_width_int_type(8);
+    let i64_type = context
+        .llvm()
+        .custom_width_int_type(NonZeroU32::new(64).expect("const is non-zero"))
+        .expect("valid integer width");
+    let i8_type = context
+        .llvm()
+        .custom_width_int_type(NonZeroU32::new(8).expect("const is non-zero"))
+        .expect("valid integer width");
     let word_type = context.word_type();
 
     let bswap64 = inkwell::intrinsics::Intrinsic::find("llvm.bswap.i64")

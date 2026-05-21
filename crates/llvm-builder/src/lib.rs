@@ -82,6 +82,8 @@ pub fn build(
         )
     }
 
+    utils::apply_patches()?;
+
     std::fs::create_dir_all(llvm_path::DIRECTORY_LLVM_TARGET.get().unwrap())?;
 
     if cfg!(target_arch = "x86_64") {

@@ -20,6 +20,9 @@ impl LLVMPath {
     /// The Emscripten SDK source directory.
     pub const DIRECTORY_EMSDK_SOURCE: &'static str = "./emsdk/";
 
+    /// The directory containing patches to apply to the LLVM source.
+    pub const DIRECTORY_PATCHES: &'static str = "./patches/llvm/";
+
     /// Returns the path to the `llvm` stage 1 host LLVM source module directory.
     pub fn llvm_host_module_llvm() -> anyhow::Result<PathBuf> {
         let mut path = PathBuf::from(Self::DIRECTORY_LLVM_HOST_SOURCE);

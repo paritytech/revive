@@ -67,6 +67,7 @@ test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
+test_spec!(erc7201, "ERC7201", "ERC7201.sol");
 test_spec!(call_gas, "CallGas", "CallGas.sol");
 test_spec!(linker_symbol, "Linked", "Linked.sol");
 test_spec!(

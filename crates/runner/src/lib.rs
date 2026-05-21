@@ -92,11 +92,12 @@ impl ExtBuilder {
             .unwrap();
 
         pallet_revive::GenesisConfig::<Runtime> {
-            debug_settings: Some(DebugSettings::new(
-                true, // allow unlimited contract size
-                true, // bypass EIP 3607
-                true, // enable PVM logs
-            )),
+            debug_settings: Some(
+                DebugSettings::default()
+                    .set_allow_unlimited_contract_size(true)
+                    .set_bypass_eip_3607(true)
+                    .set_enable_pvm_logs(true),
+            ),
             ..Default::default()
         }
         .assimilate_storage(&mut t)

@@ -1,6 +1,6 @@
 [package]
 name = "lld-sys"
-version.workspace = true
+version = "1.1.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true

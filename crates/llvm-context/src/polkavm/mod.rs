@@ -1,6 +1,7 @@
 //! The LLVM context library.
 
 use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 
 use crate::debug_config::DebugConfig;
 use crate::optimizer::settings::Settings as OptimizerSettings;
@@ -80,7 +81,7 @@ pub fn link(
         Ok(format @ ObjectFormat::PVM) => (bytecode.to_vec(), format),
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
-            let bytecode_linked = ElfLinker::setup()?.link(bytecode, symbols.as_slice())?;
+            let bytecode_linked = ElfLinker::setup()?.link(bytecode, &symbols)?;
             polkavm_linker(&bytecode_linked, strip_binary)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
                 .unwrap_or_else(|error| {
@@ -105,11 +106,17 @@ pub fn link(
 pub fn build_symbols(
     linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
     factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
-) -> anyhow::Result<inkwell::memory_buffer::MemoryBuffer> {
+) -> anyhow::Result<Vec<u8>> {
     let context = inkwell::context::Context::create();
     let module = context.create_module("symbols");
-    let word_type = context.custom_width_int_type(BIT_LENGTH_WORD as u32);
-    let address_type = context.custom_width_int_type(BIT_LENGTH_ETH_ADDRESS as u32);
+    let word_type = context
+        .custom_width_int_type(NonZeroU32::new(BIT_LENGTH_WORD as u32).expect("const is non-zero"))
+        .expect("valid integer width");
+    let address_type = context
+        .custom_width_int_type(
+            NonZeroU32::new(BIT_LENGTH_ETH_ADDRESS as u32).expect("const is non-zero"),
+        )
+        .expect("valid integer width");
 
     for (name, value) in linker_symbols {
         let global_value = module.add_global(address_type, Default::default(), name);
@@ -137,11 +144,11 @@ pub fn build_symbols(
         );
     }
 
-    Ok(
-        PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none())?
-            .write_to_memory_buffer(&module)
-            .expect("ICE: the symbols module should be valid"),
-    )
+    let target_machine = PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none())?;
+    let buffer = target_machine
+        .write_to_memory_buffer(&module)
+        .expect("ICE: the symbols module should be valid");
+    Ok(buffer.as_slice().to_vec())
 }
 /// Implemented by items which are translated into LLVM IR.
 pub trait WriteLLVM {

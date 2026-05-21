@@ -50,7 +50,7 @@ jobs:
 
       - name: Set LLVM Environment Variables
         run: |
-          echo "LLVM_SYS_211_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
           echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/llvm-wasm32-unknown-emscripten" >> $GITHUB_ENV
 
       - name: Build Revive
@@ -86,9 +86,9 @@ jobs:
           path: ${{ env.REVIVE_WASM_INSTALL_DIR }}
 
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install Node Packages
         run: npm install

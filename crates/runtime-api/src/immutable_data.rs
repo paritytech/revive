@@ -16,6 +16,8 @@
 //!
 //! [0]: https://llvm.org/docs/LangRef.html#global-variables
 
+use std::num::NonZeroU32;
+
 /// The immutable data module name.
 pub static MODULE_NAME: &str = "__evm_immutables";
 /// The immutable data global pointer.
@@ -28,13 +30,20 @@ pub static IMMUTABLE_DATA_MAX_SIZE: u32 = 4 * 1024;
 /// Returns the immutable data global type.
 pub fn data_type(context: &inkwell::context::Context, size: u32) -> inkwell::types::ArrayType<'_> {
     context
-        .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
+        .custom_width_int_type(
+            NonZeroU32::new(revive_common::BIT_LENGTH_WORD as u32).expect("const is non-zero"),
+        )
+        .expect("valid integer width")
         .array_type(size)
 }
 
 /// Returns the immutable data size global type.
 pub fn size_type(context: &inkwell::context::Context) -> inkwell::types::IntType<'_> {
-    context.custom_width_int_type(revive_common::BIT_LENGTH_X32 as u32)
+    context
+        .custom_width_int_type(
+            NonZeroU32::new(revive_common::BIT_LENGTH_X32 as u32).expect("const is non-zero"),
+        )
+        .expect("valid integer width")
 }
 
 /// Creates a LLVM module with the immutable data and its `size` in bytes.

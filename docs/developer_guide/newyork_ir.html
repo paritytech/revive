@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-98ffaedf.js";
+            window.path_to_searchindex_js = "../searchindex-cfbfcc89.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -3060,6 +3060,121 @@ sstore(v2, v3) /* slot: 0x0 */
 </div>
 <h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
 <p>None.</p>
+<h2 id="bindings-and-wrappers-1"><a class="header" href="#bindings-and-wrappers-1">Bindings and wrappers</a></h2>
+<p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
+<h3 id="let"><a class="header" href="#let"><code>let</code></a></h3>
+<p>(<code>Statement::Let</code>)</p>
+<h4 id="description-79"><a class="header" href="#description-79">Description</a></h4>
+<p>SSA binding: evaluate an expression and bind its result(s) to a list of fresh value ids. The <code>let</code> statement is the only mechanism by which pure expressions enter the value namespace; every <code>v&lt;id&gt;</code> in a dump was produced by a <code>let</code> (or by a value-yielding control-flow statement or by a parameter at function entry).</p>
+<h4 id="syntax-79"><a class="header" href="#syntax-79">Syntax</a></h4>
+<pre><code class="language-text">let $binding_0[, $binding_1, …] := $expression
+</code></pre>
+<h4 id="example-79"><a class="header" href="#example-79">Example</a></h4>
+<pre><code class="language-text">let v3 := add(v0, v1)
+let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a value-yielding If
+</code></pre>
+<h4 id="operands-79"><a class="header" href="#operands-79">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bindings</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>One or more fresh SSA ids to bind. Most expressions produce one value; control-flow statements may produce several.</td></tr>
+<tr><td><code>value</code></td><td><code>Expression</code></td><td>The right-hand side; see any of the Pure expression entries.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-79"><a class="header" href="#result-and-purity-79">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None directly — the bound ids carry the expression’s result(s)</td><td>Effectful (binding establishment); the right-hand side’s purity is independent</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-79"><a class="header" href="#annotations-79">Annotations</a></h4>
+<p>None.</p>
+<h3 id="expression-statement"><a class="header" href="#expression-statement">Expression statement</a></h3>
+<p>(<code>Statement::Expression</code>)</p>
+<h4 id="description-80"><a class="header" href="#description-80">Description</a></h4>
+<p>Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a user-defined function call (<code>Expression::Call</code>) whose return values the source code discarded, or another Yul expression statement that does not have a dedicated <code>Statement::</code> variant. EVM external calls (<code>call</code>, <code>delegatecall</code>, etc.) and contract creation (<code>create</code>, <code>create2</code>) translate to dedicated <code>Statement::ExternalCall</code> and <code>Statement::Create</code> variants, not through this wrapper.</p>
+<h4 id="syntax-80"><a class="header" href="#syntax-80">Syntax</a></h4>
+<pre><code class="language-text">$expression
+</code></pre>
+<h4 id="example-80"><a class="header" href="#example-80">Example</a></h4>
+<pre><code class="language-text">keccak256(v0, v1)           // hash computed but not bound to a value
+</code></pre>
+<h4 id="operands-80"><a class="header" href="#operands-80">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>expression</code></td><td><code>Expression</code></td><td>Any expression; result is discarded.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-80"><a class="header" href="#result-and-purity-80">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (per its statement position)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-80"><a class="header" href="#annotations-80">Annotations</a></h4>
+<p>None.</p>
+<h3 id="setimmutable"><a class="header" href="#setimmutable"><code>setimmutable</code></a></h3>
+<p>(<code>Statement::SetImmutable</code>)</p>
+<h4 id="description-81"><a class="header" href="#description-81">Description</a></h4>
+<p>Write an immutable variable during contract construction. Immutables are written once in the constructor and read later via <a href="#loadimmutable"><code>loadimmutable</code></a>. The key is a string identifier resolved by the linker.</p>
+<h4 id="syntax-81"><a class="header" href="#syntax-81">Syntax</a></h4>
+<pre><code class="language-text">setimmutable("&lt;key&gt;", $value[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-81"><a class="header" href="#example-81">Example</a></h4>
+<pre><code class="language-text">setimmutable("MyContract.owner", v0: i160)
+</code></pre>
+<h4 id="operands-81"><a class="header" href="#operands-81">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The value to store; the key is a quoted string literal in the syntax position.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-81"><a class="header" href="#result-and-purity-81">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-81"><a class="header" href="#annotations-81">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key: String</code></td><td>The quoted identifier in the syntax position.</td></tr>
+</tbody>
+</table>
+</div>
 
                     </main>
 

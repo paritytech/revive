@@ -3136,3 +3136,119 @@ calldatacopy(v0, v1, v2)
 #### Annotations
 
 None.
+
+## Bindings and wrappers
+
+The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix's earlier sections appears on the right-hand side of one of these statements (almost always `let`).
+
+### `let`
+
+(`Statement::Let`)
+
+#### Description
+
+SSA binding: evaluate an expression and bind its result(s) to a list of fresh value ids. The `let` statement is the only mechanism by which pure expressions enter the value namespace; every `v<id>` in a dump was produced by a `let` (or by a value-yielding control-flow statement or by a parameter at function entry).
+
+#### Syntax
+
+```text
+let $binding_0[, $binding_1, …] := $expression
+```
+
+#### Example
+
+```text
+let v3 := add(v0, v1)
+let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a value-yielding If
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `bindings` | `Vec<ValueId>` | One or more fresh SSA ids to bind. Most expressions produce one value; control-flow statements may produce several. |
+| `value` | `Expression` | The right-hand side; see any of the Pure expression entries. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None directly — the bound ids carry the expression's result(s) | Effectful (binding establishment); the right-hand side's purity is independent |
+
+#### Annotations
+
+None.
+
+### Expression statement
+
+(`Statement::Expression`)
+
+#### Description
+
+Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a user-defined function call (`Expression::Call`) whose return values the source code discarded, or another Yul expression statement that does not have a dedicated `Statement::` variant. EVM external calls (`call`, `delegatecall`, etc.) and contract creation (`create`, `create2`) translate to dedicated `Statement::ExternalCall` and `Statement::Create` variants, not through this wrapper.
+
+#### Syntax
+
+```text
+$expression
+```
+
+#### Example
+
+```text
+keccak256(v0, v1)           // hash computed but not bound to a value
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `expression` | `Expression` | Any expression; result is discarded. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful (per its statement position) |
+
+#### Annotations
+
+None.
+
+### `setimmutable`
+
+(`Statement::SetImmutable`)
+
+#### Description
+
+Write an immutable variable during contract construction. Immutables are written once in the constructor and read later via [`loadimmutable`](#loadimmutable). The key is a string identifier resolved by the linker.
+
+#### Syntax
+
+```text
+setimmutable("<key>", $value[: <type>])
+```
+
+#### Example
+
+```text
+setimmutable("MyContract.owner", v0: i160)
+```
+
+#### Operands
+
+| Name | Type | Notes |
+|---|---|---|
+| `value` | `i256` | The value to store; the key is a quoted string literal in the syntax position. |
+
+#### Result and purity
+
+| Result | Purity |
+|---|---|
+| None | Effectful |
+
+#### Annotations
+
+| Source field | Printed as |
+|---|---|
+| `key: String` | The quoted identifier in the syntax position. |

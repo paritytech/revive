@@ -73,6 +73,7 @@ jobs:
       contents: write # for uploading assets to release
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # without this it will override our rust flags
@@ -100,6 +101,13 @@ jobs:
         if: ${{ matrix.host == 'windows' }}
         run: |
           choco install ninja
+
+      # Provides MSVC toolchain (ml64, headers, libs) used by clang-cl when building LLVM.
+      - name: Set Up MSVC Developer Environment
+        if: ${{ matrix.host == 'windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Install LLVM Builder
         run: |

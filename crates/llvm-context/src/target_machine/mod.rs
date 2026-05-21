@@ -62,7 +62,7 @@ impl TargetMachine {
     pub fn write_to_memory_buffer(
         &self,
         module: &inkwell::module::Module,
-    ) -> Result<inkwell::memory_buffer::MemoryBuffer, inkwell::support::LLVMString> {
+    ) -> Result<inkwell::memory_buffer::MemoryBuffer<'static>, inkwell::support::LLVMString> {
         match self.target {
             Target::PVM => self
                 .target_machine

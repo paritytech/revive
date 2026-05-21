@@ -1,6 +1,6 @@
 [package]
 name = "resolc"
-version = "1.0.0"
+version = "1.1.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -42,7 +42,7 @@ mimalloc = { version = "0.1.46", default-features = false }
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 libc = { workspace = true }
-inkwell = { workspace = true, features = ["target-riscv", "llvm21-1-no-llvm-linking"]}
+inkwell = { workspace = true, features = ["target-riscv", "llvm22-1-no-llvm-linking"]}
 
 [build-dependencies]
 git2 = { workspace = true, default-features = false }

@@ -456,7 +456,7 @@ impl Specs {
                                 code,
                                 data,
                                 salt.0,
-                                ExecConfig::new_substrate_tx(),
+                                &ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Instantiate {
                                 result,
@@ -495,7 +495,7 @@ impl Specs {
                                     deposit_limit: storage_deposit_limit.unwrap_or(DEPOSIT_LIMIT),
                                 },
                                 data,
-                                ExecConfig::new_substrate_tx(),
+                                &ExecConfig::new_substrate_tx(),
                             );
                             results.push(CallResult::Exec {
                                 result,

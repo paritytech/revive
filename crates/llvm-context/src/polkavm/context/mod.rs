@@ -3,13 +3,13 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
-use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -318,7 +318,6 @@ impl<'ctx> Context<'ctx> {
     ) -> anyhow::Result<Build> {
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
-
         let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         self.module().set_triple(&target_machine.get_triple());
 
@@ -342,22 +341,6 @@ impl<'ctx> Context<'ctx> {
                     error
                 )
             })?;
-
-        // Narrow large integer div/rem where operands provably fit in a smaller
-        // type. LLVM's DivRemNarrowing pass sometimes fails on large functions,
-        // leaving behind i256 div/rem that triggers strip_minsize_for_divrem.
-        self.narrow_divrem_instructions();
-
-        // Remove MinSize on functions that perform large integer div/rem to
-        // avoid compiler crash that happens when large integer div/rem by
-        // power-of-2 are not being expanded by ExpandLargeIntDivRem pass as
-        // it expects peephole from DAGCombine, which doesn't happen due to the
-        // MinSize attribute being set on the function.
-        // NOTE: As soon as it strips attribute from a function where large
-        // integer div/rem is used, it's crucial to call it after inlining.
-        // TODO: Remove this once LLVM fix is backported to LLVM 21 and we
-        // switch to corresponding inkwell version.
-        self.strip_minsize_for_divrem();
 
         self.debug_config
             .dump_llvm_ir_optimized(contract_path, self.module())?;
@@ -1436,23 +1419,37 @@ impl<'ctx> Context<'ctx> {
     /// Returns the default byte type.
     pub fn byte_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_BYTE as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_BYTE as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the integer type of the specified bit-length.
     pub fn integer_type(&self, bit_length: usize) -> inkwell::types::IntType<'ctx> {
-        self.llvm.custom_width_int_type(bit_length as u32)
+        self.llvm
+            .custom_width_int_type(
+                NonZeroU32::new(bit_length as u32).expect("bit length is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the XLEN witdh sized type.
     pub fn xlen_type(&self) -> inkwell::types::IntType<'ctx> {
-        self.llvm.custom_width_int_type(crate::polkavm::XLEN as u32)
+        self.llvm
+            .custom_width_int_type(
+                NonZeroU32::new(crate::polkavm::XLEN as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the PolkaVM native register width sized type.
     pub fn register_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_X64 as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_X64 as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the sentinel pointer value.
@@ -1472,13 +1469,19 @@ impl<'ctx> Context<'ctx> {
     /// Returns the runtime value width sized type.
     pub fn value_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_VALUE as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_VALUE as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the default word type.
     pub fn word_type(&self) -> inkwell::types::IntType<'ctx> {
         self.llvm
-            .custom_width_int_type(revive_common::BIT_LENGTH_WORD as u32)
+            .custom_width_int_type(
+                NonZeroU32::new(revive_common::BIT_LENGTH_WORD as u32).expect("const is non-zero"),
+            )
+            .expect("valid integer width")
     }
 
     /// Returns the array type with the specified length.
@@ -1718,251 +1721,5 @@ impl<'ctx> Context<'ctx> {
                 .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
             false,
         )
-    }
-
-    /// Narrows large integer div/rem instructions whose operands provably fit
-    /// in a smaller type. This preserves the `MinSize` attribute on functions
-    /// that would otherwise have it stripped by `strip_minsize_for_divrem`.
-    ///
-    /// LLVM's `DivRemNarrowing` pass sometimes fails to narrow div/rem in
-    /// large functions after inlining. This runs as a safety net after
-    /// optimization to catch those cases.
-    ///
-    /// This lives in `llvm-context` rather than `newyork` because it operates
-    /// on LLVM IR after the full LLVM optimization pipeline has run. The
-    /// proof sources we accept (LLVM constants, `and` masks, `zext`) only
-    /// exist in their final form after IPSCCP has propagated values across
-    /// function boundaries and inlining has fused producers with consumers —
-    /// information that is not available at the newyork-IR level, where
-    /// width-narrowing already runs in `type_inference` and `guard_narrow`.
-    /// It also sits alongside its sibling workaround `strip_minsize_for_divrem`,
-    /// which targets the same LLVM 21 backend bug.
-    fn narrow_divrem_instructions(&self) {
-        let builder = self.llvm.create_builder();
-
-        for function in self.module().get_functions() {
-            let mut to_narrow = Vec::new();
-
-            for basic_block in function.get_basic_blocks() {
-                for instruction in basic_block.get_instructions() {
-                    let is_divrem = matches!(
-                        instruction.get_opcode(),
-                        InstructionOpcode::UDiv
-                            | InstructionOpcode::SDiv
-                            | InstructionOpcode::URem
-                            | InstructionOpcode::SRem
-                    );
-                    if !is_divrem {
-                        continue;
-                    }
-                    if instruction.get_type().into_int_type().get_bit_width() < 256 {
-                        continue;
-                    }
-
-                    let lhs = instruction.get_operand(0).and_then(|op| op.value());
-                    let rhs = instruction.get_operand(1).and_then(|op| op.value());
-
-                    if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
-                        let lhs_width = Self::provable_bit_width(lhs);
-                        let rhs_width = Self::provable_bit_width(rhs);
-
-                        if let (Some(lw), Some(rw)) = (lhs_width, rhs_width) {
-                            let max_operand_width = lw.max(rw);
-                            let narrow_width = Self::round_up_bit_width(max_operand_width);
-                            // Signed div/rem narrowing is sound only when bit (narrow_width - 1) of every operand is provably zero — otherwise the
-                            // narrow signed division treats a non-negative i256 operand as negative and the sign-extended result diverges from the
-                            // i256 sdiv. The proof sources accepted here (constants, AND-masks, ZExt) all pin the upper bits to zero strictly above
-                            // the operand width, so this holds iff the operand fits with at least one bit of headroom in the narrow type.
-                            let is_signed = matches!(
-                                instruction.get_opcode(),
-                                InstructionOpcode::SDiv | InstructionOpcode::SRem
-                            );
-                            let signed_sign_bit_safe =
-                                !is_signed || narrow_width > max_operand_width;
-                            if narrow_width < 256 && signed_sign_bit_safe {
-                                to_narrow.push((instruction, narrow_width));
-                            }
-                        }
-                    }
-                }
-            }
-
-            for (instruction, narrow_width) in to_narrow {
-                let lhs = instruction
-                    .get_operand(0)
-                    .unwrap()
-                    .value()
-                    .unwrap()
-                    .into_int_value();
-                let rhs = instruction
-                    .get_operand(1)
-                    .unwrap()
-                    .value()
-                    .unwrap()
-                    .into_int_value();
-                let wide_type = instruction.get_type().into_int_type();
-                let narrow_type = self.llvm.custom_width_int_type(narrow_width);
-
-                builder.position_before(&instruction);
-
-                let lhs_truncated = builder.build_int_truncate(lhs, narrow_type, "").unwrap();
-                let rhs_truncated = builder.build_int_truncate(rhs, narrow_type, "").unwrap();
-
-                let narrow_result = match instruction.get_opcode() {
-                    InstructionOpcode::UDiv => builder
-                        .build_int_unsigned_div(lhs_truncated, rhs_truncated, "")
-                        .unwrap(),
-                    InstructionOpcode::SDiv => builder
-                        .build_int_signed_div(lhs_truncated, rhs_truncated, "")
-                        .unwrap(),
-                    InstructionOpcode::URem => builder
-                        .build_int_unsigned_rem(lhs_truncated, rhs_truncated, "")
-                        .unwrap(),
-                    InstructionOpcode::SRem => builder
-                        .build_int_signed_rem(lhs_truncated, rhs_truncated, "")
-                        .unwrap(),
-                    _ => unreachable!(),
-                };
-
-                let wide_result = if matches!(
-                    instruction.get_opcode(),
-                    InstructionOpcode::SDiv | InstructionOpcode::SRem
-                ) {
-                    builder
-                        .build_int_s_extend(narrow_result, wide_type, "")
-                        .unwrap()
-                } else {
-                    builder
-                        .build_int_z_extend(narrow_result, wide_type, "")
-                        .unwrap()
-                };
-
-                let wide_instruction = wide_result.as_instruction().unwrap();
-                instruction.replace_all_uses_with(&wide_instruction);
-                instruction.erase_from_basic_block();
-            }
-        }
-    }
-
-    /// Returns the provable bit width of a value, if it can be determined.
-    ///
-    /// Checks for:
-    /// - Constants: bit width needed to represent the value.
-    /// - `and %x, mask`: bit width of the mask.
-    /// - `zext from smaller_type`: bit width of the source type.
-    /// - `trunc to smaller_type`: bit width of the result type.
-    fn provable_bit_width(value: inkwell::values::BasicValueEnum) -> Option<u32> {
-        let integer_value = value.into_int_value();
-        if integer_value.is_const() {
-            return Self::constant_bit_width(integer_value);
-        }
-
-        let instruction = integer_value.as_instruction()?;
-        match instruction.get_opcode() {
-            InstructionOpcode::And => {
-                let operand_0 = instruction.get_operand(0)?.value()?.into_int_value();
-                let operand_1 = instruction.get_operand(1)?.value()?.into_int_value();
-                if operand_1.is_const() {
-                    Self::constant_bit_width(operand_1)
-                } else if operand_0.is_const() {
-                    Self::constant_bit_width(operand_0)
-                } else {
-                    None
-                }
-            }
-            InstructionOpcode::ZExt => {
-                let source = instruction.get_operand(0)?.value()?.into_int_value();
-                Some(source.get_type().get_bit_width())
-            }
-            InstructionOpcode::Trunc => {
-                Some(instruction.get_type().into_int_type().get_bit_width())
-            }
-            _ => None,
-        }
-    }
-
-    /// Returns the minimum number of bits needed to represent a constant integer.
-    ///
-    /// For types up to 64 bits the direct LLVM API suffices. For wider types (e.g. i256) we
-    /// truncate to i64 and verify the round-trip: if the reconstructed wide constant equals the
-    /// original (LLVM constants are interned, so pointer equality is correct), the value fits
-    /// in u64 and we report `64 - leading_zeros`.
-    fn constant_bit_width(integer_value: inkwell::values::IntValue) -> Option<u32> {
-        if let Some(value) = integer_value.get_zero_extended_constant() {
-            return Some(if value == 0 {
-                1
-            } else {
-                64 - value.leading_zeros()
-            });
-        }
-
-        let wide_type = integer_value.get_type();
-        if wide_type.get_bit_width() > 64 {
-            let i64_type = wide_type.get_context().i64_type();
-            let truncated = integer_value.const_truncate(i64_type);
-            if let Some(value) = truncated.get_zero_extended_constant() {
-                let reconstructed = wide_type.const_int(value, false);
-                if reconstructed == integer_value {
-                    return Some(if value == 0 {
-                        1
-                    } else {
-                        64 - value.leading_zeros()
-                    });
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Rounds a bit width up to the next standard integer type width.
-    fn round_up_bit_width(bits: u32) -> u32 {
-        if bits <= 8 {
-            8
-        } else if bits <= 16 {
-            16
-        } else if bits <= 32 {
-            32
-        } else if bits <= 64 {
-            64
-        } else if bits <= 128 {
-            128
-        } else {
-            256
-        }
-    }
-
-    /// Scans all functions in the module and removes the `MinSize` attribute
-    /// if the function contains any large sdiv, udiv, srem, urem instructions with either unknown
-    /// NOTE: The check here could be relaxed by checking denominator: if the denominator is
-    /// unknown or is a power-of-2 constant, then need to strip the `minsize` attribute; otherwise
-    /// instruction can be ignored as backend will expand it correctly.
-    fn strip_minsize_for_divrem(&self) {
-        self.module().get_functions().for_each(|func| {
-            let has_divrem = func.get_basic_block_iter().any(|b| {
-                b.get_instructions().any(|inst| match inst.get_opcode() {
-                    InstructionOpcode::SDiv
-                    | InstructionOpcode::UDiv
-                    | InstructionOpcode::SRem
-                    | InstructionOpcode::URem => {
-                        inst.get_type().into_int_type().get_bit_width() >= 256
-                    }
-                    _ => false,
-                })
-            });
-            if has_divrem
-                && func
-                    .get_enum_attribute(
-                        inkwell::attributes::AttributeLoc::Function,
-                        Attribute::MinSize as u32,
-                    )
-                    .is_some()
-            {
-                func.remove_enum_attribute(
-                    inkwell::attributes::AttributeLoc::Function,
-                    Attribute::MinSize as u32,
-                );
-            }
-        });
     }
 }

@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-91ab665a.js";
+            window.path_to_searchindex_js = "searchindex-663759c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -1112,6 +1112,70 @@ the low N bits are non-zero).</p>
 <li><a href="#error_string_revert"><code>error_string_revert</code></a></li>
 <li><a href="#custom_error_revert"><code>custom_error_revert</code></a></li>
 </ul>
+<h2 id="type-system"><a class="header" href="#type-system">Type system</a></h2>
+<p>Every value in the IR carries a <code>Type</code>. The operation entries below refer to widths (<code>i1</code>…<code>i256</code>), address spaces (<code>ptr&lt;heap&gt;</code>, etc.), and memory regions (<code>scratch</code>, etc.) by their printed form; this section is the reference for those names.</p>
+<h3 id="type"><a class="header" href="#type"><code>Type</code></a></h3>
+<p>The umbrella enum. Three variants:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Printed as</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Int(BitWidth)</code></td><td><code>i1</code>, <code>i8</code>, …, <code>i256</code></td><td>An integer at one of seven widths; see <a href="#bitwidth">BitWidth</a>.</td></tr>
+<tr><td><code>Ptr(AddressSpace)</code></td><td><code>ptr&lt;heap&gt;</code>, <code>ptr&lt;stack&gt;</code>, <code>ptr&lt;storage&gt;</code>, <code>ptr&lt;code&gt;</code></td><td>A pointer tagged with its address space; see <a href="#addressspace">AddressSpace</a>.</td></tr>
+<tr><td><code>Void</code></td><td><code>void</code></td><td>Unit type. Used for statements that produce no value and for <code>void</code>-returning functions.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="bitwidth"><a class="header" href="#bitwidth"><code>BitWidth</code></a></h3>
+<p>The seven rungs of integer width. Newly minted values default to <code>I256</code>; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Printed as</th><th>Typical use</th></tr>
+</thead>
+<tbody>
+<tr><td><code>I1</code></td><td><code>i1</code></td><td>Boolean. Result type of every comparison and <code>iszero</code>.</td></tr>
+<tr><td><code>I8</code></td><td><code>i8</code></td><td>Byte values. The narrowest meaningful integer.</td></tr>
+<tr><td><code>I32</code></td><td><code>i32</code></td><td>PolkaVM pointer width (XLEN); minimum width for function parameters under the rv64e ABI.</td></tr>
+<tr><td><code>I64</code></td><td><code>i64</code></td><td>PolkaVM native register width; most narrowed values land here.</td></tr>
+<tr><td><code>I128</code></td><td><code>i128</code></td><td>Two registers; arithmetic that overflows <code>i64</code> but doesn’t need full 256-bit emulation.</td></tr>
+<tr><td><code>I160</code></td><td><code>i160</code></td><td>Ethereum addresses; result of <code>caller</code>, <code>origin</code>, mapping keys.</td></tr>
+<tr><td><code>I256</code></td><td><code>i256</code></td><td>EVM word width. The default and conservative ceiling.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="addressspace"><a class="header" href="#addressspace"><code>AddressSpace</code></a></h3>
+<p>The address space a pointer points into. Carried on every <code>Ptr</code> value so the codegen can lower loads and stores without a separate alias-analysis pass.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Printed as</th><th>Points into</th><th>Endianness</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Heap</code></td><td><code>ptr&lt;heap&gt;</code></td><td>Emulated EVM linear memory (the simulated <code>mload</code>/<code>mstore</code> region).</td><td>Big-endian (by EVM contract).</td></tr>
+<tr><td><code>Stack</code></td><td><code>ptr&lt;stack&gt;</code></td><td>Native PolkaVM stack allocations.</td><td>Little-endian (no swap).</td></tr>
+<tr><td><code>Storage</code></td><td><code>ptr&lt;storage&gt;</code></td><td>Contract storage; key/value with 256-bit slots.</td><td>Big-endian on the wire.</td></tr>
+<tr><td><code>Code</code></td><td><code>ptr&lt;code&gt;</code></td><td>Read-only code/data segment.</td><td>Big-endian.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="memoryregion"><a class="header" href="#memoryregion"><code>MemoryRegion</code></a></h3>
+<p>A refinement carried by every memory load and store on top of <code>AddressSpace::Heap</code>. The tag tells later passes what kind of heap address an offset is hitting, which drives both free-memory-pointer propagation and byte-swap elimination.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Address range</th><th>Printed as</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Scratch</code></td><td><code>0x00</code>–<code>0x3f</code></td><td><code>/* scratch */</code></td><td>EVM scratch space; safe to touch without consulting the free memory pointer.</td></tr>
+<tr><td><code>FreePointerSlot</code></td><td>exactly <code>0x40</code></td><td><code>/* free_ptr */</code></td><td>Slot that stores the free memory pointer itself.</td></tr>
+<tr><td><code>Dynamic</code></td><td><code>0x80</code> and above</td><td><code>/* dynamic */</code></td><td>Real heap allocations.</td></tr>
+<tr><td><code>Unknown</code></td><td>everything else (constants in <code>0x41</code>–<code>0x7f</code>, plus all non-constant offsets)</td><td>(suppressed)</td><td>Conservative fallback used when the offset isn’t a constant or doesn’t slot cleanly.</td></tr>
+</tbody>
+</table>
+</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="pvm-and-the-pallet-revive-runtime-target"><a class="header" href="#pvm-and-the-pallet-revive-runtime-target">PVM and the pallet-revive runtime target</a></h1>
 <p>The <code>revive</code> compiler targets <a href="https://github.com/paritytech/polkavm">PolkaVM (PVM)</a> via <a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/revive">pallet-revive</a> on Polkadot.</p>

@@ -190,3 +190,53 @@ Syntax templates in each entry use the following conventions:
 - [`panic_revert`](#panic_revert)
 - [`error_string_revert`](#error_string_revert)
 - [`custom_error_revert`](#custom_error_revert)
+
+## Type system
+
+Every value in the IR carries a `Type`. The operation entries below refer to widths (`i1`…`i256`), address spaces (`ptr<heap>`, etc.), and memory regions (`scratch`, etc.) by their printed form; this section is the reference for those names.
+
+### `Type`
+
+The umbrella enum. Three variants:
+
+| Variant | Printed as | Description |
+|---|---|---|
+| `Int(BitWidth)` | `i1`, `i8`, …, `i256` | An integer at one of seven widths; see [BitWidth](#bitwidth). |
+| `Ptr(AddressSpace)` | `ptr<heap>`, `ptr<stack>`, `ptr<storage>`, `ptr<code>` | A pointer tagged with its address space; see [AddressSpace](#addressspace). |
+| `Void` | `void` | Unit type. Used for statements that produce no value and for `void`-returning functions. |
+
+### `BitWidth`
+
+The seven rungs of integer width. Newly minted values default to `I256`; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.
+
+| Variant | Printed as | Typical use |
+|---|---|---|
+| `I1` | `i1` | Boolean. Result type of every comparison and `iszero`. |
+| `I8` | `i8` | Byte values. The narrowest meaningful integer. |
+| `I32` | `i32` | PolkaVM pointer width (XLEN); minimum width for function parameters under the rv64e ABI. |
+| `I64` | `i64` | PolkaVM native register width; most narrowed values land here. |
+| `I128` | `i128` | Two registers; arithmetic that overflows `i64` but doesn't need full 256-bit emulation. |
+| `I160` | `i160` | Ethereum addresses; result of `caller`, `origin`, mapping keys. |
+| `I256` | `i256` | EVM word width. The default and conservative ceiling. |
+
+### `AddressSpace`
+
+The address space a pointer points into. Carried on every `Ptr` value so the codegen can lower loads and stores without a separate alias-analysis pass.
+
+| Variant | Printed as | Points into | Endianness |
+|---|---|---|---|
+| `Heap` | `ptr<heap>` | Emulated EVM linear memory (the simulated `mload`/`mstore` region). | Big-endian (by EVM contract). |
+| `Stack` | `ptr<stack>` | Native PolkaVM stack allocations. | Little-endian (no swap). |
+| `Storage` | `ptr<storage>` | Contract storage; key/value with 256-bit slots. | Big-endian on the wire. |
+| `Code` | `ptr<code>` | Read-only code/data segment. | Big-endian. |
+
+### `MemoryRegion`
+
+A refinement carried by every memory load and store on top of `AddressSpace::Heap`. The tag tells later passes what kind of heap address an offset is hitting, which drives both free-memory-pointer propagation and byte-swap elimination.
+
+| Variant | Address range | Printed as | Meaning |
+|---|---|---|---|
+| `Scratch` | `0x00`–`0x3f` | `/* scratch */` | EVM scratch space; safe to touch without consulting the free memory pointer. |
+| `FreePointerSlot` | exactly `0x40` | `/* free_ptr */` | Slot that stores the free memory pointer itself. |
+| `Dynamic` | `0x80` and above | `/* dynamic */` | Real heap allocations. |
+| `Unknown` | everything else (constants in `0x41`–`0x7f`, plus all non-constant offsets) | (suppressed) | Conservative fallback used when the offset isn't a constant or doesn't slot cleanly. |

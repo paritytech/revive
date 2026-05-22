@@ -183,15 +183,6 @@ impl<'ctx> Function<'ctx> {
             );
         }
 
-        if !optimizer.settings().is_middle_end_enabled() {
-            Self::set_attributes(
-                llvm,
-                declaration,
-                &[Attribute::NoInline, Attribute::OptimizeNone],
-                true,
-            );
-        }
-
         // `NoFree` and `NoUnwind` are facts about the PVM target, not optimization heuristics:
         //   * PVM has no `free` (the heap is bump-allocated via `sbrk`), so no Solidity-emitted
         //     function can ever release memory.

@@ -3543,12 +3543,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// other functions, we let LLVM decide using its own heuristics (it
     /// already has MinSize/OptimizeForSize from `set_default_attributes`).
     fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
-        let llvm_func = match context.get_function(&function.name, true) {
-            Some(func_ref) => func_ref.borrow().declaration().value,
+        // Library/post-link compilations run with the middle end disabled and have
+        // `NoInline`/`OptimizeNone` forced on every function by `set_default_attributes`.
+        // Stacking `AlwaysInline` on top would produce contradictory attributes and
+        // trip the LLVM IR verifier; the hints would be inert there anyway.
+        if !context.optimizer_settings().is_middle_end_enabled() {
+            return;
+        }
+
+        let declaration = match context.get_function(&function.name, true) {
+            Some(func_ref) => func_ref.borrow().declaration(),
             None => return,
         };
-
-        let llvm_ctx = context.llvm();
 
         let ir_decision = self.inline_decisions.get(&function.id.0).copied();
 
@@ -3582,9 +3588,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         };
 
         if let Some(attr) = attr {
-            llvm_func.add_attribute(
-                inkwell::attributes::AttributeLoc::Function,
-                llvm_ctx.create_enum_attribute(attr as u32, 0),
+            revive_llvm_context::PolkaVMFunction::set_attributes(
+                context.llvm(),
+                declaration,
+                &[attr],
+                true,
             );
         }
     }

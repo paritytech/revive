@@ -586,10 +586,8 @@ fn collect_top_scope_defs(statements: &[Statement]) -> Vec<ValueId> {
 fn region_defines_value(region: &Region, target: ValueId) -> bool {
     for statement in &region.statements {
         match statement {
-            Statement::Let { bindings, .. } => {
-                if bindings.contains(&target) {
-                    return true;
-                }
+            Statement::Let { bindings, .. } if bindings.contains(&target) => {
+                return true;
             }
             Statement::If {
                 outputs,
@@ -653,10 +651,8 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
                     return true;
                 }
             }
-            Statement::Block(r) => {
-                if region_defines_value(r, target) {
-                    return true;
-                }
+            Statement::Block(r) if region_defines_value(r, target) => {
+                return true;
             }
             _ => {}
         }

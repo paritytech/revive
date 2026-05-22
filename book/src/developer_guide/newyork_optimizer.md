@@ -66,6 +66,8 @@ The newyork IR is an SSA form with structured control flow, inspired by MLIR's S
 - **Semantic annotations**: Memory operations are tagged with region information (`Scratch`, `FreePointerSlot`, `Dynamic`). Storage operations carry static slot values when known at compile time.
 - **Structured control flow**: `If`, `Switch`, and `For` nodes preserve the high-level structure from Yul, with explicit region arguments and yields for value flow across control edges.
 
+For per-operation detail — printed syntax, operand and result types, and more — see the [newyork IR reference](./newyork_ir.md).
+
 ## Key optimizations explained
 
 ### Type narrowing

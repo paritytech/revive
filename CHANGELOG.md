@@ -9,7 +9,12 @@
 - Updated `LLVM` from `21.1.8` to LLVM `22.1.4`
 
 ### Added
+
 - Support for solc v0.8.35.
+
+### Fixed
+
+- A constant folding bug causing incorrect translation of the case `type(int256).min % -1`.
 
 ## v1.1.0
 

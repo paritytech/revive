@@ -71,6 +71,26 @@ const SMALL_FUNCTION_BONUS: usize = 28;
 /// OZ corpus at threshold 15 vs. 10).
 const SMALL_FUNCTION_BONUS_SIZE_THRESHOLD: usize = 10;
 
+/// Maximum call count for which the few-callsites bonus applies. The cost term
+/// `(call_count - 1) * size` grows linearly with callers, so 2–3 is the regime
+/// where the bonus can plausibly offset it. Calibrated alongside the rest of
+/// the cost model in commit 6ea5672c ("Improve the inliner") — see INLINER.md.
+const FEW_CALLS_BONUS_CALL_THRESHOLD: usize = 3;
+
+/// Maximum Leave count for the few-callsites bonus to apply. Each Leave becomes
+/// an exit-flag + phi chain in the inlined body (see [`eliminate_leaves`]); the
+/// `leaves² * 6 * call_count` term in `cost` already discourages many-Leave
+/// inlines, so this threshold just keeps single-Leave functions in play.
+const FEW_CALLS_BONUS_LEAVE_THRESHOLD: usize = 1;
+
+/// Cost-benefit bonus when a function has both few call sites
+/// ([`FEW_CALLS_BONUS_CALL_THRESHOLD`]) and few Leaves
+/// ([`FEW_CALLS_BONUS_LEAVE_THRESHOLD`]). Retuned from 10 to 15 in commit
+/// 6ea5672c as part of an end-to-end cost-model retune that landed −8.95% on
+/// the OZ corpus. INLINER.md records that the model is at a local optimum on
+/// this axis, so don't perturb in isolation without re-running the corpus.
+const FEW_CALLS_BONUS: usize = 15;
+
 /// Results of the call graph analysis.
 #[derive(Debug, Clone)]
 pub struct CallGraphAnalysis {
@@ -270,8 +290,10 @@ pub fn make_inline_decisions(
                 benefit += SMALL_FUNCTION_BONUS;
             }
 
-            if call_count <= 3 && leave_count <= 1 {
-                benefit += 15;
+            if call_count <= FEW_CALLS_BONUS_CALL_THRESHOLD
+                && leave_count <= FEW_CALLS_BONUS_LEAVE_THRESHOLD
+            {
+                benefit += FEW_CALLS_BONUS;
             }
 
             if benefit > cost {

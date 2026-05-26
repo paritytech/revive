@@ -226,7 +226,7 @@ impl YulTranslator {
 
                 for (name, value) in &block_scope {
                     if parent_scope.contains_key(name) {
-                        self.ssa.define(name, *value);
+                        self.ssa.assign(name, *value);
                     }
                 }
 
@@ -277,7 +277,7 @@ impl YulTranslator {
                 let binding = &variable_declaration.bindings[0];
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
-                self.ssa.define(&binding.inner, value);
+                self.ssa.declare(&binding.inner, value);
 
                 statements.push(Statement::Let {
                     bindings: vec![value_id],
@@ -288,7 +288,7 @@ impl YulTranslator {
                 for binding in &variable_declaration.bindings {
                     let value_id = self.ssa.fresh_value();
                     let value = Value::new(value_id, Type::Int(BitWidth::I256));
-                    self.ssa.define(&binding.inner, value);
+                    self.ssa.declare(&binding.inner, value);
                     bindings.push(value_id);
                 }
 
@@ -301,7 +301,7 @@ impl YulTranslator {
             for binding in &variable_declaration.bindings {
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
-                self.ssa.define(&binding.inner, value);
+                self.ssa.declare(&binding.inner, value);
 
                 statements.push(Statement::Let {
                     bindings: vec![value_id],
@@ -331,7 +331,7 @@ impl YulTranslator {
             let binding = &assignment.bindings[0];
             let value_id = self.ssa.fresh_value();
             let value = Value::new(value_id, Type::Int(BitWidth::I256));
-            self.ssa.define(&binding.inner, value);
+            self.ssa.assign(&binding.inner, value);
 
             statements.push(Statement::Let {
                 bindings: vec![value_id],
@@ -342,7 +342,7 @@ impl YulTranslator {
             for binding in &assignment.bindings {
                 let value_id = self.ssa.fresh_value();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
-                self.ssa.define(&binding.inner, value);
+                self.ssa.assign(&binding.inner, value);
                 bindings.push(value_id);
             }
 
@@ -980,7 +980,7 @@ impl YulTranslator {
             let output_id = self.ssa.fresh_value();
             outputs.push(output_id);
             self.ssa
-                .define(name, Value::new(output_id, before_value.value_type));
+                .assign(name, Value::new(output_id, before_value.value_type));
         }
 
         let mut then_with_yields = then_region;
@@ -1130,7 +1130,7 @@ impl YulTranslator {
 
         self.ssa.restore_scope(scope_before);
         for (name, value) in output_names {
-            self.ssa.define(&name, value);
+            self.ssa.assign(&name, value);
         }
 
         statements.push(Statement::Switch {
@@ -1171,7 +1171,7 @@ impl YulTranslator {
                 .get(name)
                 .map(|v| v.value_type)
                 .unwrap_or_default();
-            self.ssa.define(name, Value::new(*var_id, value_type));
+            self.ssa.assign(name, Value::new(*var_id, value_type));
         }
 
         let (condition_statements, condition_expression) =
@@ -1210,7 +1210,7 @@ impl YulTranslator {
                 .get(name)
                 .map(|v| v.value_type)
                 .unwrap_or_default();
-            self.ssa.define(name, Value::new(post_var_id, value_type));
+            self.ssa.assign(name, Value::new(post_var_id, value_type));
         }
 
         let mut post_region = self.translate_region(&for_loop.finalizer)?;
@@ -1237,7 +1237,7 @@ impl YulTranslator {
         self.ssa.exit_scope();
 
         for (name, value) in output_values {
-            self.ssa.define(&name, value);
+            self.ssa.assign(&name, value);
         }
 
         statements.push(Statement::For {
@@ -1280,7 +1280,7 @@ impl YulTranslator {
                 .iter()
                 .zip(&function_definition.arguments)
             {
-                self.ssa.define(
+                self.ssa.declare(
                     &parameter_identifier.inner,
                     Value::new(*parameter_id, Type::Int(BitWidth::I256)),
                 );
@@ -1291,7 +1291,7 @@ impl YulTranslator {
         let saved_return_variable_names = std::mem::take(&mut self.current_return_variable_names);
         for return_identifier in &function_definition.result {
             let return_id = self.ssa.fresh_value();
-            self.ssa.define(
+            self.ssa.declare(
                 &return_identifier.inner,
                 Value::new(return_id, Type::Int(BitWidth::I256)),
             );

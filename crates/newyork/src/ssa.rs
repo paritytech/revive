@@ -43,8 +43,25 @@ impl SsaBuilder {
         Value::new(self.fresh_value(), value_type)
     }
 
-    /// Defines a variable with the given name and value.
-    pub fn define(&mut self, name: &str, value: Value) {
+    /// Declares a new variable in the current scope.
+    ///
+    /// Panics if a binding for `name` already exists in the current scope.
+    pub fn declare(&mut self, name: &str, value: Value) {
+        assert!(
+            !self.current_scope.contains_key(name),
+            "ICE: SsaBuilder::declare called for already-declared variable `{name}`",
+        );
+        self.current_scope.insert(name.to_string(), value);
+    }
+
+    /// Assigns a new value to an existing variable in the current scope.
+    ///
+    /// Panics if no binding for `name` exists in the current scope.
+    pub fn assign(&mut self, name: &str, value: Value) {
+        assert!(
+            self.current_scope.contains_key(name),
+            "ICE: SsaBuilder::assign called for undeclared variable `{name}`",
+        );
         self.current_scope.insert(name.to_string(), value);
     }
 
@@ -69,61 +86,6 @@ impl SsaBuilder {
     /// Gets the current scope (for computing modified variables).
     pub fn current_scope(&self) -> &BTreeMap<String, Value> {
         &self.current_scope
-    }
-
-    /// Gets the parent scope (if any) for comparison.
-    pub fn parent_scope(&self) -> Option<&BTreeMap<String, Value>> {
-        self.scope_stack.last()
-    }
-
-    /// Computes variables that were modified in the current scope compared to parent.
-    pub fn modified_variables(&self) -> Vec<(String, Value, Value)> {
-        let Some(parent) = self.parent_scope() else {
-            return Vec::new();
-        };
-
-        let mut modified = Vec::new();
-        for (name, &current_value) in &self.current_scope {
-            if let Some(&parent_value) = parent.get(name) {
-                if current_value.id != parent_value.id {
-                    modified.push((name.clone(), parent_value, current_value));
-                }
-            }
-        }
-        modified
-    }
-
-    /// Merges two scopes at a control flow join point.
-    /// Returns the list of (variable_name, phi_result, then_value, else_value).
-    pub fn merge_scopes(
-        &mut self,
-        then_scope: &BTreeMap<String, Value>,
-        else_scope: &BTreeMap<String, Value>,
-    ) -> Vec<(String, ValueId, Value, Value)> {
-        let mut merges = Vec::new();
-
-        for (name, &then_value) in then_scope {
-            if let Some(&else_value) = else_scope.get(name) {
-                if then_value.id != else_value.id {
-                    let phi_result = self.fresh_value();
-                    merges.push((name.clone(), phi_result, then_value, else_value));
-
-                    self.define(name, Value::new(phi_result, then_value.value_type));
-                } else {
-                    self.define(name, then_value);
-                }
-            } else {
-                self.define(name, then_value);
-            }
-        }
-
-        for (name, &else_value) in else_scope {
-            if !then_scope.contains_key(name) {
-                self.define(name, else_value);
-            }
-        }
-
-        merges
     }
 
     /// Restores scope from a saved state, used after control flow constructs.
@@ -152,10 +114,10 @@ mod tests {
     }
 
     #[test]
-    fn test_define_and_lookup() {
+    fn test_declare_and_lookup() {
         let mut builder = SsaBuilder::new();
         let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
-        builder.define("x", v);
+        builder.declare("x", v);
         assert_eq!(builder.lookup("x"), Some(v));
         assert_eq!(builder.lookup("y"), None);
     }
@@ -164,14 +126,31 @@ mod tests {
     fn test_nested_scopes() {
         let mut builder = SsaBuilder::new();
         let v0 = builder.fresh_typed_value(Type::Int(BitWidth::I256));
-        builder.define("x", v0);
+        builder.declare("x", v0);
 
         builder.enter_scope();
         let v1 = builder.fresh_typed_value(Type::Int(BitWidth::I256));
-        builder.define("x", v1);
+        builder.assign("x", v1);
         assert_eq!(builder.lookup("x"), Some(v1));
 
         builder.exit_scope();
         assert_eq!(builder.lookup("x"), Some(v0));
+    }
+
+    #[test]
+    #[should_panic(expected = "ICE: SsaBuilder::declare called for already-declared variable")]
+    fn declare_twice_panics() {
+        let mut builder = SsaBuilder::new();
+        let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        builder.declare("x", v);
+        builder.declare("x", v);
+    }
+
+    #[test]
+    #[should_panic(expected = "ICE: SsaBuilder::assign called for undeclared variable")]
+    fn assign_undeclared_panics() {
+        let mut builder = SsaBuilder::new();
+        let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        builder.assign("x", v);
     }
 }

@@ -1881,6 +1881,12 @@ fn yields_as_used(yields: &[Value]) -> BTreeSet<u32> {
     used
 }
 
+/// Minimum function size for exact dedup. A body this small lowers to a
+/// handful of instructions — comparable to a call's own per-site overhead —
+/// so collapsing duplicates into a shared callable would cost more than it
+/// saves.
+const MIN_DEDUP_SIZE: usize = 4;
+
 /// Deduplicates functions with identical bodies in an object.
 ///
 /// Two functions are considered duplicates if they have:
@@ -1901,7 +1907,7 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
     let mut redirects: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
 
     for function in object.functions.values() {
-        if function.size_estimate <= 3 {
+        if function.size_estimate < MIN_DEDUP_SIZE {
             continue;
         }
 

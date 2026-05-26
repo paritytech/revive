@@ -79,7 +79,14 @@ impl SsaBuilder {
     /// Returns the scope that was exited (for computing modified variables).
     pub fn exit_scope(&mut self) -> BTreeMap<String, Value> {
         let exited = std::mem::take(&mut self.current_scope);
-        self.current_scope = self.scope_stack.pop().unwrap_or_default();
+        self.current_scope = self.scope_stack.pop().unwrap_or_else(|| {
+            panic!(
+                "ICE: SsaBuilder::exit_scope called without a matching enter_scope; \
+                 {} binding(s) about to be silently dropped: {:?}",
+                exited.len(),
+                exited.keys().collect::<Vec<_>>(),
+            )
+        });
         exited
     }
 

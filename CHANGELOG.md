@@ -14,7 +14,10 @@
 
 ### Fixed
 
-- A constant folding bug causing incorrect translation of the case `type(int256).min % -1`.
+- A constant folding bug causing incorrect translation of an SREM edge case. The affected pattern (Solidity % or Yul smod):
+  - SREM over the two constant operands `type(int256).min` and `-1`.
+  - At least one of the two constants needs folding (i.e. not just `type(int256).min % -1`),
+    in such a way that solc doesn't constant fold but LLVM does, resulting in UB (signed-overflow).
 
 ## v1.1.0
 

@@ -142,8 +142,14 @@ impl Validator {
             self.validate_function(function);
         }
 
+        // Subobjects compile to separate units with their own SSA ID and function-ID
+        // namespaces — they share no values or callables with the parent. Validate each
+        // with a fresh validator so the parent's defined IDs don't leak in and produce
+        // spurious MultipleDef errors when the subobject reuses the same value numbers.
         for subobject in &object.subobjects {
-            self.validate_object(subobject);
+            if let Err(sub_errors) = validate_object(subobject) {
+                self.errors.extend(sub_errors);
+            }
         }
     }
 
@@ -350,9 +356,9 @@ impl Validator {
                 condition_statements,
                 condition,
                 body,
+                post_input_variables,
                 post,
                 outputs,
-                ..
             } => {
                 for v in initial_values {
                     self.use_value(v, context);
@@ -364,6 +370,15 @@ impl Validator {
                         context,
                         loop_variables.len(),
                         initial_values.len()
+                    )));
+                }
+
+                if post_input_variables.len() != loop_variables.len() {
+                    self.error(ValidationError::FunctionError(format!(
+                        "{}: post_input_variables count ({}) != loop_variables count ({})",
+                        context,
+                        post_input_variables.len(),
+                        loop_variables.len()
                     )));
                 }
 
@@ -379,6 +394,10 @@ impl Validator {
                 self.validate_expression(condition, &format!("{} condition", context));
 
                 self.validate_region(body, &format!("{} body", context));
+
+                for id in post_input_variables {
+                    self.define(*id);
+                }
 
                 self.validate_region(post, &format!("{} post", context));
 
@@ -543,9 +562,12 @@ impl Validator {
             }
 
             Statement::Block(region) => {
-                self.enter_scope();
+                // A standalone `Statement::Block` is straight-line code in the codegen
+                // (no LLVM-level scoping, no phi merge — `generate_region` just lowers
+                // the statements). SSA values defined inside flow through to the
+                // surrounding scope, matching `Statement::For`/`If`/`Switch` which DO
+                // scope-isolate because their regions form control-flow splits.
                 self.validate_region(region, context);
-                self.exit_scope();
             }
 
             Statement::Expression(expression) => {

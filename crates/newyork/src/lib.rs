@@ -169,9 +169,15 @@ pub fn translate_yul_object(
     let type_info = run_late_inline_loop(&mut ir_object, &mut inline_results, type_info);
 
     if let Err(errors) = validate::validate_object(&ir_object) {
-        for error in &errors {
-            log::warn!("IR validation error in {}: {}", ir_object.name, error);
-        }
+        let details = errors
+            .iter()
+            .map(|error| format!("  - {error}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        panic!(
+            "ICE: IR validation failed for object `{}` after optimization pipeline:\n{}",
+            ir_object.name, details,
+        );
     }
 
     Ok(TranslationResult {

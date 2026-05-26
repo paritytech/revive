@@ -290,14 +290,14 @@ pub fn make_inline_decisions(
 /// State for SSA value remapping during inlining.
 struct InlineRemapper {
     /// Maps old ValueId -> new ValueId.
-    value_map: BTreeMap<u32, ValueId>,
+    value_map: BTreeMap<ValueId, ValueId>,
     /// Next fresh value ID to allocate.
-    next_value_id: u32,
+    next_value_id: ValueId,
 }
 
 impl InlineRemapper {
     /// Creates a new remapper starting from the given next ID.
-    fn new(next_value_id: u32) -> Self {
+    fn new(next_value_id: ValueId) -> Self {
         InlineRemapper {
             value_map: BTreeMap::new(),
             next_value_id,
@@ -306,12 +306,11 @@ impl InlineRemapper {
 
     /// Gets or creates a fresh ID for the given old ID.
     fn remap_value_id(&mut self, old: ValueId) -> ValueId {
-        if let Some(&new_id) = self.value_map.get(&old.0) {
+        if let Some(&new_id) = self.value_map.get(&old) {
             new_id
         } else {
-            let new_id = ValueId::new(self.next_value_id);
-            self.next_value_id += 1;
-            self.value_map.insert(old.0, new_id);
+            let new_id = self.next_value_id.fresh();
+            self.value_map.insert(old, new_id);
             new_id
         }
     }
@@ -409,10 +408,8 @@ fn statement_has_leave_recursive(statement: &Statement) -> bool {
 }
 
 /// Allocates a fresh ValueId.
-fn fresh_id(next_id: &mut u32) -> ValueId {
-    let id = ValueId::new(*next_id);
-    *next_id += 1;
-    id
+fn fresh_id(next_id: &mut ValueId) -> ValueId {
+    next_id.fresh()
 }
 
 /// Result of Leave elimination on a statement list.
@@ -430,7 +427,7 @@ struct LeaveElimResult {
 fn eliminate_leaves(
     statements: &[Statement],
     accum_ids: &[ValueId],
-    next_id: &mut u32,
+    next_id: &mut ValueId,
 ) -> LeaveElimResult {
     let mut result_statements = Vec::new();
     let mut current_accums = accum_ids.to_vec();
@@ -504,7 +501,7 @@ fn wrap_remaining_in_guard(
     statements: &[Statement],
     accum_ids: &[ValueId],
     done_id: ValueId,
-    next_id: &mut u32,
+    next_id: &mut ValueId,
 ) -> LeaveElimResult {
     let mut pre_stmts = Vec::new();
 
@@ -667,7 +664,7 @@ fn promote_yields_from_guards(
     statements: &mut [Statement],
     yields: &mut [Value],
     top_defs: &[ValueId],
-    next_id: &mut u32,
+    next_id: &mut ValueId,
 ) {
     for yield_val in yields.iter_mut() {
         if top_defs.contains(&yield_val.id) {
@@ -699,7 +696,7 @@ fn promote_yields_from_guards(
 fn transform_leave_statement(
     statement: &Statement,
     accum_ids: &[ValueId],
-    next_id: &mut u32,
+    next_id: &mut ValueId,
 ) -> LeaveElimResult {
     match statement {
         Statement::If {
@@ -980,7 +977,7 @@ pub fn inline_functions(object: &mut Object) -> InlineResults {
     let decisions = make_inline_decisions(object, &analysis);
     results.decisions = decisions.clone();
 
-    let mut next_value_id = object.find_max_value_id() + 1;
+    let mut next_value_id = ValueId(object.find_max_value_id() + 1);
 
     let functions_snapshot: BTreeMap<FunctionId, Function> = object.functions.clone();
 
@@ -1052,7 +1049,7 @@ fn inline_in_statements(
     statements: &[Statement],
     inlineable: &BTreeSet<FunctionId>,
     functions: &BTreeMap<FunctionId, Function>,
-    next_value_id: &mut u32,
+    next_value_id: &mut ValueId,
     inlined_count: &mut usize,
 ) -> Vec<Statement> {
     let mut result = Vec::new();
@@ -1207,7 +1204,7 @@ fn inline_in_region(
     region: &Region,
     inlineable: &BTreeSet<FunctionId>,
     functions: &BTreeMap<FunctionId, Function>,
-    next_value_id: &mut u32,
+    next_value_id: &mut ValueId,
     inlined_count: &mut usize,
 ) -> Region {
     Region {
@@ -1230,7 +1227,7 @@ fn inline_call_with_results(
     function: &Function,
     arguments: &[Value],
     result_bindings: &[ValueId],
-    next_value_id: &mut u32,
+    next_value_id: &mut ValueId,
 ) -> Vec<Statement> {
     let mut remapper = InlineRemapper::new(*next_value_id);
     let mut statements = Vec::new();
@@ -1267,12 +1264,12 @@ fn inline_call_with_results(
     let initial_accums: Vec<ValueId> = function
         .return_values_initial
         .iter()
-        .filter_map(|id| remapper.value_map.get(&id.0).copied())
+        .filter_map(|id| remapper.value_map.get(id).copied())
         .collect();
     let fallthrough_ids: Vec<ValueId> = function
         .return_values
         .iter()
-        .filter_map(|id| remapper.value_map.get(&id.0).copied())
+        .filter_map(|id| remapper.value_map.get(id).copied())
         .collect();
 
     let mut body_with_leave = remapped_body;
@@ -1303,7 +1300,7 @@ fn inline_call_with_results(
 fn inline_call_void(
     function: &Function,
     arguments: &[Value],
-    next_value_id: &mut u32,
+    next_value_id: &mut ValueId,
 ) -> Vec<Statement> {
     let mut remapper = InlineRemapper::new(*next_value_id);
     let mut statements = Vec::new();
@@ -1334,7 +1331,7 @@ fn inline_call_void(
         let initial_accums: Vec<ValueId> = function
             .return_values_initial
             .iter()
-            .filter_map(|id| remapper.value_map.get(&id.0).copied())
+            .filter_map(|id| remapper.value_map.get(id).copied())
             .collect();
 
         let elim = eliminate_leaves(&remapped_body, &initial_accums, next_value_id);

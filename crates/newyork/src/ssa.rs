@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 #[derive(Debug)]
 pub struct SsaBuilder {
     /// Next value ID to allocate.
-    next_value_id: u32,
+    next_value_id: ValueId,
     /// Current scope's variable bindings: variable name -> SSA value.
     current_scope: BTreeMap<String, Value>,
     /// Stack of saved scopes for nested blocks.
@@ -27,7 +27,7 @@ impl SsaBuilder {
     /// Creates a new SSA builder.
     pub fn new() -> Self {
         SsaBuilder {
-            next_value_id: 0,
+            next_value_id: ValueId(0),
             current_scope: BTreeMap::new(),
             scope_stack: Vec::new(),
         }
@@ -35,9 +35,7 @@ impl SsaBuilder {
 
     /// Allocates a fresh value ID.
     pub fn fresh_value(&mut self) -> ValueId {
-        let id = ValueId::new(self.next_value_id);
-        self.next_value_id += 1;
-        id
+        self.next_value_id.fresh()
     }
 
     /// Allocates a fresh typed value with the given type.
@@ -134,7 +132,7 @@ impl SsaBuilder {
     }
 
     /// Gets the next value ID that will be allocated (for planning).
-    pub fn peek_next_id(&self) -> u32 {
+    pub fn peek_next_id(&self) -> ValueId {
         self.next_value_id
     }
 }

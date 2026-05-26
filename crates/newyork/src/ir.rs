@@ -125,13 +125,21 @@ impl MemoryRegion {
 }
 
 /// An SSA value reference (index into value table).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ValueId(pub u32);
 
 impl ValueId {
     /// Creates a new value ID.
     pub fn new(id: u32) -> Self {
         ValueId(id)
+    }
+
+    /// Returns the current value ID and advances `self` to the next one.
+    /// Used by counter fields and locals that allocate fresh IDs.
+    pub fn fresh(&mut self) -> ValueId {
+        let id = *self;
+        self.0 += 1;
+        id
     }
 }
 

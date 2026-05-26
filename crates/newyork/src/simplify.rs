@@ -81,7 +81,7 @@ pub struct Simplifier {
     /// expression tracking. Used to simplify patterns like `sub(add(x, y), x) → y`.
     binary_defs: BTreeMap<u32, (BinaryOperation, ValueId, ValueId)>,
     /// Counter for fresh value IDs when creating new bindings (strength reduction).
-    next_value_id: u32,
+    next_value_id: ValueId,
     /// CSE cache for pure environment reads (calldatasize, caller, etc.).
     /// Maps the read category to the first ValueId that bound this expression.
     /// Saved/restored in region scopes to ensure LLVM SSA domination correctness:
@@ -105,7 +105,7 @@ impl Simplifier {
             copies: BTreeMap::new(),
             unary_defs: BTreeMap::new(),
             binary_defs: BTreeMap::new(),
-            next_value_id: 0,
+            next_value_id: ValueId(0),
             env_reads: BTreeMap::new(),
             statistics: SimplifyResults::default(),
         }
@@ -113,9 +113,7 @@ impl Simplifier {
 
     /// Allocates a fresh ValueId.
     fn fresh_id(&mut self) -> ValueId {
-        let id = ValueId(self.next_value_id);
-        self.next_value_id += 1;
-        id
+        self.next_value_id.fresh()
     }
 
     /// Resolves the memory region for a value if its offset is a known constant.
@@ -129,7 +127,7 @@ impl Simplifier {
 
     /// Simplifies an entire object in place.
     pub fn simplify_object(&mut self, object: &mut Object) -> SimplifyResults {
-        self.next_value_id = object.find_max_value_id() + 1;
+        self.next_value_id = ValueId(object.find_max_value_id() + 1);
 
         self.simplify_block(&mut object.code);
         self.statistics.dead_bindings_removed +=
@@ -2634,7 +2632,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
     }
 
     let mut total_removed = 0;
-    let mut next_value_id = object.find_max_value_id() + 1;
+    let mut next_value_id = ValueId(object.find_max_value_id() + 1);
 
     for group in fuzzy_groups.values() {
         if group.len() < 2 {
@@ -2715,9 +2713,7 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 
         let mut new_parameter_ids: Vec<ValueId> = Vec::new();
         for _ in 0..unique_param_count {
-            let vid = ValueId(next_value_id);
-            next_value_id += 1;
-            new_parameter_ids.push(vid);
+            new_parameter_ids.push(next_value_id.fresh());
         }
 
         let position_parameter_ids: Vec<(usize, ValueId)> = differing_positions
@@ -3225,7 +3221,7 @@ fn update_call_sites_with_extra_args(
     new_id: FunctionId,
     extra_args: &[BigUint],
     parameter_types: &[Type],
-    next_value_id: &mut u32,
+    next_value_id: &mut ValueId,
 ) {
     fn rewrite(
         statements: &mut Vec<Statement>,
@@ -3233,7 +3229,7 @@ fn update_call_sites_with_extra_args(
         new_id: FunctionId,
         extra_args: &[BigUint],
         parameter_types: &[Type],
-        next_id: &mut u32,
+        next_id: &mut ValueId,
     ) {
         let mut i = 0;
         while i < statements.len() {
@@ -3334,8 +3330,7 @@ fn update_call_sites_with_extra_args(
             if is_target {
                 let mut extra_values = Vec::with_capacity(extra_args.len());
                 for (arg_val, parameter_type) in extra_args.iter().zip(parameter_types.iter()) {
-                    let vid = ValueId(*next_id);
-                    *next_id += 1;
+                    let vid = next_id.fresh();
                     statements.insert(
                         i,
                         Statement::Let {

@@ -46,24 +46,56 @@ pub struct SimplifyResults {
 }
 
 /// Categories of pure environment reads that can be CSE'd.
-/// These are values that remain constant for the entire contract invocation.
+///
+/// These are nullary expressions whose value is fixed for the duration of a
+/// single contract invocation, so reads of the same kind in the same dominator
+/// scope can share a binding.
+///
+/// Deliberately excluded — these *look* nullary but are observably variable:
+/// - `Gas`: gas remaining, decreases on every opcode.
+/// - `MSize`: memory size, grows when memory expands.
+/// - `ReturnDataSize`: resets after each external call.
+/// - `SelfBalance`: changes when the contract sends or receives value.
+///
+/// Hash expressions (`Keccak256*`) take operands and so aren't `EnvRead`
+/// candidates by shape; see `HASH_CSE_NOTE.md` for the separate CSE story.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum EnvRead {
+    Address,
+    BaseFee,
+    BlobBaseFee,
     CallDataSize,
     CallValue,
     Caller,
+    ChainId,
+    CodeSize,
+    Coinbase,
+    Difficulty,
+    GasLimit,
+    GasPrice,
+    Number,
     Origin,
-    Address,
+    Timestamp,
 }
 
 /// Returns the `EnvRead` kind for an expression if it is a pure environment read.
 fn env_read_kind(expression: &Expression) -> Option<EnvRead> {
     match expression {
+        Expression::Address => Some(EnvRead::Address),
+        Expression::BaseFee => Some(EnvRead::BaseFee),
+        Expression::BlobBaseFee => Some(EnvRead::BlobBaseFee),
         Expression::CallDataSize => Some(EnvRead::CallDataSize),
         Expression::CallValue => Some(EnvRead::CallValue),
         Expression::Caller => Some(EnvRead::Caller),
+        Expression::ChainId => Some(EnvRead::ChainId),
+        Expression::CodeSize => Some(EnvRead::CodeSize),
+        Expression::Coinbase => Some(EnvRead::Coinbase),
+        Expression::Difficulty => Some(EnvRead::Difficulty),
+        Expression::GasLimit => Some(EnvRead::GasLimit),
+        Expression::GasPrice => Some(EnvRead::GasPrice),
+        Expression::Number => Some(EnvRead::Number),
         Expression::Origin => Some(EnvRead::Origin),
-        Expression::Address => Some(EnvRead::Address),
+        Expression::Timestamp => Some(EnvRead::Timestamp),
         _ => None,
     }
 }
@@ -708,11 +740,21 @@ impl Simplifier {
                 Expression::MLoad { offset, region }
             }
 
+            Expression::Address => self.cse_env_read(EnvRead::Address, expression),
+            Expression::BaseFee => self.cse_env_read(EnvRead::BaseFee, expression),
+            Expression::BlobBaseFee => self.cse_env_read(EnvRead::BlobBaseFee, expression),
             Expression::CallDataSize => self.cse_env_read(EnvRead::CallDataSize, expression),
             Expression::CallValue => self.cse_env_read(EnvRead::CallValue, expression),
             Expression::Caller => self.cse_env_read(EnvRead::Caller, expression),
+            Expression::ChainId => self.cse_env_read(EnvRead::ChainId, expression),
+            Expression::CodeSize => self.cse_env_read(EnvRead::CodeSize, expression),
+            Expression::Coinbase => self.cse_env_read(EnvRead::Coinbase, expression),
+            Expression::Difficulty => self.cse_env_read(EnvRead::Difficulty, expression),
+            Expression::GasLimit => self.cse_env_read(EnvRead::GasLimit, expression),
+            Expression::GasPrice => self.cse_env_read(EnvRead::GasPrice, expression),
+            Expression::Number => self.cse_env_read(EnvRead::Number, expression),
             Expression::Origin => self.cse_env_read(EnvRead::Origin, expression),
-            Expression::Address => self.cse_env_read(EnvRead::Address, expression),
+            Expression::Timestamp => self.cse_env_read(EnvRead::Timestamp, expression),
 
             Expression::Keccak256Single { word0 } => {
                 let word0 = self.resolve_value(word0);

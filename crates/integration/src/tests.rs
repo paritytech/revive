@@ -514,8 +514,16 @@ fn unsigned_division_half_const() {
         (one, U256::ZERO),
     ];
     for (n, d) in pairs {
-        push_call(&mut actions, TestAddress::Instantiated(0), div_rhs_const_data(n, d));
-        push_call(&mut actions, TestAddress::Instantiated(0), div_lhs_const_data(n, d));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            div_rhs_const_data(n, d),
+        );
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            div_lhs_const_data(n, d),
+        );
     }
     run_differential(actions);
 }
@@ -525,7 +533,11 @@ fn unsigned_division_both_const() {
     let mut actions = instantiate_yul("contracts/DivBothConst.yul", "DivBothConst");
     let pair_count = 5;
     for i in 0..pair_count {
-        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            yul_which_calldata(i),
+        );
     }
     run_differential(actions);
 }
@@ -553,8 +565,16 @@ fn signed_division_half_const() {
         (I256::MIN + I256::ONE, I256::MINUS_ONE),
     ];
     for (n, d) in pairs {
-        push_call(&mut actions, TestAddress::Instantiated(0), sdiv_rhs_const_data(n, d));
-        push_call(&mut actions, TestAddress::Instantiated(0), sdiv_lhs_const_data(n, d));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            sdiv_rhs_const_data(n, d),
+        );
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            sdiv_lhs_const_data(n, d),
+        );
     }
     run_differential(actions);
 }
@@ -564,7 +584,11 @@ fn signed_division_both_const() {
     let mut actions = instantiate_yul("contracts/SdivBothConst.yul", "SdivBothConst");
     let pair_count = 13;
     for i in 0..pair_count {
-        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            yul_which_calldata(i),
+        );
     }
     run_differential(actions);
 }
@@ -586,8 +610,16 @@ fn unsigned_remainder_half_const() {
         (U256::MAX, U256::ZERO),
     ];
     for (n, d) in pairs {
-        push_call(&mut actions, TestAddress::Instantiated(0), mod_rhs_const_data(n, d));
-        push_call(&mut actions, TestAddress::Instantiated(0), mod_lhs_const_data(n, d));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            mod_rhs_const_data(n, d),
+        );
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            mod_lhs_const_data(n, d),
+        );
     }
     run_differential(actions);
 }
@@ -597,7 +629,11 @@ fn unsigned_remainder_both_const() {
     let mut actions = instantiate_yul("contracts/ModBothConst.yul", "ModBothConst");
     let pair_count = 7;
     for i in 0..pair_count {
-        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            yul_which_calldata(i),
+        );
     }
     run_differential(actions);
 }
@@ -629,8 +665,16 @@ fn signed_remainder_half_const() {
         (I256::ZERO, I256::ZERO),
     ];
     for (n, d) in pairs {
-        push_call(&mut actions, TestAddress::Instantiated(0), smod_rhs_const_data(n, d));
-        push_call(&mut actions, TestAddress::Instantiated(0), smod_lhs_const_data(n, d));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            smod_rhs_const_data(n, d),
+        );
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            smod_lhs_const_data(n, d),
+        );
     }
     run_differential(actions);
 }
@@ -640,7 +684,11 @@ fn signed_remainder_both_const() {
     let mut actions = instantiate_yul("contracts/SmodBothConst.yul", "SmodBothConst");
     let pair_count = 17;
     for i in 0..pair_count {
-        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            yul_which_calldata(i),
+        );
     }
     run_differential(actions);
 }
@@ -650,10 +698,7 @@ fn signed_remainder_both_const() {
 /// fixture is shaped the way it is. Expected to FAIL until the bug is fixed.
 #[test]
 fn signed_remainder_int_min_neg_one_bug() {
-    let mut actions = instantiate_yul(
-        "contracts/SmodIntMinNegOneBug.yul",
-        "SmodIntMinNegOneBug",
-    );
+    let mut actions = instantiate_yul("contracts/SmodIntMinNegOneBug.yul", "SmodIntMinNegOneBug");
     let mut tag = vec![0u8; 32];
     tag[28..32].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
     push_call(&mut actions, TestAddress::Instantiated(0), tag);
@@ -664,10 +709,7 @@ fn signed_remainder_int_min_neg_one_bug() {
 /// claimed to be guarded; this test pins that guard so regressions surface.
 #[test]
 fn signed_division_int_min_neg_one_bug() {
-    let mut actions = instantiate_yul(
-        "contracts/SdivIntMinNegOneBug.yul",
-        "SdivIntMinNegOneBug",
-    );
+    let mut actions = instantiate_yul("contracts/SdivIntMinNegOneBug.yul", "SdivIntMinNegOneBug");
     let mut tag = vec![0u8; 32];
     tag[28..32].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
     push_call(&mut actions, TestAddress::Instantiated(0), tag);
@@ -748,20 +790,12 @@ fn probe_signextend_oob() {
 
 #[test]
 fn probe_byte_oob() {
-    run_probe(
-        "contracts/ByteOobProbe.yul",
-        "ByteOobProbe",
-        &[U256::MAX],
-    );
+    run_probe("contracts/ByteOobProbe.yul", "ByteOobProbe", &[U256::MAX]);
 }
 
 #[test]
 fn probe_exp_zero_zero() {
-    run_probe(
-        "contracts/ExpZeroZeroProbe.yul",
-        "ExpZeroZeroProbe",
-        &[],
-    );
+    run_probe("contracts/ExpZeroZeroProbe.yul", "ExpZeroZeroProbe", &[]);
 }
 
 #[test]

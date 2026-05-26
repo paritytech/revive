@@ -674,6 +674,96 @@ fn signed_division_int_min_neg_one_bug() {
     run_differential(actions);
 }
 
+/// Build the standard "tag plus extra calldata words" payload used by the
+/// single-case probe fixtures.
+fn probe_calldata(extra_words: &[U256]) -> Vec<u8> {
+    let mut data = vec![0u8; 32 * (1 + extra_words.len())];
+    data[28..32].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    for (i, word) in extra_words.iter().enumerate() {
+        let off = 32 * (i + 1);
+        data[off..off + 32].copy_from_slice(&word.to_be_bytes::<32>());
+    }
+    data
+}
+
+fn run_probe(path: &str, contract: &str, extra: &[U256]) {
+    let mut actions = instantiate_yul(path, contract);
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        probe_calldata(extra),
+    );
+    run_differential(actions);
+}
+
+#[test]
+fn probe_shl_overflow() {
+    run_probe(
+        "contracts/ShlOverflowProbe.yul",
+        "ShlOverflowProbe",
+        &[U256::from(0x123456789abcdef_u64)],
+    );
+}
+
+#[test]
+fn probe_shr_overflow() {
+    run_probe(
+        "contracts/ShrOverflowProbe.yul",
+        "ShrOverflowProbe",
+        &[U256::from(0x123456789abcdef_u64)],
+    );
+}
+
+#[test]
+fn probe_sar_overflow() {
+    run_probe("contracts/SarOverflowProbe.yul", "SarOverflowProbe", &[]);
+}
+
+#[test]
+fn probe_addmod_zero() {
+    run_probe(
+        "contracts/AddModZeroProbe.yul",
+        "AddModZeroProbe",
+        &[U256::from(42), U256::from(99)],
+    );
+}
+
+#[test]
+fn probe_mulmod_zero() {
+    run_probe(
+        "contracts/MulModZeroProbe.yul",
+        "MulModZeroProbe",
+        &[U256::from(42), U256::from(99)],
+    );
+}
+
+#[test]
+fn probe_signextend_oob() {
+    run_probe(
+        "contracts/SignExtendOobProbe.yul",
+        "SignExtendOobProbe",
+        &[U256::MAX],
+    );
+}
+
+#[test]
+fn probe_byte_oob() {
+    run_probe(
+        "contracts/ByteOobProbe.yul",
+        "ByteOobProbe",
+        &[U256::MAX],
+    );
+}
+
+#[test]
+fn probe_exp_zero_zero() {
+    run_probe(
+        "contracts/ExpZeroZeroProbe.yul",
+        "ExpZeroZeroProbe",
+        &[],
+    );
+}
+
 #[test]
 fn ext_code_hash() {
     let mut actions = instantiate("contracts/ExtCode.sol", "ExtCode");

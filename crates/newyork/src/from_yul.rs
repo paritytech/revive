@@ -121,7 +121,7 @@ impl YulTranslator {
                 let mut function = Function::new(id, function_definition.identifier.clone());
 
                 for _parameter in &function_definition.arguments {
-                    let parameter_id = self.ssa.fresh_value();
+                    let parameter_id = self.ssa.fresh_id();
                     function
                         .parameters
                         .push((parameter_id, Type::Int(BitWidth::I256)));
@@ -275,7 +275,7 @@ impl YulTranslator {
 
             if variable_declaration.bindings.len() == 1 {
                 let binding = &variable_declaration.bindings[0];
-                let value_id = self.ssa.fresh_value();
+                let value_id = self.ssa.fresh_id();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.declare(&binding.inner, value);
 
@@ -286,7 +286,7 @@ impl YulTranslator {
             } else {
                 let mut bindings = Vec::new();
                 for binding in &variable_declaration.bindings {
-                    let value_id = self.ssa.fresh_value();
+                    let value_id = self.ssa.fresh_id();
                     let value = Value::new(value_id, Type::Int(BitWidth::I256));
                     self.ssa.declare(&binding.inner, value);
                     bindings.push(value_id);
@@ -299,7 +299,7 @@ impl YulTranslator {
             }
         } else {
             for binding in &variable_declaration.bindings {
-                let value_id = self.ssa.fresh_value();
+                let value_id = self.ssa.fresh_id();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.declare(&binding.inner, value);
 
@@ -329,7 +329,7 @@ impl YulTranslator {
 
         if assignment.bindings.len() == 1 {
             let binding = &assignment.bindings[0];
-            let value_id = self.ssa.fresh_value();
+            let value_id = self.ssa.fresh_id();
             let value = Value::new(value_id, Type::Int(BitWidth::I256));
             self.ssa.assign(&binding.inner, value);
 
@@ -340,7 +340,7 @@ impl YulTranslator {
         } else {
             let mut bindings = Vec::new();
             for binding in &assignment.bindings {
-                let value_id = self.ssa.fresh_value();
+                let value_id = self.ssa.fresh_id();
                 let value = Value::new(value_id, Type::Int(BitWidth::I256));
                 self.ssa.assign(&binding.inner, value);
                 bindings.push(value_id);
@@ -419,7 +419,7 @@ impl YulTranslator {
                 let value = match value_expression {
                     Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
                     _ => {
-                        let temporary_id = self.ssa.fresh_value();
+                        let temporary_id = self.ssa.fresh_id();
                         statements.push(Statement::Let {
                             bindings: vec![temporary_id],
                             value: value_expression,
@@ -454,7 +454,7 @@ impl YulTranslator {
             let argument_value = match argument_expression {
                 Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
                 _ => {
-                    let temporary_id = self.ssa.fresh_value();
+                    let temporary_id = self.ssa.fresh_id();
                     statements.push(Statement::Let {
                         bindings: vec![temporary_id],
                         value: argument_expression,
@@ -690,7 +690,7 @@ impl YulTranslator {
             }),
 
             FunctionName::Call => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::ExternalCall {
                     kind: CallKind::Call,
                     gas: arguments[0],
@@ -705,7 +705,7 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
             FunctionName::CallCode => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::ExternalCall {
                     kind: CallKind::CallCode,
                     gas: arguments[0],
@@ -720,7 +720,7 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
             FunctionName::DelegateCall => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::ExternalCall {
                     kind: CallKind::DelegateCall,
                     gas: arguments[0],
@@ -735,7 +735,7 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
             FunctionName::StaticCall => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::ExternalCall {
                     kind: CallKind::StaticCall,
                     gas: arguments[0],
@@ -751,7 +751,7 @@ impl YulTranslator {
             }
 
             FunctionName::Create => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::Create {
                     kind: CreateKind::Create,
                     value: arguments[0],
@@ -763,7 +763,7 @@ impl YulTranslator {
                 Ok(Expression::Var(result_id))
             }
             FunctionName::Create2 => {
-                let result_id = self.ssa.fresh_value();
+                let result_id = self.ssa.fresh_id();
                 statements.push(Statement::Create {
                     kind: CreateKind::Create2,
                     value: arguments[0],
@@ -948,7 +948,7 @@ impl YulTranslator {
         let condition_value = match condition_expression {
             Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
-                let temporary_id = self.ssa.fresh_value();
+                let temporary_id = self.ssa.fresh_id();
                 statements.push(Statement::Let {
                     bindings: vec![temporary_id],
                     value: condition_expression,
@@ -977,7 +977,7 @@ impl YulTranslator {
         }
 
         for (name, before_value, _then_value) in &modified_vars {
-            let output_id = self.ssa.fresh_value();
+            let output_id = self.ssa.fresh_id();
             outputs.push(output_id);
             self.ssa
                 .assign(name, Value::new(output_id, before_value.value_type));
@@ -1023,7 +1023,7 @@ impl YulTranslator {
         let scrutinee_value = match scrutinee_expression {
             Expression::Var(id) => Value::new(id, Type::Int(BitWidth::I256)),
             _ => {
-                let temporary_id = self.ssa.fresh_value();
+                let temporary_id = self.ssa.fresh_id();
                 statements.push(Statement::Let {
                     bindings: vec![temporary_id],
                     value: scrutinee_expression,
@@ -1089,7 +1089,7 @@ impl YulTranslator {
         for name in &modified_names {
             if let Some(&before_value) = modified_vars.get(name) {
                 inputs.push(before_value);
-                let output_id = self.ssa.fresh_value();
+                let output_id = self.ssa.fresh_id();
                 outputs.push(output_id);
                 output_names.push((name.clone(), Value::new(output_id, before_value.value_type)));
             }
@@ -1162,7 +1162,7 @@ impl YulTranslator {
         let mut initializer_values = Vec::new();
 
         for (name, &value) in &initializer_scope {
-            loop_variables.push((name.clone(), self.ssa.fresh_value()));
+            loop_variables.push((name.clone(), self.ssa.fresh_id()));
             initializer_values.push(value);
         }
 
@@ -1204,7 +1204,7 @@ impl YulTranslator {
         self.ssa.enter_scope();
         let mut post_input_var_ids = Vec::new();
         for (name, _) in loop_variables.iter() {
-            let post_var_id = self.ssa.fresh_value();
+            let post_var_id = self.ssa.fresh_id();
             post_input_var_ids.push(post_var_id);
             let value_type = initializer_scope
                 .get(name)
@@ -1225,7 +1225,7 @@ impl YulTranslator {
         let mut outputs = Vec::new();
         let mut output_values = Vec::new();
         for (name, _) in &loop_variables {
-            let output_id = self.ssa.fresh_value();
+            let output_id = self.ssa.fresh_id();
             outputs.push(output_id);
             let value_type = initializer_scope
                 .get(name)
@@ -1290,7 +1290,7 @@ impl YulTranslator {
         let mut return_value_ids = Vec::new();
         let saved_return_variable_names = std::mem::take(&mut self.current_return_variable_names);
         for return_identifier in &function_definition.result {
-            let return_id = self.ssa.fresh_value();
+            let return_id = self.ssa.fresh_id();
             self.ssa.declare(
                 &return_identifier.inner,
                 Value::new(return_id, Type::Int(BitWidth::I256)),

@@ -34,13 +34,13 @@ impl SsaBuilder {
     }
 
     /// Allocates a fresh value ID.
-    pub fn fresh_value(&mut self) -> ValueId {
+    pub fn fresh_id(&mut self) -> ValueId {
         self.next_value_id.fresh()
     }
 
     /// Allocates a fresh typed value with the given type.
     pub fn fresh_typed_value(&mut self, value_type: Type) -> Value {
-        Value::new(self.fresh_value(), value_type)
+        Value::new(self.fresh_id(), value_type)
     }
 
     /// Declares a new variable in the current scope.
@@ -114,8 +114,8 @@ mod tests {
     #[test]
     fn test_fresh_values() {
         let mut builder = SsaBuilder::new();
-        let v0 = builder.fresh_value();
-        let v1 = builder.fresh_value();
+        let v0 = builder.fresh_id();
+        let v1 = builder.fresh_id();
         assert_eq!(v0.0, 0);
         assert_eq!(v1.0, 1);
     }

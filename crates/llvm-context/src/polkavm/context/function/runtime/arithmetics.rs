@@ -160,6 +160,15 @@ impl WriteLLVM for Remainder {
 }
 
 /// Implements the signed remainder operator according to the EVM specification.
+///
+/// `srem(INT_MIN, -1)` is signed-overflow UB in LLVM even though the
+/// mathematical remainder is `0`, and EVM `SMOD` defines this case as `0`.
+/// Before performing the srem we therefore swap a `-1` divisor for `1`:
+/// `srem(x, 1) == 0 == SMOD(x, -1)` for all x, so the substitution preserves
+/// EVM semantics while never feeding the UB pair to LLVM's srem. Unlike a
+/// branch-based guard this leaves the srem unconditionally well-defined at
+/// the IR level, so constant propagation cannot fold its way into poison
+/// regardless of pass ordering. See paritytech/revive#524.
 pub struct SignedRemainder;
 
 impl RuntimeFunction for SignedRemainder {
@@ -180,9 +189,24 @@ impl RuntimeFunction for SignedRemainder {
         let operand_2 = Self::paramater(context, 1).into_int_value();
 
         wrapped_division(context, operand_2, || {
+            let is_neg_one = context.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                operand_2,
+                context.word_type().const_all_ones(),
+                "smod_divisor_is_neg_one",
+            )?;
+            let safe_divisor = context
+                .builder()
+                .build_select(
+                    is_neg_one,
+                    context.word_const(1),
+                    operand_2,
+                    "smod_safe_divisor",
+                )?
+                .into_int_value();
             Ok(context
                 .builder()
-                .build_int_signed_rem(operand_1, operand_2, "SMOD")?)
+                .build_int_signed_rem(operand_1, safe_divisor, "SMOD")?)
         })
         .map(Into::into)
     }

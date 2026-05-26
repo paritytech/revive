@@ -5,6 +5,8 @@
 	install-wasm \
 	install-llvm-builder \
 	install-llvm \
+	install-mdbook \
+	install-cargo-llvm-cov \
 	install-revive-runner \
 	format \
 	clippy \
@@ -19,6 +21,8 @@
 	test-wasm \
 	test-llvm-builder \
 	test-book \
+	coverage \
+	coverage-reset \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -85,9 +89,59 @@ test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
 
-test-book:
-	cargo install mdbook --version 0.5.1 --locked
+MDBOOK_VERSION = 0.5.1
+
+install-mdbook:
+	@mdbook --version 2>/dev/null | grep -qx "mdbook v$(MDBOOK_VERSION)" \
+		|| cargo install mdbook --version $(MDBOOK_VERSION) --locked --force
+
+install-cargo-llvm-cov:
+	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
+	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
+
+test-book: install-mdbook
 	mdbook test book
+
+# Workspace-wide coverage (including revive-llvm-builder). Stages HTML under
+# book/src/coverage/; mdbook copies it to docs/coverage/ during build. The
+# chapter is stamped in place — revert with `make coverage-reset`.
+# Several hours expected: llvm-builder tests run single-threaded.
+coverage: install-cargo-llvm-cov install-mdbook
+	cargo llvm-cov clean --workspace
+	rm -rf target/coverage
+	cargo llvm-cov --workspace \
+		--all-targets \
+		--locked \
+		--ignore-run-fail \
+		--html \
+		--output-dir target/coverage \
+		-- --test-threads=1
+	cargo llvm-cov report --summary-only > target/coverage/summary.txt
+	rm -rf book/src/coverage
+	mkdir -p book/src/coverage
+	mv target/coverage/html book/src/coverage/html
+	mv target/coverage/summary.txt book/src/coverage/summary.txt
+	@COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ; \
+	 TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") ; \
+	 COVERED=$$(awk '/^TOTAL/ { print $$10; exit }' target/coverage/summary.txt) ; \
+	 [ -n "$$COVERED" ] || COVERED=N/A ; \
+	 awk -v commit="$$COMMIT" -v ts="$$TIMESTAMP" -v covered="$$COVERED" \
+	     -v link="../coverage/html/index.html" \
+	     -f .github/scripts/stamp-coverage-chapter.awk \
+	     book/src/developer_guide/coverage.md \
+	     > book/src/developer_guide/coverage.md.new
+	mv book/src/developer_guide/coverage.md.new book/src/developer_guide/coverage.md
+	mdbook build book
+	@echo
+	@echo "Coverage collected. Run 'make book' to view."
+	@echo "Run 'make coverage-reset' before committing."
+
+# Restore the committed chapter and drop the staged HTML.
+coverage-reset: install-mdbook
+	git checkout -- book/src/developer_guide/coverage.md
+	rm -rf book/src/coverage
+	mdbook build book
+	@echo "Coverage chapter restored."
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

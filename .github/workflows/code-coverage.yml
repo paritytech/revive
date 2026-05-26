@@ -1,0 +1,145 @@
+# Label-gated coverage workflow (`measure code coverage`). Uses
+# `pull_request_target` for write-token access — the label is the trust
+# gate. Drop the label if a labeled PR's author pushes commits you do not
+# trust; new pushes otherwise re-fire the workflow on the existing trust.
+# One-time setup: create the label and point Settings → Pages at the
+# `gh-pages` branch after the first successful run.
+
+name: Code coverage
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [labeled, synchronize, reopened]
+
+concurrency:
+  group: code-coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write       # push to gh-pages
+  pull-requests: write  # comment on PR
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    name: Measure and publish coverage
+    if: contains(github.event.pull_request.labels.*.name, 'measure code coverage')
+    runs-on: ubuntu-24.04
+    # Cap is 360 min; llvm-builder tests alone can take hours.
+    timeout-minutes: 360
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: recursive
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ""
+          components: llvm-tools-preview
+
+      - name: Install solc
+        uses: ./.github/actions/get-solc
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM environment variables
+        run: |
+          echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate HTML coverage report
+        # Includes revive-llvm-builder (serial per Makefile); --ignore-run-fail keeps partial coverage on test-binary non-zero exit.
+        run: |
+          cargo llvm-cov clean --workspace
+          rm -rf target/llvm-cov
+          cargo llvm-cov --workspace \
+            --all-targets \
+            --locked \
+            --ignore-run-fail \
+            --html \
+            --output-dir target/llvm-cov \
+            -- --test-threads=1
+
+      - name: Generate coverage summary
+        run: |
+          cargo llvm-cov report --summary-only \
+            | tee target/llvm-cov/summary.txt
+
+      - name: Upload coverage HTML as workflow artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-pr-${{ github.event.pull_request.number }}
+          path: target/llvm-cov/html
+          retention-days: 30
+
+      - name: Publish coverage to gh-pages
+        if: success()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: target/llvm-cov/html
+          destination_dir: pr-${{ github.event.pull_request.number }}
+          # Preserve reports from other PRs already on the branch.
+          keep_files: true
+          commit_message: "coverage: PR #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.head.sha }}"
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Comment coverage report URL on PR
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('target/llvm-cov/summary.txt', 'utf8').trim();
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const sha = context.payload.pull_request.head.sha.substring(0, 8);
+            const url = `https://${owner}.github.io/${repo}/pr-${prNumber}/`;
+            const marker = '<!-- code-coverage-bot -->';
+            const body = [
+              marker,
+              `### Code coverage`,
+              ``,
+              `Report for \`${sha}\` is available at: ${url}`,
+              ``,
+              `<details><summary>Summary</summary>`,
+              ``,
+              `\`\`\``,
+              summary,
+              `\`\`\``,
+              ``,
+              `</details>`,
+              ``,
+              `_Workflow run: [#${context.runId}](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})_`,
+            ].join('\n');
+
+            // Update prior bot comment in place rather than spamming.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body,
+              });
+            }

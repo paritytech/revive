@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-79c091ca.js";
+            window.path_to_searchindex_js = "searchindex-96db7748.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6f3f265e.js"></script>
+        <script src="toc-bc498aa7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -716,6 +716,56 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
 <h2 id="the-differential-testing-utility"><a class="header" href="#the-differential-testing-utility">The differential testing utility</a></h2>
 <p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus, we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
 <p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="code-coverage"><a class="header" href="#code-coverage">Code coverage</a></h1>
+<p>Revive measures Rust line and branch coverage with
+<a href="https://github.com/taiki-e/cargo-llvm-cov"><code>cargo-llvm-cov</code></a>. Coverage is
+collected over the entire workspace — including the otherwise-excluded
+<code>revive-llvm-builder</code> crate — so the report reflects every shipped line.</p>
+<p>Two ways to obtain a report:</p>
+<ol>
+<li><strong>Locally:</strong> <code>make coverage</code> (described below).</li>
+<li><strong>Per PR:</strong> apply the <code>measure code coverage</code> label. The workflow at
+<code>.github/workflows/code-coverage.yml</code> publishes the report to
+<code>https://paritytech.github.io/revive/pr-&lt;N&gt;/</code> and comments the link on
+the PR. Label requires maintainer privileges.</li>
+</ol>
+<h2 id="running-locally"><a class="header" href="#running-locally">Running locally</a></h2>
+<pre><code class="language-bash">make coverage
+</code></pre>
+<p>The target:</p>
+<ol>
+<li>Builds and tests the workspace under cargo-llvm-cov, tolerating per-crate
+test failures (<code>--no-fail-fast --ignore-run-fail</code>) so partial coverage
+lands.</li>
+<li>Writes HTML to <code>target/coverage/html/</code> and a summary to
+<code>target/coverage/summary.txt</code>.</li>
+<li>Stages the HTML under <code>book/src/coverage/</code>; mdbook copies it to
+<code>docs/coverage/</code> during build.</li>
+<li>Rewrites the <strong>Status</strong> block below in place with the short commit hash,
+ISO-8601 UTC timestamp, and total line coverage, then runs
+<code>mdbook build</code>.</li>
+</ol>
+<p>Expect several hours: <code>revive-llvm-builder</code> tests build LLVM end-to-end and
+run single-threaded.</p>
+<p>Prerequisites:</p>
+<ul>
+<li><code>LLVM_SYS_221_PREFIX</code> exported and pointing at a compatible LLVM build
+(same as <code>make test-workspace</code>).</li>
+<li><code>llvm-tools-preview</code> rustup component, <code>cargo-llvm-cov</code>, and the pinned
+<code>mdbook</code> version — all installed on demand by the target.</li>
+</ul>
+<h3 id="reverting-local-changes"><a class="header" href="#reverting-local-changes">Reverting local changes</a></h3>
+<p><code>make coverage</code> modifies <code>book/src/developer_guide/coverage.md</code> in place and
+stages files under <code>book/src/coverage/</code>. To restore the committed state
+before pushing:</p>
+<pre><code class="language-bash">make coverage-reset
+</code></pre>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<!-- COVERAGE_STATUS_BEGIN -->
+<p><strong>Last collected:</strong> 2026-05-26T19:00:57Z for commit <code>a59298e</code> — <strong>38.08% line coverage</strong>.</p>
+<p><a href="coverage/html/index.html">Open the report</a></p>
+<!-- COVERAGE_STATUS_END -->
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cross-compilation"><a class="header" href="#cross-compilation">Cross compilation</a></h1>
 <p>We cross-compile the <code>resolc.js</code> frontend executable to Wasm for running it in a Node.js or browser environment.</p>

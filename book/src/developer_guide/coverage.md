@@ -55,7 +55,5 @@ make coverage-reset
 ## Status
 
 <!-- COVERAGE_STATUS_BEGIN -->
-**Last collected:** 2026-05-26T19:00:57Z for commit `a59298e` — **38.08% line coverage**.
-
 [Open the report](../coverage/html/index.html)
 <!-- COVERAGE_STATUS_END -->

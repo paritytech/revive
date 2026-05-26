@@ -7,7 +7,7 @@ use revive_runner::*;
 use SpecsAction::*;
 
 use crate::cases::Contract;
-use crate::cases::DivisionArithmeticsConst;
+use crate::cases::{DivConst, ModConst, SdivConst, SmodConst};
 
 /// Parameters:
 /// - The function name of the test
@@ -319,15 +319,15 @@ fn signed_const_set() -> (I256, I256, I256, I256, I256, I256, I256, I256) {
 fn div_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
     let (one, two, five, max) = unsigned_const_set();
     if d == U256::ZERO {
-        DivisionArithmeticsConst::divRhsZeroCall::new((n,)).abi_encode()
+        DivConst::divRhsZeroCall::new((n,)).abi_encode()
     } else if d == one {
-        DivisionArithmeticsConst::divRhsOneCall::new((n,)).abi_encode()
+        DivConst::divRhsOneCall::new((n,)).abi_encode()
     } else if d == two {
-        DivisionArithmeticsConst::divRhsTwoCall::new((n,)).abi_encode()
+        DivConst::divRhsTwoCall::new((n,)).abi_encode()
     } else if d == five {
-        DivisionArithmeticsConst::divRhsFiveCall::new((n,)).abi_encode()
+        DivConst::divRhsFiveCall::new((n,)).abi_encode()
     } else if d == max {
-        DivisionArithmeticsConst::divRhsMaxCall::new((n,)).abi_encode()
+        DivConst::divRhsMaxCall::new((n,)).abi_encode()
     } else {
         panic!("no divRhsConst variant for d={d}")
     }
@@ -336,15 +336,15 @@ fn div_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
 fn div_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
     let (one, two, five, max) = unsigned_const_set();
     if n == U256::ZERO {
-        DivisionArithmeticsConst::divLhsZeroCall::new((d,)).abi_encode()
+        DivConst::divLhsZeroCall::new((d,)).abi_encode()
     } else if n == one {
-        DivisionArithmeticsConst::divLhsOneCall::new((d,)).abi_encode()
+        DivConst::divLhsOneCall::new((d,)).abi_encode()
     } else if n == two {
-        DivisionArithmeticsConst::divLhsTwoCall::new((d,)).abi_encode()
+        DivConst::divLhsTwoCall::new((d,)).abi_encode()
     } else if n == five {
-        DivisionArithmeticsConst::divLhsFiveCall::new((d,)).abi_encode()
+        DivConst::divLhsFiveCall::new((d,)).abi_encode()
     } else if n == max {
-        DivisionArithmeticsConst::divLhsMaxCall::new((d,)).abi_encode()
+        DivConst::divLhsMaxCall::new((d,)).abi_encode()
     } else {
         panic!("no divLhsConst variant for n={n}")
     }
@@ -353,15 +353,15 @@ fn div_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
 fn mod_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
     let (one, two, five, max) = unsigned_const_set();
     if d == U256::ZERO {
-        DivisionArithmeticsConst::modRhsZeroCall::new((n,)).abi_encode()
+        ModConst::modRhsZeroCall::new((n,)).abi_encode()
     } else if d == one {
-        DivisionArithmeticsConst::modRhsOneCall::new((n,)).abi_encode()
+        ModConst::modRhsOneCall::new((n,)).abi_encode()
     } else if d == two {
-        DivisionArithmeticsConst::modRhsTwoCall::new((n,)).abi_encode()
+        ModConst::modRhsTwoCall::new((n,)).abi_encode()
     } else if d == five {
-        DivisionArithmeticsConst::modRhsFiveCall::new((n,)).abi_encode()
+        ModConst::modRhsFiveCall::new((n,)).abi_encode()
     } else if d == max {
-        DivisionArithmeticsConst::modRhsMaxCall::new((n,)).abi_encode()
+        ModConst::modRhsMaxCall::new((n,)).abi_encode()
     } else {
         panic!("no modRhsConst variant for d={d}")
     }
@@ -370,15 +370,15 @@ fn mod_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
 fn mod_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
     let (one, two, five, max) = unsigned_const_set();
     if n == U256::ZERO {
-        DivisionArithmeticsConst::modLhsZeroCall::new((d,)).abi_encode()
+        ModConst::modLhsZeroCall::new((d,)).abi_encode()
     } else if n == one {
-        DivisionArithmeticsConst::modLhsOneCall::new((d,)).abi_encode()
+        ModConst::modLhsOneCall::new((d,)).abi_encode()
     } else if n == two {
-        DivisionArithmeticsConst::modLhsTwoCall::new((d,)).abi_encode()
+        ModConst::modLhsTwoCall::new((d,)).abi_encode()
     } else if n == five {
-        DivisionArithmeticsConst::modLhsFiveCall::new((d,)).abi_encode()
+        ModConst::modLhsFiveCall::new((d,)).abi_encode()
     } else if n == max {
-        DivisionArithmeticsConst::modLhsMaxCall::new((d,)).abi_encode()
+        ModConst::modLhsMaxCall::new((d,)).abi_encode()
     } else {
         panic!("no modLhsConst variant for n={n}")
     }
@@ -387,25 +387,25 @@ fn mod_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
 fn sdiv_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
     let (one, two, neg_two, five, neg_five, min, min_p1, max) = signed_const_set();
     if d == I256::ZERO {
-        DivisionArithmeticsConst::sdivRhsZeroCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsZeroCall::new((n,)).abi_encode()
     } else if d == one {
-        DivisionArithmeticsConst::sdivRhsOneCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsOneCall::new((n,)).abi_encode()
     } else if d == I256::MINUS_ONE {
-        DivisionArithmeticsConst::sdivRhsNegOneCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsNegOneCall::new((n,)).abi_encode()
     } else if d == two {
-        DivisionArithmeticsConst::sdivRhsTwoCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsTwoCall::new((n,)).abi_encode()
     } else if d == neg_two {
-        DivisionArithmeticsConst::sdivRhsNegTwoCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsNegTwoCall::new((n,)).abi_encode()
     } else if d == five {
-        DivisionArithmeticsConst::sdivRhsFiveCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsFiveCall::new((n,)).abi_encode()
     } else if d == neg_five {
-        DivisionArithmeticsConst::sdivRhsNegFiveCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsNegFiveCall::new((n,)).abi_encode()
     } else if d == min {
-        DivisionArithmeticsConst::sdivRhsMinCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsMinCall::new((n,)).abi_encode()
     } else if d == min_p1 {
-        DivisionArithmeticsConst::sdivRhsMinPlusOneCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsMinPlusOneCall::new((n,)).abi_encode()
     } else if d == max {
-        DivisionArithmeticsConst::sdivRhsMaxCall::new((n,)).abi_encode()
+        SdivConst::sdivRhsMaxCall::new((n,)).abi_encode()
     } else {
         panic!("no sdivRhsConst variant for d={d}")
     }
@@ -414,25 +414,25 @@ fn sdiv_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
 fn sdiv_lhs_const_data(n: I256, d: I256) -> Vec<u8> {
     let (one, two, neg_two, five, neg_five, min, min_p1, max) = signed_const_set();
     if n == I256::ZERO {
-        DivisionArithmeticsConst::sdivLhsZeroCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsZeroCall::new((d,)).abi_encode()
     } else if n == one {
-        DivisionArithmeticsConst::sdivLhsOneCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsOneCall::new((d,)).abi_encode()
     } else if n == I256::MINUS_ONE {
-        DivisionArithmeticsConst::sdivLhsNegOneCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsNegOneCall::new((d,)).abi_encode()
     } else if n == two {
-        DivisionArithmeticsConst::sdivLhsTwoCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsTwoCall::new((d,)).abi_encode()
     } else if n == neg_two {
-        DivisionArithmeticsConst::sdivLhsNegTwoCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsNegTwoCall::new((d,)).abi_encode()
     } else if n == five {
-        DivisionArithmeticsConst::sdivLhsFiveCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsFiveCall::new((d,)).abi_encode()
     } else if n == neg_five {
-        DivisionArithmeticsConst::sdivLhsNegFiveCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsNegFiveCall::new((d,)).abi_encode()
     } else if n == min {
-        DivisionArithmeticsConst::sdivLhsMinCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsMinCall::new((d,)).abi_encode()
     } else if n == min_p1 {
-        DivisionArithmeticsConst::sdivLhsMinPlusOneCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsMinPlusOneCall::new((d,)).abi_encode()
     } else if n == max {
-        DivisionArithmeticsConst::sdivLhsMaxCall::new((d,)).abi_encode()
+        SdivConst::sdivLhsMaxCall::new((d,)).abi_encode()
     } else {
         panic!("no sdivLhsConst variant for n={n}")
     }
@@ -441,23 +441,23 @@ fn sdiv_lhs_const_data(n: I256, d: I256) -> Vec<u8> {
 fn smod_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
     let (one, two, neg_two, five, neg_five, min, _min_p1, max) = signed_const_set();
     if d == I256::ZERO {
-        DivisionArithmeticsConst::smodRhsZeroCall::new((n,)).abi_encode()
+        SmodConst::smodRhsZeroCall::new((n,)).abi_encode()
     } else if d == one {
-        DivisionArithmeticsConst::smodRhsOneCall::new((n,)).abi_encode()
+        SmodConst::smodRhsOneCall::new((n,)).abi_encode()
     } else if d == I256::MINUS_ONE {
-        DivisionArithmeticsConst::smodRhsNegOneCall::new((n,)).abi_encode()
+        SmodConst::smodRhsNegOneCall::new((n,)).abi_encode()
     } else if d == two {
-        DivisionArithmeticsConst::smodRhsTwoCall::new((n,)).abi_encode()
+        SmodConst::smodRhsTwoCall::new((n,)).abi_encode()
     } else if d == neg_two {
-        DivisionArithmeticsConst::smodRhsNegTwoCall::new((n,)).abi_encode()
+        SmodConst::smodRhsNegTwoCall::new((n,)).abi_encode()
     } else if d == five {
-        DivisionArithmeticsConst::smodRhsFiveCall::new((n,)).abi_encode()
+        SmodConst::smodRhsFiveCall::new((n,)).abi_encode()
     } else if d == neg_five {
-        DivisionArithmeticsConst::smodRhsNegFiveCall::new((n,)).abi_encode()
+        SmodConst::smodRhsNegFiveCall::new((n,)).abi_encode()
     } else if d == min {
-        DivisionArithmeticsConst::smodRhsMinCall::new((n,)).abi_encode()
+        SmodConst::smodRhsMinCall::new((n,)).abi_encode()
     } else if d == max {
-        DivisionArithmeticsConst::smodRhsMaxCall::new((n,)).abi_encode()
+        SmodConst::smodRhsMaxCall::new((n,)).abi_encode()
     } else {
         panic!("no smodRhsConst variant for d={d}")
     }
@@ -466,23 +466,23 @@ fn smod_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
 fn smod_lhs_const_data(n: I256, d: I256) -> Vec<u8> {
     let (one, two, neg_two, five, neg_five, min, _min_p1, max) = signed_const_set();
     if n == I256::ZERO {
-        DivisionArithmeticsConst::smodLhsZeroCall::new((d,)).abi_encode()
+        SmodConst::smodLhsZeroCall::new((d,)).abi_encode()
     } else if n == one {
-        DivisionArithmeticsConst::smodLhsOneCall::new((d,)).abi_encode()
+        SmodConst::smodLhsOneCall::new((d,)).abi_encode()
     } else if n == I256::MINUS_ONE {
-        DivisionArithmeticsConst::smodLhsNegOneCall::new((d,)).abi_encode()
+        SmodConst::smodLhsNegOneCall::new((d,)).abi_encode()
     } else if n == two {
-        DivisionArithmeticsConst::smodLhsTwoCall::new((d,)).abi_encode()
+        SmodConst::smodLhsTwoCall::new((d,)).abi_encode()
     } else if n == neg_two {
-        DivisionArithmeticsConst::smodLhsNegTwoCall::new((d,)).abi_encode()
+        SmodConst::smodLhsNegTwoCall::new((d,)).abi_encode()
     } else if n == five {
-        DivisionArithmeticsConst::smodLhsFiveCall::new((d,)).abi_encode()
+        SmodConst::smodLhsFiveCall::new((d,)).abi_encode()
     } else if n == neg_five {
-        DivisionArithmeticsConst::smodLhsNegFiveCall::new((d,)).abi_encode()
+        SmodConst::smodLhsNegFiveCall::new((d,)).abi_encode()
     } else if n == min {
-        DivisionArithmeticsConst::smodLhsMinCall::new((d,)).abi_encode()
+        SmodConst::smodLhsMinCall::new((d,)).abi_encode()
     } else if n == max {
-        DivisionArithmeticsConst::smodLhsMaxCall::new((d,)).abi_encode()
+        SmodConst::smodLhsMaxCall::new((d,)).abi_encode()
     } else {
         panic!("no smodLhsConst variant for n={n}")
     }
@@ -501,10 +501,7 @@ fn push_call(actions: &mut Vec<SpecsAction>, dest: TestAddress, data: Vec<u8>) {
 
 #[test]
 fn unsigned_division_half_const() {
-    let mut actions = instantiate(
-        "contracts/DivisionArithmeticsConst.sol",
-        "DivisionArithmeticsConst",
-    );
+    let mut actions = instantiate("contracts/DivisionArithmeticsConst.sol", "DivConst");
     let (one, two, five, _max) = unsigned_const_set();
     let pairs = [
         (five, five),
@@ -544,10 +541,7 @@ fn unsigned_division_both_const() {
 
 #[test]
 fn signed_division_half_const() {
-    let mut actions = instantiate(
-        "contracts/DivisionArithmeticsConst.sol",
-        "DivisionArithmeticsConst",
-    );
+    let mut actions = instantiate("contracts/DivisionArithmeticsConst.sol", "SdivConst");
     let (one, two, neg_two, five, neg_five, _min, _min_p1, _max) = signed_const_set();
     let pairs = [
         (five, five),
@@ -595,10 +589,7 @@ fn signed_division_both_const() {
 
 #[test]
 fn unsigned_remainder_half_const() {
-    let mut actions = instantiate(
-        "contracts/DivisionArithmeticsConst.sol",
-        "DivisionArithmeticsConst",
-    );
+    let mut actions = instantiate("contracts/DivisionArithmeticsConst.sol", "ModConst");
     let (one, two, five, _max) = unsigned_const_set();
     let pairs = [
         (five, five),
@@ -640,10 +631,7 @@ fn unsigned_remainder_both_const() {
 
 #[test]
 fn signed_remainder_half_const() {
-    let mut actions = instantiate(
-        "contracts/DivisionArithmeticsConst.sol",
-        "DivisionArithmeticsConst",
-    );
+    let mut actions = instantiate("contracts/DivisionArithmeticsConst.sol", "SmodConst");
     let (one, two, neg_two, five, neg_five, _min, _min_p1, _max) = signed_const_set();
     let pairs = [
         (five, five),

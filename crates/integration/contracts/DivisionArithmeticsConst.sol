@@ -8,11 +8,14 @@ pragma solidity ^0.8;
 /// final bytecode contains a real div/sdiv/mod/smod with one constant
 /// operand — exercising revive's "one literal operand" codegen path.
 ///
+/// Split into four contracts (one per opcode) so each compiled blob stays
+/// well under polkavm-linker's debug line-program limit. A single 58-function
+/// contract overflowed it in debug builds.
+///
 /// Two-constant cases are covered by Yul fixtures (see
-/// `DivisionArithmeticsConst*.yul`) to bypass solc's Yul optimizer.
-contract DivisionArithmeticsConst {
-    // ---------- div (unsigned) ----------
+/// `*BothConst.yul`) to bypass solc's Yul optimizer.
 
+contract DivConst {
     function divRhsZero(uint256 n) public pure returns (uint256 r) { assembly { r := div(n, 0) } }
     function divRhsOne(uint256 n) public pure returns (uint256 r) { assembly { r := div(n, 1) } }
     function divRhsTwo(uint256 n) public pure returns (uint256 r) { assembly { r := div(n, 2) } }
@@ -30,9 +33,9 @@ contract DivisionArithmeticsConst {
         uint256 c = type(uint256).max;
         assembly { r := div(c, d) }
     }
+}
 
-    // ---------- sdiv (signed) ----------
-
+contract SdivConst {
     function sdivRhsZero(int256 n) public pure returns (int256 r) { assembly { r := sdiv(n, 0) } }
     function sdivRhsOne(int256 n) public pure returns (int256 r) { assembly { r := sdiv(n, 1) } }
     function sdivRhsNegOne(int256 n) public pure returns (int256 r) {
@@ -90,9 +93,9 @@ contract DivisionArithmeticsConst {
         int256 c = type(int256).max;
         assembly { r := sdiv(c, d) }
     }
+}
 
-    // ---------- mod (unsigned) ----------
-
+contract ModConst {
     function modRhsZero(uint256 n) public pure returns (uint256 r) { assembly { r := mod(n, 0) } }
     function modRhsOne(uint256 n) public pure returns (uint256 r) { assembly { r := mod(n, 1) } }
     function modRhsTwo(uint256 n) public pure returns (uint256 r) { assembly { r := mod(n, 2) } }
@@ -110,9 +113,9 @@ contract DivisionArithmeticsConst {
         uint256 c = type(uint256).max;
         assembly { r := mod(c, d) }
     }
+}
 
-    // ---------- smod (signed) ----------
-
+contract SmodConst {
     function smodRhsZero(int256 n) public pure returns (int256 r) { assembly { r := smod(n, 0) } }
     function smodRhsOne(int256 n) public pure returns (int256 r) { assembly { r := smod(n, 1) } }
     function smodRhsNegOne(int256 n) public pure returns (int256 r) {

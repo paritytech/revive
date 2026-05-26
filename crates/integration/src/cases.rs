@@ -187,7 +187,7 @@ case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmet
 case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
 
 sol!(
-    contract DivisionArithmeticsConst {
+    contract DivConst {
         function divRhsZero(uint256 n) external pure returns (uint256);
         function divRhsOne(uint256 n) external pure returns (uint256);
         function divRhsTwo(uint256 n) external pure returns (uint256);
@@ -198,7 +198,9 @@ sol!(
         function divLhsTwo(uint256 d) external pure returns (uint256);
         function divLhsFive(uint256 d) external pure returns (uint256);
         function divLhsMax(uint256 d) external pure returns (uint256);
+    }
 
+    contract SdivConst {
         function sdivRhsZero(int256 n) external pure returns (int256);
         function sdivRhsOne(int256 n) external pure returns (int256);
         function sdivRhsNegOne(int256 n) external pure returns (int256);
@@ -219,7 +221,9 @@ sol!(
         function sdivLhsMin(int256 d) external pure returns (int256);
         function sdivLhsMinPlusOne(int256 d) external pure returns (int256);
         function sdivLhsMax(int256 d) external pure returns (int256);
+    }
 
+    contract ModConst {
         function modRhsZero(uint256 n) external pure returns (uint256);
         function modRhsOne(uint256 n) external pure returns (uint256);
         function modRhsTwo(uint256 n) external pure returns (uint256);
@@ -230,7 +234,9 @@ sol!(
         function modLhsTwo(uint256 d) external pure returns (uint256);
         function modLhsFive(uint256 d) external pure returns (uint256);
         function modLhsMax(uint256 d) external pure returns (uint256);
+    }
 
+    contract SmodConst {
         function smodRhsZero(int256 n) external pure returns (int256);
         function smodRhsOne(int256 n) external pure returns (int256);
         function smodRhsNegOne(int256 n) external pure returns (int256);

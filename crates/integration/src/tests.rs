@@ -1,11 +1,13 @@
 use std::str::FromStr;
 
 use alloy_primitives::*;
+use alloy_sol_types::SolCall;
 use resolc::test_utils::build_yul;
 use revive_runner::*;
 use SpecsAction::*;
 
 use crate::cases::Contract;
+use crate::cases::DivisionArithmeticsConst;
 
 /// Parameters:
 /// - The function name of the test
@@ -265,6 +267,410 @@ fn signed_remainder() {
         })
     }
 
+    run_differential(actions);
+}
+
+/// Build calldata for the both-const Yul fixtures. Each fixture reads the case
+/// index from `calldataload(0)` and a 32-byte "tag" from `calldataload(32)`
+/// that gets XORed into the returned result. A non-zero tag turns silent
+/// poison/undef from a UB-triggering const-fold into an observable divergence
+/// from EVM (otherwise the buggy path coincidentally returns 0, which matches
+/// EVM SMOD/SDIV's defined result for INT_MIN op -1 and masks the bug).
+fn yul_which_calldata(which: u8) -> Vec<u8> {
+    let mut data = vec![0u8; 64];
+    data[31] = which;
+    // tag: 0xdeadbeef padded into the second 32-byte word
+    data[60..64].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    data
+}
+
+fn instantiate_yul(path: &str, contract: &str) -> Vec<SpecsAction> {
+    vec![Instantiate {
+        origin: TestAddress::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        code: Code::Yul {
+            path: path.into(),
+            contract: contract.to_string(),
+        },
+        data: vec![],
+        salt: OptionalHex::default(),
+    }]
+}
+
+fn unsigned_const_set() -> (U256, U256, U256, U256) {
+    (U256::from(1), U256::from(2), U256::from(5), U256::MAX)
+}
+
+fn signed_const_set() -> (I256, I256, I256, I256, I256, I256, I256, I256) {
+    (
+        I256::try_from(1).unwrap(),
+        I256::try_from(2).unwrap(),
+        I256::try_from(-2).unwrap(),
+        I256::try_from(5).unwrap(),
+        I256::try_from(-5).unwrap(),
+        I256::MIN,
+        I256::MIN + I256::ONE,
+        I256::MAX,
+    )
+}
+
+fn div_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
+    let (one, two, five, max) = unsigned_const_set();
+    if d == U256::ZERO {
+        DivisionArithmeticsConst::divRhsZeroCall::new((n,)).abi_encode()
+    } else if d == one {
+        DivisionArithmeticsConst::divRhsOneCall::new((n,)).abi_encode()
+    } else if d == two {
+        DivisionArithmeticsConst::divRhsTwoCall::new((n,)).abi_encode()
+    } else if d == five {
+        DivisionArithmeticsConst::divRhsFiveCall::new((n,)).abi_encode()
+    } else if d == max {
+        DivisionArithmeticsConst::divRhsMaxCall::new((n,)).abi_encode()
+    } else {
+        panic!("no divRhsConst variant for d={d}")
+    }
+}
+
+fn div_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
+    let (one, two, five, max) = unsigned_const_set();
+    if n == U256::ZERO {
+        DivisionArithmeticsConst::divLhsZeroCall::new((d,)).abi_encode()
+    } else if n == one {
+        DivisionArithmeticsConst::divLhsOneCall::new((d,)).abi_encode()
+    } else if n == two {
+        DivisionArithmeticsConst::divLhsTwoCall::new((d,)).abi_encode()
+    } else if n == five {
+        DivisionArithmeticsConst::divLhsFiveCall::new((d,)).abi_encode()
+    } else if n == max {
+        DivisionArithmeticsConst::divLhsMaxCall::new((d,)).abi_encode()
+    } else {
+        panic!("no divLhsConst variant for n={n}")
+    }
+}
+
+fn mod_rhs_const_data(n: U256, d: U256) -> Vec<u8> {
+    let (one, two, five, max) = unsigned_const_set();
+    if d == U256::ZERO {
+        DivisionArithmeticsConst::modRhsZeroCall::new((n,)).abi_encode()
+    } else if d == one {
+        DivisionArithmeticsConst::modRhsOneCall::new((n,)).abi_encode()
+    } else if d == two {
+        DivisionArithmeticsConst::modRhsTwoCall::new((n,)).abi_encode()
+    } else if d == five {
+        DivisionArithmeticsConst::modRhsFiveCall::new((n,)).abi_encode()
+    } else if d == max {
+        DivisionArithmeticsConst::modRhsMaxCall::new((n,)).abi_encode()
+    } else {
+        panic!("no modRhsConst variant for d={d}")
+    }
+}
+
+fn mod_lhs_const_data(n: U256, d: U256) -> Vec<u8> {
+    let (one, two, five, max) = unsigned_const_set();
+    if n == U256::ZERO {
+        DivisionArithmeticsConst::modLhsZeroCall::new((d,)).abi_encode()
+    } else if n == one {
+        DivisionArithmeticsConst::modLhsOneCall::new((d,)).abi_encode()
+    } else if n == two {
+        DivisionArithmeticsConst::modLhsTwoCall::new((d,)).abi_encode()
+    } else if n == five {
+        DivisionArithmeticsConst::modLhsFiveCall::new((d,)).abi_encode()
+    } else if n == max {
+        DivisionArithmeticsConst::modLhsMaxCall::new((d,)).abi_encode()
+    } else {
+        panic!("no modLhsConst variant for n={n}")
+    }
+}
+
+fn sdiv_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
+    let (one, two, neg_two, five, neg_five, min, min_p1, max) = signed_const_set();
+    if d == I256::ZERO {
+        DivisionArithmeticsConst::sdivRhsZeroCall::new((n,)).abi_encode()
+    } else if d == one {
+        DivisionArithmeticsConst::sdivRhsOneCall::new((n,)).abi_encode()
+    } else if d == I256::MINUS_ONE {
+        DivisionArithmeticsConst::sdivRhsNegOneCall::new((n,)).abi_encode()
+    } else if d == two {
+        DivisionArithmeticsConst::sdivRhsTwoCall::new((n,)).abi_encode()
+    } else if d == neg_two {
+        DivisionArithmeticsConst::sdivRhsNegTwoCall::new((n,)).abi_encode()
+    } else if d == five {
+        DivisionArithmeticsConst::sdivRhsFiveCall::new((n,)).abi_encode()
+    } else if d == neg_five {
+        DivisionArithmeticsConst::sdivRhsNegFiveCall::new((n,)).abi_encode()
+    } else if d == min {
+        DivisionArithmeticsConst::sdivRhsMinCall::new((n,)).abi_encode()
+    } else if d == min_p1 {
+        DivisionArithmeticsConst::sdivRhsMinPlusOneCall::new((n,)).abi_encode()
+    } else if d == max {
+        DivisionArithmeticsConst::sdivRhsMaxCall::new((n,)).abi_encode()
+    } else {
+        panic!("no sdivRhsConst variant for d={d}")
+    }
+}
+
+fn sdiv_lhs_const_data(n: I256, d: I256) -> Vec<u8> {
+    let (one, two, neg_two, five, neg_five, min, min_p1, max) = signed_const_set();
+    if n == I256::ZERO {
+        DivisionArithmeticsConst::sdivLhsZeroCall::new((d,)).abi_encode()
+    } else if n == one {
+        DivisionArithmeticsConst::sdivLhsOneCall::new((d,)).abi_encode()
+    } else if n == I256::MINUS_ONE {
+        DivisionArithmeticsConst::sdivLhsNegOneCall::new((d,)).abi_encode()
+    } else if n == two {
+        DivisionArithmeticsConst::sdivLhsTwoCall::new((d,)).abi_encode()
+    } else if n == neg_two {
+        DivisionArithmeticsConst::sdivLhsNegTwoCall::new((d,)).abi_encode()
+    } else if n == five {
+        DivisionArithmeticsConst::sdivLhsFiveCall::new((d,)).abi_encode()
+    } else if n == neg_five {
+        DivisionArithmeticsConst::sdivLhsNegFiveCall::new((d,)).abi_encode()
+    } else if n == min {
+        DivisionArithmeticsConst::sdivLhsMinCall::new((d,)).abi_encode()
+    } else if n == min_p1 {
+        DivisionArithmeticsConst::sdivLhsMinPlusOneCall::new((d,)).abi_encode()
+    } else if n == max {
+        DivisionArithmeticsConst::sdivLhsMaxCall::new((d,)).abi_encode()
+    } else {
+        panic!("no sdivLhsConst variant for n={n}")
+    }
+}
+
+fn smod_rhs_const_data(n: I256, d: I256) -> Vec<u8> {
+    let (one, two, neg_two, five, neg_five, min, _min_p1, max) = signed_const_set();
+    if d == I256::ZERO {
+        DivisionArithmeticsConst::smodRhsZeroCall::new((n,)).abi_encode()
+    } else if d == one {
+        DivisionArithmeticsConst::smodRhsOneCall::new((n,)).abi_encode()
+    } else if d == I256::MINUS_ONE {
+        DivisionArithmeticsConst::smodRhsNegOneCall::new((n,)).abi_encode()
+    } else if d == two {
+        DivisionArithmeticsConst::smodRhsTwoCall::new((n,)).abi_encode()
+    } else if d == neg_two {
+        DivisionArithmeticsConst::smodRhsNegTwoCall::new((n,)).abi_encode()
+    } else if d == five {
+        DivisionArithmeticsConst::smodRhsFiveCall::new((n,)).abi_encode()
+    } else if d == neg_five {
+        DivisionArithmeticsConst::smodRhsNegFiveCall::new((n,)).abi_encode()
+    } else if d == min {
+        DivisionArithmeticsConst::smodRhsMinCall::new((n,)).abi_encode()
+    } else if d == max {
+        DivisionArithmeticsConst::smodRhsMaxCall::new((n,)).abi_encode()
+    } else {
+        panic!("no smodRhsConst variant for d={d}")
+    }
+}
+
+fn smod_lhs_const_data(n: I256, d: I256) -> Vec<u8> {
+    let (one, two, neg_two, five, neg_five, min, _min_p1, max) = signed_const_set();
+    if n == I256::ZERO {
+        DivisionArithmeticsConst::smodLhsZeroCall::new((d,)).abi_encode()
+    } else if n == one {
+        DivisionArithmeticsConst::smodLhsOneCall::new((d,)).abi_encode()
+    } else if n == I256::MINUS_ONE {
+        DivisionArithmeticsConst::smodLhsNegOneCall::new((d,)).abi_encode()
+    } else if n == two {
+        DivisionArithmeticsConst::smodLhsTwoCall::new((d,)).abi_encode()
+    } else if n == neg_two {
+        DivisionArithmeticsConst::smodLhsNegTwoCall::new((d,)).abi_encode()
+    } else if n == five {
+        DivisionArithmeticsConst::smodLhsFiveCall::new((d,)).abi_encode()
+    } else if n == neg_five {
+        DivisionArithmeticsConst::smodLhsNegFiveCall::new((d,)).abi_encode()
+    } else if n == min {
+        DivisionArithmeticsConst::smodLhsMinCall::new((d,)).abi_encode()
+    } else if n == max {
+        DivisionArithmeticsConst::smodLhsMaxCall::new((d,)).abi_encode()
+    } else {
+        panic!("no smodLhsConst variant for n={n}")
+    }
+}
+
+fn push_call(actions: &mut Vec<SpecsAction>, dest: TestAddress, data: Vec<u8>) {
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest,
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+}
+
+#[test]
+fn unsigned_division_half_const() {
+    let mut actions = instantiate(
+        "contracts/DivisionArithmeticsConst.sol",
+        "DivisionArithmeticsConst",
+    );
+    let (one, two, five, _max) = unsigned_const_set();
+    let pairs = [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (five, two),
+        (one, U256::ZERO),
+    ];
+    for (n, d) in pairs {
+        push_call(&mut actions, TestAddress::Instantiated(0), div_rhs_const_data(n, d));
+        push_call(&mut actions, TestAddress::Instantiated(0), div_lhs_const_data(n, d));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn unsigned_division_both_const() {
+    let mut actions = instantiate_yul("contracts/DivBothConst.yul", "DivBothConst");
+    let pair_count = 5;
+    for i in 0..pair_count {
+        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn signed_division_half_const() {
+    let mut actions = instantiate(
+        "contracts/DivisionArithmeticsConst.sol",
+        "DivisionArithmeticsConst",
+    );
+    let (one, two, neg_two, five, neg_five, _min, _min_p1, _max) = signed_const_set();
+    let pairs = [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::ZERO, I256::MINUS_ONE),
+        (five, two),
+        (five, I256::MINUS_ONE),
+        (I256::MINUS_ONE, neg_two),
+        (neg_five, neg_five),
+        (neg_five, two),
+        (I256::MINUS_ONE, I256::MIN),
+        (one, I256::ZERO),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::MIN + I256::ONE, I256::MINUS_ONE),
+    ];
+    for (n, d) in pairs {
+        push_call(&mut actions, TestAddress::Instantiated(0), sdiv_rhs_const_data(n, d));
+        push_call(&mut actions, TestAddress::Instantiated(0), sdiv_lhs_const_data(n, d));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn signed_division_both_const() {
+    let mut actions = instantiate_yul("contracts/SdivBothConst.yul", "SdivBothConst");
+    let pair_count = 13;
+    for i in 0..pair_count {
+        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn unsigned_remainder_half_const() {
+    let mut actions = instantiate(
+        "contracts/DivisionArithmeticsConst.sol",
+        "DivisionArithmeticsConst",
+    );
+    let (one, two, five, _max) = unsigned_const_set();
+    let pairs = [
+        (five, five),
+        (five, one),
+        (U256::ZERO, U256::MAX),
+        (U256::MAX, U256::MAX),
+        (five, two),
+        (two, five),
+        (U256::MAX, U256::ZERO),
+    ];
+    for (n, d) in pairs {
+        push_call(&mut actions, TestAddress::Instantiated(0), mod_rhs_const_data(n, d));
+        push_call(&mut actions, TestAddress::Instantiated(0), mod_lhs_const_data(n, d));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn unsigned_remainder_both_const() {
+    let mut actions = instantiate_yul("contracts/ModBothConst.yul", "ModBothConst");
+    let pair_count = 7;
+    for i in 0..pair_count {
+        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn signed_remainder_half_const() {
+    let mut actions = instantiate(
+        "contracts/DivisionArithmeticsConst.sol",
+        "DivisionArithmeticsConst",
+    );
+    let (one, two, neg_two, five, neg_five, _min, _min_p1, _max) = signed_const_set();
+    let pairs = [
+        (five, five),
+        (five, one),
+        (I256::ZERO, I256::MAX),
+        (I256::MAX, I256::MAX),
+        (five, two),
+        (two, five),
+        (five, neg_five),
+        (five, I256::MINUS_ONE),
+        (five, neg_two),
+        (neg_five, two),
+        (neg_two, five),
+        (neg_five, neg_five),
+        (neg_five, I256::MINUS_ONE),
+        (neg_five, neg_two),
+        (neg_two, neg_five),
+        (I256::MIN, I256::MINUS_ONE),
+        (I256::ZERO, I256::ZERO),
+    ];
+    for (n, d) in pairs {
+        push_call(&mut actions, TestAddress::Instantiated(0), smod_rhs_const_data(n, d));
+        push_call(&mut actions, TestAddress::Instantiated(0), smod_lhs_const_data(n, d));
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn signed_remainder_both_const() {
+    let mut actions = instantiate_yul("contracts/SmodBothConst.yul", "SmodBothConst");
+    let pair_count = 17;
+    for i in 0..pair_count {
+        push_call(&mut actions, TestAddress::Instantiated(0), yul_which_calldata(i));
+    }
+    run_differential(actions);
+}
+
+/// Surfaces the `smod(INT_MIN, -1)` LLVM-UB const-fold bug from
+/// paritytech/revive#524. See `SmodIntMinNegOneBug.yul` for why this specific
+/// fixture is shaped the way it is. Expected to FAIL until the bug is fixed.
+#[test]
+fn signed_remainder_int_min_neg_one_bug() {
+    let mut actions = instantiate_yul(
+        "contracts/SmodIntMinNegOneBug.yul",
+        "SmodIntMinNegOneBug",
+    );
+    let mut tag = vec![0u8; 32];
+    tag[28..32].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    push_call(&mut actions, TestAddress::Instantiated(0), tag);
+    run_differential(actions);
+}
+
+/// Sibling to `signed_remainder_int_min_neg_one_bug`. Per the issue, sdiv is
+/// claimed to be guarded; this test pins that guard so regressions surface.
+#[test]
+fn signed_division_int_min_neg_one_bug() {
+    let mut actions = instantiate_yul(
+        "contracts/SdivIntMinNegOneBug.yul",
+        "SdivIntMinNegOneBug",
+    );
+    let mut tag = vec![0u8; 32];
+    tag[28..32].copy_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
+    push_call(&mut actions, TestAddress::Instantiated(0), tag);
     run_differential(actions);
 }
 

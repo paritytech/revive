@@ -483,6 +483,130 @@ fn compile_evm(
     blob
 }
 
+/// Compile a Yul source into a PVM blob via revive's Yul-to-LLVM path.
+///
+/// `Project::try_from_yul_sources` parses raw Yul with revive's own parser
+/// and never invokes solc's Yul optimizer, so literal operands written in the
+/// source survive intact all the way to LLVM IR.
+pub fn compile_yul_blob(contract_name: &str, yul_source: &str) -> Vec<u8> {
+    compile_yul_blob_with_options(contract_name, yul_source, OptimizerSettings::cycles())
+}
+
+/// Like [`compile_yul_blob`] but with explicit LLVM optimizer settings.
+pub fn compile_yul_blob_with_options(
+    contract_name: &str,
+    yul_source: &str,
+    optimizer_settings: OptimizerSettings,
+) -> Vec<u8> {
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        opt: optimizer_settings.middle_end_as_string(),
+        solc_optimizer_enabled: false,
+        solidity: yul_source.to_owned(),
+    };
+    if let Some(blob) = PVM_BLOB_CACHE.lock().unwrap().get(&id) {
+        return blob.clone();
+    }
+
+    check_dependencies();
+    inkwell::support::enable_llvm_pretty_stack_trace();
+    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+
+    let path = format!("{contract_name}.yul");
+    let mut build = Project::try_from_yul_sources(
+        BTreeMap::from([(
+            path.clone(),
+            SolcStandardJsonInputSource::from(yul_source.to_owned()),
+        )]),
+        Default::default(),
+        None,
+        &DEBUG_CONFIG,
+    )
+    .expect("yul project should build")
+    .compile(
+        &mut vec![],
+        optimizer_settings,
+        MetadataHash::Keccak256,
+        &DEBUG_CONFIG,
+        Default::default(),
+        Default::default(),
+    )
+    .expect("yul should compile");
+    build.take_and_write_warnings();
+    build.check_errors().expect("yul build should succeed");
+    let mut build = build.link(Default::default(), &DEBUG_CONFIG);
+    build.take_and_write_warnings();
+    build.check_errors().expect("yul link should succeed");
+
+    let blob = build
+        .results
+        .into_values()
+        .next()
+        .expect("at least one contract")
+        .expect("contract should be built")
+        .build
+        .bytecode;
+    assert_eq!(&blob[..3], b"PVM");
+
+    PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+    blob
+}
+
+/// Compile a Yul source into the EVM deploy bytecode via `solc --strict-assembly --bin`
+/// **without** `--optimize`, so solc's Yul optimizer never folds literal arithmetic.
+/// The resulting EVM bytecode therefore executes the op at runtime with the literal
+/// operands on the stack, giving us a faithful EVM oracle even for cases where the
+/// op would otherwise be constant-folded at compile time.
+pub fn compile_yul_evm_deploy_code(contract_name: &str, yul_source: &str) -> Vec<u8> {
+    let id = CachedBlob {
+        contract_name: contract_name.to_owned(),
+        opt: String::new(),
+        solc_optimizer_enabled: false,
+        solidity: yul_source.to_owned(),
+    };
+    if let Some(blob) = EVM_BLOB_CACHE.lock().unwrap().get(&id) {
+        return blob.clone();
+    }
+
+    check_dependencies();
+
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = std::env::temp_dir().join(format!(
+        "revive-yul-{contract_name}-{}-{counter}.yul",
+        std::process::id()
+    ));
+    std::fs::write(&tmp_path, yul_source).expect("write yul");
+
+    let output = std::process::Command::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME)
+        .arg("--strict-assembly")
+        .arg("--bin")
+        .arg(&tmp_path)
+        .output()
+        .unwrap_or_else(|e| panic!("solc subprocess failed: {e}"));
+    let _ = std::fs::remove_file(&tmp_path);
+    assert!(
+        output.status.success(),
+        "solc failed compiling {contract_name}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("solc output is utf-8");
+    let hex_line = stdout
+        .lines()
+        .rev()
+        .find(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+        })
+        .unwrap_or_else(|| panic!("no hex bytecode in solc output for {contract_name}:\n{stdout}"));
+    let blob = hex::decode(hex_line.trim()).expect("invalid hex from solc");
+
+    EVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
+    blob
+}
+
 /// Compiles the Solidity source code into Yul IR and returns
 /// the Yul IR code of the contract named `contract_name`.
 pub fn compile_to_yul(

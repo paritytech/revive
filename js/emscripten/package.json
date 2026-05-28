@@ -14,7 +14,7 @@
     "build:package": "node ./build.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.60.0",
     "chai": "^5.1.2",
     "http-server": "^14.1.1",
     "mocha": "^11.7.5",

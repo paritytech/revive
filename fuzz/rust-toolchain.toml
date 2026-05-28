@@ -1,0 +1,6 @@
+# cargo-fuzz requires nightly for `-Zsanitizer-coverage-*` flags.
+# Scoped to fuzz/ only — the rest of the workspace stays on stable per
+# the workspace Cargo.toml rust-version pin.
+[toolchain]
+channel = "nightly"
+components = ["rust-src", "llvm-tools-preview"]

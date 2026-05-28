@@ -48,6 +48,14 @@ pub enum Subcommand {
         #[arg(long)]
         enable_coverage: bool,
 
+        /// Build LLVM with SanitizerCoverage edge-tracking
+        /// (`-fsanitize=fuzzer-no-link`) so libFuzzer's mutation
+        /// engine sees LLVM C++ edges when these archives are linked
+        /// into a fuzz-target binary. Disjoint from
+        /// `--enable-coverage` (which targets `llvm-cov` reports).
+        #[arg(long)]
+        enable_sancov: bool,
+
         /// Extra arguments to pass to CMake.  
         /// A leading backslash will be unescaped.
         #[arg(long)]

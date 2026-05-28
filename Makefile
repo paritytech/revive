@@ -5,6 +5,7 @@
 	install-wasm \
 	install-llvm-builder \
 	install-llvm \
+	install-llvm-sancov \
 	install-revive-runner \
 	format \
 	clippy \
@@ -19,6 +20,7 @@
 	test-wasm \
 	test-llvm-builder \
 	test-book \
+	fuzz-libfuzzer \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -44,6 +46,15 @@ install-llvm-builder:
 install-llvm: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
+
+# LLVM built with `-fsanitize=fuzzer-no-link` so libFuzzer sees C++
+# edges. Shares `target-llvm/<env>/` with `install-llvm` — run
+# `revive-llvm clean` when switching. Resulting archives only link
+# into fuzz-target binaries (which supply libFuzzer's runtime).
+# `JOBS=N` caps thread count.
+install-llvm-sancov: install-llvm-builder
+	git submodule update --init --recursive --depth 1
+	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-sancov
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
@@ -88,6 +99,13 @@ test-llvm-builder:
 test-book:
 	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
+
+# Coverage-guided differential fuzzer (libFuzzer + SanCov). Generates
+# Solidity, runs solc → EVM and resolc → PVM, diffs the executions.
+# `JOBS=N` shards across N forked workers. Requires `solc` and geth's
+# `evm` in $PATH. Toolchain pinned via `fuzz/rust-toolchain.toml`.
+fuzz-libfuzzer:
+	cd fuzz && cargo +nightly fuzz run solidity_differential -- -fork=$(or $(JOBS),4) -ignore_crashes=0
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

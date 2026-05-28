@@ -21,6 +21,7 @@ revive-build-utils = { version = "1.1.0", path = "crates/build-utils" }
 revive-builtins = { version = "1.0.0", path = "crates/builtins" }
 revive-common = { version = "1.0.0", path = "crates/common" }
 revive-differential = { version = "1.0.0", path = "crates/differential" }
+revive-fuzz = { version = "1.0.0", path = "crates/fuzz" }
 revive-integration = { version = "1.1.0", path = "crates/integration" }
 revive-linker = { version = "1.0.0", path = "crates/linker" }
 revive-llvm-context = { version = "1.1.0", path = "crates/llvm-context" }

@@ -18,6 +18,7 @@
   - SREM over the two constant operands `type(int256).min` and `-1`.
   - At least one of the two constants needs folding (i.e. not just `type(int256).min % -1`),
     and is written specifically such that solc doesn't fold but LLVM does, resulting in UB (signed-overflow).
+- Fix `mulmod` returning out-of-range result for large moduli.
 
 ## v1.1.0
 

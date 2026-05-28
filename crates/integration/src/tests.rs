@@ -66,6 +66,7 @@ test_spec!(function_type, "FunctionType", "FunctionType.sol");
 test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
 test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
 test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
+test_spec!(ulongrem, "UlongRemTester", "UlongRem.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");
@@ -102,6 +103,42 @@ fn run_differential(actions: Vec<SpecsAction>) {
         ..Default::default()
     }
     .run();
+}
+
+/// Rust-driven fuzz against the stdlib `__ulongrem` slow path. Each iteration
+/// computes (a, b, m) deterministically from the index and dispatches a single
+/// `bigMulMod` call via the differential runner — there is no in-contract loop,
+/// so PVM never sees more than one mulmod per call dispatch. Any divergence
+/// shows up as a returndata mismatch on the specific failing iteration.
+#[test]
+fn ulongrem_fuzz() {
+    use alloy_primitives::keccak256;
+
+    let mut actions = instantiate("contracts/UlongRem.sol", "UlongRem");
+
+    for i in 0u64..256 {
+        let derive = |tag: &[u8]| -> U256 {
+            let mut buf = Vec::with_capacity(8 + tag.len());
+            buf.extend_from_slice(&i.to_be_bytes());
+            buf.extend_from_slice(tag);
+            U256::from_be_bytes::<32>(keccak256(&buf).0)
+        };
+        let a = derive(b"a");
+        let b = derive(b"b");
+        // Force modulus into the slow path (m >= 2^255).
+        let m = derive(b"m") | (U256::from(1u64) << 255);
+
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: Contract::ulongrem_big_mulmod(a, b, m).calldata,
+        });
+    }
+
+    run_differential(actions);
 }
 
 #[test]

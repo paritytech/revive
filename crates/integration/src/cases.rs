@@ -354,6 +354,13 @@ sol!(
 case!("Bitwise.sol", Bitwise, opByteCall, bitwise_byte, index: U256, value: U256);
 
 sol!(
+    contract UlongRem {
+        function bigMulMod(uint a, uint b, uint m) external pure returns (uint);
+    }
+);
+case!("UlongRem.sol", UlongRem, bigMulModCall, ulongrem_big_mulmod, a: U256, b: U256, m: U256);
+
+sol!(
     contract Storage {
         function transient(uint value) public returns (uint ret);
     }

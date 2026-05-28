@@ -159,10 +159,13 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
   %48 = mul i256 %47, %.054
   %49 = sub i256 %46, %48
   %50 = lshr i256 %49, %5
+  %.corr.cmp = icmp uge i256 %50, %2
+  %.corr.sub = sub i256 %50, %2
+  %.corrected = select i1 %.corr.cmp, i256 %.corr.sub, i256 %50
   br label %51
 
 51:
-  %.0 = phi i256 [ %50, %44 ], [ -1, %3 ]
+  %.0 = phi i256 [ %.corrected, %44 ], [ -1, %3 ]
   ret i256 %.0
 }
 

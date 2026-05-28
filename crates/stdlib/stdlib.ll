@@ -104,7 +104,7 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
 19:
   %.056 = phi i256 [ %15, %13 ], [ %25, %.critedge ]
   %.055 = phi i256 [ %16, %13 ], [ %26, %.critedge ]
-  %.not62 = icmp ult i256 %.056, 340282366920938463463374607431768211455
+  %.not62 = icmp ult i256 %.056, 340282366920938463463374607431768211456
   br i1 %.not62, label %20, label %.critedge
 
 20:
@@ -117,7 +117,7 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
 .critedge:
   %25 = add i256 %.056, -1
   %26 = add i256 %.055, %14
-  %.not65 = icmp ult i256 %26, 340282366920938463463374607431768211455
+  %.not65 = icmp ult i256 %26, 340282366920938463463374607431768211456
   br i1 %.not65, label %19, label %27
 
 27:
@@ -135,7 +135,7 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
 36:
   %.2 = phi i256 [ %33, %27 ], [ %42, %.critedge1 ]
   %.1 = phi i256 [ %34, %27 ], [ %43, %.critedge1 ]
-  %.not63 = icmp ult i256 %.2, 340282366920938463463374607431768211455
+  %.not63 = icmp ult i256 %.2, 340282366920938463463374607431768211456
   br i1 %.not63, label %37, label %.critedge1
 
 37:
@@ -148,7 +148,7 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
 .critedge1:
   %42 = add i256 %.2, -1
   %43 = add i256 %.1, %14
-  %.not64 = icmp ult i256 %43, 340282366920938463463374607431768211455
+  %.not64 = icmp ult i256 %43, 340282366920938463463374607431768211456
   br i1 %.not64, label %36, label %44
 
 44:
@@ -159,13 +159,10 @@ define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
   %48 = mul i256 %47, %.054
   %49 = sub i256 %46, %48
   %50 = lshr i256 %49, %5
-  %.corr.cmp = icmp uge i256 %50, %2
-  %.corr.sub = sub i256 %50, %2
-  %.corrected = select i1 %.corr.cmp, i256 %.corr.sub, i256 %50
   br label %51
 
 51:
-  %.0 = phi i256 [ %.corrected, %44 ], [ -1, %3 ]
+  %.0 = phi i256 [ %50, %44 ], [ -1, %3 ]
   ret i256 %.0
 }
 

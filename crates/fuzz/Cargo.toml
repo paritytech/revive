@@ -1,0 +1,49 @@
+[package]
+name = "revive-fuzz"
+version = "1.0.0"
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Differential fuzzer over solc, revive (Yul round-trip), and revive (PVM)"
+
+[[bin]]
+name = "revive-fuzz"
+path = "src/bin/revive_fuzz.rs"
+
+[[bin]]
+name = "revive-yul-fuzz"
+path = "src/bin/revive_yul_fuzz.rs"
+
+[features]
+default = []
+# Surface `Divergence` and compile failures as panics so libFuzzer treats
+# them as crashes and saves the input bytes to `fuzz/artifacts/`. The
+# in-tree CLI driver does not enable this feature — it prints the
+# divergence and continues.
+panic-on-divergence = []
+
+[dependencies]
+resolc = { workspace = true }
+revive-yul = { workspace = true }
+revive-differential = { workspace = true }
+revive-llvm-context = { workspace = true }
+revive-runner = { workspace = true }
+revive-solc-json-interface = { workspace = true }
+
+alloy-primitives = { workspace = true }
+anyhow = { workspace = true }
+arbitrary = { version = "1.4", features = ["derive"] }
+clap = { workspace = true, features = ["help", "std", "derive"] }
+hex = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+num_cpus = { workspace = true }
+rand = { version = "0.9", features = ["std_rng"] }
+rand_chacha = "0.9"
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+which = { workspace = true }

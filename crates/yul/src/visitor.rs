@@ -165,66 +165,46 @@ pub trait AstVisitor {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{
-        lexer::Lexer,
-        parser::{
-            identifier::Identifier,
-            statement::{
-                assignment::Assignment,
-                block::Block,
-                code::Code,
-                expression::{function_call::FunctionCall, literal::Literal, Expression},
-                for_loop::ForLoop,
-                function_definition::FunctionDefinition,
-                if_conditional::IfConditional,
-                object::Object,
-                switch::{case::Case, Switch},
-                variable_declaration::VariableDeclaration,
-                Statement,
-            },
-        },
-    };
+/// The [Printer] visitor reconstructs Yul source text from an
+/// [`Object`] AST. The reprinted output round-trips through the lexer
+/// + parser — see `tests::print_visitor_works`. Used by the
+/// `revive-fuzz` differential harness to drive the Yul-roundtrip
+/// pipeline.
+#[derive(Default)]
+pub struct Printer {
+    /// The print buffer.
+    pub buffer: String,
+    /// The current indentation level.
+    indentation: usize,
+}
 
-    use super::{AstNode, AstVisitor};
-
-    /// The [Printer] visitor builds the AST back into its textual representation.
-    #[derive(Default)]
-    struct Printer {
-        /// The print buffer.
-        buffer: String,
-        /// The current indentation level.
-        indentation: usize,
+impl Printer {
+    /// Append a newline with the current identation to the print buffer.
+    fn newline(&mut self) {
+        self.buffer.push('\n');
+        self.indent();
     }
 
-    impl Printer {
-        /// Append a newline with the current identation to the print buffer.
-        fn newline(&mut self) {
-            self.buffer.push('\n');
-            self.indent();
-        }
-
-        /// Append the current identation to the print buffer.
-        fn indent(&mut self) {
-            for _ in 0..self.indentation {
-                self.buffer.push_str("  ");
-            }
-        }
-
-        /// Append the given `nodes` comma-separated.
-        fn separate(&mut self, nodes: &[impl AstNode]) {
-            for (index, argument) in nodes.iter().enumerate() {
-                argument.accept(self);
-
-                if index < nodes.len() - 1 {
-                    self.buffer.push_str(", ");
-                }
-            }
+    /// Append the current identation to the print buffer.
+    fn indent(&mut self) {
+        for _ in 0..self.indentation {
+            self.buffer.push_str("  ");
         }
     }
 
-    impl AstVisitor for Printer {
+    /// Append the given `nodes` comma-separated.
+    fn separate(&mut self, nodes: &[impl AstNode]) {
+        for (index, argument) in nodes.iter().enumerate() {
+            argument.accept(self);
+
+            if index < nodes.len() - 1 {
+                self.buffer.push_str(", ");
+            }
+        }
+    }
+}
+
+impl AstVisitor for Printer {
         fn visit(&mut self, node: &impl AstNode) {
             node.accept(self);
         }
@@ -286,8 +266,14 @@ mod tests {
             self.separate(&node.arguments);
             self.buffer.push(')');
 
-            self.buffer.push_str(" -> ");
-            self.separate(&node.result);
+            // Yul's grammar attaches `-> <return-list>` only when the
+            // function actually has return values. Emitting a bare
+            // `-> ` for void functions makes solc reject the printer
+            // output with "Expected identifier but got `{`".
+            if !node.result.is_empty() {
+                self.buffer.push_str(" -> ");
+                self.separate(&node.result);
+            }
 
             node.body.accept(self);
         }
@@ -340,6 +326,13 @@ mod tests {
             }
         }
     }
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::Lexer;
+    use crate::parser::statement::object::Object;
+
+    use super::{AstNode, Printer};
 
     const ERC20: &str = r#"/// @use-src 0:"crates/integration/contracts/ERC20.sol"
 object "ERC20_247" {

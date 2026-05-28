@@ -226,7 +226,7 @@ pub enum CallResult {
 
 impl CallResult {
     /// Check if the call was successful
-    fn did_revert(&self) -> bool {
+    pub fn did_revert(&self) -> bool {
         match self {
             Self::Exec { result, .. } => result
                 .result
@@ -242,7 +242,7 @@ impl CallResult {
     }
 
     /// Get the output of the call
-    fn output(&self) -> Vec<u8> {
+    pub fn output(&self) -> Vec<u8> {
         match self {
             Self::Exec { result, .. } => result
                 .result
@@ -258,7 +258,7 @@ impl CallResult {
     }
 
     /// Get the gas consumed by the call
-    fn gas_consumed(&self) -> u128 {
+    pub fn gas_consumed(&self) -> u128 {
         match self {
             Self::Exec { result, .. } => result.gas_consumed,
             Self::Instantiate { result, .. } => result.gas_consumed,

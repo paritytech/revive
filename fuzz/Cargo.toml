@@ -1,0 +1,24 @@
+[package]
+name = "revive-fuzz-libfuzzer"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace — cargo-fuzz compiles this crate with sanitizer-coverage
+# flags that we do not want leaking into the rest of the repo's build graph.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.4", features = ["derive"] }
+revive-fuzz = { path = "../crates/fuzz", features = ["panic-on-divergence"] }
+
+[[bin]]
+name = "solidity_differential"
+path = "fuzz_targets/solidity_differential.rs"
+test = false
+doc = false
+bench = false

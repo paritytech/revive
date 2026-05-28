@@ -203,6 +203,17 @@ pub struct Specs {
     pub balances: Vec<(H160, Balance)>,
     /// List of actions to perform
     pub actions: Vec<SpecsAction>,
+    /// When `true` (the default), `actions()` auto-injects a
+    /// `VerifyCall(success: true)` assertion after every Instantiate /
+    /// Call that does not already have one. Set to `false` for callers
+    /// that need to observe revert outcomes without panicking — e.g.
+    /// the differential fuzzer in `revive-fuzz`.
+    #[serde(default = "default_verify_each_call")]
+    pub verify_each_call: bool,
+}
+
+fn default_verify_each_call() -> bool {
+    true
 }
 
 impl Default for Specs {
@@ -215,6 +226,7 @@ impl Default for Specs {
                 (CHARLIE, 1_000_000_000_000),
             ],
             actions: Default::default(),
+            verify_each_call: true,
         }
     }
 }
@@ -229,10 +241,12 @@ impl Specs {
             .enumerate()
             .flat_map(|(index, item)| {
                 let next_item = self.actions.get(index + 1);
-                if matches!(
-                    item,
-                    SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
-                ) && !matches!(next_item, Some(SpecsAction::VerifyCall { .. }))
+                if self.verify_each_call
+                    && matches!(
+                        item,
+                        SpecsAction::Instantiate { .. } | SpecsAction::Call { .. }
+                    )
+                    && !matches!(next_item, Some(SpecsAction::VerifyCall { .. }))
                     && !self.differential
                 {
                     return vec![

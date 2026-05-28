@@ -19,6 +19,8 @@
 	test-wasm \
 	test-llvm-builder \
 	test-book \
+	fuzz \
+	fuzz-libfuzzer \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -88,6 +90,25 @@ test-llvm-builder:
 test-book:
 	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
+
+# Differential fuzzer (revive-Yul → EVM vs resolc → PVM).
+# Depends on `install-bin` because the harness shells out to
+# `~/.cargo/bin/resolc` (resolved at runtime via `which::which`).
+# Running `cargo run -p revive-fuzz` directly does NOT refresh the
+# installed binary — always use `make fuzz` after editing revive.
+# Requires `solc` and geth's `evm` in $PATH.
+fuzz: install-bin
+	cargo run --release -p revive-fuzz -- --iterations 100
+
+# Coverage-guided fuzzer (libFuzzer + SanitizerCoverage). Drives the same
+# Solidity differential as `make fuzz` but mutates inputs based on resolc's
+# Rust-side edge coverage. Nightly toolchain is scoped to fuzz/ via its
+# rust-toolchain.toml. `JOBS=N` shards across N forked workers.
+#
+# No `install-bin` dep: the libFuzzer target uses in-process `compile_blob`,
+# not the installed `~/.cargo/bin/resolc`. `solc` and `evm` must be on PATH.
+fuzz-libfuzzer:
+	cd fuzz && cargo +nightly fuzz run solidity_differential -- -fork=$(or $(JOBS),4) -ignore_crashes=0
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

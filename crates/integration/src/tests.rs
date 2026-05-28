@@ -64,11 +64,7 @@ test_spec!(function_type, "FunctionType", "FunctionType.sol");
 test_spec!(layout_at, "LayoutAt", "LayoutAt.sol");
 test_spec!(shift_arithmetic_right, "SAR", "SAR.sol");
 test_spec!(add_mod_mul_mod, "AddModMulModTester", "AddModMulMod.sol");
-test_spec!(
-    ulongrem_mulmod_big_modulus,
-    "UlongRemTester",
-    "UlongRem.sol"
-);
+test_spec!(ulongrem, "UlongRemTester", "UlongRem.sol");
 test_spec!(memory_bounds, "MemoryBounds", "MemoryBounds.sol");
 test_spec!(selfdestruct, "Selfdestruct", "Selfdestruct.sol");
 test_spec!(clz, "CountLeadingZeros", "CountLeadingZeros.sol");

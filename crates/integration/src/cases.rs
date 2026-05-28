@@ -187,6 +187,78 @@ case!("DivisionArithmetics.sol", DivisionArithmetics, modCall, division_arithmet
 case!("DivisionArithmetics.sol", DivisionArithmetics, smodCall, division_arithmetics_smod, n: I256, d: I256);
 
 sol!(
+    contract DivConst {
+        function divRhsZero(uint256 n) external pure returns (uint256);
+        function divRhsOne(uint256 n) external pure returns (uint256);
+        function divRhsTwo(uint256 n) external pure returns (uint256);
+        function divRhsFive(uint256 n) external pure returns (uint256);
+        function divRhsMax(uint256 n) external pure returns (uint256);
+        function divLhsZero(uint256 d) external pure returns (uint256);
+        function divLhsOne(uint256 d) external pure returns (uint256);
+        function divLhsTwo(uint256 d) external pure returns (uint256);
+        function divLhsFive(uint256 d) external pure returns (uint256);
+        function divLhsMax(uint256 d) external pure returns (uint256);
+    }
+
+    contract SdivConst {
+        function sdivRhsZero(int256 n) external pure returns (int256);
+        function sdivRhsOne(int256 n) external pure returns (int256);
+        function sdivRhsNegOne(int256 n) external pure returns (int256);
+        function sdivRhsTwo(int256 n) external pure returns (int256);
+        function sdivRhsNegTwo(int256 n) external pure returns (int256);
+        function sdivRhsFive(int256 n) external pure returns (int256);
+        function sdivRhsNegFive(int256 n) external pure returns (int256);
+        function sdivRhsMin(int256 n) external pure returns (int256);
+        function sdivRhsMinPlusOne(int256 n) external pure returns (int256);
+        function sdivRhsMax(int256 n) external pure returns (int256);
+        function sdivLhsZero(int256 d) external pure returns (int256);
+        function sdivLhsOne(int256 d) external pure returns (int256);
+        function sdivLhsNegOne(int256 d) external pure returns (int256);
+        function sdivLhsTwo(int256 d) external pure returns (int256);
+        function sdivLhsNegTwo(int256 d) external pure returns (int256);
+        function sdivLhsFive(int256 d) external pure returns (int256);
+        function sdivLhsNegFive(int256 d) external pure returns (int256);
+        function sdivLhsMin(int256 d) external pure returns (int256);
+        function sdivLhsMinPlusOne(int256 d) external pure returns (int256);
+        function sdivLhsMax(int256 d) external pure returns (int256);
+    }
+
+    contract ModConst {
+        function modRhsZero(uint256 n) external pure returns (uint256);
+        function modRhsOne(uint256 n) external pure returns (uint256);
+        function modRhsTwo(uint256 n) external pure returns (uint256);
+        function modRhsFive(uint256 n) external pure returns (uint256);
+        function modRhsMax(uint256 n) external pure returns (uint256);
+        function modLhsZero(uint256 d) external pure returns (uint256);
+        function modLhsOne(uint256 d) external pure returns (uint256);
+        function modLhsTwo(uint256 d) external pure returns (uint256);
+        function modLhsFive(uint256 d) external pure returns (uint256);
+        function modLhsMax(uint256 d) external pure returns (uint256);
+    }
+
+    contract SmodConst {
+        function smodRhsZero(int256 n) external pure returns (int256);
+        function smodRhsOne(int256 n) external pure returns (int256);
+        function smodRhsNegOne(int256 n) external pure returns (int256);
+        function smodRhsTwo(int256 n) external pure returns (int256);
+        function smodRhsNegTwo(int256 n) external pure returns (int256);
+        function smodRhsFive(int256 n) external pure returns (int256);
+        function smodRhsNegFive(int256 n) external pure returns (int256);
+        function smodRhsMin(int256 n) external pure returns (int256);
+        function smodRhsMax(int256 n) external pure returns (int256);
+        function smodLhsZero(int256 d) external pure returns (int256);
+        function smodLhsOne(int256 d) external pure returns (int256);
+        function smodLhsNegOne(int256 d) external pure returns (int256);
+        function smodLhsTwo(int256 d) external pure returns (int256);
+        function smodLhsNegTwo(int256 d) external pure returns (int256);
+        function smodLhsFive(int256 d) external pure returns (int256);
+        function smodLhsNegFive(int256 d) external pure returns (int256);
+        function smodLhsMin(int256 d) external pure returns (int256);
+        function smodLhsMax(int256 d) external pure returns (int256);
+    }
+);
+
+sol!(
     contract Send {
         function transfer_self(uint _amount) public payable;
     }

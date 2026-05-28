@@ -9,7 +9,15 @@
 - Updated `LLVM` from `21.1.8` to LLVM `22.1.4`
 
 ### Added
+
 - Support for solc v0.8.35.
+
+### Fixed
+
+- A constant folding bug causing incorrect translation of a signed remainder edge case. The affected pattern (Solidity % or Yul smod):
+  - SREM over the two constant operands `type(int256).min` and `-1`.
+  - At least one of the two constants needs folding (i.e. not just `type(int256).min % -1`),
+    and is written specifically such that solc doesn't fold but LLVM does, resulting in UB (signed-overflow).
 
 ## v1.1.0
 

@@ -4,13 +4,12 @@
 #           target: x86_64-unknown-linux-gnu
 
 name: "Download LLVM"
+description: "Downloads a prebuilt LLVM release for a specific target."
+
 inputs:
   target:
+    description: "Target triple (e.g., x86_64-unknown-linux-musl)"
     required: true
-  version:
-    description: "LLVM release version (e.g., 'llvm-18.1.8'). If not specified, uses the latest published LLVM release. To test a specific draft release, use the full name (e.g. 'llvm-21.1.8-revive.0f80912')."
-    required: false
-    default: ""
 
 runs:
   using: "composite"
@@ -18,8 +17,12 @@ runs:
     - name: detect llvm version from submodule
       id: detect-version
       shell: bash
+      env:
+        # To test a draft LLVM release across every CI workflow, set this to the full
+        # draft name (e.g. "llvm-21.1.8-revive.0f80912") and revert to "" before merging.
+        OVERRIDE_VERSION: ""
       run: |
-        if [ -z "${{ inputs.version }}" ]; then
+        if [ -z "${OVERRIDE_VERSION}" ]; then
           # Get the full version from the LLVM submodule.
           git submodule update --init --recursive
           cd llvm
@@ -37,8 +40,8 @@ runs:
           fi
           cd ..
         else
-          echo "Using explicitly provided version: ${{ inputs.version }}"
-          echo "version_prefix=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          echo "Using OVERRIDE_VERSION: ${OVERRIDE_VERSION}"
+          echo "version_prefix=${OVERRIDE_VERSION}" >> $GITHUB_OUTPUT
         fi
 
     - name: find asset

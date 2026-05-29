@@ -22,9 +22,6 @@ env:
   CARGO_TERM_COLOR: always
   EMSCRIPTEN_TARGET: wasm32-unknown-emscripten
   HOST_TARGET: x86_64-unknown-linux-gnu
-  # An empty string is interpreted as the latest published release (default behavior).
-  # To test a specific draft release, use the full name (e.g. "llvm-21.1.8-revive.5789e11").
-  LLVM_VERSION: ""
 
 jobs:
   build:
@@ -62,14 +59,12 @@ jobs:
         uses: ./.github/actions/get-llvm
         with:
           target: ${{ env.HOST_TARGET }}
-          version: ${{ env.LLVM_VERSION }}
 
       - name: Download Wasm LLVM
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/get-llvm
         with:
           target: ${{ env.EMSCRIPTEN_TARGET }}
-          version: ${{ env.LLVM_VERSION }}
 
       - name: Download EMSDK
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}

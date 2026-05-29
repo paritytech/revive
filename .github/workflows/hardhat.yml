@@ -3,7 +3,19 @@
 name: Hardhat Integration
 
 on:
-  workflow_call:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "**.md"
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize]
+    paths-ignore:
+      - "**.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   # Workflow-internal hardhat envs are prefixed with `CI_` to not conflict with the
@@ -11,7 +23,13 @@ env:
   CI_HARDHAT_PROJECT_ROOT: tooling-projects/hardhat/erc20
 
 jobs:
+  build:
+    uses: ./.github/workflows/reusable-build-linux.yml
+    with:
+      retention_days: 1
+
   use-hardhat:
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive

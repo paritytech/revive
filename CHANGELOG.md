@@ -2,11 +2,11 @@
 
 ## Unreleased
 
-- Supported `polkadot-sdk` rev: `2603`
+Supported `polkadot-sdk` rev: `2603`
 
 ## v1.2.0
 
-- Supported `polkadot-sdk` rev: `2603`
+Supported `polkadot-sdk` rev: `2603`
 
 ### Changed
 

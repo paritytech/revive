@@ -36,9 +36,6 @@ jobs:
       # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
       group: reusable-build-wasm32-unknown-emscripten-${{ github.sha }}
       cancel-in-progress: false
-    env:
-      # Consumed by js/emscripten/build.js.
-      RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
     steps:
       - name: Checkout revive
         uses: actions/checkout@v4
@@ -80,6 +77,9 @@ jobs:
 
       - name: Build
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        env:
+          # Consumed by js/emscripten/build.js.
+          RELEASE_RESOLC_WASM_URI: https://github.com/paritytech/revive/releases/download/${{ github.ref_name }}/resolc.wasm
         run: |
           export LLVM_SYS_221_PREFIX=$PWD/llvm-${{ env.HOST_TARGET }}
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-${{ env.EMSCRIPTEN_TARGET }}

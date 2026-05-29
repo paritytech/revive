@@ -20,52 +20,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-      # Pin to 1.92.0 until LLVM WASM libraries are rebuilt with -fwasm-exceptions
-      # See: https://github.com/paritytech/revive/issues/XXX
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: "1.92.0"
-          target: wasm32-unknown-emscripten
-          # without this it will override our rust flags
-          rustflags: ""
-
-      - name: Download Host LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: x86_64-unknown-linux-gnu
-
-      - name: Download Wasm LLVM
-        uses: ./.github/actions/get-llvm
-        with:
-          target: wasm32-unknown-emscripten
-
-      - name: Install emsdk
-        uses: ./.github/actions/get-emsdk
-
-      - name: Set LLVM Environment Variables
-        run: |
-          echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-          echo "REVIVE_LLVM_TARGET_PREFIX=$(pwd)/llvm-wasm32-unknown-emscripten" >> $GITHUB_ENV
-
-      - name: Build Revive
-        run: |
-          source emsdk/emsdk_env.sh
-          make install-wasm
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: revive-wasm
-          path: |
-            ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.js
-            ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc.wasm
-            ${{ env.REVIVE_WASM_INSTALL_DIR }}/resolc_web.js
-          retention-days: 1
+    uses: ./.github/workflows/reusable-build-wasm.yml
+    with:
+      is_release: false
+      retention_days: 1
 
   test:
     needs: build
@@ -74,15 +32,14 @@ jobs:
         os: ["ubuntu-24.04", "macos-15", "windows-2022"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout revive
+        uses: actions/checkout@v4
 
-      - name: Create Target Directory
-        run: mkdir -p ${{ env.REVIVE_WASM_INSTALL_DIR }}
-
-      - name: Download Artifact
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: revive-wasm
+          pattern: resolc*.{js,wasm}
+          merge-multiple: true
           path: ${{ env.REVIVE_WASM_INSTALL_DIR }}
 
       - name: Set Up Node.js
@@ -103,7 +60,7 @@ jobs:
           echo "Running tests for ${{ matrix.os }}"
           npm run -w js/resolc test
 
-      - name: Run Playwright tests
+      - name: Run Playwright Tests
         run: |
           cd js/emscripten
           npx playwright install --with-deps

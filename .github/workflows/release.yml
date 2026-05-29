@@ -140,7 +140,7 @@ jobs:
 
       - name: Build
         run: |
-          cp -f --remove-destination resolc.{wasm,js} js/resolc/src/resolc/
+          cp --remove-destination resolc.{wasm,js} js/resolc/src/resolc/
           npm -w js/resolc run build
 
       - name: npm pack

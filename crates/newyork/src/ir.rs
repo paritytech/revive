@@ -5,6 +5,7 @@
 //! structure from Yul while enabling domain-specific optimizations.
 
 use num::BigUint;
+use revive_common::BYTE_LENGTH_WORD;
 use std::collections::BTreeMap;
 
 /// Bit width for integer types.
@@ -140,6 +141,11 @@ impl MemoryRegion {
     pub fn is_free_pointer_slot(self, resolved_offset: Option<u64>) -> bool {
         self == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40)
     }
+}
+
+/// Rounds a byte address down to the start of its EVM word.
+pub fn word_align(address: u64) -> u64 {
+    address / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64
 }
 
 /// An SSA value reference (index into value table).

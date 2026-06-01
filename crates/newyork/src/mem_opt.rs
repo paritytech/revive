@@ -55,8 +55,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, Zero};
 
 use crate::ir::{
-    for_each_statement, BinaryOperation, BitWidth, Block, Expression, FunctionId, MemoryRegion,
-    Object, Region, Statement, Type, Value, ValueId,
+    for_each_statement, word_align, BinaryOperation, BitWidth, Block, Expression, FunctionId,
+    MemoryRegion, Object, Region, Statement, Type, Value, ValueId,
 };
 use revive_common::BYTE_LENGTH_WORD;
 
@@ -163,8 +163,7 @@ impl MemoryOptimizer {
                     region,
                 } => {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                        let word_offset =
-                            static_offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
+                        let word_offset = word_align(static_offset);
 
                         // Dead-store elimination: an unread mstore to the
                         // exact same offset is fully overwritten by this
@@ -579,8 +578,7 @@ impl MemoryOptimizer {
         match expression {
             Expression::MLoad { offset, region } => {
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                    let word_offset =
-                        static_offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
+                    let word_offset = word_align(static_offset);
 
                     self.pending_stores.remove(&word_offset);
 

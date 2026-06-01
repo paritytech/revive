@@ -691,13 +691,18 @@ impl<'a> Printer<'a> {
                 arguments,
             } => {
                 self.write_indent();
-                let arg_strs: Vec<String> =
-                    arguments.iter().map(|a| format!("v{}", a.id.0)).collect();
-                self.output.push_str(&format!(
-                    "custom_error_revert(0x{}, [{}])",
-                    selector.to_str_radix(16),
-                    arg_strs.join(", ")
-                ));
+                let _ = write!(
+                    self.output,
+                    "custom_error_revert(0x{}, [",
+                    selector.to_str_radix(16)
+                );
+                for (i, argument) in arguments.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.write_value(argument);
+                }
+                self.output.push_str("])");
                 self.write_newline();
             }
 
@@ -1426,6 +1431,24 @@ mod tests {
             "got:\n{output}"
         );
         assert!(output.contains("\n    body {\n    }\n"), "got:\n{output}");
+    }
+
+    #[test]
+    fn custom_error_revert_args_use_write_value() {
+        // Arguments must go through write_value so they pick up type-width
+        // annotations like every other value, rather than being hand-formatted.
+        let statement = Statement::CustomErrorRevert {
+            selector: BigUint::from(0x12345678u64),
+            arguments: vec![
+                Value::int(ValueId(7)),
+                Value::new(ValueId(8), Type::Int(BitWidth::I64)),
+            ],
+        };
+        let output = print_statement(&statement);
+        assert_eq!(
+            output, "custom_error_revert(0x12345678, [v7, v8: i64])\n",
+            "got: {output}"
+        );
     }
 
     #[test]

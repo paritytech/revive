@@ -1,14 +1,17 @@
-name: Test Wasm Version
+name: Test Wasm
+
 on:
   push:
     branches: ["main"]
     paths-ignore:
       - "**.md"
+      - "tooling-projects/**"
   pull_request:
     branches: ["main"]
     types: [opened, synchronize]
     paths-ignore:
       - "**.md"
+      - "tooling-projects/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

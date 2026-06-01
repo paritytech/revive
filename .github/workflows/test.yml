@@ -61,7 +61,25 @@ jobs:
       - name: Test docs
         run: make doc
 
+  # Used as a gate for subjobs that should run only if `test` succeeds
+  # and files relevant for the specific job have changed.
+  check-changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: read
+    outputs:
+      should-run-differential-tests: ${{ steps.filter.outputs.should-run-differential-tests }}
+    steps:
+      - name: Check If Relevant Files Changed
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            should-run-differential-tests:
+              - '**'
+              - '!tooling-projects/**'
+
   run-differential-tests:
-    # Only run this if `test` successfully completes.
-    needs: test
+    needs: [test, check-changes]
+    if: ${{ needs.check-changes.outputs.should-run-differential-tests == 'true' }}
     uses: ./.github/workflows/differential-tests.yml

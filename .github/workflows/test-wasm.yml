@@ -1,5 +1,4 @@
 name: Test Wasm
-
 on:
   push:
     branches: ["main"]

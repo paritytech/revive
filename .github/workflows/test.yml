@@ -84,6 +84,8 @@ jobs:
               - '!book/**'
               - '!docs/**'
               - '!js/**'
+              - '!package.json'
+              - '!package-lock.json'
 
   run-differential-tests:
     needs: [test, check-changes]

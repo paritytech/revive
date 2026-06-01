@@ -122,6 +122,24 @@ impl MemoryRegion {
             MemoryRegion::Unknown
         }
     }
+
+    /// Returns whether a memory access targets the free memory pointer slot (`0x40`).
+    ///
+    /// Two independent signals identify an FMP access and neither subsumes the
+    /// other, so both must be checked:
+    /// - `self == FreePointerSlot`: the region tag assigned by [`MemoryRegion::from_address`]
+    ///   at translation time from a literal `0x40` offset. This catches accesses
+    ///   whose offset value a later pass cannot fold back to a constant (offset
+    ///   resolution only tracks locally visible literal bindings).
+    /// - `resolved_offset == Some(0x40)`: a *computed* offset (e.g. `add(0x20, 0x20)`)
+    ///   that a constant-folding pass resolves to `0x40` but that was tagged
+    ///   `Unknown` at translation time because no literal was visible then.
+    ///
+    /// `resolved_offset` is the caller's best constant resolution of the access
+    /// offset, or `None` when it could not be resolved.
+    pub fn is_free_pointer_slot(self, resolved_offset: Option<u64>) -> bool {
+        self == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40)
+    }
 }
 
 /// An SSA value reference (index into value table).
@@ -226,8 +244,8 @@ pub enum CreateKind {
 /// objects refers to two unrelated functions. Passes that walk an object tree
 /// must look up names/bodies in the *current* object's table — never the parent's.
 ///
-/// Cross-object references go through [`Object.subobjects`] and contract-creation
-/// expressions, not through `FunctionId`.
+/// Cross-object references go through the [`Object`] `subobjects` field and
+/// contract-creation expressions, not through `FunctionId`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct FunctionId(pub u32);
 

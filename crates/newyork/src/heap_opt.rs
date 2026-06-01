@@ -243,8 +243,7 @@ impl HeapAnalysis {
                 // value at runtime. Downstream `mload(0x40)` range
                 // proofs / native-mode truncations assume `FMP <
                 // heap_size`; those assumptions break here.
-                let is_fmp_store =
-                    *region == MemoryRegion::FreePointerSlot || static_offset == Some(0x40);
+                let is_fmp_store = region.is_free_pointer_slot(static_offset);
                 if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
                     self.fmp_could_be_unbounded = true;
                 }

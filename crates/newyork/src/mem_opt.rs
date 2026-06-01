@@ -933,8 +933,7 @@ impl FmpPropagation {
                     region,
                 } => {
                     let resolved_offset = Self::resolve_offset(&constants, &offset);
-                    let is_fmp_store =
-                        region == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40);
+                    let is_fmp_store = region.is_free_pointer_slot(resolved_offset);
 
                     if is_fmp_store {
                         let new_fmp = Self::resolve_value(&constants, &value);
@@ -968,8 +967,7 @@ impl FmpPropagation {
                     } = value
                     {
                         let resolved_offset = Self::resolve_offset(&constants, offset);
-                        let is_fmp_load = *region == MemoryRegion::FreePointerSlot
-                            || resolved_offset == Some(0x40);
+                        let is_fmp_load = region.is_free_pointer_slot(resolved_offset);
 
                         if is_fmp_load {
                             if let Some(ref known_fmp) = fmp_value {
@@ -1625,5 +1623,134 @@ mod tests {
         } else {
             panic!("Expected Let statement");
         }
+    }
+
+    /// `is_free_pointer_slot` must keep both detection signals: the
+    /// `FreePointerSlot` region tag is the only thing that identifies an FMP
+    /// access whose offset a pass cannot fold back to a constant.
+    ///
+    /// Here the offset value (id 9) is never bound to a literal, so
+    /// `resolve_offset` returns `None`. Detection relies solely on the region
+    /// tag. If that signal were dropped, the unresolved-offset store would
+    /// invalidate the tracked FMP and the load would not be eliminated.
+    #[test]
+    fn test_fmp_eliminated_via_region_tag_with_unresolvable_offset() {
+        use crate::ir::{MemoryRegion, Object};
+        use num::BigUint;
+
+        let stored_value = make_value(1);
+        let unresolvable_offset = make_value(9);
+        let load_result = ValueId(3);
+
+        let statements = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x80u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::MStore {
+                offset: unresolvable_offset,
+                value: stored_value,
+                region: MemoryRegion::FreePointerSlot,
+            },
+            Statement::Let {
+                bindings: vec![load_result],
+                value: Expression::MLoad {
+                    offset: unresolvable_offset,
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+
+        let mut fmp = FmpPropagation::new(0);
+        fmp.propagate_object(&mut object);
+
+        assert_eq!(
+            fmp.loads_eliminated, 1,
+            "region tag must detect the FMP load when the offset cannot be resolved"
+        );
+    }
+
+    /// `is_free_pointer_slot` must keep both detection signals: the
+    /// resolved-offset check is the only thing that identifies an FMP access
+    /// whose offset was computed (and so could not be classified by
+    /// `MemoryRegion::from_address` at translation time).
+    ///
+    /// Here the offset is computed as `0x20 + 0x20`, folds to `0x40`, and is
+    /// tagged `Unknown`. Detection relies solely on the resolved offset. If
+    /// that signal were dropped, neither the store nor the load would be
+    /// recognised as FMP accesses.
+    #[test]
+    fn test_fmp_eliminated_via_resolved_offset_when_region_untagged() {
+        use crate::ir::{BinaryOperation, MemoryRegion, Object};
+        use num::BigUint;
+
+        let stored_value = make_value(1);
+        let half_offset = make_value(2);
+        let computed_offset = make_value(3);
+        let load_result = ValueId(4);
+
+        let statements = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x80u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![ValueId(2)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x20u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: half_offset,
+                    rhs: half_offset,
+                },
+            },
+            Statement::MStore {
+                offset: computed_offset,
+                value: stored_value,
+                region: MemoryRegion::Unknown,
+            },
+            Statement::Let {
+                bindings: vec![load_result],
+                value: Expression::MLoad {
+                    offset: computed_offset,
+                    region: MemoryRegion::Unknown,
+                },
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+
+        let mut fmp = FmpPropagation::new(0);
+        fmp.propagate_object(&mut object);
+
+        assert_eq!(
+            fmp.loads_eliminated, 1,
+            "resolved offset must detect the FMP load when the region is untagged"
+        );
     }
 }

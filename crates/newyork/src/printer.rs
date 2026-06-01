@@ -90,11 +90,6 @@ impl<'a> Printer<'a> {
         self.output.clear();
         self.indent = 0;
         self.function_names.clear();
-
-        for (id, function) in &object.functions {
-            self.function_names.insert(*id, &function.name);
-        }
-
         self.write_object(object);
         std::mem::take(&mut self.output)
     }
@@ -133,6 +128,15 @@ impl<'a> Printer<'a> {
     }
 
     fn write_object(&mut self, object: &'a Object) {
+        // FunctionIds are per-object (see ir::FunctionId docs); swap in this
+        // object's name table for the duration of the walk and restore on exit
+        // so subobjects don't print the parent's names or fall through to
+        // `func_<id>` on collisions.
+        let saved_function_names = std::mem::take(&mut self.function_names);
+        for (id, function) in &object.functions {
+            self.function_names.insert(*id, &function.name);
+        }
+
         self.write_indent();
         let _ = write!(self.output, "object \"{}\" {{", object.name);
         self.write_newline();
@@ -176,6 +180,8 @@ impl<'a> Printer<'a> {
         self.write_indent();
         self.output.push('}');
         self.write_newline();
+
+        self.function_names = saved_function_names;
     }
 
     fn write_function(&mut self, function: &Function) {
@@ -1306,6 +1312,107 @@ mod tests {
         assert!(output.contains("-> (v1: i256)"));
         assert!(output.contains("let v2 := add(v0, v3)"));
         assert!(output.contains("/* calls: 1, size: 5 */"));
+    }
+
+    #[test]
+    fn test_subobject_function_names_are_scoped() {
+        // Regression test for a printer bug where subobject Call expressions
+        // resolved against the parent's function-name map: ids missing in the
+        // parent printed as `func_<id>`, and id collisions printed the parent's
+        // name (e.g. `extract_byte_array_length()` from a subobject).
+        let parent_only = Function {
+            id: FunctionId(0),
+            name: "parent_only".to_string(),
+            parameters: vec![],
+            returns: vec![],
+            return_values_initial: vec![],
+            return_values: vec![],
+            body: Block { statements: vec![] },
+            call_count: 1,
+            size_estimate: 1,
+        };
+        let sub_collides = Function {
+            id: FunctionId(0),
+            name: "sub_collides".to_string(),
+            parameters: vec![],
+            returns: vec![],
+            return_values_initial: vec![],
+            return_values: vec![],
+            body: Block { statements: vec![] },
+            call_count: 1,
+            size_estimate: 1,
+        };
+        let sub_unique = Function {
+            id: FunctionId(7),
+            name: "sub_unique".to_string(),
+            parameters: vec![],
+            returns: vec![],
+            return_values_initial: vec![],
+            return_values: vec![],
+            body: Block { statements: vec![] },
+            call_count: 1,
+            size_estimate: 1,
+        };
+
+        let call = |id| {
+            Statement::Expression(Expression::Call {
+                function: FunctionId(id),
+                arguments: vec![],
+            })
+        };
+
+        let mut parent_functions = BTreeMap::new();
+        parent_functions.insert(parent_only.id, parent_only);
+        let mut sub_functions = BTreeMap::new();
+        sub_functions.insert(sub_collides.id, sub_collides);
+        sub_functions.insert(sub_unique.id, sub_unique);
+
+        let subobject = Object {
+            name: "Sub".to_string(),
+            code: Block {
+                statements: vec![call(0), call(7)],
+            },
+            functions: sub_functions,
+            subobjects: Vec::new(),
+            data: BTreeMap::new(),
+        };
+        let object = Object {
+            name: "Parent".to_string(),
+            code: Block {
+                statements: vec![call(0)],
+            },
+            functions: parent_functions,
+            subobjects: vec![subobject],
+            data: BTreeMap::new(),
+        };
+
+        let output = print_object(&object);
+
+        let parent_header = output.find("object \"Parent\"").unwrap();
+        let sub_header = output.find("object \"Sub\"").unwrap();
+        let (parent_section, sub_section) = output.split_at(sub_header);
+        let parent_section = &parent_section[parent_header..];
+
+        assert!(
+            parent_section.contains("parent_only()"),
+            "parent should resolve its own FunctionId(0):\n{parent_section}",
+        );
+        assert!(
+            sub_section.contains("sub_collides()"),
+            "subobject's FunctionId(0) should print as sub_collides, not parent_only:\n{sub_section}",
+        );
+        assert!(
+            sub_section.contains("sub_unique()"),
+            "subobject's FunctionId(7) should resolve via the subobject map, not fall through to func_7:\n{sub_section}",
+        );
+        assert!(
+            !sub_section.contains("parent_only"),
+            "parent_only must not leak into subobject output:\n{sub_section}",
+        );
+        assert!(
+            !sub_section.contains("func_7"),
+            "missing-id fallback must not appear:\n{sub_section}",
+        );
     }
 
     #[test]

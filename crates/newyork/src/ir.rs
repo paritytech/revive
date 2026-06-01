@@ -219,7 +219,15 @@ pub enum CreateKind {
     Create2,
 }
 
-/// Function identifier.
+/// Function identifier, unique within a single [`Object`] but **not** across objects.
+///
+/// Each [`Object`] (top-level and every subobject) owns its own `functions` map
+/// and issues IDs starting from `0`, so the same `FunctionId(N)` in two different
+/// objects refers to two unrelated functions. Passes that walk an object tree
+/// must look up names/bodies in the *current* object's table — never the parent's.
+///
+/// Cross-object references go through [`Object.subobjects`] and contract-creation
+/// expressions, not through `FunctionId`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct FunctionId(pub u32);
 

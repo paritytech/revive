@@ -78,10 +78,16 @@ jobs:
           filters: |
             should-run-differential-tests:
               - '**'
+              - '!**.md'
+              - '!book/**'
+              - '!docs/**'
               - '!tooling-projects/**'
             should-run-hardhat-tests:
               - '**'
               - '!**.md'
+              - '!book/**'
+              - '!docs/**'
+              - '!js/**'
 
   run-differential-tests:
     needs: [test, check-changes]

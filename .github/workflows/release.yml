@@ -5,12 +5,13 @@ on:
     branches: ["main"]
     tags:
       - "v*"
-    paths-ignore:
-      - "tooling-projects/**"
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, labeled, unlabeled]
     paths-ignore:
+      - "**.md"
+      - "book/**"
+      - "docs/**"
       - "tooling-projects/**"
 
 concurrency:

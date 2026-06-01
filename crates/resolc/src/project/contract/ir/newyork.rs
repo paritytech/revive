@@ -79,6 +79,10 @@ const SBRK_NOINLINE_THRESHOLD: usize = 30;
 /// when [`crate::RESOLC_DEBUG_HEAP_ENV`] is set.
 const HEAP_DEBUG_LOG_FILE: &str = "resolc_heap_debug.log";
 
+/// File name of the memory-optimization statistics log appended inside the debug output
+/// directory when [`crate::RESOLC_DEBUG_MEM_ENV`] is set.
+const MEM_DEBUG_LOG_FILE: &str = "resolc_mem_debug.log";
+
 impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.yul_object.declare(context)?;
@@ -112,6 +116,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         }
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
+        let mem_opt = translation_result.mem_opt;
         let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =
             translation_result
                 .inline_results
@@ -148,6 +153,31 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                         heap_opt.native_safe_offsets,
                         heap_opt.has_dynamic_escapes,
                         heap_opt.has_dynamic_accesses,
+                    );
+                }
+            }
+        }
+
+        if std::env::var(crate::RESOLC_DEBUG_MEM_ENV).is_ok() {
+            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
+                use std::io::Write;
+                let mut log_path = output_directory.to_owned();
+                log_path.push(MEM_DEBUG_LOG_FILE);
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    let _ = writeln!(
+                        file,
+                        "MEM_OPT [{}]: loads_eliminated={}, stores_eliminated={}, values_tracked={}, keccak_pairs_fused={}, keccak_singles_fused={}, fmp_loads_eliminated={}",
+                        ir_object.name,
+                        mem_opt.loads_eliminated,
+                        mem_opt.stores_eliminated,
+                        mem_opt.values_tracked,
+                        mem_opt.keccak_pairs_fused,
+                        mem_opt.keccak_singles_fused,
+                        mem_opt.fmp_loads_eliminated,
                     );
                 }
             }

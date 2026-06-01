@@ -103,6 +103,10 @@ pub const RESOLC_DEBUG_IR_ENV: &str = "RESOLC_DEBUG_IR";
 /// every compiled object to `/tmp/resolc_heap_debug.log`.
 pub const RESOLC_DEBUG_HEAP_ENV: &str = "RESOLC_DEBUG_HEAP";
 
+/// Environment variable: when set, appends the memory-optimization statistics for
+/// every compiled object to a `resolc_mem_debug.log` file in the debug output directory.
+pub const RESOLC_DEBUG_MEM_ENV: &str = "RESOLC_DEBUG_MEM";
+
 /// Runs the Yul mode.
 ///
 /// When `use_newyork` is `true`, each Yul source is routed through the newyork IR

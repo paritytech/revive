@@ -72,6 +72,8 @@ pub struct MemOptResults {
     pub keccak_pairs_fused: usize,
     /// Number of keccak256 calls fused into keccak256_single.
     pub keccak_singles_fused: usize,
+    /// Number of FMP (`mload(0x40)`) loads eliminated by [`FmpPropagation`].
+    pub fmp_loads_eliminated: usize,
 }
 
 /// Memory optimization pass.

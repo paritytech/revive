@@ -295,6 +295,7 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     let mut mem_opt_results = mem_optimizer.optimize_object(object);
     let mut fmp_prop = mem_opt::FmpPropagation::new(0);
     fmp_prop.propagate_object(object);
+    mem_opt_results.fmp_loads_eliminated += fmp_prop.loads_eliminated;
 
     simplify::fold_constant_keccak(object);
 
@@ -334,6 +335,7 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
         mem_opt_results.values_tracked += sub_mem_opt.values_tracked;
         mem_opt_results.keccak_pairs_fused += sub_mem_opt.keccak_pairs_fused;
         mem_opt_results.keccak_singles_fused += sub_mem_opt.keccak_singles_fused;
+        mem_opt_results.fmp_loads_eliminated += sub_mem_opt.fmp_loads_eliminated;
     }
 
     (inline_results, mem_opt_results)

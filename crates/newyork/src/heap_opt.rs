@@ -20,6 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ir::{for_each_statement, Block, Expression, MemoryRegion, Object, Statement, Value};
+use revive_common::BYTE_LENGTH_WORD;
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -232,8 +233,9 @@ impl HeapAnalysis {
                 }
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
                     if let Some(addr) = static_offset {
-                        if addr % 32 != 0 {
-                            self.tainted_regions.insert(addr / 32 * 32);
+                        if addr % BYTE_LENGTH_WORD as u64 != 0 {
+                            self.tainted_regions
+                                .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                         }
                     }
                 }
@@ -253,7 +255,8 @@ impl HeapAnalysis {
                 let pattern = AccessPattern::Unknown;
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
-                    self.tainted_regions.insert(addr / 32 * 32);
+                    self.tainted_regions
+                        .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 } else {
                     self.has_dynamic_accesses = true;
                 }
@@ -330,7 +333,8 @@ impl HeapAnalysis {
 
             Statement::ReturnDataCopy { dest, .. } => {
                 if let Some(addr) = self.extract_static_offset(dest) {
-                    self.tainted_regions.insert(addr / 32 * 32);
+                    self.tainted_regions
+                        .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 } else {
                     self.has_dynamic_accesses = true;
                 }
@@ -344,7 +348,8 @@ impl HeapAnalysis {
                     self.memory_accesses
                         .entry(addr)
                         .or_insert(AccessPattern::AlignedStatic(addr));
-                    self.tainted_regions.insert(addr / 32 * 32);
+                    self.tainted_regions
+                        .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 } else {
                     self.has_dynamic_accesses = true;
                 }
@@ -370,7 +375,7 @@ impl HeapAnalysis {
     fn classify_access(&self, offset: &Value) -> AccessPattern {
         if let Some(info) = self.offset_values.get(&offset.id.0) {
             if let Some(static_val) = info.static_value {
-                if static_val % 32 == 0 {
+                if static_val % BYTE_LENGTH_WORD as u64 == 0 {
                     return AccessPattern::AlignedStatic(static_val);
                 } else {
                     return AccessPattern::UnalignedStatic(static_val);
@@ -427,7 +432,7 @@ impl HeapAnalysis {
                 }
             }
             (Some(s), None) => {
-                let word_start = s / 32 * 32;
+                let word_start = s / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
                 self.min_dynamic_escape_start = Some(
                     self.min_dynamic_escape_start
                         .map_or(word_start, |prev| prev.min(word_start)),
@@ -446,9 +451,10 @@ impl HeapAnalysis {
             (Some(_), Some(0)) => {}
             (Some(addr), Some(size)) => {
                 let end = addr.saturating_add(size);
-                let first_word = addr / 32 * 32;
+                let first_word = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
                 let range = end.saturating_sub(first_word);
-                let num_words = range.saturating_add(31) / 32;
+                let num_words =
+                    range.saturating_add(BYTE_LENGTH_WORD as u64 - 1) / BYTE_LENGTH_WORD as u64;
                 if num_words > MAX_RANGE_WORDS {
                     self.escaping_regions.insert(first_word);
                     self.has_dynamic_escapes = true;
@@ -456,12 +462,13 @@ impl HeapAnalysis {
                     let mut word = first_word;
                     while word < end {
                         self.escaping_regions.insert(word);
-                        word += 32;
+                        word += BYTE_LENGTH_WORD as u64;
                     }
                 }
             }
             (Some(addr), None) => {
-                self.escaping_regions.insert(addr / 32 * 32);
+                self.escaping_regions
+                    .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 self.has_dynamic_escapes = true;
             }
             (None, _) => {
@@ -476,8 +483,11 @@ impl HeapAnalysis {
         match (start, len) {
             (Some(addr), Some(size)) if size > 0 => {
                 let end = addr.saturating_add(size);
-                let first_word = addr / 32 * 32;
-                let num_words = end.saturating_sub(first_word).saturating_add(31) / 32;
+                let first_word = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
+                let num_words = end
+                    .saturating_sub(first_word)
+                    .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
+                    / BYTE_LENGTH_WORD as u64;
                 if num_words > MAX_RANGE_WORDS {
                     self.tainted_regions.insert(first_word);
                     self.has_dynamic_accesses = true;
@@ -485,12 +495,13 @@ impl HeapAnalysis {
                     let mut word = first_word;
                     while word < end {
                         self.tainted_regions.insert(word);
-                        word += 32;
+                        word += BYTE_LENGTH_WORD as u64;
                     }
                 }
             }
             (Some(addr), _) => {
-                self.tainted_regions.insert(addr / 32 * 32);
+                self.tainted_regions
+                    .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 self.has_dynamic_accesses = true;
             }
             (None, _) => {
@@ -506,8 +517,11 @@ impl HeapAnalysis {
         match (start, len) {
             (Some(addr), Some(size)) if size > 0 => {
                 let end = addr.saturating_add(size);
-                let first_word = addr / 32 * 32;
-                let num_words = end.saturating_sub(first_word).saturating_add(31) / 32;
+                let first_word = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
+                let num_words = end
+                    .saturating_sub(first_word)
+                    .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
+                    / BYTE_LENGTH_WORD as u64;
                 if num_words > MAX_RANGE_WORDS {
                     self.escaping_regions.insert(first_word);
                     self.tainted_regions.insert(first_word);
@@ -517,13 +531,15 @@ impl HeapAnalysis {
                     while word < end {
                         self.escaping_regions.insert(word);
                         self.tainted_regions.insert(word);
-                        word += 32;
+                        word += BYTE_LENGTH_WORD as u64;
                     }
                 }
             }
             (Some(addr), None) => {
-                self.escaping_regions.insert(addr / 32 * 32);
-                self.tainted_regions.insert(addr / 32 * 32);
+                self.escaping_regions
+                    .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
+                self.tainted_regions
+                    .insert(addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64);
                 self.has_dynamic_escapes = true;
             }
             _ => {
@@ -685,13 +701,13 @@ impl HeapAnalysis {
 
     /// Returns whether a memory region requires big-endian emulation.
     pub fn requires_big_endian(&self, addr: u64) -> bool {
-        let word_addr = addr / 32 * 32;
+        let word_addr = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
         self.tainted_regions.contains(&word_addr) || self.escaping_regions.contains(&word_addr)
     }
 
     /// Returns whether a memory region escapes to external code.
     pub fn region_escapes(&self, addr: u64) -> bool {
-        let word_addr = addr / 32 * 32;
+        let word_addr = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
         self.escaping_regions.contains(&word_addr)
     }
 
@@ -908,7 +924,7 @@ impl HeapOptResults {
             if matches!(pattern, AccessPattern::Unknown) {
                 unknown_accesses += 1;
             } else if pattern.is_aligned() {
-                let word_addr = addr / 32 * 32;
+                let word_addr = addr / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
                 if !analysis.requires_big_endian(addr) {
                     native_safe_regions.insert(word_addr);
                     native_safe_offsets.insert(addr);
@@ -950,7 +966,7 @@ impl HeapOptResults {
             return false;
         }
         if let Some(min_start) = self.min_dynamic_escape_start {
-            let word_offset = offset / 32 * 32;
+            let word_offset = offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
             if word_offset >= min_start {
                 return false;
             }
@@ -961,7 +977,7 @@ impl HeapOptResults {
         if self.native_safe_offsets.contains(&offset) {
             return true;
         }
-        let word_addr = offset / 32 * 32;
+        let word_addr = offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
         self.native_safe_regions.contains(&word_addr)
     }
 

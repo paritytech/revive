@@ -58,6 +58,7 @@ use crate::ir::{
     for_each_statement, BinaryOperation, BitWidth, Block, Expression, FunctionId, MemoryRegion,
     Object, Region, Statement, Type, Value, ValueId,
 };
+use revive_common::BYTE_LENGTH_WORD;
 
 /// Results of memory optimization.
 #[derive(Clone, Debug, Default)]
@@ -79,7 +80,7 @@ pub struct MemOptResults {
 /// Memory optimization pass.
 pub struct MemoryOptimizer {
     /// Tracks the most recently stored value at each static memory offset.
-    /// Key is the word-aligned offset (offset / 32 * 32).
+    /// Key is the word-aligned offset.
     memory_state: BTreeMap<u64, TrackedValue>,
     /// Tracks constant values for ValueIds.
     /// When a Let binds a literal, we record the constant value here.
@@ -162,7 +163,8 @@ impl MemoryOptimizer {
                     region,
                 } => {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                        let word_offset = static_offset / 32 * 32;
+                        let word_offset =
+                            static_offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
 
                         // Dead-store elimination: an unread mstore to the
                         // exact same offset is fully overwritten by this
@@ -188,9 +190,10 @@ impl MemoryOptimizer {
                         // stale tracked offset would forward the
                         // pre-overwrite value while the actual memory has
                         // been partially overwritten by the new store.
-                        let new_end = static_offset.saturating_add(32);
+                        let new_end = static_offset.saturating_add(BYTE_LENGTH_WORD as u64);
                         self.memory_state.retain(|_, tracked| {
-                            let tracked_end = tracked.offset.saturating_add(32);
+                            let tracked_end =
+                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
                             tracked_end <= static_offset || tracked.offset >= new_end
                         });
                         // Same for pending_stores: a partial-overwrite
@@ -200,7 +203,7 @@ impl MemoryOptimizer {
                         // pending entry can never be matched and should
                         // not be kept.
                         self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(32);
+                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
                             prev_end <= static_offset || k >= new_end
                         });
 
@@ -241,11 +244,12 @@ impl MemoryOptimizer {
                         // pre-overwrite value. Invalidate every such
                         // entry and the matching `pending_stores` key.
                         self.memory_state.retain(|_, tracked| {
-                            let tracked_end = tracked.offset.saturating_add(32);
+                            let tracked_end =
+                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
                             tracked.offset > static_offset || tracked_end <= static_offset
                         });
                         self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(32);
+                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
                             k > static_offset || prev_end <= static_offset
                         });
                     } else {
@@ -496,11 +500,12 @@ impl MemoryOptimizer {
                         // case 2: known [start, start + size) range
                         let end = start.saturating_add(size);
                         self.memory_state.retain(|_, tracked| {
-                            let tracked_end = tracked.offset.saturating_add(32);
+                            let tracked_end =
+                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
                             tracked_end <= start || tracked.offset >= end
                         });
                         self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(32);
+                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
                             prev_end <= start || k >= end
                         });
                     } else {
@@ -574,7 +579,8 @@ impl MemoryOptimizer {
         match expression {
             Expression::MLoad { offset, region } => {
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                    let word_offset = static_offset / 32 * 32;
+                    let word_offset =
+                        static_offset / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64;
 
                     self.pending_stores.remove(&word_offset);
 
@@ -618,18 +624,21 @@ impl MemoryOptimizer {
                 // mem_opt's forwarding can't reach because of an
                 // intervening clearing event) reads the helper's heap
                 // write and gets the same value EVM would.
-                if static_offset == Some(0) && static_length == Some(64) {
-                    if let (Some(tracked0), Some(tracked32)) =
-                        (self.memory_state.get(&0), self.memory_state.get(&32))
-                    {
-                        if tracked0.offset == 0 && tracked32.offset == 32 {
+                if static_offset == Some(0) && static_length == Some(2 * BYTE_LENGTH_WORD as u64) {
+                    if let (Some(tracked0), Some(tracked32)) = (
+                        self.memory_state.get(&0),
+                        self.memory_state.get(&(BYTE_LENGTH_WORD as u64)),
+                    ) {
+                        if tracked0.offset == 0 && tracked32.offset == BYTE_LENGTH_WORD as u64 {
                             let word0 = tracked0.stored_value;
                             let word1 = tracked32.stored_value;
                             if let Some(&idx0) = self.pending_stores.get(&0) {
                                 self.dead_store_indices.insert(idx0);
                                 self.statistics.stores_eliminated += 1;
                             }
-                            if let Some(&idx32) = self.pending_stores.get(&32) {
+                            if let Some(&idx32) =
+                                self.pending_stores.get(&(BYTE_LENGTH_WORD as u64))
+                            {
                                 self.dead_store_indices.insert(idx32);
                                 self.statistics.stores_eliminated += 1;
                             }
@@ -641,7 +650,7 @@ impl MemoryOptimizer {
                     }
                 }
 
-                if static_offset == Some(0) && static_length == Some(32) {
+                if static_offset == Some(0) && static_length == Some(BYTE_LENGTH_WORD as u64) {
                     if let Some(tracked0) = self.memory_state.get(&0) {
                         if tracked0.offset == 0 {
                             let word0 = tracked0.stored_value;

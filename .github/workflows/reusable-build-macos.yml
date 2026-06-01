@@ -27,6 +27,7 @@ env:
 
 jobs:
   build:
+    name: Build macOS (${{ matrix.target }})
     # GH Actions matrix jobs don't support multiple outputs.
     # Workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
     outputs:
@@ -69,6 +70,7 @@ jobs:
           echo "${{ matrix.target }}_sha=${{ steps.build.outputs.sha }}" >> "$GITHUB_OUTPUT"
 
   create-universal:
+    name: Build macOS (universal)
     needs: build
     runs-on: macos-15
     outputs:

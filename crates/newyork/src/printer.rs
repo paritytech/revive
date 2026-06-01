@@ -190,9 +190,19 @@ impl<'a> Printer<'a> {
             self.write_newline();
         }
 
-        for subobject in &object.subobjects {
+        for (index, subobject) in object.subobjects.iter().enumerate() {
             self.write_newline();
+            // Subobjects have their own ValueId namespace and a matching
+            // `TypeInference` in `sub_inferences` (same order as `subobjects`,
+            // mirroring codegen). Swap to the child's inference for the duration
+            // of the walk so subobject value ids aren't looked up in the parent
+            // map — where they'd be absent and default to i1. Restore on exit.
+            let saved_inferred_types = self.inferred_types;
+            self.inferred_types = self
+                .inferred_types
+                .and_then(|inference| inference.sub_inferences.get(index));
             self.write_object(subobject);
+            self.inferred_types = saved_inferred_types;
         }
 
         self.indent -= 1;
@@ -1320,6 +1330,55 @@ mod tests {
         assert_eq!(inference.effective_width(ValueId(0)), BitWidth::I8);
         let typed = print_object_with_types(&object, &inference);
         assert!(typed.contains("let v0: i8 := 0xff"), "got: {typed}");
+    }
+
+    #[test]
+    fn subobject_bindings_use_subobject_inference() {
+        use crate::type_inference::TypeInference;
+
+        // Parent and subobject both bind ValueId(0), but to literals of
+        // different widths. Because each object has its own ValueId namespace
+        // and its own inference, the subobject's v0 must be annotated from the
+        // subobject inference (i64), not the parent's (i8).
+        let mut parent = Object::new("Parent".to_string());
+        parent.code.statements.push(Statement::Let {
+            bindings: vec![ValueId(0)],
+            value: Expression::Literal {
+                value: BigUint::from(0xffu64),
+                value_type: Type::Int(BitWidth::I256),
+            },
+        });
+
+        let mut subobject = Object::new("Parent_deployed".to_string());
+        subobject.code.statements.push(Statement::Let {
+            bindings: vec![ValueId(0)],
+            value: Expression::Literal {
+                value: BigUint::from(0xffffffffffffffffu64),
+                value_type: Type::Int(BitWidth::I256),
+            },
+        });
+        parent.subobjects.push(subobject);
+
+        let mut inference = TypeInference::new();
+        inference.infer_object_tree(&parent);
+
+        let output = print_object_with_types(&parent, &inference);
+        let subobject_section = output
+            .split_once("object \"Parent_deployed\"")
+            .expect("subobject section present")
+            .1;
+
+        // Parent v0 is the i8 literal; subobject v0 is the i64 literal. If the
+        // subobject were printed against the parent inference it would wrongly
+        // show i8 (or default to i1 for ids the parent never saw).
+        assert!(
+            output.contains("let v0: i8 := 0xff\n"),
+            "parent binding should be i8:\n{output}"
+        );
+        assert!(
+            subobject_section.contains("let v0: i64 := 0xffffffffffffffff"),
+            "subobject binding should be i64 from its own inference:\n{subobject_section}"
+        );
     }
 
     #[test]

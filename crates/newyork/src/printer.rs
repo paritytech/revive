@@ -525,9 +525,9 @@ impl<'a> Printer<'a> {
                 condition_statements,
                 condition,
                 body,
+                post_input_variables,
                 post,
                 outputs,
-                ..
             } => {
                 self.write_indent();
 
@@ -558,24 +558,38 @@ impl<'a> Printer<'a> {
                 self.output.push_str(" }");
                 self.write_newline();
 
+                // Everything that makes up the loop is indented one level under
+                // the `for` header so the condition, post and body blocks line
+                // up and their braces match.
+                self.indent += 1;
+
                 if !condition_statements.is_empty() {
-                    self.indent += 1;
                     self.write_indent();
-                    self.output.push_str("// condition_statements:");
+                    self.output.push_str("// condition statements:");
                     self.write_newline();
                     for statement in condition_statements {
                         self.write_statement(statement);
                     }
-                    self.indent -= 1;
                 }
 
                 self.write_indent();
-                self.output.push_str("  ");
+                self.output.push_str("condition: ");
                 self.write_expression(condition);
                 self.write_newline();
 
                 self.write_indent();
-                self.output.push_str("  { // post");
+                self.output.push_str("post");
+                if !post_input_variables.is_empty() {
+                    self.output.push_str(" (");
+                    for (i, id) in post_input_variables.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        self.write_value_id(*id);
+                    }
+                    self.output.push(')');
+                }
+                self.output.push_str(" {");
                 self.write_newline();
                 self.indent += 1;
                 self.write_region(post);
@@ -585,7 +599,7 @@ impl<'a> Printer<'a> {
                 self.write_newline();
 
                 self.write_indent();
-                self.output.push('{');
+                self.output.push_str("body {");
                 self.write_newline();
                 self.indent += 1;
                 self.write_region(body);
@@ -593,6 +607,8 @@ impl<'a> Printer<'a> {
                 self.write_indent();
                 self.output.push('}');
                 self.write_newline();
+
+                self.indent -= 1;
             }
 
             Statement::Break { .. } => {
@@ -1379,6 +1395,37 @@ mod tests {
             subobject_section.contains("let v0: i64 := 0xffffffffffffffff"),
             "subobject binding should be i64 from its own inference:\n{subobject_section}"
         );
+    }
+
+    #[test]
+    fn for_loop_prints_post_inputs_with_aligned_braces() {
+        let for_statement = Statement::For {
+            initial_values: vec![Value::int(ValueId(0))],
+            loop_variables: vec![ValueId(1)],
+            condition_statements: Vec::new(),
+            condition: Expression::Var(ValueId(1)),
+            body: Region::default(),
+            post_input_variables: vec![ValueId(2)],
+            post: Region::default(),
+            outputs: Vec::new(),
+        };
+
+        let output = print_statement(&for_statement);
+
+        // The post-region input variables must not be dropped.
+        assert!(
+            output.contains("post (v2) {"),
+            "post inputs should be printed:\n{output}"
+        );
+        // Header at column 0; condition/post/body indented one level under it,
+        // with matching open/close braces at that level.
+        assert!(output.contains("for { v1 := v0 }\n"), "got:\n{output}");
+        assert!(output.contains("\n    condition: v1\n"), "got:\n{output}");
+        assert!(
+            output.contains("\n    post (v2) {\n    }\n"),
+            "got:\n{output}"
+        );
+        assert!(output.contains("\n    body {\n    }\n"), "got:\n{output}");
     }
 
     #[test]

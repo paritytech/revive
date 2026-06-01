@@ -9,23 +9,29 @@
 //! ```text
 //! object "Test" {
 //!     code {
-//!         let v0: i256 = 0x00
-//!         let v1: i256 = calldataload(v0)
+//!         let v0 := 0x00
+//!         let v1 := calldataload(v0)
 //!         mstore(v0, v1)
 //!     }
 //!
 //!     function add_one(v2: i256) -> (v3: i256) {
-//!         let v4: i256 = 0x01
-//!         let v3 = add(v2, v4)
+//!         let v4 := 0x01
+//!         let v3 := add(v2, v4)
 //!     }
 //! }
 //! ```
+//!
+//! When type-inference results are attached via [`Printer::set_type_info`],
+//! value ids whose inferred width is narrower than the i256 default are
+//! annotated with that width, e.g. `let v4: i64 := 0x01`. Without inference,
+//! bindings carry no annotation because they store no type of their own.
 
 use crate::ir::{
     AddressSpace, BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function,
     FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
     ValueId,
 };
+use crate::type_inference::TypeInference;
 use std::collections::BTreeMap;
 use std::fmt::{self, Write};
 
@@ -62,6 +68,10 @@ pub struct Printer<'a> {
     indent: usize,
     /// Function name lookup for printing calls.
     function_names: BTreeMap<FunctionId, &'a str>,
+    /// Optional type-inference results. When present, value ids are annotated
+    /// with their post-narrow effective width instead of the statically
+    /// assigned i256 default stored in the IR.
+    inferred_types: Option<&'a TypeInference>,
 }
 
 impl<'a> Printer<'a> {
@@ -72,6 +82,7 @@ impl<'a> Printer<'a> {
             output: String::new(),
             indent: 0,
             function_names: BTreeMap::new(),
+            inferred_types: None,
         }
     }
 
@@ -82,7 +93,15 @@ impl<'a> Printer<'a> {
             output: String::new(),
             indent: 0,
             function_names: BTreeMap::new(),
+            inferred_types: None,
         }
+    }
+
+    /// Attaches type-inference results so value annotations reflect the
+    /// post-narrow effective widths computed by the type-inference pass rather
+    /// than the statically assigned i256 defaults stored in the IR.
+    pub fn set_type_info(&mut self, type_info: &'a TypeInference) {
+        self.inferred_types = Some(type_info);
     }
 
     /// Prints an IR object and returns the formatted string.
@@ -284,7 +303,7 @@ impl<'a> Printer<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.write_value_id(*id);
+                    self.write_binding_id(*id);
                 }
                 self.output.push_str(" := ");
                 self.write_expression(value);
@@ -1107,9 +1126,37 @@ impl<'a> Printer<'a> {
 
     fn write_value(&mut self, value: &Value) {
         self.write_value_id(value.id);
-        if self.config.show_types && value.value_type != Type::Int(BitWidth::I256) {
+        if !self.config.show_types {
+            return;
+        }
+        // Pointers and void are never narrowed by type inference, so keep the
+        // statically assigned type. For integers, prefer the post-narrow
+        // effective width when inference is attached; otherwise fall back to the
+        // static type. The default i256 width is suppressed to reduce noise.
+        let display_type = match (self.inferred_types, value.value_type) {
+            (Some(inference), Type::Int(_)) => Type::Int(inference.effective_width(value.id)),
+            _ => value.value_type,
+        };
+        if display_type != Type::Int(BitWidth::I256) {
             self.output.push_str(": ");
-            self.write_type(value.value_type);
+            self.write_type(display_type);
+        }
+    }
+
+    /// Writes a binding value id, annotating it with the inferred effective
+    /// width when type-inference results are attached. Bindings carry no static
+    /// type of their own, so without inference no annotation is printed.
+    fn write_binding_id(&mut self, id: ValueId) {
+        self.write_value_id(id);
+        if !self.config.show_types {
+            return;
+        }
+        if let Some(inference) = self.inferred_types {
+            let width = inference.effective_width(id);
+            if width != BitWidth::I256 {
+                self.output.push_str(": ");
+                self.write_type(Type::Int(width));
+            }
         }
     }
 
@@ -1187,6 +1234,16 @@ pub fn print_object(object: &Object) -> String {
     printer.print_object(object)
 }
 
+/// Convenience function to print an object annotated with inferred type widths.
+///
+/// Value ids are annotated with the post-narrow effective widths from
+/// `type_info`; see [`Printer::set_type_info`].
+pub fn print_object_with_types<'a>(object: &'a Object, type_info: &'a TypeInference) -> String {
+    let mut printer = Printer::new();
+    printer.set_type_info(type_info);
+    printer.print_object(object)
+}
+
 /// Convenience function to print a function to a string.
 pub fn print_function(function: &Function) -> String {
     let mut printer = Printer::new();
@@ -1236,6 +1293,34 @@ impl fmt::Display for Expression {
 mod tests {
     use super::*;
     use num::BigUint;
+
+    #[test]
+    fn binding_shows_inferred_narrow_width() {
+        use crate::type_inference::TypeInference;
+
+        let mut object = Object::new("Test".to_string());
+        object.code.statements.push(Statement::Let {
+            bindings: vec![ValueId(0)],
+            value: Expression::Literal {
+                value: BigUint::from(0xffu64),
+                value_type: Type::Int(BitWidth::I256),
+            },
+        });
+
+        // Without type info the binding carries no annotation: bindings store no
+        // type of their own.
+        let plain = print_object(&object);
+        assert!(plain.contains("let v0 := 0xff"), "got: {plain}");
+        assert!(!plain.contains("v0: i"), "got: {plain}");
+
+        // With inference attached, the i8 literal binding is annotated with its
+        // post-narrow effective width.
+        let mut inference = TypeInference::new();
+        inference.infer_object(&object);
+        assert_eq!(inference.effective_width(ValueId(0)), BitWidth::I8);
+        let typed = print_object_with_types(&object, &inference);
+        assert!(typed.contains("let v0: i8 := 0xff"), "got: {typed}");
+    }
 
     #[test]
     fn test_print_literal() {

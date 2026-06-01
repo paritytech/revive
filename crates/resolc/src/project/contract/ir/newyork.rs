@@ -95,11 +95,16 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let translation_result =
             self.translate_to_ir(context.debug_config().output_directory.as_deref())?;
         let ir_object = translation_result.object;
+        let heap_opt = translation_result.heap_opt;
+        let type_info = translation_result.type_info;
+        let mem_opt = translation_result.mem_opt;
 
+        // Dump the final, fully optimized IR annotated with the inferred type
+        // widths so the narrow pass's effect is visible in the dump.
         if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
             if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
                 use std::io::Write;
-                let ir_text = revive_newyork::print_object(&ir_object);
+                let ir_text = revive_newyork::print_object_with_types(&ir_object, &type_info);
                 let mut file_path = output_directory.to_owned();
                 file_path.push(format!("{}.newyork.txt", ir_object.name.replace('/', "_")));
                 if let Ok(mut f) = std::fs::File::create(&file_path) {
@@ -107,9 +112,6 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 }
             }
         }
-        let heap_opt = translation_result.heap_opt;
-        let type_info = translation_result.type_info;
-        let mem_opt = translation_result.mem_opt;
         let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =
             translation_result
                 .inline_results

@@ -2,7 +2,6 @@ name: Build & Release
 
 on:
   push:
-    branches: ["main"]
     tags:
       - "v*"
   pull_request:
@@ -141,7 +140,7 @@ jobs:
 
       - name: Build
         run: |
-          cp -f resolc.{wasm,js} js/resolc/src/resolc
+          cp --remove-destination resolc.{wasm,js} js/resolc/src/resolc/
           npm -w js/resolc run build
 
       - name: npm pack

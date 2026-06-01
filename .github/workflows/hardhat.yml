@@ -1,0 +1,47 @@
+# Tests compilation and E2E integration with hardhat-polkadot, but not runtime correctness.
+
+name: Hardhat Integration
+
+on:
+  workflow_call:
+
+env:
+  # Workflow-internal hardhat envs are prefixed with `CI_` to not conflict with the
+  # `HARDHAT_*` namespace, which hardhat itself will interpret for its configuration.
+  CI_HARDHAT_PROJECT_ROOT: tooling-projects/hardhat/erc20
+
+jobs:
+  use-hardhat:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v4
+
+      - name: Download resolc Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: resolc-x86_64-unknown-linux-musl
+          path: resolc-bin
+
+      - name: Export resolc Path
+        run: |
+          chmod +x resolc-bin/resolc-x86_64-unknown-linux-musl
+          # This env is used by `hardhat.config.js`.
+          echo "RESOLC_PATH=$(pwd)/resolc-bin/resolc-x86_64-unknown-linux-musl" >> $GITHUB_ENV
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install Project Dependencies
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: npm ci
+
+      - name: Compile Project
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: npx hardhat compile
+
+      - name: Verify Output
+        working-directory: ${{ env.CI_HARDHAT_PROJECT_ROOT }}
+        run: bash verify-compiler-output.sh

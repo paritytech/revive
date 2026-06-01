@@ -22,27 +22,33 @@ runs:
         # draft name (e.g. "llvm-21.1.8-revive.0f80912") and revert to "" before merging.
         OVERRIDE_VERSION: ""
       run: |
-        if [ -z "${OVERRIDE_VERSION}" ]; then
-          # Get the full version from the LLVM submodule.
-          git submodule update --init --recursive
-          cd llvm
-          # Try to get the most recent tag (e.g., "llvmorg-18.1.8")
-          LLVM_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
-          if [ -n "$LLVM_TAG" ]; then
-            echo "Detected LLVM version from submodule: $LLVM_TAG"
-            # Convert "llvmorg-x.y.z" to "llvm-x.y.z"
-            LLVM_VERSION=$(echo "$LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
-            echo "Detected LLVM version from submodule: $LLVM_VERSION"
-            echo "version_prefix=$LLVM_VERSION" >> $GITHUB_OUTPUT
-          else
-            echo "Could not detect LLVM version from submodule, will use latest release"
-            echo "version_prefix=" >> $GITHUB_OUTPUT
-          fi
-          cd ..
-        else
-          echo "Using OVERRIDE_VERSION: ${OVERRIDE_VERSION}"
-          echo "version_prefix=${OVERRIDE_VERSION}" >> $GITHUB_OUTPUT
+        set -euo pipefail
+
+        if [ -n "${OVERRIDE_VERSION}" ]; then
+          echo "Using override version: ${OVERRIDE_VERSION}"
+          echo "version_prefix=${OVERRIDE_VERSION}" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
+
+        LLVM_SHA=$(git ls-tree HEAD llvm | awk '{print $3}')
+        echo "LLVM_SHA: $LLVM_SHA"
+        LLVM_URL=$(git config -f .gitmodules submodule.llvm.url)
+        echo "LLVM_URL: $LLVM_URL"
+        if [ -z "$LLVM_SHA" ] || [ -z "$LLVM_URL" ]; then
+          echo "::error::Could not resolve LLVM submodule SHA or URL from this repo." >&2
+          exit 1
+        fi
+
+        # Do a treeless clone to avoid unnecessarily fetching source files.
+        git clone --filter=tree:0 --no-checkout "$LLVM_URL" llvm-tmp
+        # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
+        LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
+        rm -rf llvm-tmp
+
+        # Convert "llvmorg-x.y.z" to "llvm-x.y.z".
+        LLVM_VERSION=$(echo "$LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
+        echo "Detected LLVM version from submodule pin: $LLVM_VERSION"
+        echo "version_prefix=$LLVM_VERSION" >> "$GITHUB_OUTPUT"
 
     - name: find asset
       id: find
@@ -58,6 +64,11 @@ runs:
 
           let target = process.env.target
           let versionPrefix = process.env.version_prefix
+
+          if (!versionPrefix) {
+            core.setFailed("version_prefix env is missing");
+            return;
+          }
 
           // Fetch all releases from all pages
           core.info('Fetching releases from revive repository...');
@@ -91,43 +102,24 @@ runs:
             core.info(`  - ${r.tag_name} (published: ${r.published_at})`);
           });
 
-          // Find the appropriate LLVM release
-          let llvmRelease;
-          if (versionPrefix) {
-            // Search for latest release matching the version prefix
-            llvmRelease = llvmReleases.find(release => {
-              return release.tag_name.startsWith(versionPrefix);
-            });
-            if (llvmRelease) {
-              core.info(`Selected LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
-            }
-          } else {
-            // Find latest LLVM release (first in sorted list)
-            llvmRelease = llvmReleases[0];
-            if (llvmRelease) {
-              core.info(`Selected latest LLVM version: ${llvmRelease.tag_name}`);
-            }
+          // Find the latest LLVM release matching the version prefix.
+          const llvmRelease = llvmReleases.find(release => release.tag_name.startsWith(versionPrefix));
+          if (!llvmRelease) {
+            core.setFailed(`No LLVM releases matching prefix '${versionPrefix}' found! Please check the version, or first release LLVM`);
+            return;
           }
 
-          if (llvmRelease) {
-            let asset = llvmRelease.assets.find(asset => {
-              return asset.name.includes(target);
-            });
-            if (!asset) {
-              core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
-              process.exit();
-            }
-            // Use the API URL (rather than `browser_download_url`) so that
-            // the authorization header is respected for draft releases.
-            return asset.url;
+          core.info(`Selected LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
+
+          const asset = llvmRelease.assets.find(asset => asset.name.includes(target));
+          if (!asset) {
+            core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
+            return;
           }
 
-          if (versionPrefix) {
-            core.setFailed(`No LLVM releases matching prefix '${versionPrefix}' found! Please check the version.`);
-          } else {
-            core.setFailed(`No LLVM releases found! Please release LLVM before running this workflow.`);
-          }
-          process.exit();
+          // Use the API URL (rather than `browser_download_url`) so that
+          // the authorization header is respected for draft releases.
+          return asset.url;
 
     - name: download
       shell: bash

@@ -69,6 +69,7 @@ jobs:
       pull-requests: read
     outputs:
       should-run-differential-tests: ${{ steps.filter.outputs.should-run-differential-tests }}
+      should-run-hardhat-tests: ${{ steps.filter.outputs.should-run-hardhat-tests }}
     steps:
       - name: Check If Relevant Files Changed
         uses: dorny/paths-filter@v4
@@ -78,8 +79,16 @@ jobs:
             should-run-differential-tests:
               - '**'
               - '!tooling-projects/**'
+            should-run-hardhat-tests:
+              - '**'
+              - '!**.md'
 
   run-differential-tests:
     needs: [test, check-changes]
     if: ${{ needs.check-changes.outputs.should-run-differential-tests == 'true' }}
     uses: ./.github/workflows/differential-tests.yml
+
+  run-hardhat-tests:
+    needs: [test, check-changes]
+    if: ${{ needs.check-changes.outputs.should-run-hardhat-tests == 'true' }}
+    uses: ./.github/workflows/hardhat.yml

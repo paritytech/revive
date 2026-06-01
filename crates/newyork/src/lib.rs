@@ -35,7 +35,9 @@
 #![deny(clippy::all)]
 
 /// Environment variable: when set, dumps the newyork IR for every translated object to
-/// `/tmp/newyork_ir_<object>.txt` after optimization passes have run.
+/// `newyork_ir_<object>.txt` inside the caller-provided debug output directory
+/// (`--debug-output-dir`), after the intra-object optimization passes have run. When the variable
+/// is set but no debug output directory was configured, the dump is skipped.
 pub const NEWYORK_DUMP_IR_ENV: &str = "NEWYORK_DUMP_IR";
 
 pub mod compound_outlining;
@@ -124,28 +126,33 @@ pub struct TranslationResult {
 /// use revive_yul::parser::statement::object::Object;
 ///
 /// let yul_object: Object = /* parse yul */;
-/// let result = translate_yul_object(&yul_object)?;
+/// let result = translate_yul_object(&yul_object, None)?;
 /// let ir_object = result.object;
 /// let heap_opt = result.heap_opt;
 /// ```
 pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
+    debug_output_directory: Option<&std::path::Path>,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
     let mut ir_object = translator.translate_object(yul_object)?;
 
     let (mut inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object);
 
+    // When `NEWYORK_DUMP_IR` is set, dump this post-`optimize_object_tree` IR snapshot into the
+    // caller-provided debug output directory. If the variable is set but no debug output directory
+    // was configured, skip the dump rather than writing to a hardcoded path.
     if std::env::var(NEWYORK_DUMP_IR_ENV).is_ok() {
-        use std::io::Write;
-        let dump_path = format!("/tmp/newyork_ir_{}.txt", ir_object.name.replace('/', "_"));
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&dump_path)
-        {
-            let _ = write!(f, "{}", print_object(&ir_object));
+        if let Some(directory) = debug_output_directory {
+            use std::io::Write;
+            let mut dump_path = directory.to_owned();
+            dump_path.push(format!(
+                "newyork_ir_{}.txt",
+                ir_object.name.replace('/', "_")
+            ));
+            if let Ok(mut file) = std::fs::File::create(&dump_path) {
+                let _ = write!(file, "{}", print_object(&ir_object));
+            }
         }
     }
 

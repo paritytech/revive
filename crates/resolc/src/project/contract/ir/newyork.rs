@@ -43,23 +43,15 @@ impl NewYork {
     }
 
     /// Translate the Yul AST to newyork IR with heap optimization analysis.
-    fn translate_to_ir(&self) -> anyhow::Result<TranslationResult> {
-        let result = revive_newyork::translate_yul_object(&self.yul_object)
-            .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))?;
-
-        if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
-            use std::io::Write;
-            let ir_text = revive_newyork::print_object(&result.object);
-            let _ = writeln!(
-                std::io::stderr(),
-                "=== newyork IR for {} ===\n{}",
-                result.object.name,
-                ir_text
-            );
-            let _ = std::io::stderr().flush();
-        }
-
-        Ok(result)
+    ///
+    /// `debug_output_directory` is forwarded so the `NEWYORK_DUMP_IR` mid-pipeline IR snapshot is
+    /// written into `--debug-output-dir` (or skipped when none is configured).
+    fn translate_to_ir(
+        &self,
+        debug_output_directory: Option<&std::path::Path>,
+    ) -> anyhow::Result<TranslationResult> {
+        revive_newyork::translate_yul_object(&self.yul_object, debug_output_directory)
+            .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
     }
 }
 
@@ -100,7 +92,8 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
-        let translation_result = self.translate_to_ir()?;
+        let translation_result =
+            self.translate_to_ir(context.debug_config().output_directory.as_deref())?;
         let ir_object = translation_result.object;
 
         if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {

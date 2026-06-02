@@ -45,12 +45,12 @@ jobs:
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}
           key: build-${{ env.EMSCRIPTEN_TARGET }}-${{ github.sha }}
 
-      # Pin to 1.92.0 until LLVM Wasm libraries are rebuilt with -fwasm-exceptions
-      # See: https://github.com/paritytech/revive/pull/463
       - name: Set Up Rust Toolchain
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
+          # Pin to 1.92.0 until LLVM Wasm libraries are rebuilt with -fwasm-exceptions
+          # See: https://github.com/paritytech/revive/pull/463
           toolchain: "1.92.0"
           target: ${{ env.EMSCRIPTEN_TARGET }}
           rustflags: ""

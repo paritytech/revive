@@ -201,9 +201,9 @@ jobs:
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
           expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
-          # Using a higher concurrency, such as 100, currently overloads the dev node's RPC
-          # bridge, causing intermittent `eth_getTransactionReceipt` timeouts during code upload.
-          concurrency-number-of-concurrent-tasks: 50
+          # Use a sane value which is fast enough to make the tests run fast but not too
+          # fast that it overwhelms the node.
+          concurrency-number-of-concurrent-tasks: 1000
 
   # Sentinel job that depends on the jobs we want to allow completing (instead of
   # being canceled once the other job chains complete). Thus, run-e2e-tests

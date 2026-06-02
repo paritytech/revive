@@ -4,8 +4,8 @@ on:
     branches: ["main"]
     types: [opened, synchronize]
     paths:
-      - "crates/llvm-builder/**"
-      - ".github/workflows/test-llvm-builder.yml"
+      - 'crates/llvm-builder/**'
+      - '.github/workflows/test-llvm-builder.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

@@ -71,3 +71,13 @@ jobs:
           cd js/emscripten
           npx playwright install --with-deps
           npx playwright test
+
+      - name: Upload Playwright Debug Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-debug-${{ matrix.os }}
+          path: |
+            js/emscripten/test-results.json
+            js/emscripten/test-results/
+          retention-days: 3

@@ -31,7 +31,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build resolc
         id: build

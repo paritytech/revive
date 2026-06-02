@@ -39,10 +39,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: resolc*.{js,wasm}
           merge-multiple: true
@@ -51,7 +51,7 @@ jobs:
       - name: Set Up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "22"
 
       - name: Install Node Packages
         run: npm install

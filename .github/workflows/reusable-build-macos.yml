@@ -52,7 +52,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build resolc
         id: build
@@ -90,7 +90,7 @@ jobs:
 
       - name: Download macOS Artifacts
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: resolc-*-apple-darwin
           merge-multiple: true
@@ -103,7 +103,7 @@ jobs:
 
       - name: Upload Universal Binary
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: resolc-universal-apple-darwin
           path: resolc-universal-apple-darwin

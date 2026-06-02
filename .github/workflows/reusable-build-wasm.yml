@@ -36,7 +36,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check Build Cache
         id: cache
@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload Bundle Artifact (Release)
         if: ${{ inputs.is_release }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: resolc-${{ env.EMSCRIPTEN_TARGET }}
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}/*
@@ -156,7 +156,7 @@ jobs:
       # https://github.com/actions/upload-artifact/issues/331
       - name: Upload resolc.js (Nightly)
         if: ${{ !inputs.is_release }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: resolc.js
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}/resolc.js
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload resolc.wasm (Nightly)
         if: ${{ !inputs.is_release }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: resolc.wasm
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}/resolc.wasm
@@ -173,7 +173,7 @@ jobs:
       - name: Upload resolc_web.js (Nightly)
         if: ${{ !inputs.is_release }}
         id: upload-web-js
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: resolc_web.js
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}/resolc_web.js

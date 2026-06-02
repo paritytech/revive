@@ -75,13 +75,13 @@ jobs:
         run: git config --system core.longpaths true
 
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: recursive
 
       - name: Download Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-bin
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: true
@@ -144,13 +144,13 @@ jobs:
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: recursive
 
       - name: Download Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: resolc-x86_64-unknown-linux-musl
           path: ./resolc-bin
@@ -160,7 +160,7 @@ jobs:
         run: chmod +x ./resolc-bin/resolc-x86_64-unknown-linux-musl
 
       - name: Checkout Polkadot SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: paritytech/polkadot-sdk
           ref: ${{ env.POLKADOT_SDK_REF }}

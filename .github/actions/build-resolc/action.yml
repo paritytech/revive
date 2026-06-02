@@ -79,7 +79,7 @@ runs:
 
     - name: Upload Artifact
       id: upload
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: resolc-${{ inputs.target }}
         path: resolc-${{ inputs.target }}*

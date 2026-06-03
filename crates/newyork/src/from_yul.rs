@@ -1145,11 +1145,20 @@ impl YulTranslator {
     }
 
     /// Translates a for loop.
+    ///
+    /// Variables declared in the `for` init block are scoped to the loop itself (Yul scopes
+    /// init declarations to the whole `for` statement, not the enclosing block). We capture
+    /// the enclosing scope's names before the init runs so that, after the loop, only
+    /// genuine loop-carried variables from the enclosing scope are written back —
+    /// init-local variables leave scope when the loop ends and must not be assigned in the
+    /// enclosing scope (doing so panics in `SsaBuilder::assign`).
     fn translate_for_loop(
         &mut self,
         for_loop: &ForLoop,
     ) -> std::result::Result<Vec<Statement>, TranslationError> {
         let mut statements = Vec::new();
+
+        let enclosing_scope = self.ssa.current_scope().clone();
 
         self.ssa.enter_scope();
         for statement in &for_loop.initializer.statements {
@@ -1237,7 +1246,11 @@ impl YulTranslator {
         self.ssa.exit_scope();
 
         for (name, value) in output_values {
-            self.ssa.assign(&name, value);
+            // Only write back variables that exist in the enclosing scope;
+            // init-block-local variables are out of scope after the loop.
+            if enclosing_scope.contains_key(&name) {
+                self.ssa.assign(&name, value);
+            }
         }
 
         statements.push(Statement::For {

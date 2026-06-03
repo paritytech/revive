@@ -162,6 +162,16 @@ pub struct TypeInference {
     /// Known constant values (from Literal expressions), used for shift-amount
     /// analysis in forward inference. Only stores values that fit in u64.
     known_constants: BTreeMap<u32, u64>,
+    /// Values that must keep full (I256) width because they feed an operand position
+    /// where EVM tolerates out-of-range magnitudes that a narrowing truncation/​boundary
+    /// trap would mis-handle: the SOURCE offset of `calldatacopy`/`codecopy` (zero-fill
+    /// beyond source) and the shift amount / `byte` index / `signextend` byte position
+    /// of `shl`/`shr`/`sar`/`byte`/`signextend` (out-of-range -> 0 / sign-fill /
+    /// unchanged). Their `max_width` is forced back to I256 after backward constraints,
+    /// overriding any narrowing demanded by other uses (e.g. a co-occurring memory
+    /// offset). `effective = min(min_width, I256)`, so provably-small operands still
+    /// narrow — only genuinely-wide ones stay full, keeping the OZ cost negligible.
+    full_width_operands: BTreeSet<u32>,
     /// Type inference results for subobjects (each subobject has its own namespace).
     pub sub_inferences: Vec<TypeInference>,
 }
@@ -176,6 +186,7 @@ impl TypeInference {
             function_returns: BTreeMap::new(),
             fn_arg_demand: BTreeMap::new(),
             known_constants: BTreeMap::new(),
+            full_width_operands: BTreeSet::new(),
             sub_inferences: Vec::new(),
         }
     }
@@ -275,6 +286,13 @@ impl TypeInference {
     /// Each object in the tree (deploy code, runtime code) has its own ValueId
     /// and FunctionId namespaces (both start at 0 per object). We process each
     /// object with a fresh context to avoid cross-object constraint pollution.
+    ///
+    /// After the backward constraints are applied, the final loop forces every operand in
+    /// `full_width_operands` back to `I256`. These operands must keep full width regardless
+    /// of any narrowing demanded by their other uses (e.g. the same value also feeding an
+    /// `mload`): `calldatacopy`/`codecopy` source offsets so the saturating copy intrinsic
+    /// can zero-fill beyond the source, and shift/`byte`/`signextend` amounts so EVM's
+    /// out-of-range semantics are preserved.
     pub fn infer_object(&mut self, object: &Object) {
         for (function_id, function) in &object.functions {
             if !function.return_values.is_empty() {
@@ -305,6 +323,13 @@ impl TypeInference {
         self.propagate_use_demands(object);
 
         self.apply_backward_constraints();
+
+        // Force the full-width operands back to I256 (see this method's doc comment).
+        for id in &self.full_width_operands {
+            let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
+            constraint.max_width = BitWidth::I256;
+            self.constraints.insert(*id, constraint);
+        }
     }
 
     /// Runs type inference on an object tree, including subobjects.
@@ -664,27 +689,55 @@ impl TypeInference {
     /// Narrowing is safe because the function provably never produces values
     /// wider than min_width.
     ///
+    /// A function returns via the fall-through `return_values` *and* via every early
+    /// `leave`, which carries its own snapshot of the return variables. Narrowing must
+    /// account for all of them — a `leave` can return a full-width value even when the
+    /// fall-through value is narrow — so the loop below collects every return path's value
+    /// id per position and narrows to the widest min_width across all of them.
+    ///
     /// Returns true if any return type was narrowed.
     pub fn narrow_function_returns(&self, object: &mut Object) -> bool {
         let mut changed = false;
         for function in object.functions.values_mut() {
+            let num_returns = function.returns.len();
+
+            let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); num_returns];
+            for (i, slot) in return_path_ids.iter_mut().enumerate() {
+                if let Some(id) = function.return_values.get(i) {
+                    slot.push(*id);
+                }
+            }
+            crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
+                if let Statement::Leave { return_values } = statement {
+                    for (i, value) in return_values.iter().enumerate() {
+                        if let Some(slot) = return_path_ids.get_mut(i) {
+                            slot.push(value.id);
+                        }
+                    }
+                }
+            });
+
             for (i, ret_ty) in function.returns.iter_mut().enumerate() {
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                let ret_id = match function.return_values.get(i) {
-                    Some(id) => *id,
-                    None => continue,
-                };
-
-                let constraint = self.get(ret_id);
-
-                if constraint.is_signed {
+                let ids = &return_path_ids[i];
+                if ids.is_empty() {
                     continue;
                 }
 
-                let width = constraint.min_width;
+                // Any signed return path forces full width; the widest min_width across
+                // all return paths bounds the narrowed type.
+                if ids.iter().any(|id| self.get(*id).is_signed) {
+                    continue;
+                }
+
+                let width = ids
+                    .iter()
+                    .map(|id| self.get(*id).min_width)
+                    .max()
+                    .unwrap_or(BitWidth::I256);
                 if width < BitWidth::I256 {
                     let clamped = width.max(BitWidth::I32);
                     *ret_ty = Type::Int(clamped);
@@ -985,12 +1038,31 @@ impl TypeInference {
                 }
             }
 
-            Statement::CodeCopy {
+            Statement::CallDataCopy {
                 dest,
                 offset,
                 length,
             }
-            | Statement::ExtCodeCopy {
+            | Statement::CodeCopy {
+                dest,
+                offset,
+                length,
+            } => {
+                // Destination (heap pointer) and length (byte count) narrow to i64.
+                self.record_use(dest.id, UseContext::MemoryOffset);
+                self.narrow_from_use(dest.id, BitWidth::I64);
+                self.record_use(length.id, UseContext::MemoryOffset);
+                self.narrow_from_use(length.id, BitWidth::I64);
+                // The SOURCE offset must stay full width: EVM zero-fills bytes beyond
+                // the calldata/code source, so a >= 2^64 offset must reach the copy
+                // intrinsic intact (it saturates and the host zero-fills). Narrowing it
+                // would truncate the offset at its definition / the call boundary and
+                // read the wrong source (or trap) instead of zero-filling.
+                self.record_use(offset.id, UseContext::MemoryOffset);
+                self.full_width_operands.insert(offset.id.0);
+            }
+
+            Statement::ExtCodeCopy {
                 dest,
                 offset,
                 length,
@@ -1000,12 +1072,10 @@ impl TypeInference {
                 dest,
                 offset,
                 length,
-            }
-            | Statement::CallDataCopy {
-                dest,
-                offset,
-                length,
             } => {
+                // `returndatacopy` reverts on an out-of-range source (and `extcodecopy`
+                // is unsupported), so narrowing the source is safe: the use-site checked
+                // truncation traps, matching EVM's revert.
                 self.record_use(dest.id, UseContext::MemoryOffset);
                 self.narrow_from_use(dest.id, BitWidth::I64);
                 self.record_use(offset.id, UseContext::MemoryOffset);
@@ -1114,6 +1184,23 @@ impl TypeInference {
                 | BinaryOperation::And => {}
                 BinaryOperation::Shl => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
+                    // The shift amount must keep full width: EVM defines a shift >= 256
+                    // as 0, but if `lhs` is also narrowed (e.g. it doubles as a memory
+                    // offset) a >= 256 amount is truncated/​trapped at the boundary,
+                    // diverging from EVM.
+                    self.full_width_operands.insert(lhs.id.0);
+                }
+                BinaryOperation::Shr
+                | BinaryOperation::Sar
+                | BinaryOperation::Byte
+                | BinaryOperation::SignExtend => {
+                    self.record_use(lhs.id, UseContext::Arithmetic);
+                    self.record_use(rhs.id, UseContext::Arithmetic);
+                    // The amount (shr/sar) / byte index / sign-extend byte position must
+                    // keep full width: EVM handles out-of-range values specially (shift
+                    // >= 256 -> 0/sign-fill; byte index >= 32 -> 0; signextend byte >= 31
+                    // -> unchanged), so narrowing+truncating `lhs` diverges from EVM.
+                    self.full_width_operands.insert(lhs.id.0);
                 }
                 _ => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
@@ -1440,10 +1527,20 @@ impl TypeInference {
                         self.widen(rhs.id, capped_operand_width);
                         double_width(lhs_width.max(rhs_width))
                     }
-                    BinaryOperation::Div
-                    | BinaryOperation::SDiv
-                    | BinaryOperation::Mod
-                    | BinaryOperation::SMod => lhs_width,
+                    // Unsigned div/mod and signed mod are bounded by the
+                    // dividend: the result magnitude never exceeds `lhs`. `smod`
+                    // takes the sign of the dividend, so a non-negative (narrow)
+                    // dividend yields a non-negative result <= dividend.
+                    BinaryOperation::Div | BinaryOperation::Mod | BinaryOperation::SMod => {
+                        lhs_width
+                    }
+                    // Signed division is NOT bounded by the dividend: a small
+                    // non-negative dividend with a negative divisor yields a
+                    // negative (full-width) quotient. A negative divisor has
+                    // `rhs_width == I256`, so `max` correctly stays full-width;
+                    // when both operands are narrow and non-negative the result
+                    // is <= dividend < 2^max.
+                    BinaryOperation::SDiv => lhs_width.max(rhs_width),
                     BinaryOperation::Exp => BitWidth::I256,
 
                     BinaryOperation::And => lhs_width.min(rhs_width),
@@ -1454,7 +1551,9 @@ impl TypeInference {
                     }
 
                     BinaryOperation::Shl => BitWidth::I256,
-                    BinaryOperation::Shr | BinaryOperation::Sar => {
+                    // Logical right shift: the shifted-in high bits are zero, so
+                    // a constant shift bounds the result to `256 - shift` bits.
+                    BinaryOperation::Shr => {
                         if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
                             if shift >= 256 {
                                 BitWidth::I1
@@ -1466,6 +1565,12 @@ impl TypeInference {
                             rhs_width
                         }
                     }
+                    // Arithmetic right shift sign-extends: shifting a *negative*
+                    // value keeps the high bits set, so the result is NOT bounded
+                    // by `256 - shift`. It is bounded by the operand's own width
+                    // (`rhs`): a non-negative operand (rhs_width < 256) shifts
+                    // down, a negative operand has rhs_width == I256.
+                    BinaryOperation::Sar => rhs_width,
 
                     BinaryOperation::Lt
                     | BinaryOperation::Gt

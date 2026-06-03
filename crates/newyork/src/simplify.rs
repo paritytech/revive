@@ -14,8 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, FunctionId,
-    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
+    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, Function,
+    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
+    ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -173,6 +174,8 @@ impl Simplifier {
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
 
+            Self::reconcile_dangling_return_values(function);
+
             let mut extra_used = BTreeSet::new();
             for ret_id in &function.return_values {
                 extra_used.insert(ret_id.0);
@@ -182,6 +185,39 @@ impl Simplifier {
         }
 
         std::mem::take(&mut self.statistics)
+    }
+
+    /// Reconciles fall-through return values left dangling by simplification.
+    ///
+    /// Folding an always-true guard can collapse a function body to an unconditional
+    /// `leave`, after which the dead fall-through code that defined some `return_values`
+    /// is removed. Those `return_values` then reference deleted definitions, which the IR
+    /// validator rejects as "used before definition" (codegen would zero-init them, but
+    /// only the unreachable fall-through path observes that). Each now-undefined return
+    /// value is pointed at its entry `return_values_initial` slot — defined at function
+    /// entry, and sound because the fall-through that would observe it is unreachable.
+    /// Return values still defined in the body are left untouched, so functions that
+    /// legitimately end in a `leave` are unaffected.
+    fn reconcile_dangling_return_values(function: &mut Function) {
+        let mut defined_ids: BTreeSet<u32> = BTreeSet::new();
+        for (id, _ty) in &function.parameters {
+            defined_ids.insert(id.0);
+        }
+        for id in &function.return_values_initial {
+            defined_ids.insert(id.0);
+        }
+        crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
+            statement.for_each_value_id_def(&mut |id| {
+                defined_ids.insert(id.0);
+            });
+        });
+        for (i, return_value) in function.return_values.iter_mut().enumerate() {
+            if !defined_ids.contains(&return_value.0) {
+                if let Some(initial) = function.return_values_initial.get(i) {
+                    *return_value = *initial;
+                }
+            }
+        }
     }
 
     /// Runs only DCE (dead code elimination) on an object without the full simplification pass.
@@ -3026,9 +3062,17 @@ fn fuzzy_encode_statement(
             }
             buf.push(cases.len() as u8);
             for c in cases {
-                buf.push(0xFF);
-                buf.extend_from_slice(&lit_counter.to_le_bytes());
-                *lit_counter += 1;
+                // Encode the case match value CONCRETELY (not as an abstracted
+                // literal position). A `switch` case label must be a compile-time
+                // constant, so it cannot be replaced by a parameter; abstracting
+                // it would let two functions that differ only in their case
+                // labels share a fuzzy form and be merged, after which
+                // `replace_literals_with_params` (which never substitutes a case
+                // value) leaves the canonical function's labels in place — a
+                // miscompile of the removed function's callers.
+                let case_bytes = c.value.to_bytes_le();
+                buf.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
+                buf.extend_from_slice(&case_bytes);
                 fuzzy_encode_region(canon, &c.body, buf, lit_counter);
             }
             if let Some(d) = default {
@@ -3141,8 +3185,12 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
+                    // Switch case match values are NOT parameterizable literals
+                    // (a case label must be a compile-time constant); they are
+                    // encoded concretely in the fuzzy form, so they are not
+                    // counted here. Keep this in sync with
+                    // `replace_literals_with_params`.
                     for c in cases {
-                        lits.push(c.value.clone());
                         walk(&c.body.statements, lits);
                     }
                     if let Some(d) = default {
@@ -3229,8 +3277,10 @@ fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(us
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
+                    // Switch case match values are not parameterizable and are
+                    // not counted by `collect_literals_ordered`, so do not
+                    // advance the counter for them here.
                     for c in cases {
-                        *counter += 1;
                         walk(&mut c.body.statements, positions, counter);
                     }
                     if let Some(d) = default {

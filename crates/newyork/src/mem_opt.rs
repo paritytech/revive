@@ -1120,10 +1120,43 @@ impl FmpPropagation {
                 }
 
                 Statement::MCopy { dest, src, length } => {
-                    if Self::resolve_offset(&constants, &dest) == Some(0x40) {
+                    if Self::write_may_cover_fmp(&constants, &dest, &length) {
                         fmp_value = None;
                     }
                     result.push(Statement::MCopy { dest, src, length });
+                }
+
+                Statement::CallDataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::CodeCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::ExtCodeCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::ReturnDataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                }
+                | Statement::DataCopy {
+                    ref dest,
+                    ref length,
+                    ..
+                } => {
+                    // These copies write to memory at `dest`; if that range can overlap
+                    // the FMP slot [0x40, 0x60) the tracked free-memory pointer is stale.
+                    if Self::write_may_cover_fmp(&constants, dest, length) {
+                        fmp_value = None;
+                    }
+                    result.push(statement);
                 }
 
                 Statement::Block(mut region) => {
@@ -1155,6 +1188,28 @@ impl FmpPropagation {
         }
 
         result
+    }
+
+    /// Whether a memory write of `length` bytes starting at `dest` could overlap the
+    /// free-memory-pointer slot `[0x40, 0x60)`. Conservative: an unresolved destination,
+    /// or an unresolved length from a destination below `0x60`, is treated as possibly
+    /// covering it. A destination provably `>= 0x60` only writes upward and cannot reach
+    /// the slot (so FMP-relative copies to `>= 0x80`, as Solidity emits, never invalidate).
+    fn write_may_cover_fmp(
+        constants: &BTreeMap<u32, BigUint>,
+        dest: &Value,
+        length: &Value,
+    ) -> bool {
+        const FMP_SLOT_START: u64 = 0x40;
+        const FMP_SLOT_END: u64 = 0x60;
+        match Self::resolve_offset(constants, dest) {
+            Some(d) if d >= FMP_SLOT_END => false,
+            Some(d) => match Self::resolve_offset(constants, length) {
+                Some(l) => d.saturating_add(l) > FMP_SLOT_START,
+                None => true,
+            },
+            None => true,
+        }
     }
 
     /// Checks if a region writes to offset 0x40 (the FMP slot).

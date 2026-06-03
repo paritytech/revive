@@ -180,16 +180,27 @@ impl HeapAnalysis {
 
     /// Runs heap analysis on an object.
     pub fn analyze_object(&mut self, object: &Object) {
-        self.analyze_block(&object.code, false);
+        self.analyze_object_inner(object, true);
+    }
+
+    /// `is_root` distinguishes the top-level deploy object from runtime
+    /// subobjects. The deploy object's tail `return(0, codesize)` returns the
+    /// runtime code (raw bytes from `codecopy`), so its coverage of the FMP slot
+    /// is not an observable BE-encoded escape and must not pessimize FMP native
+    /// mode. A runtime subobject's top-level `return`, however, returns
+    /// caller-observable data, so a return covering 0x40 there is a genuine FMP
+    /// escape.
+    fn analyze_object_inner(&mut self, object: &Object, is_root: bool) {
+        self.analyze_block(&object.code, false, is_root);
 
         for function in object.functions.values() {
-            self.analyze_block(&function.body, true);
+            self.analyze_block(&function.body, true, is_root);
         }
 
         for subobject in &object.subobjects {
             self.offset_values.clear();
             self.value_expressions.clear();
-            self.analyze_object(subobject);
+            self.analyze_object_inner(subobject, false);
         }
 
         self.compute_tainted_regions();
@@ -198,15 +209,15 @@ impl HeapAnalysis {
     /// Analyzes a block for memory access patterns. Recursion through nested
     /// regions is handled by `for_each_statement`; `analyze_statement` only handles
     /// the per-statement analysis (no longer recursing internally).
-    fn analyze_block(&mut self, block: &Block, in_function: bool) {
+    fn analyze_block(&mut self, block: &Block, in_function: bool, is_root: bool) {
         for_each_statement(&block.statements, &mut |statement| {
-            self.analyze_statement(statement, in_function);
+            self.analyze_statement(statement, in_function, is_root);
         });
     }
 
     /// Analyzes a single statement for memory access patterns. The caller is
     /// responsible for walking nested regions (use `for_each_statement`).
-    fn analyze_statement(&mut self, statement: &Statement, in_function: bool) {
+    fn analyze_statement(&mut self, statement: &Statement, in_function: bool, is_root: bool) {
         match statement {
             Statement::Let { bindings, value } => {
                 if let Some(offset_info) = self.analyze_expression_offset(value) {
@@ -257,8 +268,19 @@ impl HeapAnalysis {
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
                     self.tainted_regions.insert(word_align(addr));
+                    // A byte write to the FMP word puts non-pointer, big-endian-
+                    // positioned data at 0x40. The FMP fast paths (`mload(0x40)`
+                    // low-32 native load + the `FMP < heap_size` range proof)
+                    // assume a small native pointer there, so they must be
+                    // disabled — otherwise `mstore8(0x40,v); mload(0x40)` reads the
+                    // wrong half / gets range-masked. Treat the slot as unbounded.
+                    if word_align(addr) == 0x40 {
+                        self.fmp_could_be_unbounded = true;
+                    }
                 } else {
                     self.has_dynamic_accesses = true;
+                    // A dynamic-offset byte write could land on the FMP word.
+                    self.fmp_could_be_unbounded = true;
                 }
             }
 
@@ -290,7 +312,12 @@ impl HeapAnalysis {
 
             Statement::Return { offset, length } => {
                 self.mark_escaping_range(offset, length);
-                if in_function {
+                // A `return` covering the FMP slot exposes its bytes to the
+                // caller in EVM big-endian format. Fire FMP-escape accounting
+                // for in-function returns and for any runtime-subobject return;
+                // only the deploy (root) object's top-level `return(0, codesize)`
+                // is exempt (it returns raw runtime code, not BE-encoded data).
+                if in_function || !is_root {
                     self.note_fmp_coverage(offset, length);
                 }
             }
@@ -331,26 +358,20 @@ impl HeapAnalysis {
                 self.analyze_expression_side_effects(expression);
             }
 
-            Statement::ReturnDataCopy { dest, .. } => {
-                if let Some(addr) = self.extract_static_offset(dest) {
-                    self.tainted_regions.insert(word_align(addr));
-                } else {
-                    self.has_dynamic_accesses = true;
-                }
+            Statement::ReturnDataCopy { dest, length, .. } => {
+                self.taint_copy_destination(dest, length);
             }
 
-            Statement::CodeCopy { dest, .. }
-            | Statement::ExtCodeCopy { dest, .. }
-            | Statement::DataCopy { dest, .. }
-            | Statement::CallDataCopy { dest, .. } => {
+            Statement::CodeCopy { dest, length, .. }
+            | Statement::ExtCodeCopy { dest, length, .. }
+            | Statement::DataCopy { dest, length, .. }
+            | Statement::CallDataCopy { dest, length, .. } => {
                 if let Some(addr) = self.extract_static_offset(dest) {
                     self.memory_accesses
                         .entry(addr)
                         .or_insert(AccessPattern::AlignedStatic(addr));
-                    self.tainted_regions.insert(word_align(addr));
-                } else {
-                    self.has_dynamic_accesses = true;
                 }
+                self.taint_copy_destination(dest, length);
             }
 
             Statement::SStore { .. }
@@ -471,6 +492,59 @@ impl HeapAnalysis {
             (None, _) => {
                 self.has_dynamic_escapes = true;
             }
+        }
+    }
+
+    /// Taints the destination of a copy opcode (`calldatacopy`, `codecopy`,
+    /// `returndatacopy`, …), which writes big-endian bytes that a later native
+    /// (little-endian) `mload` must not byte-reverse.
+    ///
+    /// When the length is statically known, every word the copy covers is tainted
+    /// — not just the start word — so a multi-word copy can't leave a later word a
+    /// native candidate. When the length is dynamic we taint only the start word
+    /// and deliberately do NOT set `has_dynamic_accesses`: doing so would disable
+    /// native mode for the entire contract (e.g. every ABI-decode `calldatacopy`),
+    /// a large code-size regression for no soundness gain over the existing
+    /// dynamic-offset guards.
+    /// Records the memory tainted by a copy (`calldatacopy`/`codecopy`/`mcopy`/…) with
+    /// destination `dest` and length `length`, and flags the free-memory-pointer slot as
+    /// possibly unbounded when the copy can clobber it.
+    ///
+    /// A copy that can overwrite the FMP slot `[0x40, 0x60)` replaces the free-memory
+    /// pointer with arbitrary, possibly out-of-range bytes. Downstream codegen that assumes
+    /// `FMP < heap_size` (the narrow `mload(0x40)` read and its range proof) would then
+    /// mis-read the corrupted value, so such a copy sets `fmp_could_be_unbounded` — exactly
+    /// as an untrusted `mstore(0x40, ...)` does. Tainting word 0x40 alone only disables the
+    /// *native-mode* FMP read; the FMP *range proof* in `to_llvm` is gated on
+    /// `fmp_could_be_unbounded`, so that flag must be set too or the proof silently
+    /// truncates the clobbered value.
+    ///
+    /// `covers_fmp` is kept deliberately narrow to avoid a code-size regression: only a
+    /// static destination+length that provably overlap the slot, or a static destination
+    /// *inside* the FMP word with a dynamic length (whose first byte(s) land in the slot),
+    /// flag unboundedness. A fully-dynamic destination, or a static destination *outside*
+    /// the word (proxy `calldatacopy(0, 0, size)`, OZ's FMP-relative ABI-decode copies to
+    /// `mload(0x40) >= 0x80`), is left to `has_dynamic_accesses` / the native-mode guards.
+    fn taint_copy_destination(&mut self, dest: &Value, length: &Value) {
+        let dest_start = self.extract_static_offset(dest);
+        let len = self.extract_static_offset(length);
+
+        let covers_fmp = match (dest_start, len) {
+            (Some(addr), Some(size)) => size > 0 && addr < 0x60 && addr.saturating_add(size) > 0x40,
+            (Some(addr), None) => (0x40..0x60).contains(&addr),
+            _ => false,
+        };
+        if covers_fmp {
+            self.fmp_could_be_unbounded = true;
+        }
+
+        match (dest_start, len) {
+            (Some(addr), Some(size)) if size > 0 => self.taint_range(Some(addr), Some(size)),
+            (Some(_), Some(_)) => {} // zero-length copy writes nothing
+            (Some(addr), None) => {
+                self.tainted_regions.insert(word_align(addr));
+            }
+            (None, _) => self.has_dynamic_accesses = true,
         }
     }
 
@@ -905,6 +979,9 @@ pub struct HeapOptResults {
     /// Whether some `mstore(0x40, value)` in the program writes a value
     /// that isn't provably sbrk-bounded. See HeapAnalysis docs.
     fmp_could_be_unbounded: bool,
+    /// Whether the FMP word at 0x40 is tainted (byte/unaligned write). Forces
+    /// big-endian emulation for the FMP slot; see `fmp_native_safe`.
+    fmp_slot_tainted: bool,
 }
 
 impl HeapOptResults {
@@ -939,6 +1016,7 @@ impl HeapOptResults {
             fmp_word_escapes: analysis.fmp_word_escapes(),
             variable_accessed_offsets: analysis.variable_accessed_offsets().clone(),
             fmp_could_be_unbounded: analysis.fmp_could_be_unbounded(),
+            fmp_slot_tainted: analysis.tainted_regions().contains(&0x40),
         }
     }
 
@@ -988,6 +1066,9 @@ impl HeapOptResults {
     /// - Offset 0x40 is accessed via a non-literal expression (LLVM won't see a constant)
     /// - Any memory access uses a fully dynamic offset (could touch 0x40)
     pub fn fmp_native_safe(&self) -> bool {
+        if self.fmp_slot_tainted {
+            return false;
+        }
         if self.variable_accessed_offsets.contains(&0x40) {
             return false;
         }

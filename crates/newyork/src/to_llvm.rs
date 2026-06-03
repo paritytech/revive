@@ -4122,10 +4122,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         if self.has_msize {
                             let static_off = Self::try_extract_const_u64(offset_val)
                                 .unwrap_or(DYNAMIC_HEAP_BASE);
-                            let min_size = context.xlen_type().const_int(
-                                static_off + revive_common::BYTE_LENGTH_WORD as u64,
-                                false,
-                            );
+                            // EVM `msize` rounds the highest accessed byte up to a full
+                            // word; a full-word store touches `[off, off+32)`, so round
+                            // `off+32` up to the next word (matters for unaligned offsets).
+                            let word = revive_common::BYTE_LENGTH_WORD as u64;
+                            let rounded = static_off.saturating_add(word).div_ceil(word) * word;
+                            let min_size = context.xlen_type().const_int(rounded, false);
                             context
                                 .ensure_heap_size(min_size)
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -4160,10 +4162,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         if self.has_msize {
                             let static_off = Self::try_extract_const_u64(offset_val)
                                 .unwrap_or(DYNAMIC_HEAP_BASE);
-                            let min_size = context.xlen_type().const_int(
-                                static_off + revive_common::BYTE_LENGTH_WORD as u64,
-                                false,
-                            );
+                            // EVM `msize` rounds the highest accessed byte up to a full
+                            // word; a full-word store touches `[off, off+32)`, so round
+                            // `off+32` up to the next word (matters for unaligned offsets).
+                            let word = revive_common::BYTE_LENGTH_WORD as u64;
+                            let rounded = static_off.saturating_add(word).div_ceil(word) * word;
+                            let min_size = context.xlen_type().const_int(rounded, false);
                             context
                                 .ensure_heap_size(min_size)
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -4541,6 +4545,27 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         }
                     }
+                }
+
+                // Soundness: case labels are materialized at the scrutinee's type via
+                // `const_int_arbitrary_precision`, which truncates a label wider than
+                // that type. If type inference narrowed the scrutinee (e.g. to i64 via an
+                // `and(x, 0xff..ff)` mask) below the width of some case label, two labels
+                // congruent modulo 2^(scrut width) would collapse — producing a duplicate
+                // LLVM switch case (verifier error) or matching a value EVM never would.
+                // Zero-extend the scrutinee to hold every label before lowering. This is
+                // value-preserving: the scrutinee was only narrowed because it provably
+                // fits its current width, so the high bits are zero.
+                let max_label_bits = cases
+                    .iter()
+                    .map(|case| case.value.bits() as u32)
+                    .max()
+                    .unwrap_or(0);
+                if max_label_bits > scrut_val.get_type().get_bit_width() {
+                    scrut_val = context
+                        .builder()
+                        .build_int_z_extend(scrut_val, context.word_type(), "switch_widen")
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                 }
 
                 let scrut_type = scrut_val.get_type();
@@ -5790,8 +5815,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.generate_binop(*operation, lhs_cmp, rhs_cmp, context)
                     }
                     BinaryOperation::Slt | BinaryOperation::Sgt => {
-                        let (lhs_val, rhs_val) =
-                            self.ensure_same_type(context, lhs_val, rhs_val, "cmp")?;
+                        // Signed comparisons must run at full width. A narrowed
+                        // operand is provably non-negative (newyork never narrows
+                        // signed values), so a set top bit at the narrow width is
+                        // not a sign bit — comparing at that width misreads it as
+                        // negative (e.g. 1 in i1 is -1, 0xC8 in i8 is -56), which
+                        // diverges from EVM's 256-bit signed comparison. Zero-extend
+                        // both operands to the full word before comparing.
+                        let lhs_val = self.ensure_word_type(context, lhs_val, "scmp_lhs")?;
+                        let rhs_val = self.ensure_word_type(context, rhs_val, "scmp_rhs")?;
                         self.generate_binop(*operation, lhs_val, rhs_val, context)
                     }
 
@@ -6168,6 +6200,24 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expression::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
+                // EVM grows active memory (and thus `msize`) on reads as well as
+                // writes. The unchecked native/byteswap load paths bypass sbrk, so
+                // advance the msize watermark explicitly to cover `[offset, offset+32)`,
+                // mirroring `MStore`. Without this, `mload(p)` followed by `msize()`
+                // under-reports relative to EVM.
+                if self.has_msize {
+                    let static_off =
+                        Self::try_extract_const_u64(offset_val).unwrap_or(DYNAMIC_HEAP_BASE);
+                    // EVM `msize` is the highest accessed byte rounded *up* to a full
+                    // word. The read touches `[off, off + WORD)`, so round `off + WORD`
+                    // up to the next word boundary (matters for unaligned offsets).
+                    let word = revive_common::BYTE_LENGTH_WORD as u64;
+                    let rounded = static_off.saturating_add(word).div_ceil(word) * word;
+                    let min_size = context.xlen_type().const_int(rounded, false);
+                    context
+                        .ensure_heap_size(min_size)
+                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+                }
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 

@@ -79,32 +79,40 @@ jobs:
       - name: Check If Relevant Files Changed
         id: filter
         run: |
+          print_changed_files() {
+            local file_count
+            file_count=$(wc -l < changed-files.txt | tr -d ' ')
+            echo "Changed files ($file_count total):"
+            sed 's/^/  /' changed-files.txt
+            echo
+          }
+
           has_changes_other_than() {
             local IFS='|'
             local ignored="$*"
             grep -qvE "$ignored" changed-files.txt && echo true || echo false
           }
 
-          {
-            echo "should-run-differential-tests=$(has_changes_other_than \
-              '\.md$' \
-              '^book/' \
-              '^docs/' \
-              '^js/' \
-              '^package\.json$' \
-              '^package-lock\.json$' \
-              '^tooling-projects/' \
-            )"
+          print_changed_files
 
-            echo "should-run-hardhat-tests=$(has_changes_other_than \
-              '\.md$' \
-              '^book/' \
-              '^docs/' \
-              '^js/' \
-              '^package\.json$' \
-              '^package-lock\.json$' \
-            )"
-          } >> $GITHUB_OUTPUT
+          echo "should-run-differential-tests=$(has_changes_other_than \
+            '\.md$' \
+            '^book/' \
+            '^docs/' \
+            '^js/' \
+            '^package\.json$' \
+            '^package-lock\.json$' \
+            '^tooling-projects/' \
+          )" | tee -a "$GITHUB_OUTPUT"
+
+          echo "should-run-hardhat-tests=$(has_changes_other_than \
+            '\.md$' \
+            '^book/' \
+            '^docs/' \
+            '^js/' \
+            '^package\.json$' \
+            '^package-lock\.json$' \
+          )" | tee -a "$GITHUB_OUTPUT"
 
   run-differential-tests:
     needs: [test, check-changes]

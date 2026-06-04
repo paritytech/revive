@@ -61,34 +61,50 @@ jobs:
   # and files relevant for the specific job have changed.
   check-changes:
     runs-on: ubuntu-24.04
-    permissions:
-      pull-requests: read
     outputs:
       should-run-differential-tests: ${{ steps.filter.outputs.should-run-differential-tests }}
       should-run-hardhat-tests: ${{ steps.filter.outputs.should-run-hardhat-tests }}
     steps:
-      - name: Check If Relevant Files Changed
-        uses: dorny/paths-filter@v4
-        id: filter
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
-          filters: |
-            should-run-differential-tests:
-              - '**'
-              - '!**.md'
-              - '!book/**'
-              - '!docs/**'
-              - '!js/**'
-              - '!package.json'
-              - '!package-lock.json'
-              - '!tooling-projects/**'
-            should-run-hardhat-tests:
-              - '**'
-              - '!**.md'
-              - '!book/**'
-              - '!docs/**'
-              - '!js/**'
-              - '!package.json'
-              - '!package-lock.json'
+          fetch-depth: 0
+
+      - name: Diff Files
+        run: |
+          git diff --name-only \
+            ${{ github.event.pull_request.base.sha || github.event.before }}...HEAD \
+            > changed-files.txt
+
+      - name: Check If Relevant Files Changed
+        id: filter
+        run: |
+          has_changes_other_than() {
+            local IFS='|'
+            local ignored="$*"
+            grep -qvE "$ignored" changed-files.txt && echo true || echo false
+          }
+
+          {
+            echo "should-run-differential-tests=$(has_changes_other_than \
+              '\.md$' \
+              '^book/' \
+              '^docs/' \
+              '^js/' \
+              '^package\.json$' \
+              '^package-lock\.json$' \
+              '^tooling-projects/' \
+            )"
+
+            echo "should-run-hardhat-tests=$(has_changes_other_than \
+              '\.md$' \
+              '^book/' \
+              '^docs/' \
+              '^js/' \
+              '^package\.json$' \
+              '^package-lock\.json$' \
+            )"
+          } >> $GITHUB_OUTPUT
 
   run-differential-tests:
     needs: [test, check-changes]

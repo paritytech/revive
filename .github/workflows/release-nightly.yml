@@ -92,9 +92,9 @@ jobs:
           Green: "\e[32m"
           NC: "\e[0m"
         run: |
-          echo '[' > data.json
-          echo '${{ toJSON(needs.build.outputs) }}' >> data.json
-          echo ']' >> data.json
+          # Rename resolc-web_js_* output keys to resolc-web.js_* expected by the script.
+          echo '${{ toJSON(needs.build.outputs) }}' \
+            | jq '[with_entries(.key |= sub("^resolc-web_js_"; "resolc-web.js_"))]' > data.json
           chmod +x bins/resolc-x86_64-unknown-linux-musl
           export FIRST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 1 -d "," | tr -d ">=")
           export LAST_SOLC_VERSION=$(./bins/resolc-x86_64-unknown-linux-musl --supported-solc-versions | cut -f 2 -d "," | tr -d "<=")

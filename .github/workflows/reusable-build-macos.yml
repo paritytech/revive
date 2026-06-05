@@ -50,6 +50,7 @@ jobs:
       # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
       group: reusable-build-${{ matrix.target }}-${{ github.sha }}
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Checkout revive
         uses: actions/checkout@v6
@@ -80,6 +81,7 @@ jobs:
       # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
       group: reusable-build-universal-apple-darwin-${{ github.sha }}
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Check Build Cache
         id: cache

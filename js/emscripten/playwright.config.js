@@ -14,16 +14,19 @@ module.exports = defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: "list",
+  reporter: [
+    ["list"],
+    ["json", { outputFile: "test-results.json" }],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: "http://127.0.0.1:8080",
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: "on-first-retry",
+    /* Collect trace for any failed test attempt. See https://playwright.dev/docs/trace-viewer */
+    trace: "retain-on-failure",
   },
-  timeout: 480000,
+  timeout: 60000,
   /* Configure projects for major browsers */
   projects: [
     {

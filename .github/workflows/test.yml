@@ -2,17 +2,13 @@ name: Test
 on:
   push:
     branches: ["main"]
-    paths-ignore:
-      - "**.md"
   pull_request:
     branches: ["main"]
     types: [opened, synchronize]
-    paths-ignore:
-      - "**.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,7 +17,7 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # without this it will override our rust flags
@@ -61,10 +57,72 @@ jobs:
       - name: Test docs
         run: make doc
 
+  # Used as a gate for subjobs that should run only if `test` succeeds
+  # and files relevant for the specific job have changed.
+  check-changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      should-run-differential-tests: ${{ steps.filter.outputs.should-run-differential-tests }}
+      should-run-hardhat-tests: ${{ steps.filter.outputs.should-run-hardhat-tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Diff Files
+        run: |
+          git diff --name-only \
+            ${{ github.event.pull_request.base.sha || github.event.before }}...HEAD \
+            > changed-files.txt
+
+      - name: Check If Relevant Files Changed
+        id: filter
+        run: |
+          print_changed_files() {
+            local file_count
+            file_count=$(wc -l < changed-files.txt | tr -d ' ')
+            echo "Changed files ($file_count total):"
+            sed 's/^/  /' changed-files.txt
+            echo
+          }
+
+          has_changes_other_than() {
+            local IFS='|'
+            local ignored="$*"
+            grep -qvE "$ignored" changed-files.txt && echo true || echo false
+          }
+
+          print_changed_files
+
+          echo "should-run-differential-tests=$(has_changes_other_than \
+            '\.md$' \
+            '^book/' \
+            '^docs/' \
+            '^js/' \
+            '^package\.json$' \
+            '^package-lock\.json$' \
+            '^tooling-projects/' \
+          )" | tee -a "$GITHUB_OUTPUT"
+
+          echo "should-run-hardhat-tests=$(has_changes_other_than \
+            '\.md$' \
+            '^book/' \
+            '^docs/' \
+            '^js/' \
+            '^package\.json$' \
+            '^package-lock\.json$' \
+          )" | tee -a "$GITHUB_OUTPUT"
+
   run-differential-tests:
-    # Only run this if `test` successfully completes.
-    needs: test
+    needs: [test, check-changes]
+    if: ${{ needs.check-changes.outputs.should-run-differential-tests == 'true' }}
     uses: ./.github/workflows/differential-tests.yml
+
+  run-hardhat-tests:
+    needs: [test, check-changes]
+    if: ${{ needs.check-changes.outputs.should-run-hardhat-tests == 'true' }}
+    uses: ./.github/workflows/hardhat.yml
 
   run-foundry-tests:
     needs: run-differential-tests

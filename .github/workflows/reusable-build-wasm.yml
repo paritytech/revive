@@ -75,6 +75,7 @@ jobs:
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         env:
           # Consumed by js/emscripten/build.js.
+          # For nightly Wasm releases, this URI is currently broken (see https://github.com/paritytech/revive/issues/542).
           RELEASE_RESOLC_WASM_URI: ${{ inputs.is_release && format('https://github.com/paritytech/revive/releases/download/{0}/resolc.wasm', github.ref_name) || '' }}
         run: |
           export LLVM_SYS_221_PREFIX=$PWD/llvm-${{ env.HOST_TARGET }}

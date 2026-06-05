@@ -96,33 +96,27 @@ jobs:
 
           print_changed_files
 
+          common_ignored=(
+            '\.md$'
+            '^book/'
+            '^docs/'
+            '^js/'
+            '^package\.json$'
+            '^package-lock\.json$'
+          )
+
           echo "should-run-differential-tests=$(has_changes_other_than \
-            '\.md$' \
-            '^book/' \
-            '^docs/' \
-            '^js/' \
-            '^package\.json$' \
-            '^package-lock\.json$' \
+            "${common_ignored[@]}" \
             '^tooling-projects/' \
           )" | tee -a "$GITHUB_OUTPUT"
 
           echo "should-run-hardhat-tests=$(has_changes_other_than \
-            '\.md$' \
-            '^book/' \
-            '^docs/' \
-            '^js/' \
-            '^package\.json$' \
-            '^package-lock\.json$' \
+            "${common_ignored[@]}" \
             '^tooling-projects/foundry' \
           )" | tee -a "$GITHUB_OUTPUT"
 
           echo "should-run-foundry-tests=$(has_changes_other_than \
-            '\.md$' \
-            '^book/' \
-            '^docs/' \
-            '^js/' \
-            '^package\.json$' \
-            '^package-lock\.json$' \
+            "${common_ignored[@]}" \
             '^tooling-projects/hardhat' \
           )" | tee -a "$GITHUB_OUTPUT"
 

@@ -16,6 +16,8 @@ env:
   # Once a release includes the updated supported versions, this can be changed to a
   # tag in order to download the prebuilt binary.
   CI_FOUNDRY_POLKADOT_COMMIT: b3173d0584382687cc96b2af072d8cb2addf23d3
+  FORGE_STD_VERSION: v1.15.0
+  OZ_CONTRACTS_VERSION: v5.3.0
 
 jobs:
   build:
@@ -71,8 +73,8 @@ jobs:
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: |
           mkdir -p lib
-          git clone --depth 1 --branch v1.15.0 https://github.com/foundry-rs/forge-std.git lib/forge-std
-          git clone --depth 1 --branch v5.3.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+          git clone --depth 1 --branch "$FORGE_STD_VERSION" https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git clone --depth 1 --branch "$OZ_CONTRACTS_VERSION" https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
 
       - name: Compile Project
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}

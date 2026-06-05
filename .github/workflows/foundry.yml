@@ -18,24 +18,20 @@ env:
   CI_FOUNDRY_POLKADOT_COMMIT: b3173d0584382687cc96b2af072d8cb2addf23d3
 
 jobs:
+  build:
+    uses: ./.github/workflows/reusable-build-linux.yml
+    with:
+      retention_days: 1
+
   use-foundry:
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
-
-      - name: Set Up Rust Toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          # without this it will override our rust flags
-          rustflags: ""
-          # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
-          # Needed for building foundry-polkadot.
-          target: wasm32-unknown-unknown
-          components: rust-src
+        uses: actions/checkout@v6
 
       - name: Download resolc Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: resolc-x86_64-unknown-linux-musl
           path: resolc-bin

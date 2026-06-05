@@ -64,6 +64,7 @@ jobs:
     outputs:
       should-run-differential-tests: ${{ steps.filter.outputs.should-run-differential-tests }}
       should-run-hardhat-tests: ${{ steps.filter.outputs.should-run-hardhat-tests }}
+      should-run-foundry-tests: ${{ steps.filter.outputs.should-run-foundry-tests }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -112,6 +113,17 @@ jobs:
             '^js/' \
             '^package\.json$' \
             '^package-lock\.json$' \
+            '^tooling-projects/foundry' \
+          )" | tee -a "$GITHUB_OUTPUT"
+
+          echo "should-run-foundry-tests=$(has_changes_other_than \
+            '\.md$' \
+            '^book/' \
+            '^docs/' \
+            '^js/' \
+            '^package\.json$' \
+            '^package-lock\.json$' \
+            '^tooling-projects/hardhat' \
           )" | tee -a "$GITHUB_OUTPUT"
 
   run-differential-tests:
@@ -125,5 +137,6 @@ jobs:
     uses: ./.github/workflows/hardhat.yml
 
   run-foundry-tests:
-    needs: run-differential-tests
+    needs: [test, check-changes]
+    if: ${{ needs.check-changes.outputs.should-run-foundry-tests == 'true' }}
     uses: ./.github/workflows/foundry.yml

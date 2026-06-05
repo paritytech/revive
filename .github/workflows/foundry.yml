@@ -32,6 +32,15 @@ jobs:
       - name: Checkout revive
         uses: actions/checkout@v6
 
+      - name: Set Up Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ""
+          # TODO: Remove once the foundry install step replaces `--commit` with `--install`.
+          # Needed for building foundry-polkadot.
+          target: wasm32-unknown-unknown
+          components: rust-src
+
       - name: Download resolc Binary
         uses: actions/download-artifact@v7
         with:

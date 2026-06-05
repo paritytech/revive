@@ -1,0 +1,110 @@
+name: Reusable Build — macOS
+
+on:
+  workflow_call:
+    inputs:
+      retention_days:
+        description: "Artifact retention days"
+        required: false
+        type: number
+        default: 1
+    outputs:
+      aarch64-apple-darwin_url:
+        value: ${{ jobs.build.outputs.aarch64-apple-darwin_url }}
+      aarch64-apple-darwin_sha:
+        value: ${{ jobs.build.outputs.aarch64-apple-darwin_sha }}
+      x86_64-apple-darwin_url:
+        value: ${{ jobs.build.outputs.x86_64-apple-darwin_url }}
+      x86_64-apple-darwin_sha:
+        value: ${{ jobs.build.outputs.x86_64-apple-darwin_sha }}
+      universal-apple-darwin_url:
+        value: ${{ jobs.create-universal.outputs.url }}
+      universal-apple-darwin_sha:
+        value: ${{ jobs.create-universal.outputs.sha }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build macOS (${{ matrix.target }})
+    # GH Actions matrix jobs don't support multiple outputs.
+    # Workaround from https://github.com/orgs/community/discussions/17245#discussioncomment-11222880
+    outputs:
+      aarch64-apple-darwin_url: ${{ steps.set-output.outputs.aarch64-apple-darwin_url }}
+      aarch64-apple-darwin_sha: ${{ steps.set-output.outputs.aarch64-apple-darwin_sha }}
+      x86_64-apple-darwin_url: ${{ steps.set-output.outputs.x86_64-apple-darwin_url }}
+      x86_64-apple-darwin_sha: ${{ steps.set-output.outputs.x86_64-apple-darwin_sha }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            # `macos-15-intel` will be the last x86_64 `macos` image supported by GHA.
+            # It will be available until Aug. 2027 (see https://github.com/actions/runner-images/issues/13045).
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    concurrency:
+      # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
+      group: reusable-build-${{ matrix.target }}-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v6
+
+      - name: Build resolc
+        id: build
+        uses: ./.github/actions/build-resolc
+        with:
+          target: ${{ matrix.target }}
+          build-type: native
+          retention-days: ${{ inputs.retention_days }}
+
+      - name: Set Output Variables
+        id: set-output
+        shell: bash
+        run: |
+          echo "${{ matrix.target }}_url=${{ steps.build.outputs.url }}" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.target }}_sha=${{ steps.build.outputs.sha }}" >> "$GITHUB_OUTPUT"
+
+  create-universal:
+    name: Build macOS (universal)
+    needs: build
+    runs-on: macos-15
+    outputs:
+      url: ${{ steps.upload.outputs.artifact-url }}
+      sha: ${{ steps.upload.outputs.artifact-digest }}
+    concurrency:
+      # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
+      group: reusable-build-universal-apple-darwin-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Check Build Cache
+        id: cache
+        uses: actions/cache@v5
+        with:
+          path: resolc-universal-apple-darwin
+          key: build-universal-apple-darwin-${{ github.sha }}
+
+      - name: Download macOS Artifacts
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/download-artifact@v7
+        with:
+          pattern: resolc-*-apple-darwin
+          merge-multiple: true
+
+      - name: Create macOS Universal Binary
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          lipo resolc-aarch64-apple-darwin resolc-x86_64-apple-darwin -create -output resolc-universal-apple-darwin
+          chmod +x resolc-universal-apple-darwin
+
+      - name: Upload Universal Binary
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: resolc-universal-apple-darwin
+          path: resolc-universal-apple-darwin
+          retention-days: ${{ inputs.retention_days }}

@@ -1,0 +1,41 @@
+name: Reusable Build — Linux
+
+on:
+  workflow_call:
+    inputs:
+      retention_days:
+        description: "Artifact retention days"
+        required: false
+        type: number
+        default: 1
+    outputs:
+      url:
+        value: ${{ jobs.build.outputs.url }}
+      sha:
+        value: ${{ jobs.build.outputs.sha }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Linux
+    runs-on: ubuntu-24.04
+    outputs:
+      url: ${{ steps.build.outputs.url }}
+      sha: ${{ steps.build.outputs.sha }}
+    concurrency:
+      # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
+      group: reusable-build-x86_64-unknown-linux-musl-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v6
+
+      - name: Build resolc
+        id: build
+        uses: ./.github/actions/build-resolc
+        with:
+          target: x86_64-unknown-linux-musl
+          build-type: musl
+          retention-days: ${{ inputs.retention_days }}

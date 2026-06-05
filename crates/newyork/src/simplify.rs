@@ -1719,6 +1719,16 @@ fn expr_has_side_effects(expression: &Expression) -> bool {
 ///
 /// `extra_used` contains ValueIds that must be preserved even if not referenced
 /// by the statements themselves (e.g., function return values, region yields).
+///
+/// Statements following an unconditional terminator are unreachable and get
+/// truncated. Some of them may still define a value that an enclosing `yield` or
+/// return references through `extra_used`: folding a constant `if` whose taken
+/// branch ends in a `leave` appends that branch's output binding after the `leave`,
+/// and the enclosing region's `yield` keeps pointing at it. Truncating the binding
+/// would leave that reference dangling and fail SSA validation ("used before
+/// definition"). Each such value is therefore re-bound to zero just before the
+/// terminator. The binding lies on a provably unreachable path (it follows an
+/// unconditional terminator), so the zero is never observed and LLVM discards it.
 fn eliminate_dead_code_in_stmts(
     statements: &mut Vec<Statement>,
     extra_used: &BTreeSet<u32>,
@@ -1728,7 +1738,29 @@ fn eliminate_dead_code_in_stmts(
     if let Some(terminator_pos) = statements.iter().position(is_terminator) {
         let unreachable_count = statements.len() - terminator_pos - 1;
         if unreachable_count > 0 {
+            // Rescue values defined in the unreachable tail that an enclosing
+            // yield/return still references, then truncate (see the doc comment).
+            let mut rescued: Vec<ValueId> = Vec::new();
+            for statement in &statements[terminator_pos + 1..] {
+                statement.for_each_value_id_def(&mut |id| {
+                    if extra_used.contains(&id.0) {
+                        rescued.push(id);
+                    }
+                });
+            }
             statements.truncate(terminator_pos + 1);
+            for id in rescued {
+                statements.insert(
+                    terminator_pos,
+                    Statement::Let {
+                        bindings: vec![id],
+                        value: Expression::Literal {
+                            value: BigUint::zero(),
+                            value_type: Type::Int(BitWidth::I256),
+                        },
+                    },
+                );
+            }
             total_removed += unreachable_count;
         }
     }

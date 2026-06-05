@@ -3450,6 +3450,46 @@ fn store8_fmp_byteorder() {
     run_differential(actions);
 }
 
+/// Regression guard for a newyork SSA-validation ICE specific to the
+/// solc-optimizer-disabled path. `try ... catch { return <constant>; }` lowers to a
+/// switch whose default region is `let r := if (true) { ...; leave } else { ... }`
+/// followed by `yield r`. The simplifier folds the constant `if`, appending the
+/// output binding after the branch's `leave`; the dead-code pass then truncated
+/// everything after that terminator — including the binding the surviving `yield r`
+/// referenced — so the IR validator rejected it with
+/// `value vN used before definition at ... default yield` and resolc ICEd on a
+/// valid contract. Both switch arms `leave`, so the fall-through yield is provably
+/// never observed; the fix zero-binds the rescued value before the terminator.
+/// Instantiated with the solc optimizer disabled to reproduce the path.
+#[test]
+fn try_catch_catch_return_solc_unoptimized() {
+    use alloy_primitives::keccak256;
+
+    let mut actions = vec![Instantiate {
+        origin: TestAddress::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        code: Code::Solidity {
+            path: Some("contracts/TryCatchCatchReturn.sol".into()),
+            contract: "TryCatchCatchReturn".to_string(),
+            solc_optimizer: Some(false),
+            libraries: Default::default(),
+        },
+        data: vec![],
+        salt: OptionalHex::default(),
+    }];
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"run()").0[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
 /// Differential probe over transient storage (EIP-1153 tstore/tload) — a distinct
 /// opcode pair not exercised by the other fuzzers. Round-trips and overwrites
 /// across boundary (slot,value) inputs, compared newyork-PVM vs solc-EVM.

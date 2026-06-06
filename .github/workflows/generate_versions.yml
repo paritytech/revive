@@ -17,13 +17,7 @@ jobs:
         with:
           path: tmp
 
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          repository: paritytech/resolc-bin
-          path: resolc-bin
-
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.REVIVE_JSON_APP_ID }}
@@ -31,12 +25,16 @@ jobs:
           owner: paritytech
           repositories: resolc-bin
 
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          repository: paritytech/resolc-bin
+          path: resolc-bin
+          token: ${{ steps.app-token.outputs.token }}
+
       - name: Generate json and push
         env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
           APP_NAME: "paritytech-revive-json"
-          Green: "\e[32m"
-          NC: "\e[0m"
         run: |
           sudo apt-get update && sudo apt-get install -y wget
           wget https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/resolc-x86_64-unknown-linux-musl
@@ -50,13 +48,6 @@ jobs:
           # Update GitHub Pages file with the JSON data.
           chmod +x ../tmp/.github/scripts/resolc-bin-gh-pages.sh
           bash ../tmp/.github/scripts/resolc-bin-gh-pages.sh $PWD
-
-          echo "${Green}Add new remote with gh app token${NC}"
-          git remote set-url origin $(git config remote.origin.url | sed "s/github.com/${APP_NAME}:${TOKEN}@github.com/g")
-
-          echo "${Green}Remove http section that causes issues with gh app auth token${NC}"
-          sed -i.bak '/\[http/d' ./.git/config
-          sed -i.bak '/extraheader/d' ./.git/config
 
           git config user.email "ci@parity.io"
           git config user.name "${APP_NAME}"

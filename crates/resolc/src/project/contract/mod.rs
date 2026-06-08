@@ -73,7 +73,7 @@ impl Contract {
         identifier_paths: BTreeMap<String, String>,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
-        let optimizer = Optimizer::new(optimizer_settings);
+        let mut optimizer = Optimizer::new(optimizer_settings);
         let metadata = Metadata::new(
             self.metadata_json,
             solc_version
@@ -107,6 +107,7 @@ impl Contract {
                 context.build(self.identifier.full_path.as_str(), metadata_bytes)?
             }
             IR::NewYork(mut newyork) => {
+                optimizer.enable_newyork_pipeline();
                 let module = llvm.create_module(self.identifier.full_path.as_str());
                 let mut context =
                     PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);

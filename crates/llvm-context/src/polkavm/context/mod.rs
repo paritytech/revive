@@ -319,7 +319,11 @@ impl<'ctx> Context<'ctx> {
     ) -> anyhow::Result<Build> {
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
-        let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
+        let target_machine = TargetMachine::new(
+            Target::PVM,
+            self.optimizer.settings(),
+            self.optimizer.is_newyork(),
+        )?;
         self.module().set_triple(&target_machine.get_triple());
 
         self.debug_config
@@ -1719,6 +1723,12 @@ impl<'ctx> Context<'ctx> {
 
     pub fn optimizer_settings(&self) -> &OptimizerSettings {
         self.optimizer.settings()
+    }
+
+    /// Whether this module is being compiled through the newyork IR generator.
+    /// Gates newyork-specific codegen that is unsound on the stock Yul path.
+    pub fn is_newyork(&self) -> bool {
+        self.optimizer.is_newyork()
     }
 
     pub fn heap_size(&self) -> inkwell::values::IntValue<'ctx> {

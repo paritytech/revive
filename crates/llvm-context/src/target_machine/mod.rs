@@ -29,17 +29,37 @@ impl TargetMachine {
 
     /// LLVM target features.
     pub const VM_FEATURES: &'static str =
-        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax,+unaligned-scalar-mem";
+        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax";
+
+    /// RISC-V backend feature that lets the code generator emit single (potentially unaligned)
+    /// scalar memory accesses instead of splitting them into byte-wise sequences. Enabled for
+    /// newyork modules only; the stock Yul path omits it, matching the upstream target
+    /// configuration. Enabling it on the Yul path was observed to introduce an end-to-end
+    /// regression (`complex/internal_function_pointers/mixed_features_2`); the exact interaction
+    /// was not isolated, so the feature is restricted to the path it was validated against.
+    pub const VM_FEATURE_UNALIGNED: &'static str = ",+unaligned-scalar-mem";
 
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.
-    pub fn new(target: Target, optimizer_settings: &OptimizerSettings) -> anyhow::Result<Self> {
+    ///
+    /// `unaligned_scalar_mem` appends [`Self::VM_FEATURE_UNALIGNED`]; pass `true` only for newyork
+    /// modules (see the constant's documentation).
+    pub fn new(
+        target: Target,
+        optimizer_settings: &OptimizerSettings,
+        unaligned_scalar_mem: bool,
+    ) -> anyhow::Result<Self> {
+        let features = if unaligned_scalar_mem {
+            format!("{}{}", Self::VM_FEATURES, Self::VM_FEATURE_UNALIGNED)
+        } else {
+            Self::VM_FEATURES.to_string()
+        };
         let target_machine = inkwell::targets::Target::from_name(target.name())
             .ok_or_else(|| anyhow::anyhow!("LLVM target machine `{}` not found", target.name()))?
             .create_target_machine(
                 &inkwell::targets::TargetTriple::create(target.triple()),
                 Self::VM_TARGET_CPU,
-                Self::VM_FEATURES,
+                &features,
                 optimizer_settings.level_back_end,
                 inkwell::targets::RelocMode::PIC,
                 inkwell::targets::CodeModel::Default,

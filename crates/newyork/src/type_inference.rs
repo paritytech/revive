@@ -1255,7 +1255,10 @@ impl TypeInference {
             | Expression::ExtCodeHash { address } => {
                 self.record_use(address.id, UseContext::ExternalCall);
             }
-            Expression::BlockHash { number } | Expression::BlobHash { index: number } => {
+            Expression::BlockHash { number } => {
+                self.record_use(number.id, UseContext::ExternalCall);
+            }
+            Expression::BlobHash { index: number } => {
                 self.record_use(number.id, UseContext::MemoryOffset);
                 self.narrow_from_use(number.id, BitWidth::I64);
             }
@@ -1626,7 +1629,7 @@ impl TypeInference {
                 BitWidth::I256
             }
             Expression::BlockHash { number } => {
-                self.widen(number.id, BitWidth::I64);
+                self.widen(number.id, BitWidth::I256);
                 BitWidth::I256
             }
             Expression::Coinbase => BitWidth::I160,

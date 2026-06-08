@@ -127,9 +127,6 @@ pub(crate) fn build_efficient_load_swap<'ctx>(
             .basic_block()
             .get_last_instruction()
             .expect("ICE: load instruction always exists")
-            // Byte alignment: the heap word pointer is derived from an arbitrary `mload`/`mstore`
-            // byte offset and is not guaranteed 8-byte aligned. Asserting a wider alignment here
-            // would be undefined behaviour on a misaligned offset.
             .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("ICE: alignment is valid");
 
@@ -244,8 +241,6 @@ pub(crate) fn build_efficient_store_swap<'ctx>(
             .builder()
             .build_store(byte_pointer, swapped_x64_value)?;
         store_instruction
-            // Byte alignment, as in the matching load: the heap word offset is arbitrary, so a
-            // wider alignment claim would be undefined behaviour on a misaligned offset.
             .set_alignment(BYTE_LENGTH_BYTE as u32)
             .expect("ICE: alignment is valid");
     }

@@ -32,7 +32,7 @@ jobs:
       resolc_web_js_sha: ${{ steps.upload-web-js.outputs.artifact-digest }}
     concurrency:
       # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
-      group: reusable-build-wasm32-unknown-emscripten-${{ github.sha }}
+      group: reusable-build-wasm32-unknown-emscripten-is-release-${{ inputs.is_release }}-${{ github.sha }}
       cancel-in-progress: false
     steps:
       - name: Checkout revive
@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: resolc-${{ env.EMSCRIPTEN_TARGET }}
-          key: build-${{ env.EMSCRIPTEN_TARGET }}-${{ github.sha }}
+          key: build-${{ env.EMSCRIPTEN_TARGET }}-is-release-${{ inputs.is_release }}-${{ github.sha }}
 
       - name: Set Up Rust Toolchain
         if: ${{ steps.cache.outputs.cache-hit != 'true' }}

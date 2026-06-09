@@ -28,8 +28,7 @@ jobs:
     name: Measure and publish coverage
     if: contains(github.event.pull_request.labels.*.name, 'measure code coverage')
     runs-on: ubuntu-24.04
-    # Cap is 360 min; llvm-builder tests alone can take hours.
-    timeout-minutes: 360
+    timeout-minutes: 90
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4
@@ -61,17 +60,18 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Generate HTML coverage report
-        # Includes revive-llvm-builder (serial per Makefile); --ignore-run-fail keeps partial coverage on test-binary non-zero exit.
+        # Mirrors `make coverage`. `--ignore-run-fail` keeps partial
+        # coverage on test-binary non-zero exit.
         run: |
           cargo llvm-cov clean --workspace
           rm -rf target/llvm-cov
           cargo llvm-cov --workspace \
+            --exclude revive-llvm-builder \
             --all-targets \
             --locked \
             --ignore-run-fail \
             --html \
-            --output-dir target/llvm-cov \
-            -- --test-threads=1
+            --output-dir target/llvm-cov
 
       - name: Generate coverage summary
         run: |

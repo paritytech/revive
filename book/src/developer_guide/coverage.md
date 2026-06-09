@@ -1,9 +1,9 @@
 # Code coverage
 
 Revive measures Rust line and branch coverage with
-[`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov). Coverage is
-collected over the entire workspace — including the otherwise-excluded
-`revive-llvm-builder` crate — so the report reflects every shipped line.
+[`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov) over the same
+crate set as `make test-workspace` (the workspace minus
+`revive-llvm-builder`).
 
 Two ways to obtain a report:
 
@@ -31,9 +31,6 @@ The target:
 4. Rewrites the **Status** block below in place with the short commit hash,
    ISO-8601 UTC timestamp, and total line coverage, then runs
    `mdbook build`.
-
-Expect several hours: `revive-llvm-builder` tests build LLVM end-to-end and
-run single-threaded.
 
 Prerequisites:
 

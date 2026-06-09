@@ -1,0 +1,88 @@
+name: Build resolc
+description: Cache-aware resolc build for a single target.
+
+inputs:
+  target:
+    description: "Target triple (e.g., x86_64-unknown-linux-musl)"
+    required: true
+  build-type:
+    description: "'native' or 'musl'"
+    required: true
+  retention-days:
+    description: "Artifact retention in days"
+    required: false
+    default: "1"
+
+outputs:
+  url:
+    description: "Uploaded artifact URL"
+    value: ${{ steps.upload.outputs.artifact-url }}
+  sha:
+    description: "Uploaded artifact digest"
+    value: ${{ steps.upload.outputs.artifact-digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check Build Cache
+      id: cache
+      uses: actions/cache@v5
+      with:
+        # Use glob to match binaries with and without extensions.
+        path: resolc-${{ inputs.target }}*
+        key: build-${{ inputs.target }}-${{ github.sha }}
+
+    - name: Set Up Rust Toolchain
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        rustflags: ""
+        cache-key: ${{ inputs.target }}
+
+    - name: Download LLVM
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: ./.github/actions/get-llvm
+      with:
+        target: ${{ inputs.target }}
+
+    - name: Build (Native)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && inputs.build-type == 'native' }}
+      shell: bash
+      run: |
+        export LLVM_SYS_221_PREFIX=$PWD/llvm-${{ inputs.target }}
+        make install-bin
+        mv target/release/resolc resolc-${{ inputs.target }} || mv target/release/resolc.exe resolc-${{ inputs.target }}.exe
+
+    - name: Build (MUSL)
+      if: ${{ steps.cache.outputs.cache-hit != 'true' && inputs.build-type == 'musl' }}
+      shell: bash
+      env:
+        RUST_MUSL_CROSS_IMAGE: messense/rust-musl-cross@sha256:2a8837c43bf12e246f1ebd05191de9ee27fcd22f9ca81511ccd4cf75dc16d71c
+      run: |
+        docker run -v $PWD:/opt/revive $RUST_MUSL_CROSS_IMAGE /bin/bash -c "
+         cd /opt/revive
+         chown -R root:root .
+         apt update && apt upgrade -y && apt install -y pkg-config
+         export LLVM_SYS_221_PREFIX=/opt/revive/llvm-${{ inputs.target }}
+         make install-bin
+         mv target/${{ inputs.target }}/release/resolc resolc-${{ inputs.target }}
+         "
+        sudo chown -R $(id -u):$(id -g) .
+
+    - name: Install Solc
+      uses: ./.github/actions/get-solc
+
+    - name: Basic Sanity Check
+      shell: bash
+      run: |
+        result=$(./resolc-${{ inputs.target }} --bin crates/integration/contracts/flipper.sol)
+        echo $result
+        if [[ $result == *'50564d'* ]]; then exit 0; else exit 1; fi
+
+    - name: Upload Artifact
+      id: upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: resolc-${{ inputs.target }}
+        path: resolc-${{ inputs.target }}*
+        retention-days: ${{ inputs.retention-days }}

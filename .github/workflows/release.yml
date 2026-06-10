@@ -67,7 +67,7 @@ jobs:
     needs: [check-version-changed]
     uses: ./.github/workflows/reusable-build.yml
     with:
-      is_release: true
+      is_release: ${{ startsWith(github.ref_name, 'v') }}
       retention_days: 1
 
   create-release:

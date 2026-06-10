@@ -260,6 +260,14 @@ impl FunctionId {
     pub fn new(id: u32) -> Self {
         FunctionId(id)
     }
+
+    /// Returns the current function ID and advances `self` to the next one.
+    /// Used by counter fields that allocate fresh IDs.
+    pub fn fresh(&mut self) -> FunctionId {
+        let id = *self;
+        self.0 += 1;
+        id
+    }
 }
 
 /// Pure expressions that produce values without side effects.

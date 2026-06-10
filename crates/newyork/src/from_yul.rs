@@ -56,7 +56,7 @@ pub struct YulTranslator {
     /// Function name to ID mapping.
     function_ids: BTreeMap<String, FunctionId>,
     /// Next function ID to allocate.
-    next_function_id: u32,
+    next_function_id: FunctionId,
     /// Collected functions.
     functions: BTreeMap<FunctionId, Function>,
     /// Return variable names for the current function being translated.
@@ -79,7 +79,7 @@ impl YulTranslator {
         YulTranslator {
             ssa: SsaBuilder::new(),
             function_ids: BTreeMap::new(),
-            next_function_id: 0,
+            next_function_id: FunctionId::new(0),
             functions: BTreeMap::new(),
             current_return_variable_names: Vec::new(),
             loop_variable_names_stack: Vec::new(),
@@ -162,8 +162,7 @@ impl YulTranslator {
         if let Some(&id) = self.function_ids.get(name) {
             return id;
         }
-        let id = FunctionId::new(self.next_function_id);
-        self.next_function_id += 1;
+        let id = self.next_function_id.fresh();
         self.function_ids.insert(name.to_string(), id);
         id
     }

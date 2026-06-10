@@ -1559,19 +1559,13 @@ fn code_block_with_nested_object_stops() {
 
 #[test]
 fn nested_function_forward_declared() {
-    // Regression test for the newyork "Undefined function: inner" bug: a function
-    // defined inside another function's body must be forward-declared by the
-    // newyork first pass (see `collect_functions` in crates/newyork/src/from_yul.rs).
-    // The bug is specific to the newyork IR translation; `build_yul` only exercises
-    // the legacy path, so use `compile_yul_blob` (which honours `RESOLC_USE_NEWYORK`)
-    // and only assert when the newyork pipeline is the one under test.
-    if !resolc::resolve_use_newyork(false) {
-        return;
-    }
-
-    // `outer` calls `inner`, defined inside its own body, and returns `inner()`'s
-    // result (42). `compile_yul_blob` panics if compilation fails, which is exactly
-    // the "Undefined function: inner" regression this guards against.
+    // Regression test for a function defined inside another function's body.
+    // `outer` calls `inner`, defined within its own body, and returns `inner()`'s
+    // result (42). Guards the newyork "Undefined function: inner" bug, where the
+    // first pass failed to forward-declare nested functions (see `collect_functions`
+    // in crates/newyork/src/from_yul.rs). `compile_yul_blob` honours
+    // `RESOLC_USE_NEWYORK`, so this exercises whichever pipeline is under test and
+    // panics if compilation fails.
     let code = compile_yul_blob(
         "Test",
         r#"object "Test" {

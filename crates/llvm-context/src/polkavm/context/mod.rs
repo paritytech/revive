@@ -696,6 +696,20 @@ impl<'ctx> Context<'ctx> {
         Ok(())
     }
 
+    /// Anchors the current debug location to the active function's own subprogram.
+    ///
+    /// Synthetic trailing instructions (the implicit branch to the return block
+    /// and the terminator) are emitted after the function body has been lowered,
+    /// at which point the debug-info scope stack may still point at a nested or
+    /// helper function generated along the way. Resolving `None` to the top scope
+    /// there would attach a `!dbg` from an unrelated subprogram, which the LLVM
+    /// verifier rejects. Using the function's own scope keeps the attachment valid.
+    /// No-op when debug info is disabled.
+    pub fn set_debug_location_to_function_scope(&self) -> anyhow::Result<()> {
+        let scope = self.current_function().borrow().get_debug_scope();
+        self.set_debug_location(0, 0, scope)
+    }
+
     /// Pushes a debug-info scope to the stack.
     pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
         if let Some(debug_info) = self.debug_info() {

@@ -86,10 +86,28 @@ impl RuntimeFunction for StoreWord {
 /// 1. Load 4x 64-bit values
 /// 2. Byte-swap each 64-bit value using llvm.bswap.i64
 /// 3. Combine them in reversed word order to form the 256-bit result
+///
+/// The unrolled form only pays off with the `+unaligned-scalar-mem` target feature,
+/// which is enabled for newyork modules exclusively. Without it the backend splits
+/// each 64-bit access into byte operations, producing larger and slower code than
+/// the single word load it replaces, so the stock Yul path keeps the legacy
+/// `llvm.bswap.i256` lowering it was validated against.
 pub(crate) fn build_efficient_load_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    if !context.is_newyork() {
+        let value = context
+            .builder()
+            .build_load(context.word_type(), pointer, "value")?;
+        context
+            .basic_block()
+            .get_last_instruction()
+            .expect("ICE: load instruction always exists")
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
+            .expect("ICE: alignment is valid");
+        return context.build_byte_swap(value);
+    }
     let i64_type = context
         .llvm()
         .custom_width_int_type(NonZeroU32::new(64).expect("const is non-zero"))
@@ -177,11 +195,24 @@ pub(crate) fn build_efficient_load_swap<'ctx>(
 /// 1. Extract 4x 64-bit values from the 256-bit word
 /// 2. Byte-swap each 64-bit value using llvm.bswap.i64
 /// 3. Store them in reversed word order
+///
+/// As with [`build_efficient_load_swap`], the unrolled form requires the
+/// `+unaligned-scalar-mem` target feature and is therefore reserved for newyork
+/// modules; the stock Yul path keeps the legacy `llvm.bswap.i256` lowering.
 pub(crate) fn build_efficient_store_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
+    if !context.is_newyork() {
+        let swapped_value = context.build_byte_swap(value.into())?;
+        context
+            .builder()
+            .build_store(pointer, swapped_value)?
+            .set_alignment(BYTE_LENGTH_BYTE as u32)
+            .expect("ICE: alignment is valid");
+        return Ok(());
+    }
     let i64_type = context
         .llvm()
         .custom_width_int_type(NonZeroU32::new(64).expect("const is non-zero"))

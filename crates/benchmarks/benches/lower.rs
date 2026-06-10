@@ -43,7 +43,12 @@ where
     // not running the optimization passes.
     let optimizer_settings = OptimizerSettings::none();
 
-    initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        "resolc",
+        optimizer_settings.level_middle_end_size,
+        Default::default(),
+    );
 
     group
         .sample_size(90)

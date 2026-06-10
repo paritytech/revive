@@ -96,33 +96,53 @@ pub(crate) mod target_machine;
 
 static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 
+/// The global LLVM options applied at [`OptimizerSettingsSizeLevel::Z`].
+///
+/// These trade execution speed for code size: the machine outliner replaces repeated
+/// instruction sequences with calls, disabling LICM avoids i256 register pressure on the
+/// PVM target (rv64e) where hoisting causes excessive stack spills, and `ext-tsp-for-size`
+/// optimizes block layout for size instead of speed. At any other optimization level the
+/// upstream LLVM defaults apply: paying execution gas for smaller code is only acceptable
+/// when the user explicitly asked for `-Oz`.
+const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
+    "--disable-licm-promotion",
+    "--disable-machine-licm",
+    "--enable-machine-outliner",
+    "--machine-outliner-reruns=2",
+    "--disable-early-taildup=true",
+    "--apply-ext-tsp-for-size=true",
+    "--attributor-allow-deep-wrappers=true",
+    "--hoist-common-insts=true",
+];
+
 /// Initializes the LLVM compiler backend.
 ///
 /// This is a no-op if called subsequentially.
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
-pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[String]) {
+///
+/// At [`OptimizerSettingsSizeLevel::Z`] the `SIZE_LEVEL_Z_ARGUMENTS` are prepended.
+/// LLVM parses command line options once per process, so the level passed by the first
+/// caller wins; production builds are unaffected because every contract is compiled in
+/// its own recursive process with its own optimizer settings.
+pub fn initialize_llvm(
+    target: PolkaVMTarget,
+    name: &str,
+    size_level: OptimizerSettingsSizeLevel,
+    llvm_arguments: &[String],
+) {
     let Ok(_) = DID_INITIALIZE.set(()) else {
         return; // Tests don't go through a recursive process
     };
 
-    // Disable LICM promotion and machine LICM: on the PVM target (rv64e),
-    // LICM hoists i256 operations out of loops, increasing register pressure
-    // and causing excessive stack spills that outweigh the loop optimization.
-    let default_args = [
-        "--disable-licm-promotion".to_string(),
-        "--disable-machine-licm".to_string(),
-        "--enable-machine-outliner".to_string(),
-        "--machine-outliner-reruns=2".to_string(),
-        "--disable-early-taildup=true".to_string(),
-        "--apply-ext-tsp-for-size=true".to_string(),
-        "--attributor-allow-deep-wrappers=true".to_string(),
-        "--hoist-common-insts=true".to_string(),
-    ];
-    let argv = [name.to_string()]
-        .iter()
-        .chain(default_args.iter())
-        .chain(llvm_arguments)
+    let size_arguments = if size_level == OptimizerSettingsSizeLevel::Z {
+        SIZE_LEVEL_Z_ARGUMENTS
+    } else {
+        &[]
+    };
+    let argv = std::iter::once(name)
+        .chain(size_arguments.iter().copied())
+        .chain(llvm_arguments.iter().map(String::as_str))
         .map(|arg| CString::new(arg.as_bytes()).unwrap())
         .collect::<Vec<_>>();
     let argv: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();

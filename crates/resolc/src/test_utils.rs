@@ -10,6 +10,7 @@ use revive_common::MetadataHash;
 use revive_llvm_context::initialize_llvm;
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
+use revive_llvm_context::OptimizerSettingsSizeLevel;
 use revive_llvm_context::PolkaVMTarget;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::Bytecode;
 use revive_solc_json_interface::standard_json::output::contract::evm::bytecode::DeployedBytecode;
@@ -79,7 +80,12 @@ pub fn build_solidity_with_options(
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
+        &[],
+    );
 
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
@@ -158,7 +164,12 @@ pub fn build_solidity_with_options_evm(
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        OptimizerSettingsSizeLevel::Zero,
+        &[],
+    );
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut input = SolcStandardJsonInput::try_from_solidity_sources(
         None,
@@ -213,7 +224,12 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
     );
 
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        OptimizerSettingsSizeLevel::Zero,
+        &[],
+    );
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let solc_version = solc.version()?;
     let mut input = SolcStandardJsonInput::try_from_solidity_sources(
@@ -255,7 +271,13 @@ pub fn build_yul<T: ToString + Display>(
 ) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    let optimizer_settings = OptimizerSettings::size();
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
+        &[],
+    );
 
     let mut build = Project::try_from_yul_sources(
         sources
@@ -274,7 +296,7 @@ pub fn build_yul<T: ToString + Display>(
     )?
     .compile(
         &mut vec![],
-        OptimizerSettings::size(),
+        optimizer_settings,
         MetadataHash::Keccak256,
         &DEBUG_CONFIG,
         Default::default(),
@@ -302,7 +324,13 @@ pub fn build_yul_standard_json(
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
+        &[],
+    );
 
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
     let mut output = solc.validate_yul_standard_json(&mut solc_input, &mut vec![])?;
@@ -318,7 +346,7 @@ pub fn build_yul_standard_json(
     )?
     .compile(
         &mut vec![],
-        OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?,
+        optimizer_settings,
         MetadataHash::Keccak256,
         &DEBUG_CONFIG,
         Default::default(),
@@ -545,7 +573,12 @@ pub fn compile_yul_blob_with_options(
 
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    initialize_llvm(PolkaVMTarget::PVM, crate::DEFAULT_EXECUTABLE_NAME, &[]);
+    initialize_llvm(
+        PolkaVMTarget::PVM,
+        crate::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
+        &[],
+    );
 
     let path = format!("{contract_name}.yul");
     let mut build = Project::try_from_yul_sources(

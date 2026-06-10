@@ -111,6 +111,7 @@ fn main_inner(
         initialize_llvm(
             PolkaVMTarget::PVM,
             resolc::DEFAULT_EXECUTABLE_NAME,
+            input.optimizer_settings.level_middle_end_size,
             &input.llvm_arguments,
         );
 
@@ -124,9 +125,14 @@ fn main_inner(
         }
     }
 
+    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
+    optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
+    optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
+
     initialize_llvm(
         PolkaVMTarget::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
         &arguments.llvm_arguments,
     );
 
@@ -166,10 +172,6 @@ fn main_inner(
         Some(evm_version) => Some(EVMVersion::try_from(evm_version.as_str())?),
         None => None,
     };
-
-    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
-    optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
-    optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 
     let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
         Some(arguments.heap_size),

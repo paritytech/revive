@@ -1,4 +1,4 @@
-//! NEW Yul OptimziR Kit (newyork)
+//! NEW Yul OptimizIR Kit (newyork)
 //!
 //! This crate provides a custom intermediate representation (IR) for the Revive
 //! compiler, positioned between Yul and LLVM IR. It enables domain-specific
@@ -29,9 +29,6 @@
 //! - [`heap_opt`] - Heap optimization for partial big-endian emulation
 //! - [`mem_opt`] - Memory optimization (load-after-store, dead store elimination)
 //! - [`inline`] - Function inlining with custom heuristics for PolkaVM
-//!
-//! For now, allow missing docs while the crate is in development.
-#![allow(missing_docs)]
 #![deny(clippy::all)]
 
 /// Environment variable: when set, dumps the newyork IR for every translated object to

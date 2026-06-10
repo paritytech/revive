@@ -1,6 +1,6 @@
 [package]
 name = "revive-newyork"
-description = "NEW Yul OptimziR Kit - Custom IR layer for domain-specific optimizations"
+description = "NEW Yul OptimizIR Kit - Custom IR layer for domain-specific optimizations"
 version = "1.0.0"
 authors.workspace = true
 license.workspace = true

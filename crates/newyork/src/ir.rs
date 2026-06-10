@@ -465,6 +465,7 @@ impl Region {
 /// A basic block of statements (no yields - for function bodies).
 #[derive(Clone, Debug, Default)]
 pub struct Block {
+    /// Statements in this block.
     pub statements: Vec<Statement>,
 }
 
@@ -843,8 +844,10 @@ impl Object {
             || self.subobjects.iter().any(|s| s.has_msize())
     }
 
-    /// Finds the maximum ValueId used anywhere in this object (code + functions).
-    /// Does NOT recurse into subobjects.
+    /// Finds the maximum `ValueId` used anywhere in this object — its code, its
+    /// functions (parameters, return slots, and bodies), and, recursively, its
+    /// subobjects. Callers use the result `+ 1` as the next free id, so spanning
+    /// subobjects keeps that bound conservative across the whole object tree.
     pub fn find_max_value_id(&self) -> u32 {
         fn scan_block(block: &Block, max_id: &mut u32) {
             for statement in &block.statements {

@@ -3,6 +3,7 @@ use std::str::FromStr;
 use alloy_primitives::*;
 use alloy_sol_types::SolCall;
 use resolc::test_utils::build_yul;
+use resolc::test_utils::compile_yul_blob;
 use revive_runner::*;
 use SpecsAction::*;
 
@@ -1549,6 +1550,82 @@ fn code_block_with_nested_object_stops() {
                 data: Default::default(),
             },
             VerifyCall(Default::default()),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
+fn nested_function_forward_declared() {
+    // Regression test for the newyork "Undefined function: inner" bug: a function
+    // defined inside another function's body must be forward-declared by the
+    // newyork first pass (see `collect_functions` in crates/newyork/src/from_yul.rs).
+    // The bug is specific to the newyork IR translation; `build_yul` only exercises
+    // the legacy path, so use `compile_yul_blob` (which honours `RESOLC_USE_NEWYORK`)
+    // and only assert when the newyork pipeline is the one under test.
+    if !resolc::resolve_use_newyork(false) {
+        return;
+    }
+
+    // `outer` calls `inner`, defined inside its own body, and returns `inner()`'s
+    // result (42). `compile_yul_blob` panics if compilation fails, which is exactly
+    // the "Undefined function: inner" regression this guards against.
+    let code = compile_yul_blob(
+        "Test",
+        r#"object "Test" {
+    code {
+        {
+            let s := datasize("Test_deployed")
+            codecopy(0, dataoffset("Test_deployed"), s)
+            return(0, s)
+        }
+    }
+    object "Test_deployed" {
+        code {
+            {
+                function outer() -> r {
+                    function inner() -> s {
+                        s := 42
+                    }
+                    r := inner()
+                }
+                mstore(0, outer())
+                return(0, 32)
+            }
+        }
+    }
+}"#,
+    );
+
+    let mut expected_output = [0u8; 32];
+    expected_output[31] = 42;
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(expected_output.to_vec()),
+                gas_consumed: None,
+            }),
         ],
         differential: false,
         ..Default::default()

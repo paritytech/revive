@@ -111,29 +111,31 @@ impl YulTranslator {
     }
 
     /// First pass: walk the AST and pre-allocate `FunctionId`s and parameter `ValueId`s for
-    /// every Yul function definition (including those nested inside blocks, if/for/switch).
+    /// every Yul function definition (including those nested inside blocks, if/for/switch,
+    /// and other function bodies).
     /// This lets later passes resolve forward references and reuse parameter IDs across
     /// recursive translation calls.
     fn collect_functions(&mut self, block: &YulBlock) -> std::result::Result<(), TranslationError> {
         for statement in &block.statements {
-            if let YulStatement::FunctionDefinition(function_definition) = statement {
-                let id = self.allocate_function_id(&function_definition.identifier);
-                let mut function = Function::new(id, function_definition.identifier.clone());
-
-                for _parameter in &function_definition.arguments {
-                    let parameter_id = self.ssa.fresh_id();
-                    function
-                        .parameters
-                        .push((parameter_id, Type::Int(BitWidth::I256)));
-                }
-                for _ in &function_definition.result {
-                    function.returns.push(Type::Int(BitWidth::I256));
-                }
-
-                self.functions.insert(id, function);
-            }
-
             match statement {
+                YulStatement::FunctionDefinition(function_definition) => {
+                    let id = self.allocate_function_id(&function_definition.identifier);
+                    let mut function = Function::new(id, function_definition.identifier.clone());
+
+                    for _parameter in &function_definition.arguments {
+                        let parameter_id = self.ssa.fresh_id();
+                        function
+                            .parameters
+                            .push((parameter_id, Type::Int(BitWidth::I256)));
+                    }
+                    for _ in &function_definition.result {
+                        function.returns.push(Type::Int(BitWidth::I256));
+                    }
+
+                    self.functions.insert(id, function);
+
+                    self.collect_functions(&function_definition.body)?;
+                }
                 YulStatement::Block(inner) => self.collect_functions(inner)?,
                 YulStatement::IfConditional(if_conditional) => {
                     self.collect_functions(&if_conditional.block)?

@@ -1463,9 +1463,11 @@ impl YulTranslator {
                     hex
                 };
 
-                if hex_string.len() > 64 {
-                    hex_string.truncate(64);
-                }
+                assert!(
+                    hex_string.len() <= 64,
+                    "ICE: string literal exceeds 32 bytes ({} hex digits)",
+                    hex_string.len()
+                );
                 while hex_string.len() < 64 {
                     hex_string.push('0');
                 }

@@ -814,11 +814,18 @@ impl Object {
     /// Counts the total number of `ErrorStringRevert` statements grouped by
     /// number of data words. Returns a map from num_words → count.
     /// Used to conditionally outline: only profitable with >= 2 call sites.
+    /// Recurses into subobjects for the same reason as [`Object::count_syscall_sites`]:
+    /// the revert helper is shared module-wide across the deploy and runtime code.
     pub fn count_error_string_reverts(&self) -> BTreeMap<usize, usize> {
         let mut counts = BTreeMap::new();
         count_error_string_reverts_in_block(&self.code, &mut counts);
         for function in self.functions.values() {
             count_error_string_reverts_in_block(&function.body, &mut counts);
+        }
+        for subobject in &self.subobjects {
+            for (length, count) in subobject.count_error_string_reverts() {
+                *counts.entry(length).or_insert(0) += count;
+            }
         }
         counts
     }
@@ -826,11 +833,18 @@ impl Object {
     /// Counts the total number of `CustomErrorRevert` statements grouped by
     /// num_args. Returns a map from num_args → count.
     /// Used to conditionally outline: only profitable with >= 3 call sites.
+    /// Recurses into subobjects for the same reason as [`Object::count_syscall_sites`]:
+    /// the revert helper is shared module-wide across the deploy and runtime code.
     pub fn count_custom_error_reverts(&self) -> BTreeMap<usize, usize> {
         let mut counts = BTreeMap::new();
         count_custom_error_reverts_in_block(&self.code, &mut counts);
         for function in self.functions.values() {
             count_custom_error_reverts_in_block(&function.body, &mut counts);
+        }
+        for subobject in &self.subobjects {
+            for (length, count) in subobject.count_custom_error_reverts() {
+                *counts.entry(length).or_insert(0) += count;
+            }
         }
         counts
     }
@@ -902,8 +916,15 @@ impl std::ops::AddAssign for SyscallCounts {
 }
 
 impl Object {
-    /// Counts the total number of callvalue and calldataload expression sites
-    /// in this object including all functions and subobjects.
+    /// Counts the syscall expression sites (`callvalue`, `calldataload`, `caller`)
+    /// in this object — its code, its functions, and, recursively, its subobjects.
+    ///
+    /// Subobjects are included because the whole object tree compiles into a single
+    /// LLVM module with a shared set of outlined helper functions: the deploy code
+    /// (top object) and runtime code (`_deployed` subobject) call the *same*
+    /// `__revive_callvalue`/`caller`/... helper. The outlining decision is therefore
+    /// a module-wide question, so the count must span the tree — dropping the
+    /// recursion regresses the OpenZeppelin suite by ~650 bytes.
     pub fn count_syscall_sites(&self) -> SyscallCounts {
         let mut counts = count_syscalls_in_block(&self.code);
         for function in self.functions.values() {

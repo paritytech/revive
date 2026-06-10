@@ -75,7 +75,7 @@ pub use simplify::{
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
 pub use type_inference::{TypeConstraint, TypeInference};
-pub use validate::{validate_function, validate_object, ValidationError, ValidationResult};
+pub use validate::{validate_object, ValidationError, ValidationResult};
 
 /// Result of translating a Yul object to newyork IR.
 pub struct TranslationResult {

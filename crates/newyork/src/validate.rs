@@ -33,10 +33,6 @@ pub enum ValidationError {
     #[error("SSA error: value v{0} defined multiple times")]
     MultipleDef(u32),
 
-    /// Type mismatch in an operation.
-    #[error("Type error: {0}")]
-    TypeMismatch(String),
-
     /// Region yields wrong number of values.
     #[error("Region error: expected {expected} yields, got {actual} at {location}")]
     YieldCountMismatch {
@@ -61,13 +57,6 @@ pub type ValidationResult = Result<(), Vec<ValidationError>>;
 pub fn validate_object(object: &Object) -> ValidationResult {
     let mut validator = Validator::new();
     validator.validate_object(object);
-    validator.into_result()
-}
-
-/// Validates a single function.
-pub fn validate_function(function: &Function) -> ValidationResult {
-    let mut validator = Validator::new();
-    validator.validate_function(function);
     validator.into_result()
 }
 

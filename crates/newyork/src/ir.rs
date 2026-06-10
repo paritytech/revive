@@ -795,20 +795,6 @@ impl Object {
         count
     }
 
-    /// Counts the total number of exit operations (Return, Revert, Stop) in this object
-    /// including all functions and subobjects.
-    /// This is used to estimate the number of `__revive_exit` call sites after LLVM codegen.
-    pub fn count_exit_operations(&self) -> usize {
-        let mut count = count_exit_ops_in_block(&self.code);
-        for function in self.functions.values() {
-            count += count_exit_ops_in_block(&function.body);
-        }
-        for subobject in &self.subobjects {
-            count += subobject.count_exit_operations();
-        }
-        count
-    }
-
     /// Counts the total number of `Keccak256Single` expression nodes in this object
     /// (including functions and subobjects).
     /// Used to conditionally emit the `__revive_keccak256_one_word` helper function
@@ -902,9 +888,6 @@ pub struct SyscallCounts {
     pub calldataload: usize,
     /// Number of `caller()` expression sites.
     pub caller: usize,
-    /// Number of heap memory operations (MStore, MLoad, MStore8, MCopy, etc.)
-    /// that translate to sbrk calls at the LLVM level.
-    pub heap_operations: usize,
 }
 
 impl std::ops::AddAssign for SyscallCounts {
@@ -912,7 +895,6 @@ impl std::ops::AddAssign for SyscallCounts {
         self.callvalue += rhs.callvalue;
         self.calldataload += rhs.calldataload;
         self.caller += rhs.caller;
-        self.heap_operations += rhs.heap_operations;
     }
 }
 
@@ -1655,33 +1637,15 @@ pub fn for_each_statement(statements: &[Statement], f: &mut dyn FnMut(&Statement
 
 fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
     let mut counts = SyscallCounts::default();
-    for_each_statement(&block.statements, &mut |statement| match statement {
-        Statement::Let { value, .. } | Statement::Expression(value) => match value {
-            Expression::CallValue => counts.callvalue += 1,
-            Expression::CallDataLoad { .. } => counts.calldataload += 1,
-            Expression::Caller => counts.caller += 1,
-            Expression::MLoad { .. } | Expression::Keccak256 { .. } => counts.heap_operations += 1,
-            _ => {}
-        },
-        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
-            counts.heap_operations += 1;
+    for_each_statement(&block.statements, &mut |statement| {
+        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+            match value {
+                Expression::CallValue => counts.callvalue += 1,
+                Expression::CallDataLoad { .. } => counts.calldataload += 1,
+                Expression::Caller => counts.caller += 1,
+                _ => {}
+            }
         }
-        Statement::Revert { .. }
-        | Statement::Return { .. }
-        | Statement::CodeCopy { .. }
-        | Statement::ExtCodeCopy { .. }
-        | Statement::ReturnDataCopy { .. }
-        | Statement::DataCopy { .. }
-        | Statement::CallDataCopy { .. } => {
-            counts.heap_operations += 1;
-        }
-        Statement::ExternalCall { .. } | Statement::Create { .. } => {
-            counts.heap_operations += 2;
-        }
-        Statement::Log { topics, .. } => {
-            counts.heap_operations += 1 + topics.len();
-        }
-        _ => {}
     });
     counts
 }
@@ -1697,19 +1661,6 @@ fn count_heap_ops_in_block(block: &Block) -> usize {
             ..
         } => count += 1,
         _ => {}
-    });
-    count
-}
-
-fn count_exit_ops_in_block(block: &Block) -> usize {
-    let mut count = 0usize;
-    for_each_statement(&block.statements, &mut |statement| {
-        if matches!(
-            statement,
-            Statement::Return { .. } | Statement::Revert { .. } | Statement::Stop
-        ) {
-            count += 1;
-        }
     });
     count
 }

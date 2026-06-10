@@ -6,7 +6,7 @@
 //! `from_yul.rs`, and the corresponding PHI nodes are emitted only later, in the
 //! LLVM IR (`to_llvm.rs`); this module does not create PHI nodes itself.
 
-use crate::ir::{Type, Value, ValueId};
+use crate::ir::{Value, ValueId};
 use std::collections::BTreeMap;
 
 /// SSA builder that tracks variable definitions and creates fresh value IDs.
@@ -39,11 +39,6 @@ impl SsaBuilder {
     /// Allocates a fresh value ID.
     pub fn fresh_id(&mut self) -> ValueId {
         self.next_value_id.fresh()
-    }
-
-    /// Allocates a fresh typed value with the given type.
-    pub fn fresh_typed_value(&mut self, value_type: Type) -> Value {
-        Value::new(self.fresh_id(), value_type)
     }
 
     /// Declares a new variable in the current scope.
@@ -102,17 +97,12 @@ impl SsaBuilder {
     pub fn restore_scope(&mut self, scope: BTreeMap<String, Value>) {
         self.current_scope = scope;
     }
-
-    /// Gets the next value ID that will be allocated (for planning).
-    pub fn peek_next_id(&self) -> ValueId {
-        self.next_value_id
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::BitWidth;
+    use crate::ir::{BitWidth, Type};
 
     #[test]
     fn test_fresh_values() {
@@ -126,7 +116,7 @@ mod tests {
     #[test]
     fn test_declare_and_lookup() {
         let mut builder = SsaBuilder::new();
-        let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
         builder.declare("x", v);
         assert_eq!(builder.lookup("x"), Some(v));
         assert_eq!(builder.lookup("y"), None);
@@ -135,11 +125,11 @@ mod tests {
     #[test]
     fn test_nested_scopes() {
         let mut builder = SsaBuilder::new();
-        let v0 = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        let v0 = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
         builder.declare("x", v0);
 
         builder.enter_scope();
-        let v1 = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        let v1 = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
         builder.assign("x", v1);
         assert_eq!(builder.lookup("x"), Some(v1));
 
@@ -151,7 +141,7 @@ mod tests {
     #[should_panic(expected = "ICE: SsaBuilder::declare called for already-declared variable")]
     fn declare_twice_panics() {
         let mut builder = SsaBuilder::new();
-        let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
         builder.declare("x", v);
         builder.declare("x", v);
     }
@@ -160,7 +150,7 @@ mod tests {
     #[should_panic(expected = "ICE: SsaBuilder::assign called for undeclared variable")]
     fn assign_undeclared_panics() {
         let mut builder = SsaBuilder::new();
-        let v = builder.fresh_typed_value(Type::Int(BitWidth::I256));
+        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
         builder.assign("x", v);
     }
 }

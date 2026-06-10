@@ -1628,6 +1628,82 @@ fn nested_function_forward_declared() {
 }
 
 #[test]
+fn for_condition_call_argument_trimmed() {
+    // Regression test for the newyork param-drop optimization missing a call site in
+    // a `for` loop condition (see `visit_calls_inner`/`trim_call_arguments` in
+    // crates/newyork/src/lib.rs). `cond`'s `limit` parameter is always the literal 5,
+    // so the optimizer drops it and rewrites every call to pass one argument. The
+    // condition `cond(i, 5)` is one of those call sites; before the fix it was left
+    // untrimmed, producing a call with the wrong argument count (a hard error under
+    // newyork) and the analysis could have dropped a parameter whose value actually
+    // varied at that site. `compile_yul_blob` honours `RESOLC_USE_NEWYORK`, so this
+    // exercises whichever pipeline is under test and panics if compilation fails.
+    //
+    // warmup `cond(0, 5)` = 1, plus the loop body adds i for i in 0..5 (= 10), so the
+    // returned value is 11.
+    let code = compile_yul_blob(
+        "Test",
+        r#"object "Test" {
+    code {
+        {
+            let s := datasize("Test_deployed")
+            codecopy(0, dataoffset("Test_deployed"), s)
+            return(0, s)
+        }
+    }
+    object "Test_deployed" {
+        code {
+            {
+                function cond(i, limit) -> r {
+                    r := lt(i, limit)
+                }
+                let s := cond(0, 5)
+                for { let i := 0 } cond(i, 5) { i := add(i, 1) } {
+                    s := add(s, i)
+                }
+                mstore(0, s)
+                return(0, 32)
+            }
+        }
+    }
+}"#,
+    );
+
+    let mut expected_output = [0u8; 32];
+    expected_output[31] = 11;
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code),
+                data: Default::default(),
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: Default::default(),
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Default::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(expected_output.to_vec()),
+                gas_consumed: None,
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+#[test]
 fn sbrk_bounds_checks() {
     let code = &build_yul(&[(
         "poc.yul",

@@ -690,6 +690,11 @@ where
     visit_calls_inner(statements, &mut literals, record);
 }
 
+/// Recursive worker for [`visit_calls`]. Walks `statements`, recording every
+/// top-level call (`Let id = call(..)` and bare `call(..)` statements) and tracking
+/// `Let id = Literal v` bindings in `literals`. Control-flow children are visited
+/// with a cloned `literals` map so each branch's own bindings stay local while still
+/// inheriting the enclosing block's literals.
 fn visit_calls_inner<F>(
     statements: &[Statement],
     literals: &mut std::collections::BTreeMap<u32, (num::BigUint, Type)>,
@@ -745,12 +750,23 @@ fn visit_calls_inner<F>(
             }
             Statement::For {
                 condition_statements,
+                condition,
                 body,
                 post,
                 ..
             } => {
                 let saved = literals.clone();
                 visit_calls_inner(condition_statements, literals, record);
+                // Unlike `If`'s condition (a `Value`), a `For` condition is an
+                // `Expression` and may itself be a top-level call, evaluated after
+                // `condition_statements`. Record it so its arguments are analysed.
+                if let Expression::Call {
+                    function,
+                    arguments,
+                } = condition
+                {
+                    record(*function, arguments, literals);
+                }
                 visit_calls_inner(&body.statements, literals, record);
                 visit_calls_inner(&post.statements, literals, record);
                 *literals = saved;
@@ -814,11 +830,24 @@ fn trim_call_arguments(
             }
             Statement::For {
                 condition_statements,
+                condition,
                 body,
                 post,
                 ..
             } => {
                 trim_call_arguments(condition_statements, drops);
+                // A `For` condition is an `Expression` and may be a top-level call;
+                // it must be trimmed too, else dropping the callee's parameter leaves
+                // this site passing too many arguments.
+                if let Expression::Call {
+                    function,
+                    arguments,
+                } = condition
+                {
+                    if let Some(indices) = drops.get(function) {
+                        trim_indices(arguments, indices);
+                    }
+                }
                 trim_call_arguments(&mut body.statements, drops);
                 trim_call_arguments(&mut post.statements, drops);
             }

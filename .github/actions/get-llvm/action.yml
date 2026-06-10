@@ -111,7 +111,11 @@ runs:
 
           core.info(`Selected LLVM release matching prefix '${versionPrefix}': ${llvmRelease.tag_name}`);
 
-          const asset = llvmRelease.assets.find(asset => asset.name.includes(target));
+          // Strict suffix match disambiguates `<target>.tar.gz` from
+          // `<target>-coverage.tar.gz`. Callers wanting the coverage
+          // variant pass `target='<x>-coverage'` explicitly.
+          const suffix = `-${target}.tar.gz`;
+          const asset = llvmRelease.assets.find(asset => asset.name.endsWith(suffix));
           if (!asset) {
             core.setFailed(`Artifact for '${target}' not found in release ${llvmRelease.tag_name} (${llvmRelease.html_url})`);
             return;

@@ -38,6 +38,12 @@ jobs:
     strategy:
       matrix:
         target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, wasm32-unknown-emscripten, aarch64-apple-darwin, x86_64-apple-darwin, x86_64-pc-windows-msvc]
+        # `coverage: true` cross-product produces a second artifact per
+        # target built with `--enable-coverage`, which threads through to
+        # `-DLLVM_BUILD_INSTRUMENTED_COVERAGE=On` (see shared.rs).
+        # Artifacts are tagged `<target>-coverage` so the `get-llvm` action
+        # can opt into them via its `target` input.
+        coverage: [false, true]
         include:
           - target: x86_64-unknown-linux-gnu
             builder-arg: gnu
@@ -65,6 +71,7 @@ jobs:
             builder-arg: gnu
             host: windows
             runner: windows-2022
+    name: build (${{ matrix.target }}${{ matrix.coverage && ' [coverage]' || '' }})
     needs: create-release-draft
     runs-on: ${{ matrix.runner }}
     env:
@@ -116,14 +123,14 @@ jobs:
       - name: Build LLVM
         if: ${{ matrix.target != 'wasm32-unknown-emscripten' }}
         run: |
-          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld --llvm-projects clang
+          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld --llvm-projects clang ${{ matrix.coverage && '--enable-coverage' || '' }}
 
       - name: Build LLVM
         if: ${{ matrix.target == 'wasm32-unknown-emscripten' }}
         run: |
           revive-llvm emsdk
           source emsdk/emsdk_env.sh
-          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld
+          revive-llvm --target-env ${{ matrix.builder-arg }} build --llvm-projects lld ${{ matrix.coverage && '--enable-coverage' || '' }}
 
       - name: Remove Unnecessary Binaries
         shell: bash
@@ -138,9 +145,14 @@ jobs:
 
       - name: Package Artifact
         shell: bash
+        env:
+          # Empty for non-coverage builds; `-coverage` for instrumented ones.
+          # Threaded through filename and unpacked dirname so both variants
+          # of every target can coexist on the same release.
+          SUFFIX: ${{ matrix.coverage && '-coverage' || '' }}
         run: |
-          cp -r target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}
-          tar -czf "${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}.tar.gz" llvm-${{ matrix.target }}
+          cp -r target-llvm/${{ matrix.builder-arg }}/target-final/ llvm-${{ matrix.target }}${SUFFIX}
+          tar -czf "${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}${SUFFIX}.tar.gz" llvm-${{ matrix.target }}${SUFFIX}
 
       - name: Add Artifact to Release
         uses: softprops/action-gh-release@v2
@@ -148,4 +160,4 @@ jobs:
           tag_name: ${{ needs.create-release-draft.outputs.version }}
           draft: true
           files: |
-            ${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}.tar.gz
+            ${{ needs.create-release-draft.outputs.version }}-${{ matrix.target }}${{ matrix.coverage && '-coverage' || '' }}.tar.gz

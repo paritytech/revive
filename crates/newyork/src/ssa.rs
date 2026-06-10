@@ -1,7 +1,10 @@
 //! SSA conversion utilities for the newyork IR.
 //!
-//! This module provides the SSA builder that tracks variable definitions
-//! and handles phi-node insertion for control flow joins.
+//! This module provides the SSA builder that allocates fresh value IDs and tracks
+//! variable definitions across lexical scopes. Control-flow joins — choosing which
+//! values cross `if`/`for`/`switch` boundaries — are wired up by the translator in
+//! `from_yul.rs`, and the corresponding PHI nodes are emitted only later, in the
+//! LLVM IR (`to_llvm.rs`); this module does not create PHI nodes itself.
 
 use crate::ir::{Type, Value, ValueId};
 use std::collections::BTreeMap;

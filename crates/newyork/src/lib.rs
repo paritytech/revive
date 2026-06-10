@@ -298,7 +298,7 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
 
     let mut mem_optimizer = MemoryOptimizer::new();
     let mut mem_opt_results = mem_optimizer.optimize_object(object);
-    let mut fmp_prop = mem_opt::FmpPropagation::new(0);
+    let mut fmp_prop = mem_opt::FmpPropagation::new();
     fmp_prop.propagate_object(object);
     mem_opt_results.fmp_loads_eliminated += fmp_prop.loads_eliminated;
 

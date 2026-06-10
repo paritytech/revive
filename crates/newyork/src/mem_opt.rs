@@ -845,9 +845,15 @@ pub struct FmpPropagation {
     fmp_writers: BTreeSet<FunctionId>,
 }
 
+impl Default for FmpPropagation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FmpPropagation {
     /// Creates a new FMP propagation pass.
-    pub fn new(_next_value_id: u32) -> Self {
+    pub fn new() -> Self {
         FmpPropagation {
             loads_eliminated: 0,
             fmp_writers: BTreeSet::new(),
@@ -1670,7 +1676,7 @@ mod tests {
             data: std::collections::BTreeMap::new(),
         };
 
-        let mut fmp = FmpPropagation::new(0);
+        let mut fmp = FmpPropagation::new();
         fmp.propagate_object(&mut object);
 
         assert_eq!(fmp.loads_eliminated, 1, "Should eliminate 1 FMP load");
@@ -1734,7 +1740,7 @@ mod tests {
             data: std::collections::BTreeMap::new(),
         };
 
-        let mut fmp = FmpPropagation::new(0);
+        let mut fmp = FmpPropagation::new();
         fmp.propagate_object(&mut object);
 
         assert_eq!(
@@ -1807,7 +1813,7 @@ mod tests {
             data: std::collections::BTreeMap::new(),
         };
 
-        let mut fmp = FmpPropagation::new(0);
+        let mut fmp = FmpPropagation::new();
         fmp.propagate_object(&mut object);
 
         assert_eq!(

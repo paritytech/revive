@@ -1365,9 +1365,9 @@ impl YulTranslator {
         variable_names
             .iter()
             .map(|name| {
-                self.ssa
-                    .lookup(name)
-                    .unwrap_or(Value::new(crate::ir::ValueId::new(0), Type::default()))
+                self.ssa.lookup(name).unwrap_or_else(|| {
+                    panic!("ICE: loop-carried variable `{name}` not in scope at break/continue")
+                })
             })
             .collect()
     }

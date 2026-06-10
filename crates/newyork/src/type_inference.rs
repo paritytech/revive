@@ -1751,6 +1751,38 @@ pub fn double_width(width: BitWidth) -> BitWidth {
     }
 }
 
+/// Maximum number of param/return narrowing iterations.
+///
+/// Each iteration narrows function signatures, re-runs full type inference with the new widths so
+/// narrowed parameters cascade through `add`/`and`/etc. forward, and then refines call-site
+/// demands. Four iterations is enough to reach a fixed point on the OZ corpus; any further work is
+/// bounded by an explicit `changed` check.
+pub(crate) const PARAM_NARROW_ITERATIONS: u32 = 4;
+/// Iteratively narrows function parameter and return types until no change.
+///
+/// Each iteration applies four narrowing strategies — forward param, caller-driven
+/// param, forward return, demand-driven return — and re-runs full type inference
+/// so the new signature widths cascade through every function body before the next
+/// iteration. Bounded by [`PARAM_NARROW_ITERATIONS`] but exits early on a fixed point.
+pub(crate) fn narrow_signatures_to_fixed_point(
+    ir_object: &mut Object,
+    mut type_info: TypeInference,
+) -> TypeInference {
+    for _ in 0..PARAM_NARROW_ITERATIONS {
+        let mut changed = type_info.narrow_function_params(ir_object);
+        changed |= type_info.narrow_function_params_from_callers(ir_object);
+        changed |= type_info.narrow_function_returns(ir_object);
+        changed |= type_info.narrow_function_returns_from_demand(ir_object);
+        if !changed {
+            break;
+        }
+        type_info = TypeInference::new();
+        type_info.infer_object_tree(ir_object);
+        type_info.refine_demands_from_params(ir_object);
+    }
+    type_info
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -332,6 +332,15 @@ impl Validator {
                         });
                     }
                     self.exit_scope();
+                } else if outputs.len() != inputs.len() {
+                    // With no explicit default, the unmatched-scrutinee path implicitly
+                    // yields `inputs` unchanged (mirroring a `Statement::If` without an
+                    // else region), so the outputs must line up with the inputs.
+                    self.error(ValidationError::YieldCountMismatch {
+                        expected: outputs.len(),
+                        actual: inputs.len(),
+                        location: format!("{} default", context),
+                    });
                 }
 
                 for id in outputs {
@@ -383,6 +392,14 @@ impl Validator {
                 self.validate_expression(condition, &format!("{} condition", context));
 
                 self.validate_region(body, &format!("{} body", context));
+
+                if loop_variables.len() != body.yields.len() {
+                    self.error(ValidationError::YieldCountMismatch {
+                        expected: loop_variables.len(),
+                        actual: body.yields.len(),
+                        location: format!("{} body", context),
+                    });
+                }
 
                 for id in post_input_variables {
                     self.define(*id);

@@ -2,7 +2,7 @@
 //!
 //! This module implements the visitor that translates Yul AST into SSA form IR.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use num::BigUint;
 
@@ -1153,6 +1153,17 @@ impl YulTranslator {
     /// genuine loop-carried variables from the enclosing scope are written back —
     /// init-local variables leave scope when the loop ends and must not be assigned in the
     /// enclosing scope (doing so panics in `SsaBuilder::assign`).
+    ///
+    /// Only variables the loop actually reassigns need a loop-carried value: every other
+    /// in-scope variable keeps a single definition that dominates the loop and can be
+    /// referenced directly from the body (like the read-only inputs of an `if`). Carrying
+    /// the whole scope would emit an identity phi per untouched variable, bloating the IR
+    /// and giving the narrowing passes spurious merges to reason about. The carried set is
+    /// therefore the variables assigned anywhere in the init, body, or finalizer
+    /// (intersected with the in-scope names); init-block assignments to enclosing variables
+    /// are included so their post-loop value is still written back. Nested function bodies
+    /// are not scanned: their assignments target their own scope, never this loop's
+    /// variables.
     fn translate_for_loop(
         &mut self,
         for_loop: &ForLoop,
@@ -1168,12 +1179,20 @@ impl YulTranslator {
         }
 
         let initializer_scope = self.ssa.current_scope().clone();
+
+        let mut assigned_names = BTreeSet::new();
+        collect_assigned_names(&for_loop.initializer, &mut assigned_names);
+        collect_assigned_names(&for_loop.body, &mut assigned_names);
+        collect_assigned_names(&for_loop.finalizer, &mut assigned_names);
+
         let mut loop_variables = Vec::new();
         let mut initializer_values = Vec::new();
 
         for (name, &value) in &initializer_scope {
-            loop_variables.push((name.clone(), self.ssa.fresh_id()));
-            initializer_values.push(value);
+            if assigned_names.contains(name) {
+                loop_variables.push((name.clone(), self.ssa.fresh_id()));
+                initializer_values.push(value);
+            }
         }
 
         for (name, var_id) in &loop_variables {
@@ -1455,6 +1474,46 @@ impl YulTranslator {
                     .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
             }
         }
+    }
+}
+
+/// Collects the names of all variables assigned (`x := ...`) anywhere in `block`,
+/// recursing into nested blocks, `if`/`for`/`switch` bodies. Variable declarations
+/// (`let x := ...`) introduce fresh bindings rather than reassigning an existing
+/// variable, so they are not collected. Nested function definitions are not entered:
+/// a function body can only assign to its own scope, never to the caller's variables.
+fn collect_assigned_names(block: &YulBlock, assigned: &mut BTreeSet<String>) {
+    for statement in &block.statements {
+        collect_assigned_names_in_statement(statement, assigned);
+    }
+}
+
+/// See [`collect_assigned_names`].
+fn collect_assigned_names_in_statement(statement: &YulStatement, assigned: &mut BTreeSet<String>) {
+    match statement {
+        YulStatement::Assignment(assignment) => {
+            for identifier in &assignment.bindings {
+                assigned.insert(identifier.inner.clone());
+            }
+        }
+        YulStatement::Block(inner) => collect_assigned_names(inner, assigned),
+        YulStatement::IfConditional(if_conditional) => {
+            collect_assigned_names(&if_conditional.block, assigned)
+        }
+        YulStatement::ForLoop(for_loop) => {
+            collect_assigned_names(&for_loop.initializer, assigned);
+            collect_assigned_names(&for_loop.body, assigned);
+            collect_assigned_names(&for_loop.finalizer, assigned);
+        }
+        YulStatement::Switch(switch) => {
+            for case in &switch.cases {
+                collect_assigned_names(&case.block, assigned);
+            }
+            if let Some(default) = &switch.default {
+                collect_assigned_names(default, assigned);
+            }
+        }
+        _ => {}
     }
 }
 

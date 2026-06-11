@@ -533,11 +533,18 @@ impl TypeInference {
 
     /// Narrows function parameter types based on backward demand analysis.
     ///
-    /// Uses the backward-inferred max_width for each parameter, which reflects
-    /// whether ALL use paths of the parameter are compatible with narrowing.
-    /// The backward pass + demand propagation through transparent ops ensures
-    /// that if ANY use path needs full width (storage values, external calls),
-    /// max_width stays at I256 and prevents narrowing.
+    /// Reads each parameter's `max_width` *after* backward inference has reached a
+    /// fixed point, so the "before all uses are collected" caveat on
+    /// [`Self::use_demand_width`] does not apply here — every use has been seen and
+    /// `full_width_operands` have been forced back to I256.
+    ///
+    /// `max_width` is the *use-site* demand: a use that re-validates the value where
+    /// it is consumed — e.g. a memory offset that `safe_truncate_int_to_xlen`
+    /// bounds-checks — lowers it via `narrow_from_use`, while uses that need the full
+    /// value (storage values, external-call data, arithmetic operands) leave it at
+    /// I256 and block narrowing. This is deliberately *not* [`Self::use_demand_width`],
+    /// which reports the widest static need and keeps memory offsets at I256; using
+    /// that instead disables the bounds-checked narrowing (≈ +5 KB on the OZ suite).
     ///
     /// For parameters where only `Comparison` uses block narrowing, a relaxed
     /// check is applied: if all non-comparison uses need ≤ I64 AND all callers

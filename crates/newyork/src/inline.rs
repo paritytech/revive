@@ -116,6 +116,14 @@ pub struct InlineResults {
     pub decisions: BTreeMap<FunctionId, InlineDecision>,
 }
 
+impl std::ops::AddAssign for InlineResults {
+    fn add_assign(&mut self, rhs: Self) {
+        self.inlined_call_sites += rhs.inlined_call_sites;
+        self.removed_functions.extend(rhs.removed_functions);
+        self.decisions.extend(rhs.decisions);
+    }
+}
+
 /// The inlining decision for a function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InlineDecision {

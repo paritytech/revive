@@ -201,12 +201,7 @@ fn run_late_inline_loop(
 ) -> TypeInference {
     for _ in 0..LATE_INLINE_ITERATIONS {
         inline::estimate_function_sizes(ir_object);
-        let late_results = inline_functions(ir_object);
-        inline_results.inlined_call_sites += late_results.inlined_call_sites;
-        inline_results
-            .removed_functions
-            .extend(late_results.removed_functions);
-        inline_results.decisions.extend(late_results.decisions);
+        *inline_results += inline_functions(ir_object);
 
         let mut simplifier = Simplifier::new();
         simplifier.simplify_object(ir_object);
@@ -287,17 +282,8 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
 
     for subobject in &mut object.subobjects {
         let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);
-        inline_results.inlined_call_sites += sub_inline.inlined_call_sites;
-        inline_results
-            .removed_functions
-            .extend(sub_inline.removed_functions);
-        inline_results.decisions.extend(sub_inline.decisions);
-        mem_opt_results.loads_eliminated += sub_mem_opt.loads_eliminated;
-        mem_opt_results.stores_eliminated += sub_mem_opt.stores_eliminated;
-        mem_opt_results.values_tracked += sub_mem_opt.values_tracked;
-        mem_opt_results.keccak_pairs_fused += sub_mem_opt.keccak_pairs_fused;
-        mem_opt_results.keccak_singles_fused += sub_mem_opt.keccak_singles_fused;
-        mem_opt_results.fmp_loads_eliminated += sub_mem_opt.fmp_loads_eliminated;
+        inline_results += sub_inline;
+        mem_opt_results += sub_mem_opt;
     }
 
     (inline_results, mem_opt_results)

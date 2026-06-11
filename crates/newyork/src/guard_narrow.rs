@@ -27,6 +27,13 @@ pub struct GuardNarrowStats {
     pub uses_replaced: usize,
 }
 
+impl std::ops::AddAssign for GuardNarrowStats {
+    fn add_assign(&mut self, rhs: Self) {
+        self.guards_narrowed += rhs.guards_narrowed;
+        self.uses_replaced += rhs.uses_replaced;
+    }
+}
+
 /// Runs guard narrowing on an entire object tree (including subobjects).
 pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     let mut next_id = object.find_max_value_id() + 1;
@@ -65,9 +72,7 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     narrow_allocator_param_types(object, &noreturn);
 
     for subobject in &mut object.subobjects {
-        let subobject_statistics = narrow_guards_in_object(subobject);
-        statistics.guards_narrowed += subobject_statistics.guards_narrowed;
-        statistics.uses_replaced += subobject_statistics.uses_replaced;
+        statistics += narrow_guards_in_object(subobject);
     }
 
     statistics
@@ -110,19 +115,7 @@ fn rewrite_allocator_p1_with_early_check(
 ) {
     let mut to_rewrite: Vec<u32> = Vec::new();
     for (function_id, function) in &object.functions {
-        if function.parameters.len() != 2 || !function.returns.is_empty() {
-            continue;
-        }
-        if !function
-            .parameters
-            .iter()
-            .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
-        {
-            continue;
-        }
-        let p0 = function.parameters[0].0;
-        let p1 = function.parameters[1].0;
-        if has_allocator_shape(&function.body, p0, p1) {
+        if is_allocator_function(function) {
             to_rewrite.push(function_id.0);
         }
     }
@@ -186,27 +179,16 @@ fn rewrite_allocator_p1_with_early_check(
     }
 }
 
+/// Narrows the size parameter (index 0) of allocator-shaped functions from i256
+/// to i64. The function's own overflow guard already traps any value wider than
+/// `UINT64_MAX` before the parameter's first non-validation use, so the narrower
+/// signature is sound. See [`is_allocator_function`].
 fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
     for (function_id, function) in &object.functions {
-        if function.parameters.is_empty() {
-            continue;
-        }
-
-        if function.parameters.len() == 2
-            && function.returns.is_empty()
-            && function
-                .parameters
-                .iter()
-                .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
-        {
-            let p0 = function.parameters[0].0;
-            let p1 = function.parameters[1].0;
-            if has_allocator_shape(&function.body, p0, p1) {
-                narrow_params.insert(function_id.0, vec![0]);
-                continue;
-            }
+        if is_allocator_function(function) {
+            narrow_params.insert(function_id.0, vec![0]);
         }
     }
 
@@ -221,20 +203,31 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
     }
 }
 
+/// Returns whether `function` has the allocator shape that guard narrowing
+/// specializes: a two-parameter `(i256, i256) -> ()` function whose body matches
+/// [`has_allocator_shape`]. Both [`rewrite_allocator_p1_with_early_check`] and
+/// [`narrow_allocator_param_types`] key off this.
+fn is_allocator_function(function: &Function) -> bool {
+    function.parameters.len() == 2
+        && function.returns.is_empty()
+        && function
+            .parameters
+            .iter()
+            .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
+        && has_allocator_shape(&function.body, function.parameters[0].0)
+}
+
 /// Detects the canonical allocator pattern in a block:
 /// * `mstore(0x40, sum)` (FMP store)
 /// * `sum = add(p0, x)` somewhere upstream
 /// * `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { <terminates> }` overflow check
 /// * `x` is derived from `p1` (we don't constrain the alignment computation
 ///   precisely; the FMP store + add(p0, _) + overflow check is enough).
-fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
-    use num::Zero;
-
+fn has_allocator_shape(block: &Block, p0: ValueId) -> bool {
     let mut add_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut and_results: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
     let mut gt_const_checks: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
     let mut lt_against_addend: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    let mut or_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
     let mut fmp_store_value: Option<u32> = None;
 
@@ -270,9 +263,6 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
                         BinaryOperation::Lt => {
                             lt_against_addend.insert(bid, (lhs.id.0, rhs.id.0));
                         }
-                        BinaryOperation::Or => {
-                            or_results.insert(bid, (lhs.id.0, rhs.id.0));
-                        }
                         _ => {}
                     }
                 }
@@ -287,13 +277,13 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
         }
     }
 
-    let Some(fmp_val) = fmp_store_value else {
+    let Some(fmp_value) = fmp_store_value else {
         return false;
     };
 
-    let sum_id = match and_results.get(&fmp_val) {
+    let sum_id = match and_results.get(&fmp_value) {
         Some((orig, _mask)) => *orig,
-        None => fmp_val,
+        None => fmp_value,
     };
 
     let Some(&(add_lhs, add_rhs)) = add_results.get(&sum_id) else {
@@ -305,39 +295,12 @@ fn has_allocator_shape(block: &Block, p0: ValueId, _p1: ValueId) -> bool {
     }
 
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
-    let mut visit: Vec<u32> = Vec::new();
-    let mut have_gt_sum_max = false;
-    let mut have_lt_sum_p0 = false;
-
-    for (or_id, (l, r)) in &or_results {
-        let _ = or_id;
-        visit.push(*l);
-        visit.push(*r);
-    }
-    for id in &visit {
-        if let Some((value, c)) = gt_const_checks.get(id) {
-            if *value == sum_id && *c == uint64_max {
-                have_gt_sum_max = true;
-            }
-        }
-        if let Some((sum, addend)) = lt_against_addend.get(id) {
-            if *sum == sum_id && *addend == p0.0 {
-                have_lt_sum_p0 = true;
-            }
-        }
-    }
-    for (id, (value, c)) in &gt_const_checks {
-        let _ = id;
-        if *value == sum_id && *c == uint64_max {
-            have_gt_sum_max = true;
-        }
-    }
-    for (id, (sum, addend)) in &lt_against_addend {
-        let _ = id;
-        if *sum == sum_id && *addend == p0.0 {
-            have_lt_sum_p0 = true;
-        }
-    }
+    let have_gt_sum_max = gt_const_checks
+        .values()
+        .any(|(value, c)| *value == sum_id && *c == uint64_max);
+    let have_lt_sum_p0 = lt_against_addend
+        .values()
+        .any(|(sum, addend)| *sum == sum_id && *addend == p0.0);
 
     have_gt_sum_max && have_lt_sum_p0
 }

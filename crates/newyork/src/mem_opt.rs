@@ -77,6 +77,17 @@ pub struct MemOptResults {
     pub fmp_loads_eliminated: usize,
 }
 
+impl std::ops::AddAssign for MemOptResults {
+    fn add_assign(&mut self, rhs: Self) {
+        self.loads_eliminated += rhs.loads_eliminated;
+        self.stores_eliminated += rhs.stores_eliminated;
+        self.values_tracked += rhs.values_tracked;
+        self.keccak_pairs_fused += rhs.keccak_pairs_fused;
+        self.keccak_singles_fused += rhs.keccak_singles_fused;
+        self.fmp_loads_eliminated += rhs.fmp_loads_eliminated;
+    }
+}
+
 /// Memory optimization pass.
 pub struct MemoryOptimizer {
     /// Tracks the most recently stored value at each static memory offset.

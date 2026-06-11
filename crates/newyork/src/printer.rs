@@ -9,13 +9,13 @@
 //! ```text
 //! object "Test" {
 //!     code {
-//!         let v0 := 0x00
+//!         let v0 := 0x0
 //!         let v1 := calldataload(v0)
-//!         mstore(v0, v1)
+//!         mstore(v0, v1) /* scratch */
 //!     }
 //!
-//!     function add_one(v2: i256) -> (v3: i256) {
-//!         let v4 := 0x01
+//!     function add_one(v2: i256) -> (v3: i256) /* calls: 1, size: 2 */ {
+//!         let v4 := 0x1
 //!         let v3 := add(v2, v4)
 //!     }
 //! }
@@ -23,7 +23,7 @@
 //!
 //! When type-inference results are attached via [`Printer::set_type_info`],
 //! value ids whose inferred width is narrower than the i256 default are
-//! annotated with that width, e.g. `let v4: i64 := 0x01`. Without inference,
+//! annotated with that width, e.g. `let v4: i64 := 0x1`. Without inference,
 //! bindings carry no annotation because they store no type of their own.
 
 use crate::ir::{
@@ -422,7 +422,7 @@ impl<'a> Printer<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value_id(*id);
+                        self.write_binding_id(*id);
                     }
                     self.output.push_str(" := ");
                 }
@@ -480,7 +480,7 @@ impl<'a> Printer<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value_id(*id);
+                        self.write_binding_id(*id);
                     }
                     self.output.push_str(" := ");
                 }
@@ -537,7 +537,7 @@ impl<'a> Printer<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value_id(*id);
+                        self.write_binding_id(*id);
                     }
                     self.output.push_str(" := ");
                 }
@@ -550,7 +550,7 @@ impl<'a> Printer<'a> {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.write_value_id(*variable);
+                    self.write_binding_id(*variable);
                     self.output.push_str(" := ");
                     self.write_value(init);
                 }
@@ -585,7 +585,7 @@ impl<'a> Printer<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value_id(*id);
+                        self.write_binding_id(*id);
                     }
                     self.output.push(')');
                 }

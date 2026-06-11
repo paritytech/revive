@@ -217,9 +217,13 @@ fn build_host(
                 "-DCOMPILER_RT_BUILD_XRAY='Off'",
                 "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
                 "-DCOMPILER_RT_BUILD_PROFILE='On'",
+                "-DCOMPILER_RT_BUILD_CTX_PROFILE='Off'",
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='x86_64'",
+                // Skip the link-based target probe; libc++ isn't built yet so
+                // the probe fails and silently disables `libclang_rt.profile.a`.
+                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
                 "-DLIBCLANG_BUILD_STATIC='On'",
                 "-DBUILD_SHARED_LIBS='Off'",
             ])

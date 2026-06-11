@@ -85,26 +85,44 @@ pub const RESOLC_USE_NEWYORK_ENV: &str = "RESOLC_USE_NEWYORK";
 /// point in this module takes a `use_newyork: bool` that callers compute via
 /// this helper.
 pub fn resolve_use_newyork(cli_flag: bool) -> bool {
-    cli_flag
-        || std::env::var(RESOLC_USE_NEWYORK_ENV)
-            .map(|value| value == "1")
-            .unwrap_or(false)
+    cli_flag || is_env_enabled(RESOLC_USE_NEWYORK_ENV)
 }
 
-/// Environment variable: when set, dumps compiled blobs and metadata for newyork
+/// Returns whether the toggle environment variable `name` is enabled.
+///
+/// A toggle is enabled only when set to exactly `"1"` (not merely present). Every
+/// `RESOLC_*`/`NEWYORK_*` toggle ([`RESOLC_USE_NEWYORK_ENV`] and the debug/dump
+/// vars below) is resolved through this so they all behave the same way — a user
+/// disables one by setting it to e.g. `0` rather than unsetting the variable.
+pub fn is_env_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| value == "1")
+        .unwrap_or(false)
+}
+
+/// File name (within the debug output directory) for the heap-optimization log
+/// appended to by [`RESOLC_DEBUG_HEAP_ENV`].
+pub const HEAP_DEBUG_LOG_FILE: &str = "resolc_heap_debug.log";
+
+/// File name (within the debug output directory) for the memory-optimization log
+/// appended to by [`RESOLC_DEBUG_MEM_ENV`].
+pub const MEM_DEBUG_LOG_FILE: &str = "resolc_mem_debug.log";
+
+/// Environment variable: when set to `"1"`, dumps compiled blobs and metadata for newyork
 /// investigations (test harness only).
 pub const RESOLC_DEBUG_BLOB_ENV: &str = "RESOLC_DEBUG_BLOB";
 
-/// Environment variable: when set, prints the translated newyork IR for every compiled
-/// object to stderr and `/tmp/newyork_ir_<object>.txt`.
+/// Environment variable: when set to `"1"`, writes the post-narrowing newyork IR (annotated
+/// with inferred type widths) for every compiled object to `<object>.newyork.txt` in the
+/// debug output directory.
 pub const RESOLC_DEBUG_IR_ENV: &str = "RESOLC_DEBUG_IR";
 
-/// Environment variable: when set, appends the heap-optimization analysis result for
-/// every compiled object to `/tmp/resolc_heap_debug.log`.
+/// Environment variable: when set to `"1"`, appends the heap-optimization analysis result for
+/// every compiled object to [`HEAP_DEBUG_LOG_FILE`] in the debug output directory.
 pub const RESOLC_DEBUG_HEAP_ENV: &str = "RESOLC_DEBUG_HEAP";
 
-/// Environment variable: when set, appends the memory-optimization statistics for
-/// every compiled object to a `resolc_mem_debug.log` file in the debug output directory.
+/// Environment variable: when set to `"1"`, appends the memory-optimization statistics for
+/// every compiled object to [`MEM_DEBUG_LOG_FILE`] in the debug output directory.
 pub const RESOLC_DEBUG_MEM_ENV: &str = "RESOLC_DEBUG_MEM";
 
 /// Runs the Yul mode.

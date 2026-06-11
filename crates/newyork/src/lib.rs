@@ -31,7 +31,7 @@
 //! - [`inline`] - Function inlining with custom heuristics for PolkaVM
 #![deny(clippy::all)]
 
-/// Environment variable: when set, dumps the newyork IR for every translated object to
+/// Environment variable: when set to `"1"`, dumps the newyork IR for every translated object to
 /// `newyork_ir_<object>.txt` inside the caller-provided debug output directory
 /// (`--debug-output-dir`), after the intra-object optimization passes have run. When the variable
 /// is set but no debug output directory was configured, the dump is skipped.
@@ -119,7 +119,10 @@ pub fn translate_yul_object(
     // When `NEWYORK_DUMP_IR` is set, dump this post-`optimize_object_tree` IR snapshot into the
     // caller-provided debug output directory. If the variable is set but no debug output directory
     // was configured, skip the dump rather than writing to a hardcoded path.
-    if std::env::var(NEWYORK_DUMP_IR_ENV).is_ok() {
+    if std::env::var(NEWYORK_DUMP_IR_ENV)
+        .map(|value| value == "1")
+        .unwrap_or(false)
+    {
         if let Some(directory) = debug_output_directory {
             use std::io::Write;
             let mut dump_path = directory.to_owned();

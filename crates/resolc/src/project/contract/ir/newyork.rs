@@ -67,14 +67,6 @@ const KECCAK_SINGLE_THRESHOLD: usize = 8;
 /// sites bloats the binary beyond the call-overhead savings on PolkaVM.
 const SBRK_NOINLINE_THRESHOLD: usize = 30;
 
-/// File name of the heap-analysis log appended inside the debug output directory
-/// when [`crate::RESOLC_DEBUG_HEAP_ENV`] is set.
-const HEAP_DEBUG_LOG_FILE: &str = "resolc_heap_debug.log";
-
-/// File name of the memory-optimization statistics log appended inside the debug output
-/// directory when [`crate::RESOLC_DEBUG_MEM_ENV`] is set.
-const MEM_DEBUG_LOG_FILE: &str = "resolc_mem_debug.log";
-
 impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     fn declare(&mut self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         self.yul_object.declare(context)?;
@@ -101,7 +93,7 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
         // Dump the final, fully optimized IR annotated with the inferred type
         // widths so the narrow pass's effect is visible in the dump.
-        if std::env::var(crate::RESOLC_DEBUG_IR_ENV).is_ok() {
+        if crate::is_env_enabled(crate::RESOLC_DEBUG_IR_ENV) {
             if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
                 use std::io::Write;
                 let ir_text = revive_newyork::print_object_with_types(&ir_object, &type_info);
@@ -125,11 +117,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let has_keccak_single = keccak_single_count >= KECCAK_SINGLE_THRESHOLD;
         let use_native_heap = heap_opt.all_native();
 
-        if std::env::var(crate::RESOLC_DEBUG_HEAP_ENV).is_ok() {
+        if crate::is_env_enabled(crate::RESOLC_DEBUG_HEAP_ENV) {
             if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
                 use std::io::Write;
                 let mut log_path = output_directory.to_owned();
-                log_path.push(HEAP_DEBUG_LOG_FILE);
+                log_path.push(crate::HEAP_DEBUG_LOG_FILE);
                 if let Ok(mut file) = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
@@ -153,11 +145,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             }
         }
 
-        if std::env::var(crate::RESOLC_DEBUG_MEM_ENV).is_ok() {
+        if crate::is_env_enabled(crate::RESOLC_DEBUG_MEM_ENV) {
             if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
                 use std::io::Write;
                 let mut log_path = output_directory.to_owned();
-                log_path.push(MEM_DEBUG_LOG_FILE);
+                log_path.push(crate::MEM_DEBUG_LOG_FILE);
                 if let Ok(mut file) = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)

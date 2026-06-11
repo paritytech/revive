@@ -117,7 +117,7 @@ pub fn build_solidity_with_options(
         return Ok(output);
     }
     let use_newyork = crate::resolve_use_newyork(false);
-    let debug_config = if std::env::var(crate::RESOLC_DEBUG_BLOB_ENV).is_ok() {
+    let debug_config = if crate::is_env_enabled(crate::RESOLC_DEBUG_BLOB_ENV) {
         let suffix = if use_newyork { "newyork" } else { "yul" };
         DebugConfig::new(
             Some(std::path::PathBuf::from(format!(
@@ -421,7 +421,7 @@ pub fn compile_blob_with_options(
     let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
     assert_eq!(&blob[..3], b"PVM");
 
-    if std::env::var(crate::RESOLC_DEBUG_BLOB_ENV).is_ok() {
+    if crate::is_env_enabled(crate::RESOLC_DEBUG_BLOB_ENV) {
         eprintln!(
             "DEBUG [{}]: blob size={}, first_bytes={:?}, use_newyork={}",
             contract_name,

@@ -35,6 +35,11 @@ use crate::type_inference::TypeInference;
 use std::collections::BTreeMap;
 use std::fmt::{self, Write};
 
+/// Bit position of the 4-byte selector within a `CustomErrorRevert`'s `selector` word.
+/// The selector occupies the most-significant 4 bytes (as it sits in the scratch word),
+/// so shifting right by this recovers the bare selector for display.
+const CUSTOM_ERROR_SELECTOR_SHIFT_BITS: usize = 224;
+
 /// Configuration for the IR printer.
 #[derive(Clone, Debug)]
 pub struct PrinterConfig {
@@ -611,31 +616,24 @@ impl<'a> Printer<'a> {
                 self.indent -= 1;
             }
 
-            Statement::Break { .. } => {
+            Statement::Break { values } => {
                 self.write_indent();
                 self.output.push_str("break");
+                self.write_carried_values(values);
                 self.write_newline();
             }
 
-            Statement::Continue { .. } => {
+            Statement::Continue { values } => {
                 self.write_indent();
                 self.output.push_str("continue");
+                self.write_carried_values(values);
                 self.write_newline();
             }
 
             Statement::Leave { return_values } => {
                 self.write_indent();
                 self.output.push_str("leave");
-                if !return_values.is_empty() {
-                    self.output.push_str(" [");
-                    for (i, v) in return_values.iter().enumerate() {
-                        if i > 0 {
-                            self.output.push_str(", ");
-                        }
-                        self.write_value(v);
-                    }
-                    self.output.push(']');
-                }
+                self.write_carried_values(return_values);
                 self.write_newline();
             }
 
@@ -691,10 +689,11 @@ impl<'a> Printer<'a> {
                 arguments,
             } => {
                 self.write_indent();
+                let selector_bytes = selector >> CUSTOM_ERROR_SELECTOR_SHIFT_BITS;
                 let _ = write!(
                     self.output,
                     "custom_error_revert(0x{}, [",
-                    selector.to_str_radix(16)
+                    selector_bytes.to_str_radix(16)
                 );
                 for (i, argument) in arguments.iter().enumerate() {
                     if i > 0 {
@@ -1155,6 +1154,22 @@ impl<'a> Printer<'a> {
         }
     }
 
+    /// Writes a bracketed `[v0, v1, ...]` list of the values carried by a
+    /// control-flow exit (`leave`/`break`/`continue`), or nothing when empty.
+    fn write_carried_values(&mut self, values: &[Value]) {
+        if values.is_empty() {
+            return;
+        }
+        self.output.push_str(" [");
+        for (i, value) in values.iter().enumerate() {
+            if i > 0 {
+                self.output.push_str(", ");
+            }
+            self.write_value(value);
+        }
+        self.output.push(']');
+    }
+
     fn write_value(&mut self, value: &Value) {
         self.write_value_id(value.id);
         if !self.config.show_types {
@@ -1438,7 +1453,7 @@ mod tests {
         // Arguments must go through write_value so they pick up type-width
         // annotations like every other value, rather than being hand-formatted.
         let statement = Statement::CustomErrorRevert {
-            selector: BigUint::from(0x12345678u64),
+            selector: BigUint::from(0x12345678u64) << CUSTOM_ERROR_SELECTOR_SHIFT_BITS,
             arguments: vec![
                 Value::int(ValueId(7)),
                 Value::new(ValueId(8), Type::Int(BitWidth::I64)),

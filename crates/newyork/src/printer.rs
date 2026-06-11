@@ -74,7 +74,7 @@ pub struct Printer<'a> {
     /// Function name lookup for printing calls.
     function_names: BTreeMap<FunctionId, &'a str>,
     /// Optional type-inference results. When present, value ids are annotated
-    /// with their post-narrow effective width instead of the statically
+    /// with their post-narrow inferred width instead of the statically
     /// assigned i256 default stored in the IR.
     inferred_types: Option<&'a TypeInference>,
 }
@@ -103,7 +103,7 @@ impl<'a> Printer<'a> {
     }
 
     /// Attaches type-inference results so value annotations reflect the
-    /// post-narrow effective widths computed by the type-inference pass rather
+    /// post-narrow inferred widths computed by the type-inference pass rather
     /// than the statically assigned i256 defaults stored in the IR.
     pub fn set_type_info(&mut self, type_info: &'a TypeInference) {
         self.inferred_types = Some(type_info);
@@ -1177,10 +1177,10 @@ impl<'a> Printer<'a> {
         }
         // Pointers and void are never narrowed by type inference, so keep the
         // statically assigned type. For integers, prefer the post-narrow
-        // effective width when inference is attached; otherwise fall back to the
+        // inferred width when inference is attached; otherwise fall back to the
         // static type. The default i256 width is suppressed to reduce noise.
         let display_type = match (self.inferred_types, value.value_type) {
-            (Some(inference), Type::Int(_)) => Type::Int(inference.effective_width(value.id)),
+            (Some(inference), Type::Int(_)) => Type::Int(inference.inferred_width(value.id)),
             _ => value.value_type,
         };
         if display_type != Type::Int(BitWidth::I256) {
@@ -1189,16 +1189,16 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// Writes a binding value id, annotating it with the inferred effective
-    /// width when type-inference results are attached. Bindings carry no static
-    /// type of their own, so without inference no annotation is printed.
+    /// Writes a binding value id, annotating it with the inferred width when
+    /// type-inference results are attached. Bindings carry no static type of
+    /// their own, so without inference no annotation is printed.
     fn write_binding_id(&mut self, id: ValueId) {
         self.write_value_id(id);
         if !self.config.show_types {
             return;
         }
         if let Some(inference) = self.inferred_types {
-            let width = inference.effective_width(id);
+            let width = inference.inferred_width(id);
             if width != BitWidth::I256 {
                 self.output.push_str(": ");
                 self.write_type(Type::Int(width));
@@ -1282,7 +1282,7 @@ pub fn print_object(object: &Object) -> String {
 
 /// Convenience function to print an object annotated with inferred type widths.
 ///
-/// Value ids are annotated with the post-narrow effective widths from
+/// Value ids are annotated with the post-narrow inferred widths from
 /// `type_info`; see [`Printer::set_type_info`].
 pub fn print_object_with_types<'a>(object: &'a Object, type_info: &'a TypeInference) -> String {
     let mut printer = Printer::new();
@@ -1360,10 +1360,10 @@ mod tests {
         assert!(!plain.contains("v0: i"), "got: {plain}");
 
         // With inference attached, the i8 literal binding is annotated with its
-        // post-narrow effective width.
+        // post-narrow inferred width.
         let mut inference = TypeInference::new();
         inference.infer_object(&object);
-        assert_eq!(inference.effective_width(ValueId(0)), BitWidth::I8);
+        assert_eq!(inference.inferred_width(ValueId(0)), BitWidth::I8);
         let typed = print_object_with_types(&object, &inference);
         assert!(typed.contains("let v0: i8 := 0xff"), "got: {typed}");
     }

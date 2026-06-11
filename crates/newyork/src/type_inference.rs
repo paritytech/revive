@@ -91,15 +91,6 @@ impl TypeConstraint {
             false
         }
     }
-
-    /// Returns the effective width to use for this value.
-    ///
-    /// Uses the minimum of forward-propagated min_width and backward-propagated
-    /// max_width, ensuring the value is at least as wide as what the definition
-    /// requires but no wider than what use sites need.
-    pub fn effective_width(&self) -> BitWidth {
-        self.min_width.min(self.max_width)
-    }
 }
 
 /// Use context - how a value is used affects its max_width constraint.
@@ -196,12 +187,12 @@ impl TypeInference {
         self.constraints.get(&id.0).copied().unwrap_or_default()
     }
 
-    /// Gets the effective width for a value (considering both min and max).
-    pub fn effective_width(&self, id: ValueId) -> BitWidth {
-        let constraint = self.get(id);
-        constraint
-            .min_width
-            .max(constraint.max_width.min(constraint.min_width))
+    /// Returns the inferred width for a value: its forward-propagated `min_width`.
+    ///
+    /// This is the single source of truth shared by codegen ([`crate::LlvmCodegen`])
+    /// and the IR printer, so dumps reflect exactly the width used to emit code.
+    pub fn inferred_width(&self, id: ValueId) -> BitWidth {
+        self.get(id).min_width
     }
 
     /// Computes the widest width needed by any use site of this value.

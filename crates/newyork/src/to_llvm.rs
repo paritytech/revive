@@ -617,11 +617,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Gets the inferred bit-width for a value from type inference.
     ///
     /// Uses the forward-propagated min_width (what the definition produces).
-    /// Backward demand narrowing (effective_width) is not used here because
+    /// Backward demand narrowing (max_width) is not used here because
     /// truncating a wide value at the definition site can break overflow
     /// detection in safe_truncate_int_to_xlen and similar safety checks.
     fn inferred_width(&self, id: ValueId) -> BitWidth {
-        self.type_info.get(id).min_width
+        self.type_info.inferred_width(id)
     }
 
     /// Ensures a value is extended to 256-bit word type.

@@ -67,8 +67,6 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
         }
     }
 
-    rewrite_allocator_p1_with_early_check(object, &mut next_id, &noreturn);
-
     narrow_allocator_param_types(object, &noreturn);
 
     for subobject in &mut object.subobjects {
@@ -78,111 +76,16 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     statistics
 }
 
-/// Narrows function parameters that are provably bounded by UINT64_MAX
-/// at every reachable path in the function body. Two patterns matter
-/// for OZ contracts:
+/// Narrows the free-memory-pointer parameter (index 0) of allocator-shaped functions from
+/// i256 to i64. In solc's `finalize_allocation(memPtr, size)` this is `memPtr`: it is bounded
+/// by the heap size, and the function's own `or(gt(sum, UINT64_MAX), lt(sum, p0))` guard also
+/// reverts (matching EVM) for any pointer wide enough to overflow the new free pointer, so the
+/// call-site truncation is sound.
 ///
-/// 1. `(i256, i256) -> ()` with the `finalize_allocation` shape — an
-///    add overflow check followed by `mstore(0x40, sum)`.
-/// 2. Any param whose first reachable use path is `if gt(p, UINT64_MAX)
-///    { <terminates> }` (Solidity's `array_allocation_size_bytes`-shape
-///    validator at function entry).
-///
-/// In both cases, plain truncation at the call site is sound because the
-/// function's own guard would have trapped a wide value before the
-/// param's first non-validation use.
-/// Inserts an explicit `if gt(p1, UINT64_MAX) { panic_0x41 }` early
-/// guard plus a downstream `and(p1, UINT64_MAX)` rewrite at the top of
-/// each `finalize_allocation`-shaped function. Subsequent uses of `p1`
-/// in the body are redirected to the AND-masked value.
-///
-/// Soundness: the inserted gt/panic pair is *redundant* with the body's
-/// existing `or(gt(sum, UINT64_MAX), lt(sum, p0)) { panic_0x41 }` check
-/// — any caller that would have failed the early check would also have
-/// failed the existing late check, so semantics are preserved. The
-/// purpose is to expose the `p1 <= UINT64_MAX` invariant at the *top*
-/// of the function so type-inference / LLVM IPSCCP can fold the rest of
-/// the body's i256 arithmetic to i64.
-///
-/// Why this avoids the iter34 regression: the function signature is
-/// untouched, so caller-side IR sees the exact same `(i64, i256)`
-/// declaration as iter33. Only the *body* changes, and only by adding
-/// an early check that any compliant caller already satisfies.
-fn rewrite_allocator_p1_with_early_check(
-    object: &mut Object,
-    next_id: &mut u32,
-    _noreturn: &std::collections::BTreeSet<u32>,
-) {
-    let mut to_rewrite: Vec<u32> = Vec::new();
-    for (function_id, function) in &object.functions {
-        if is_allocator_function(function) {
-            to_rewrite.push(function_id.0);
-        }
-    }
-
-    let uint64_max: BigUint = (BigUint::from(1u32) << 64) - BigUint::from(1u32);
-    for function_id in to_rewrite {
-        let Some(function) = object.functions.get_mut(&FunctionId(function_id)) else {
-            continue;
-        };
-        let p1 = function.parameters[1].0;
-        let max_const = ValueId(*next_id);
-        *next_id += 1;
-        let gt_check = ValueId(*next_id);
-        *next_id += 1;
-        let p1_narrow = ValueId(*next_id);
-        *next_id += 1;
-
-        let original_stmts = std::mem::take(&mut function.body.statements);
-
-        let mut new_stmts: Vec<Statement> = Vec::with_capacity(original_stmts.len() + 4);
-        new_stmts.push(Statement::Let {
-            bindings: vec![max_const],
-            value: Expression::Literal {
-                value: uint64_max.clone(),
-                value_type: Type::Int(BitWidth::I256),
-            },
-        });
-        new_stmts.push(Statement::Let {
-            bindings: vec![gt_check],
-            value: Expression::Binary {
-                operation: BinaryOperation::Gt,
-                lhs: Value::int(p1),
-                rhs: Value::int(max_const),
-            },
-        });
-        new_stmts.push(Statement::If {
-            condition: Value::new(gt_check, Type::Int(BitWidth::I1)),
-            inputs: Vec::new(),
-            then_region: Region {
-                statements: vec![Statement::PanicRevert { code: 0x41 }],
-                yields: Vec::new(),
-            },
-            else_region: None,
-            outputs: Vec::new(),
-        });
-        new_stmts.push(Statement::Let {
-            bindings: vec![p1_narrow],
-            value: Expression::Binary {
-                operation: BinaryOperation::And,
-                lhs: Value::int(p1),
-                rhs: Value::int(max_const),
-            },
-        });
-
-        let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
-        replacements.insert(p1.0, p1_narrow);
-        for statement in original_stmts {
-            new_stmts.push(replace_value_ids_in_statement(statement, &replacements));
-        }
-        function.body.statements = new_stmts;
-    }
-}
-
-/// Narrows the size parameter (index 0) of allocator-shaped functions from i256
-/// to i64. The function's own overflow guard already traps any value wider than
-/// `UINT64_MAX` before the parameter's first non-validation use, so the narrower
-/// signature is sound. See [`is_allocator_function`].
+/// The size parameter (index 1) is deliberately left i256. Narrowing it would require asserting
+/// `size <= UINT64_MAX`, which is unsound: for `size ∈ [2^256-31, 2^256-1]` the rounding
+/// `and(add(size, 31), not(31))` wraps to 0, so EVM leaves the free pointer unchanged and does
+/// not revert — but the assertion would trap. See [`is_allocator_function`].
 fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
@@ -205,8 +108,7 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
 
 /// Returns whether `function` has the allocator shape that guard narrowing
 /// specializes: a two-parameter `(i256, i256) -> ()` function whose body matches
-/// [`has_allocator_shape`]. Both [`rewrite_allocator_p1_with_early_check`] and
-/// [`narrow_allocator_param_types`] key off this.
+/// [`has_allocator_shape`]. [`narrow_allocator_param_types`] keys off this.
 fn is_allocator_function(function: &Function) -> bool {
     function.parameters.len() == 2
         && function.returns.is_empty()
@@ -992,4 +894,126 @@ fn replace_value_ids_in_statement(
         }
     });
     statement
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// A `finalize_allocation`-shaped function must NOT get an injected
+    /// `if gt(p1, UINT64_MAX) { panic 0x41 }` early guard: that trap fires for the
+    /// alignment-wrap window `p1 ∈ [2^256-31, 2^256-1]`, where EVM does not revert
+    /// (`add(p1,31)` wraps so the rounded size is 0 and the free pointer is unchanged).
+    /// The size parameter therefore stays `i256`; only the heap-bounded `p0` is narrowed.
+    #[test]
+    fn allocator_size_param_gets_no_spurious_overflow_trap() {
+        let p0 = ValueId(0);
+        let p1 = ValueId(1);
+        let c40 = ValueId(2);
+        let umax = ValueId(3);
+        let sum = ValueId(4);
+        let gt = ValueId(5);
+        let lt = ValueId(6);
+        let u64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
+
+        let mut function = Function::new(FunctionId(0), "finalize_allocation".to_string());
+        function.parameters = vec![
+            (p0, Type::Int(BitWidth::I256)),
+            (p1, Type::Int(BitWidth::I256)),
+        ];
+        function.body = Block {
+            statements: vec![
+                Statement::Let {
+                    bindings: vec![c40],
+                    value: Expression::Literal {
+                        value: BigUint::from(0x40u32),
+                        value_type: Type::Int(BitWidth::I256),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![umax],
+                    value: Expression::Literal {
+                        value: u64_max,
+                        value_type: Type::Int(BitWidth::I256),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![sum],
+                    value: Expression::Binary {
+                        operation: BinaryOperation::Add,
+                        lhs: Value::int(p0),
+                        rhs: Value::int(p1),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![gt],
+                    value: Expression::Binary {
+                        operation: BinaryOperation::Gt,
+                        lhs: Value::int(sum),
+                        rhs: Value::int(umax),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![lt],
+                    value: Expression::Binary {
+                        operation: BinaryOperation::Lt,
+                        lhs: Value::int(sum),
+                        rhs: Value::int(p0),
+                    },
+                },
+                Statement::MStore {
+                    offset: Value::int(c40),
+                    value: Value::int(sum),
+                    region: MemoryRegion::Unknown,
+                },
+            ],
+        };
+
+        let mut functions = BTreeMap::new();
+        functions.insert(FunctionId(0), function);
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements: vec![] },
+            functions,
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        narrow_guards_in_object(&mut object);
+
+        let function = &object.functions[&FunctionId(0)];
+        // The shape is still recognised: the heap-bounded pointer (p0) is narrowed to i64.
+        assert_eq!(function.parameters[0].1, Type::Int(BitWidth::I64));
+        // The size (p1) must stay i256 — narrowing it would be unsound in the wrap window.
+        assert_eq!(function.parameters[1].1, Type::Int(BitWidth::I256));
+        // No early guard / mask was prepended (would have added a literal, a gt, an
+        // if-panic and an and — four statements).
+        assert_eq!(
+            function.body.statements.len(),
+            6,
+            "no overflow trap / mask should be injected for the size parameter"
+        );
+        assert!(
+            !body_contains_panic(&function.body.statements),
+            "the size parameter must not gain a spurious overflow trap"
+        );
+    }
+
+    fn body_contains_panic(statements: &[Statement]) -> bool {
+        statements.iter().any(|statement| match statement {
+            Statement::PanicRevert { .. } => true,
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                body_contains_panic(&then_region.statements)
+                    || else_region
+                        .as_ref()
+                        .is_some_and(|region| body_contains_panic(&region.statements))
+            }
+            _ => false,
+        })
+    }
 }

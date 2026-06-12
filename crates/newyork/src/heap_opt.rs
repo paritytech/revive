@@ -1014,6 +1014,23 @@ pub struct HeapOptResults {
     fmp_slot_tainted: bool,
 }
 
+impl Object {
+    /// Runs heap analysis over this object and returns the native-mode results codegen consumes.
+    ///
+    /// Call this on the FINAL IR, after every pass that can mutate memory accesses has run — in
+    /// particular `run_late_inline_loop` (late inline, outlining, and fuzzy dedup's
+    /// `replace_literals_with_params`, which turns a literal memory offset into a function
+    /// parameter). A literal offset proven native-LE-safe against an earlier snapshot would then be
+    /// lowered byte-swapped (a variable offset can't be proven native-safe) while other still-literal
+    /// accesses to the same word lower native-LE, corrupting that word's byte order. Deriving the
+    /// results from the final IR keeps native-mode decisions consistent with what codegen emits.
+    pub fn analyze_heap(&self) -> HeapOptResults {
+        let mut analysis = HeapAnalysis::new();
+        analysis.analyze_object(self);
+        HeapOptResults::from_analysis(&analysis)
+    }
+}
+
 impl HeapOptResults {
     /// Creates results from a completed heap analysis.
     pub fn from_analysis(analysis: &HeapAnalysis) -> Self {
@@ -1219,5 +1236,92 @@ mod tests {
         let info = analysis.analyze_expression_offset(&expression).unwrap();
         assert_eq!(info.static_value, Some(64));
         assert_eq!(info.alignment, 5);
+    }
+
+    /// N5 regression: fuzzy dedup that parameterizes a literal memory offset
+    /// invalidates a heap analysis computed before it runs.
+    ///
+    /// Two functions identical except for a literal memory offset get merged by
+    /// `deduplicate_functions_fuzzy`, which replaces the differing offset literal
+    /// with a function parameter. Heap analysis on the *pre-dedup* IR sees only
+    /// literal offsets (`has_dynamic_accesses == false`) and would mark those
+    /// words native-LE; on the *post-dedup* IR the merged body stores through a
+    /// variable offset (`has_dynamic_accesses == true`), which disables native
+    /// mode. Lowering with the stale (pre-dedup) result would byte-swap the
+    /// parameterized store while literal accesses to the same word stay native-LE
+    /// — a byte-order miscompile. This is why `translate_yul_object` must compute
+    /// `HeapOptResults` after `run_late_inline_loop`, not before.
+    #[test]
+    fn fuzzy_dedup_offset_param_invalidates_prior_heap_analysis() {
+        use crate::ir::{Block, Function, FunctionId, Object, Type, ValueId};
+
+        fn store_at(offset: u64, offset_id: u32, value_id: u32) -> Vec<Statement> {
+            vec![
+                Statement::Let {
+                    bindings: vec![ValueId(offset_id)],
+                    value: Expression::Literal {
+                        value: BigUint::from(offset),
+                        value_type: Type::default(),
+                    },
+                },
+                Statement::MStore {
+                    offset: Value::int(ValueId(offset_id)),
+                    value: Value::int(ValueId(value_id)),
+                    region: MemoryRegion::from_address(&BigUint::from(offset)),
+                },
+            ]
+        }
+
+        fn make_function(id: u32, offset: u64, offset_id: u32, value_id: u32) -> Function {
+            Function {
+                id: FunctionId(id),
+                name: format!("store_{offset:#x}"),
+                parameters: vec![(ValueId(value_id), Type::default())],
+                returns: vec![],
+                return_values_initial: vec![],
+                return_values: vec![],
+                body: Block {
+                    statements: store_at(offset, offset_id, value_id),
+                },
+                call_count: 1,
+                // Above MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS so the narrow-params
+                // path considers the pair (the bodies are deliberately tiny).
+                size_estimate: 15,
+            }
+        }
+
+        let mut functions = std::collections::BTreeMap::new();
+        functions.insert(FunctionId(0), make_function(0, 0x80, 11, 10));
+        functions.insert(FunctionId(1), make_function(1, 0xa0, 21, 20));
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements: vec![] },
+            functions,
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+
+        let before = object.analyze_heap();
+        assert!(
+            !before.has_dynamic_accesses,
+            "pre-dedup: both offsets are literals, so no access is dynamic"
+        );
+
+        let removed = crate::simplify::deduplicate_functions_fuzzy(&mut object);
+        assert!(
+            removed >= 1,
+            "the two offset-only-differing functions must fuzzy-merge (offset parameterized)"
+        );
+
+        let after = object.analyze_heap();
+        assert!(
+            after.has_dynamic_accesses,
+            "post-dedup: the merged body stores through a variable offset parameter"
+        );
+        assert!(
+            !after.can_use_native(0x80),
+            "post-dedup native mode must be disabled for the now-variable offset word"
+        );
     }
 }

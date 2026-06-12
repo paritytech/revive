@@ -2613,6 +2613,28 @@ fn msize_read_ops() {
     run_differential(actions);
 }
 
+/// Regression (N23): a bare `msize()` for-loop condition is the one expression
+/// position the IR does not materialize into a preceding `let`, so the msize
+/// scan must inspect `For::condition` directly. Missing it makes native stores
+/// skip the heap-size watermark update, so `msize()` reads stale 0, the guarded
+/// body is skipped, and `ran` diverges from the EVM reference. See
+/// MsizeForCondition.yul.
+#[test]
+fn msize_in_for_condition() {
+    let mut actions = instantiate_yul("contracts/MsizeForCondition.yul", "MsizeForCondition");
+    for x in [U256::ZERO, U256::from(0xABu64), U256::MAX] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: x.to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

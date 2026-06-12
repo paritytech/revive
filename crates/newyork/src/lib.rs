@@ -136,10 +136,6 @@ pub fn translate_yul_object(
         }
     }
 
-    let mut heap_analysis = HeapAnalysis::new();
-    heap_analysis.analyze_object(&ir_object);
-    let heap_opt = HeapOptResults::from_analysis(&heap_analysis);
-
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
@@ -154,6 +150,8 @@ pub fn translate_yul_object(
     // by every subsequent optimization (mem_opt, compound_outlining, guard_narrow, full type
     // narrowing).
     let type_info = run_late_inline_loop(&mut ir_object, &mut inline_results, type_info);
+
+    let heap_opt = ir_object.analyze_heap();
 
     if let Err(errors) = validate::validate_object(&ir_object) {
         let details = errors

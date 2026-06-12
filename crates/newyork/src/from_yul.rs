@@ -387,9 +387,16 @@ impl YulTranslator {
         }
     }
 
-    /// Translates a function call. The `DataSize`, `DataOffset`, `LoadImmutable`, `SetImmutable`,
-    /// and `LinkerSymbol` builtins receive a string literal argument that cannot be evaluated as
-    /// an expression, so they are extracted before the generic argument-translation loop runs.
+    /// Translates a function call.
+    ///
+    /// Yul evaluates call arguments right-to-left. The generic argument loop therefore translates
+    /// them in reverse, emitting each argument's side-effecting statements in evaluation order,
+    /// then reverses the collected values back to call order for the callee. Builtins handled
+    /// specially below evaluate their arguments in the same order.
+    ///
+    /// The `DataSize`, `DataOffset`, `LoadImmutable`, `SetImmutable`, and `LinkerSymbol` builtins
+    /// receive a string literal argument that cannot be evaluated as an expression, so they are
+    /// extracted before the generic argument-translation loop runs.
     fn translate_function_call(
         &mut self,
         call: &FunctionCall,
@@ -422,6 +429,22 @@ impl YulTranslator {
                         Value::new(temporary_id, Type::Int(BitWidth::I256))
                     }
                 };
+
+                // The memory-offset argument (index 0) is not represented in the IR
+                // `SetImmutable` — immutables are keyed by name — but Yul still evaluates it for
+                // its side effects. Evaluate it after the value (per the argument order above)
+                // and discard the result.
+                let (offset_statements, offset_expression) =
+                    self.translate_expression(&call.arguments[0])?;
+                statements.extend(offset_statements);
+                if !matches!(offset_expression, Expression::Var(_)) {
+                    let offset_temporary_id = self.ssa.fresh_id();
+                    statements.push(Statement::Let {
+                        bindings: vec![offset_temporary_id],
+                        value: offset_expression,
+                    });
+                }
+
                 statements.push(Statement::SetImmutable { key, value });
                 return Ok((
                     statements,
@@ -1639,6 +1662,40 @@ object "Test" {
             called.len(),
             2,
             "the two `f()` calls must resolve to the two distinct functions"
+        );
+    }
+
+    /// `setimmutable(offset, "name", value)` must evaluate its offset argument for side effects,
+    /// even though the IR `SetImmutable` is keyed by name and ignores the offset value.
+    #[test]
+    fn setimmutable_offset_side_effects_preserved() {
+        let source = r#"
+object "C" {
+    code {
+        function f() -> r { sstore(5, 1) r := 0 }
+        setimmutable(f(), "x", 1)
+    }
+    object "C_deployed" {
+        code {
+            return(0, 0)
+        }
+    }
+}
+"#;
+        let mut lexer = Lexer::new(source.to_owned());
+        let yul_object = YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+        let object = YulTranslator::new()
+            .translate_object(&yul_object)
+            .expect("translation should succeed");
+
+        // `f` is only ever invoked as the offset argument of `setimmutable`. If that argument is
+        // dropped, the deploy code contains no call to it (and its `sstore` is lost).
+        let mut called: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        collect_called_function_ids(&object.code.statements, &mut called);
+        assert!(
+            !called.is_empty(),
+            "setimmutable's offset argument `f()` must be evaluated for its side effects"
         );
     }
 

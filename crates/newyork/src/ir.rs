@@ -1738,12 +1738,23 @@ fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usiz
 
 fn has_msize_in_block(block: &Block) -> bool {
     let mut found = false;
-    for_each_statement(&block.statements, &mut |statement| {
-        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+    for_each_statement(&block.statements, &mut |statement| match statement {
+        Statement::Let { value, .. } | Statement::Expression(value) => {
             if matches!(value, Expression::MSize) {
                 found = true;
             }
         }
+        // `For::condition` is the only expression position the IR does not
+        // materialize into a preceding `Let`, so `for_each_statement` never
+        // surfaces it as a `value` above. A bare `for {} msize() {}` keeps
+        // `msize` here; missing it makes native stores skip the heap-size
+        // watermark update and `msize` then reads stale.
+        Statement::For { condition, .. } => {
+            if matches!(condition, Expression::MSize) {
+                found = true;
+            }
+        }
+        _ => {}
     });
     found
 }

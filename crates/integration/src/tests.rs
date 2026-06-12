@@ -2758,6 +2758,27 @@ fn panic_outline_yield_rescue() {
     run_differential(actions);
 }
 
+/// Regression (N14): the panic-pattern outliner must honor last-write-wins. The selector store is
+/// overwritten by a later `mstore(0, 0xdeadbeef)`, so the EVM revert data starts with 0xdeadbeef;
+/// collapsing to a canonical Panic(0x11) (selector 0x4e487b71) would emit the wrong payload. See
+/// PanicOverwriteSelector.yul.
+#[test]
+fn panic_outline_overwritten_selector() {
+    let mut actions = instantiate_yul(
+        "contracts/PanicOverwriteSelector.yul",
+        "PanicOverwriteSelector",
+    );
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

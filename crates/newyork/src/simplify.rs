@@ -1116,10 +1116,14 @@ fn find_panic_pattern_backwards(
                 if is_const_value(offset.id, 0, constants) {
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
+                        // Last-write-wins: the matched selector/code stores must be the final
+                        // writes to offsets 0/4, or the revert payload differs from canonical Panic.
                         if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX
                             && statements[j..]
                                 .iter()
                                 .all(|s| panic_window_droppable(s, constants))
+                            && !any_mstore_to_offset(&statements[j + 1..], 0, constants)
+                            && !any_mstore_to_offset(&statements[mstore4_idx + 1..], 4, constants)
                         {
                             return Some((j, error_code));
                         }
@@ -1159,6 +1163,18 @@ fn panic_window_droppable(statement: &Statement, constants: &BTreeMap<u32, BigUi
         }
         _ => false,
     }
+}
+
+/// Whether any of `statements` is an `mstore` to the constant byte `offset`. Used to confirm a
+/// matched panic selector/code store is the last write to its offset (last-write-wins).
+fn any_mstore_to_offset(
+    statements: &[Statement],
+    offset: u64,
+    constants: &BTreeMap<u32, BigUint>,
+) -> bool {
+    statements.iter().any(|s| {
+        matches!(s, Statement::MStore { offset: o, .. } if is_const_value(o.id, offset, constants))
+    })
 }
 
 /// Checks if a ValueId maps to a specific constant value.
@@ -1331,6 +1347,24 @@ fn find_custom_error_pattern_backwards(
     });
     if !all_safe {
         return None;
+    }
+
+    // Last-write-wins: each payload offset (selector at 0, arguments at 4, 0x24, …) must be written
+    // exactly once in the collapsed window. A repeated store means a later write overwrites an
+    // earlier one — so the value the backward scan matched is not what the EVM revert emits — and the
+    // sequence must not be collapsed into a `CustomErrorRevert`.
+    let payload_offsets = std::iter::once(0u64).chain((0..num_args as u64).map(|i| 4 + i * 0x20));
+    for payload_offset in payload_offsets {
+        let writes = statements[earliest_idx..]
+            .iter()
+            .filter(|s| {
+                matches!(s, Statement::MStore { offset, .. }
+                    if is_const_value(offset.id, payload_offset, constants))
+            })
+            .count();
+        if writes != 1 {
+            return None;
+        }
     }
 
     Some((earliest_idx, selector, arguments))
@@ -4029,5 +4063,50 @@ mod tests {
             &BigUint::from(0xFFu64),
         );
         assert_eq!(result, Some(BigUint::zero()));
+    }
+
+    /// N14: the panic-pattern matcher must honor last-write-wins — a later store that overwrites
+    /// the matched selector (offset 0) or code (offset 4) means the revert payload is not the
+    /// canonical `Panic`, so the window must not be collapsed.
+    #[test]
+    fn panic_pattern_respects_last_write_wins() {
+        use crate::ir::{MemoryRegion, Value, ValueId};
+
+        let panic_word = BigUint::parse_bytes(
+            revive_common::PANIC_UINT256_SELECTOR_WORD_HEX.as_bytes(),
+            16,
+        )
+        .unwrap();
+        let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
+        constants.insert(0, BigUint::zero()); // offset 0
+        constants.insert(1, panic_word); // panic selector
+        constants.insert(2, BigUint::from(4u64)); // offset 4
+        constants.insert(3, BigUint::from(0x11u64)); // code (fits u8)
+        constants.insert(4, BigUint::from(0xdeadbeefu64)); // overwriting selector value
+        constants.insert(5, BigUint::from(0x100u64)); // wide code (> u8)
+
+        let mstore = |offset: u32, value: u32| Statement::MStore {
+            offset: Value::int(ValueId(offset)),
+            value: Value::int(ValueId(value)),
+            region: MemoryRegion::Scratch,
+        };
+
+        // Canonical `mstore(0, sel); mstore(4, code)` is recognized.
+        assert_eq!(
+            find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3)], &constants),
+            Some((0, 0x11)),
+        );
+
+        // A later `mstore(0, 0xdeadbeef)` overwrites the selector.
+        assert_eq!(
+            find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3), mstore(0, 4)], &constants),
+            None,
+        );
+
+        // A later (wide) `mstore(4, 0x100)` overwrites the code.
+        assert_eq!(
+            find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3), mstore(2, 5)], &constants),
+            None,
+        );
     }
 }

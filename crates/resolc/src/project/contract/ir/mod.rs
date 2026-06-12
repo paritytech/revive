@@ -22,6 +22,11 @@ pub enum IR {
 }
 
 impl IR {
+    /// Whether this contract is lowered through the newyork IR pipeline.
+    pub fn is_newyork(&self) -> bool {
+        matches!(self, Self::NewYork(_))
+    }
+
     /// Drains the list of factory dependencies.
     pub fn drain_factory_dependencies(&mut self) -> BTreeSet<String> {
         match self {

@@ -84,6 +84,7 @@ pub fn build_solidity_with_options(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
+        false,
         &[],
     );
 
@@ -168,6 +169,7 @@ pub fn build_solidity_with_options_evm(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         OptimizerSettingsSizeLevel::Zero,
+        false,
         &[],
     );
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
@@ -228,6 +230,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         OptimizerSettingsSizeLevel::Zero,
+        false,
         &[],
     );
     let solc = SolcCompiler::new(SolcCompiler::DEFAULT_EXECUTABLE_NAME.to_owned())?;
@@ -276,6 +279,7 @@ pub fn build_yul<T: ToString + Display>(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
+        false,
         &[],
     );
 
@@ -329,6 +333,7 @@ pub fn build_yul_standard_json(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
+        false,
         &[],
     );
 
@@ -577,6 +582,7 @@ pub fn compile_yul_blob_with_options(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
+        false,
         &[],
     );
 

@@ -112,6 +112,7 @@ fn main_inner(
             PolkaVMTarget::PVM,
             resolc::DEFAULT_EXECUTABLE_NAME,
             input.optimizer_settings.level_middle_end_size,
+            input.contract.ir.is_newyork(),
             &input.llvm_arguments,
         );
 
@@ -133,6 +134,7 @@ fn main_inner(
         PolkaVMTarget::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
+        resolc::resolve_use_newyork(arguments.newyork),
         &arguments.llvm_arguments,
     );
 

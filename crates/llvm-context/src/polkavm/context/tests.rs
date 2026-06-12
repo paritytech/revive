@@ -11,6 +11,7 @@ fn initialize_llvm() {
         PolkaVMTarget::PVM,
         "resolc",
         crate::OptimizerSettingsSizeLevel::Zero,
+        false,
         Default::default(),
     );
 }

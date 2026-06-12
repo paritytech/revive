@@ -47,6 +47,7 @@ where
         PolkaVMTarget::PVM,
         "resolc",
         optimizer_settings.level_middle_end_size,
+        false,
         Default::default(),
     );
 

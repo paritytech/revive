@@ -96,7 +96,7 @@ pub(crate) mod target_machine;
 
 static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 
-/// The global LLVM options applied at [`OptimizerSettingsSizeLevel::Z`].
+/// The global LLVM options applied at [`OptimizerSettingsSizeLevel::Z`] **on the newyork path**.
 ///
 /// These trade execution speed for code size: the machine outliner replaces repeated
 /// instruction sequences with calls, disabling LICM avoids i256 register pressure on the
@@ -104,6 +104,12 @@ static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 /// optimizes block layout for size instead of speed. At any other optimization level the
 /// upstream LLVM defaults apply: paying execution gas for smaller code is only acceptable
 /// when the user explicitly asked for `-Oz`.
+///
+/// They are applied only for modules produced by the newyork IR generator. Like the
+/// aggressive code-size pass pipeline in [`crate::optimizer::Optimizer::run`] and the
+/// `+unaligned-scalar-mem` target feature, these knobs are tuned and validated against
+/// newyork's outlined code; the stock Yul path keeps the upstream LLVM defaults it was
+/// validated against (matching `main`).
 const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
     "--disable-licm-promotion",
     "--disable-machine-licm",
@@ -121,21 +127,24 @@ const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
 ///
-/// At [`OptimizerSettingsSizeLevel::Z`] the `SIZE_LEVEL_Z_ARGUMENTS` are prepended.
-/// LLVM parses command line options once per process, so the level passed by the first
-/// caller wins; production builds are unaffected because every contract is compiled in
-/// its own recursive process with its own optimizer settings.
+/// When `use_newyork` is set and the size level is [`OptimizerSettingsSizeLevel::Z`], the
+/// `SIZE_LEVEL_Z_ARGUMENTS` are prepended. They are gated on the newyork path because they
+/// are validated against its codegen; the stock Yul path must keep the upstream defaults.
+/// LLVM parses command line options once per process, so the first caller wins; production
+/// builds are unaffected because every contract is compiled in its own recursive process
+/// with its own optimizer settings and IR generator.
 pub fn initialize_llvm(
     target: PolkaVMTarget,
     name: &str,
     size_level: OptimizerSettingsSizeLevel,
+    use_newyork: bool,
     llvm_arguments: &[String],
 ) {
     let Ok(_) = DID_INITIALIZE.set(()) else {
         return; // Tests don't go through a recursive process
     };
 
-    let size_arguments = if size_level == OptimizerSettingsSizeLevel::Z {
+    let size_arguments = if use_newyork && size_level == OptimizerSettingsSizeLevel::Z {
         SIZE_LEVEL_Z_ARGUMENTS
     } else {
         &[]

@@ -4058,6 +4058,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
+    /// Binds each loop variable to its phi node at full width.
+    ///
+    /// Loop variables are deliberately NOT narrowed. Narrowing the counter (e.g. on
+    /// `non_comparison_demand`, which excludes the loop condition) would let a wide-stride counter
+    /// wrap at the narrow width while the EVM comparison and increment stay 256-bit. Body sites still
+    /// narrow at their own use points.
+    fn bind_loop_variables(
+        &mut self,
+        loop_variables: &[ValueId],
+        loop_phis: &[inkwell::values::PhiValue<'ctx>],
+    ) {
+        for (loop_var, phi) in loop_variables.iter().zip(loop_phis.iter()) {
+            self.set_value(*loop_var, phi.as_basic_value());
+        }
+    }
+
     /// Inner implementation of generate_statement.
     fn generate_statement_inner(
         &mut self,
@@ -4807,27 +4823,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     loop_phis.push(phi);
                 }
 
-                for (i, loop_var) in loop_variables.iter().enumerate() {
-                    let phi_val = loop_phis[i].as_basic_value();
-                    let non_comp = self.type_info.non_comparison_demand(*loop_var);
-                    let loop_val = if !self.type_info.get(*loop_var).is_signed
-                        && matches!(non_comp, BitWidth::I32 | BitWidth::I64)
-                    {
-                        let narrow_type = context.integer_type(non_comp.bits() as usize);
-                        let truncated = context
-                            .builder()
-                            .build_int_truncate(
-                                phi_val.into_int_value(),
-                                narrow_type,
-                                &format!("loop_narrow_{}", i),
-                            )
-                            .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        truncated.as_basic_value_enum()
-                    } else {
-                        phi_val
-                    };
-                    self.set_value(*loop_var, loop_val);
-                }
+                self.bind_loop_variables(loop_variables, &loop_phis);
 
                 for statement in condition_statements {
                     self.generate_statement(statement, context)?;

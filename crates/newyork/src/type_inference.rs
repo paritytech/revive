@@ -586,7 +586,7 @@ impl TypeInference {
     /// function body preserves comparison semantics for values within the narrowed
     /// range (e.g., `gt(zext(param_i64), threshold)` is correct when param ≤ 2^64).
     ///
-    /// Narrowing is gated on [`Self::unconditionally_narrowed`]: the demand must come
+    /// Narrowing is gated on the `unconditionally_narrowed` set: the demand must come
     /// from a use reached on every path, since the narrowed signature truncates the
     /// argument (with a trap) unconditionally at each call site.
     ///

@@ -2816,6 +2816,34 @@ fn store_huge_const_offset_traps() {
     run_differential(actions);
 }
 
+/// Regression (N19): a `return` with a constant offset range past the heap must trap, not take the
+/// inline unchecked seal_return path and read one-past-heap into the returndata (information leak).
+/// `return(0x20000, 0x20)` reads exactly at the 128 KiB heap end. The check is PVM-only (non-
+/// differential): EVM cheaply zero-expands such a moderate range, whereas PVM's bounded heap must
+/// trap — the security property here is that it traps rather than leaking. See PastHeapConstReturn.yul.
+#[test]
+fn return_past_heap_const_offset_traps() {
+    let mut actions = instantiate_yul("contracts/PastHeapConstReturn.yul", "PastHeapConstReturn");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

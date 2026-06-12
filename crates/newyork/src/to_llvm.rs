@@ -1252,19 +1252,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let revert_block = context.append_basic_block(&block_name);
         context.set_basic_block(revert_block);
 
-        // Soundness: `xlen_type().const_int(u64_value, false)` silently
-        // truncates the length to xlen. A constant length above `u32::MAX`
-        // would wrap and the revert would carry the wrong byte count
-        // instead of trapping on the out-of-bounds memory expansion. Fall
-        // back to the i256 + safe-truncate path in that case.
-        let xlen_bits = context.xlen_type().get_bit_width();
-        let length_fits_in_xlen =
-            xlen_bits >= 64 || (xlen_bits > 0 && const_length >> xlen_bits == 0);
-
         if const_length == 0 {
             revive_llvm_context::polkavm_evm_return::revert_empty_outlined(context)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-        } else if length_fits_in_xlen {
+        } else if self.const_exit_range_within_heap(context, 0, const_length) {
             let length_xlen = context.xlen_type().const_int(const_length, false);
             revive_llvm_context::polkavm_evm_return::revert_outlined(context, length_xlen)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
@@ -2736,6 +2727,30 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
+    /// Whether a constant `[offset, offset + length)` exit range lies wholly within the fixed heap.
+    ///
+    /// The dedup exit blocks ([`Self::get_or_create_return_block`] /
+    /// [`Self::get_or_create_revert_block`]) lower an in-range constant range through `seal_return`
+    /// over an UNCHECKED heap GEP. That is sound only when the range is heap-covered: a constant past
+    /// the heap (e.g. `return(0xFFFFFFF0, 0x20)`) would read one-past-heap into the returndata — an
+    /// information leak — where EVM zero-expands / runs out of gas. Out-of-range ranges must take the
+    /// bounds-checked path instead. Heap coverage also subsumes the silent-truncation guard: since
+    /// `heap_size <= 2^32`, a covered range's offset and length both fit in xlen.
+    fn const_exit_range_within_heap(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        offset: u64,
+        length: u64,
+    ) -> bool {
+        let heap_size = context
+            .heap_size()
+            .get_zero_extended_constant()
+            .unwrap_or(0);
+        offset
+            .checked_add(length)
+            .is_some_and(|end| end <= heap_size)
+    }
+
     /// Gets or creates a shared basic block for a `return(offset, length)` pattern
     /// where both offset and length are constants. This deduplicates identical return
     /// sequences (e.g., `return(0x80, 0x20)` appearing 7 times in ERC20 runtime).
@@ -2763,16 +2778,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Some(revive_llvm_context::PolkaVMCodeType::Deploy)
         );
 
-        // Soundness: `xlen_type().const_int(u64_value, false)` silently
-        // truncates the value to xlen (i32 here). A constant offset or
-        // length above `u32::MAX` would wrap mod `2^32` before reaching
-        // `emit_exit_unchecked` and the return would access the wrong
-        // (in-heap) bytes instead of trapping. Fall back to the i256 +
-        // safe-truncate path for any constant that doesn't fit in xlen.
-        let xlen_bits = context.xlen_type().get_bit_width();
-        let fits_in_xlen = |v: u64| xlen_bits >= 64 || (xlen_bits > 0 && v >> xlen_bits == 0);
-
-        if !self.has_msize && !is_deploy && fits_in_xlen(const_offset) && fits_in_xlen(const_length)
+        if !self.has_msize
+            && !is_deploy
+            && self.const_exit_range_within_heap(context, const_offset, const_length)
         {
             let offset_xlen = context.xlen_type().const_int(const_offset, false);
             let length_xlen = context.xlen_type().const_int(const_length, false);

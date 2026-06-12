@@ -55,8 +55,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, Zero};
 
 use crate::ir::{
-    for_each_statement, word_align, BinaryOperation, BitWidth, Block, Expression, FunctionId,
-    MemoryRegion, Object, Region, Statement, Type, Value, ValueId,
+    for_each_statement, word_align, word_store_overlaps_free_pointer_slot, BinaryOperation,
+    BitWidth, Block, Expression, FunctionId, MemoryRegion, Object, Region, Statement, Type, Value,
+    ValueId,
 };
 use revive_common::BYTE_LENGTH_WORD;
 
@@ -962,6 +963,8 @@ impl FmpPropagation {
                     if is_fmp_store {
                         let new_fmp = Self::resolve_value(&constants, &value);
                         fmp_value = new_fmp;
+                    } else if word_store_overlaps_free_pointer_slot(resolved_offset) {
+                        fmp_value = None;
                     } else if resolved_offset.is_none()
                         && region != MemoryRegion::Dynamic
                         && region != MemoryRegion::Scratch
@@ -1830,6 +1833,83 @@ mod tests {
         assert_eq!(
             fmp.loads_eliminated, 1,
             "resolved offset must detect the FMP load when the region is untagged"
+        );
+    }
+
+    /// A statically-resolved misaligned store that overlaps the FMP word must invalidate the
+    /// tracked free-memory pointer, so a later `mload(0x40)` is not forwarded a stale constant.
+    ///
+    /// `mstore(0x21, v)` covers bytes `[0x21, 0x41)` and so overwrites byte `0x40` of the FMP
+    /// word, but `MemoryRegion::from_address(0x21)` tags it `Scratch` — `is_free_pointer_slot`
+    /// alone misses it, and its offset resolves, so the unresolved-offset fallback does not fire
+    /// either. Detection relies solely on `word_store_overlaps_free_pointer_slot`; without it the
+    /// load would be (wrongly) eliminated to the pre-corruption value.
+    #[test]
+    fn test_misaligned_overlap_store_invalidates_fmp() {
+        use crate::ir::{MemoryRegion, Object};
+        use num::BigUint;
+
+        let fmp_initial = make_value(1);
+        let fmp_offset = make_value(2);
+        let misaligned_offset = make_value(3);
+        let stored_value = make_value(1);
+        let load_result = ValueId(4);
+
+        let statements = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x80u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![ValueId(2)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x40u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::MStore {
+                offset: fmp_offset,
+                value: fmp_initial,
+                region: MemoryRegion::FreePointerSlot,
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x21u64),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::MStore {
+                offset: misaligned_offset,
+                value: stored_value,
+                region: MemoryRegion::Scratch,
+            },
+            Statement::Let {
+                bindings: vec![load_result],
+                value: Expression::MLoad {
+                    offset: fmp_offset,
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+
+        let mut fmp = FmpPropagation::new();
+        fmp.propagate_object(&mut object);
+
+        assert_eq!(
+            fmp.loads_eliminated, 0,
+            "a misaligned store overlapping the FMP word must invalidate the tracked pointer"
         );
     }
 }

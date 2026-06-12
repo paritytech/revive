@@ -148,6 +148,25 @@ pub fn word_align(address: u64) -> u64 {
     address / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64
 }
 
+/// Whether a 32-byte (`mstore`) write at this resolved byte offset *misaligned-overlaps* the
+/// free-memory-pointer word `[0x40, 0x60)`.
+///
+/// A word store at `o` covers `[o, o + 32)`, so it touches the FMP word when `o ∈ [0x21, 0x5f]`.
+/// The aligned `o == 0x40` is the ordinary free-pointer update — recognized by
+/// [`MemoryRegion::is_free_pointer_slot`] and subject to the usual sbrk-bounded value check — so it
+/// is excluded here. Every *other* offset in the range is a misaligned store that partially
+/// overwrites, and therefore corrupts, the pointer regardless of the value written.
+/// [`MemoryRegion::from_address`] tags such a store by its start byte (`Scratch` for `0x21..0x40`,
+/// `Unknown` for `0x41..0x60`), so the store-side FMP-corruption checks must consult this predicate
+/// in addition to `is_free_pointer_slot`.
+///
+/// Only meaningful for a statically-resolved offset; a dynamic offset that could wrap onto the FMP
+/// word is a separate, deliberately-unflagged gap (see the `fmp_could_be_unbounded` field docs in
+/// `heap_opt`).
+pub fn word_store_overlaps_free_pointer_slot(resolved_offset: Option<u64>) -> bool {
+    matches!(resolved_offset, Some(offset) if (0x21..0x60).contains(&offset) && offset != 0x40)
+}
+
 /// An SSA value reference (index into value table).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ValueId(pub u32);

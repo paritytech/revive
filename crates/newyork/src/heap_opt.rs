@@ -140,6 +140,19 @@ pub struct HeapAnalysis {
     /// for essentially every contract (~+9% / +30 KB on the OZ corpus). The gap is
     /// solc-unreachable: solc's dynamic stores are FMP-relative (`>= 0x80`) and never target
     /// `0x40`; only hand-written Yul with an offset engineered to equal `0x40` reaches it.
+    ///
+    /// A *static* misaligned full-word store that overlaps the FMP word
+    /// ([`crate::ir::word_store_overlaps_free_pointer_slot`], e.g. `mstore(0x21, v)`) is the same
+    /// class of gap *for this flag's range-proof consumer*, and for the same cost reason: it is
+    /// not flagged here. solc emits exactly such stores when ABI-encoding a revert string
+    /// (`mstore(0x24, len)` / `mstore(0x44, data)` cover `0x40`), so flagging them would set this
+    /// for almost every contract with a `require`-with-message (~+12 % / +13 KB on the OZ corpus).
+    /// Those stores are benign — they precede an immediate `revert`, so the corrupted pointer is
+    /// never observed — and distinguishing observed from unobserved corruption needs a control-flow
+    /// dataflow this object-wide flag does not model. The FMP value-forwarding consumer *is*
+    /// defended cheaply at the corruption site (see the `word_store_overlaps_free_pointer_slot`
+    /// branch in `mem_opt`'s `FmpPropagation`); only the range-proof consumer carries this residual,
+    /// reachable solely by hand-written Yul that observes `mload(0x40)` after a misaligned overlap.
     fmp_could_be_unbounded: bool,
     /// Per-`Let`-binding source expression, used by
     /// `is_trusted_fmp_source` to decide whether an mstore's value

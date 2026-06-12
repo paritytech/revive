@@ -2656,6 +2656,28 @@ fn for_loop_fmp_realloc() {
     run_differential(actions);
 }
 
+/// Regression (N18 FMP): an `if`/`switch` branch that calls an allocating internal function bumps
+/// the free-memory pointer, so a tracked FMP constant must be invalidated after the branch. Region
+/// FMP invalidation used to be tag-only (direct FMP store / external call / create) and missed the
+/// `fmp_writers` call case that straight-line propagation already honored, so the post-branch
+/// `mload(0x40)` was forwarded the stale pre-branch pointer. For `cnt > 0` the returned pointer must
+/// equal `0x80 + cnt * 0x20`; the bug returns 0x80. See IfCallFmp.yul.
+#[test]
+fn branch_calls_allocator_fmp() {
+    let mut actions = instantiate_yul("contracts/IfCallFmp.yul", "IfCallFmp");
+    for cnt in [0u64, 1, 2, 3] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(cnt).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

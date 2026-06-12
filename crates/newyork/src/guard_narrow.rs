@@ -86,11 +86,11 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 /// `size <= UINT64_MAX`, which is unsound: for `size ∈ [2^256-31, 2^256-1]` the rounding
 /// `and(add(size, 31), not(31))` wraps to 0, so EVM leaves the free pointer unchanged and does
 /// not revert — but the assertion would trap. See [`is_allocator_function`].
-fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collections::BTreeSet<u32>) {
+fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections::BTreeSet<u32>) {
     let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
     for (function_id, function) in &object.functions {
-        if is_allocator_function(function) {
+        if is_allocator_function(function, noreturn) {
             narrow_params.insert(function_id.0, vec![0]);
         }
     }
@@ -109,29 +109,43 @@ fn narrow_allocator_param_types(object: &mut Object, _noreturn: &std::collection
 /// Returns whether `function` has the allocator shape that guard narrowing
 /// specializes: a two-parameter `(i256, i256) -> ()` function whose body matches
 /// [`has_allocator_shape`]. [`narrow_allocator_param_types`] keys off this.
-fn is_allocator_function(function: &Function) -> bool {
+fn is_allocator_function(function: &Function, noreturn: &std::collections::BTreeSet<u32>) -> bool {
     function.parameters.len() == 2
         && function.returns.is_empty()
         && function
             .parameters
             .iter()
             .all(|(_, value_type)| matches!(value_type, Type::Int(BitWidth::I256)))
-        && has_allocator_shape(&function.body, function.parameters[0].0)
+        && has_allocator_shape(&function.body, function.parameters[0].0, noreturn)
 }
 
 /// Detects the canonical allocator pattern in a block:
 /// * `mstore(0x40, sum)` (FMP store)
 /// * `sum = add(p0, x)` somewhere upstream
-/// * `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { <terminates> }` overflow check
+/// * `if or(gt(sum, UINT64_MAX), lt(sum, p0)) { <reverts> }` overflow check
 /// * `x` is derived from `p1` (we don't constrain the alignment computation
 ///   precisely; the FMP store + add(p0, _) + overflow check is enough).
-fn has_allocator_shape(block: &Block, p0: ValueId) -> bool {
+///
+/// The overflow check must actually feed an aborting `if` that **reverts** (panics) — not merely
+/// exist as dead comparisons, and not merely `leave`/`return`. That guard is what makes narrowing
+/// `p0` sound: a caller passing a wide pointer reverts under EVM exactly as the narrowed call-site
+/// truncation traps. Without it, a function that computes-but-ignores the checks would be narrowed
+/// and trap on inputs EVM accepts.
+fn has_allocator_shape(
+    block: &Block,
+    p0: ValueId,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> bool {
     let mut add_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut and_results: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
+    let mut or_results: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut gt_const_checks: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
     let mut lt_against_addend: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
     let mut fmp_store_value: Option<u32> = None;
+    // Conditions of `if` statements whose then-region reverts (aborts the transaction).
+    let mut reverting_if_conditions: std::collections::BTreeSet<u32> =
+        std::collections::BTreeSet::new();
 
     for statement in &block.statements {
         if let Statement::Let { bindings, value } = statement {
@@ -157,6 +171,9 @@ fn has_allocator_shape(block: &Block, p0: ValueId) -> bool {
                                 and_results.insert(bid, (rhs.id.0, mask.clone()));
                             }
                         }
+                        BinaryOperation::Or => {
+                            or_results.insert(bid, (lhs.id.0, rhs.id.0));
+                        }
                         BinaryOperation::Gt => {
                             if let Some(c) = constants.get(&rhs.id.0) {
                                 gt_const_checks.insert(bid, (lhs.id.0, c.clone()));
@@ -175,6 +192,16 @@ fn has_allocator_shape(block: &Block, p0: ValueId) -> bool {
                 if !off.is_zero() && *off == BigUint::from(0x40u32) {
                     fmp_store_value = Some(value.id.0);
                 }
+            }
+        }
+        if let Statement::If {
+            condition,
+            then_region,
+            ..
+        } = statement
+        {
+            if region_reverts(then_region, noreturn) {
+                reverting_if_conditions.insert(condition.id.0);
             }
         }
     }
@@ -196,15 +223,55 @@ fn has_allocator_shape(block: &Block, p0: ValueId) -> bool {
         return false;
     }
 
+    // Collect the specific comparison bindings `gt(sum, UINT64_MAX)` and `lt(sum, p0)`.
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
-    let have_gt_sum_max = gt_const_checks
-        .values()
-        .any(|(value, c)| *value == sum_id && *c == uint64_max);
-    let have_lt_sum_p0 = lt_against_addend
-        .values()
-        .any(|(sum, addend)| *sum == sum_id && *addend == p0.0);
+    let gt_ids: std::collections::BTreeSet<u32> = gt_const_checks
+        .iter()
+        .filter(|(_, (value, c))| *value == sum_id && *c == uint64_max)
+        .map(|(bid, _)| *bid)
+        .collect();
+    let lt_ids: std::collections::BTreeSet<u32> = lt_against_addend
+        .iter()
+        .filter(|(_, (sum, addend))| *sum == sum_id && *addend == p0.0)
+        .map(|(bid, _)| *bid)
+        .collect();
+    if gt_ids.is_empty() || lt_ids.is_empty() {
+        return false;
+    }
 
-    have_gt_sum_max && have_lt_sum_p0
+    // Require an aborting `if or(gt, lt) { revert }` over those two comparisons. This is what
+    // guarantees the function reverts for a pointer wide enough to overflow `sum`, making the
+    // `p0` narrowing sound.
+    or_results.iter().any(|(or_id, (a, b))| {
+        reverting_if_conditions.contains(or_id)
+            && ((gt_ids.contains(a) && lt_ids.contains(b))
+                || (gt_ids.contains(b) && lt_ids.contains(a)))
+    })
+}
+
+/// Whether the region unconditionally aborts the transaction (reverts or panics), as opposed to
+/// merely returning from the current function (`leave`) or halting successfully (`return`/`stop`).
+/// Stricter than [`region_terminates`]: it is used to confirm an allocator's overflow guard
+/// actually reverts on a wide value, so narrowing its pointer parameter matches EVM.
+fn region_reverts(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -> bool {
+    region.statements.iter().any(|s| {
+        if matches!(
+            s,
+            Statement::Revert { .. }
+                | Statement::Invalid
+                | Statement::PanicRevert { .. }
+                | Statement::ErrorStringRevert { .. }
+                | Statement::CustomErrorRevert { .. }
+        ) {
+            return true;
+        }
+        if let Statement::Expression(Expression::Call { function, .. }) = s {
+            if noreturn.contains(&function.0) {
+                return true;
+            }
+        }
+        false
+    })
 }
 
 /// Detects functions that always terminate (no fall-through). A function
@@ -901,119 +968,193 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    /// A `finalize_allocation`-shaped function must NOT get an injected
-    /// `if gt(p1, UINT64_MAX) { panic 0x41 }` early guard: that trap fires for the
-    /// alignment-wrap window `p1 ∈ [2^256-31, 2^256-1]`, where EVM does not revert
-    /// (`add(p1,31)` wraps so the rounded size is 0 and the free pointer is unchanged).
-    /// The size parameter therefore stays `i256`; only the heap-bounded `p0` is narrowed.
-    #[test]
-    fn allocator_size_param_gets_no_spurious_overflow_trap() {
+    /// Builds a `finalize_allocation(memPtr, size)`-shaped function (param 0 = `memPtr`/`p0`,
+    /// param 1 = `size`/`p1`). When `with_guard` is set, the overflow comparisons feed an aborting
+    /// `if or(gt(sum, u64max), lt(sum, p0)) { panic }`; otherwise they are computed but ignored.
+    fn allocator_object(with_guard: bool) -> Object {
         let p0 = ValueId(0);
         let p1 = ValueId(1);
         let c40 = ValueId(2);
         let umax = ValueId(3);
-        let sum = ValueId(4);
-        let gt = ValueId(5);
-        let lt = ValueId(6);
+        let c31 = ValueId(4);
+        let not31 = ValueId(5);
+        let rounded = ValueId(6);
+        let round_up = ValueId(7);
+        let sum = ValueId(8);
+        let gt = ValueId(9);
+        let lt = ValueId(10);
+        let or_check = ValueId(11);
         let u64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
+        let not_31: BigUint = (BigUint::from(1u32) << 256) - BigUint::from(32u32);
+
+        // Mirror solc's `finalize_allocation`: the size is rounded up to a word before being added
+        // to the pointer, so `p1` sits behind `add`+`and` rather than feeding the guard directly.
+        let mut statements = vec![
+            Statement::Let {
+                bindings: vec![c40],
+                value: Expression::Literal {
+                    value: BigUint::from(0x40u32),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![umax],
+                value: Expression::Literal {
+                    value: u64_max,
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![c31],
+                value: Expression::Literal {
+                    value: BigUint::from(31u32),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![not31],
+                value: Expression::Literal {
+                    value: not_31,
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![rounded],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: Value::int(p1),
+                    rhs: Value::int(c31),
+                },
+            },
+            Statement::Let {
+                bindings: vec![round_up],
+                value: Expression::Binary {
+                    operation: BinaryOperation::And,
+                    lhs: Value::int(rounded),
+                    rhs: Value::int(not31),
+                },
+            },
+            Statement::Let {
+                bindings: vec![sum],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: Value::int(p0),
+                    rhs: Value::int(round_up),
+                },
+            },
+            Statement::Let {
+                bindings: vec![gt],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Gt,
+                    lhs: Value::int(sum),
+                    rhs: Value::int(umax),
+                },
+            },
+            Statement::Let {
+                bindings: vec![lt],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Lt,
+                    lhs: Value::int(sum),
+                    rhs: Value::int(p0),
+                },
+            },
+        ];
+        if with_guard {
+            statements.push(Statement::Let {
+                bindings: vec![or_check],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Or,
+                    lhs: Value::int(gt),
+                    rhs: Value::int(lt),
+                },
+            });
+            statements.push(Statement::If {
+                condition: Value::new(or_check, Type::Int(BitWidth::I1)),
+                inputs: Vec::new(),
+                then_region: Region {
+                    statements: vec![Statement::PanicRevert { code: 0x41 }],
+                    yields: Vec::new(),
+                },
+                else_region: None,
+                outputs: Vec::new(),
+            });
+        }
+        statements.push(Statement::MStore {
+            offset: Value::int(c40),
+            value: Value::int(sum),
+            region: MemoryRegion::Unknown,
+        });
 
         let mut function = Function::new(FunctionId(0), "finalize_allocation".to_string());
         function.parameters = vec![
             (p0, Type::Int(BitWidth::I256)),
             (p1, Type::Int(BitWidth::I256)),
         ];
-        function.body = Block {
-            statements: vec![
-                Statement::Let {
-                    bindings: vec![c40],
-                    value: Expression::Literal {
-                        value: BigUint::from(0x40u32),
-                        value_type: Type::Int(BitWidth::I256),
-                    },
-                },
-                Statement::Let {
-                    bindings: vec![umax],
-                    value: Expression::Literal {
-                        value: u64_max,
-                        value_type: Type::Int(BitWidth::I256),
-                    },
-                },
-                Statement::Let {
-                    bindings: vec![sum],
-                    value: Expression::Binary {
-                        operation: BinaryOperation::Add,
-                        lhs: Value::int(p0),
-                        rhs: Value::int(p1),
-                    },
-                },
-                Statement::Let {
-                    bindings: vec![gt],
-                    value: Expression::Binary {
-                        operation: BinaryOperation::Gt,
-                        lhs: Value::int(sum),
-                        rhs: Value::int(umax),
-                    },
-                },
-                Statement::Let {
-                    bindings: vec![lt],
-                    value: Expression::Binary {
-                        operation: BinaryOperation::Lt,
-                        lhs: Value::int(sum),
-                        rhs: Value::int(p0),
-                    },
-                },
-                Statement::MStore {
-                    offset: Value::int(c40),
-                    value: Value::int(sum),
-                    region: MemoryRegion::Unknown,
-                },
-            ],
-        };
+        function.body = Block { statements };
 
         let mut functions = BTreeMap::new();
         functions.insert(FunctionId(0), function);
-        let mut object = Object {
+        Object {
             name: "test".to_string(),
             code: Block { statements: vec![] },
             functions,
             subobjects: vec![],
             data: BTreeMap::new(),
-        };
+        }
+    }
 
+    /// True if any top-level `Let` binds `and(target, _)` / `and(_, target)` — the artifact of the
+    /// (removed) unsound size-parameter mask.
+    fn body_masks(statements: &[Statement], target: ValueId) -> bool {
+        statements.iter().any(|s| {
+            matches!(
+                s,
+                Statement::Let {
+                    value: Expression::Binary { operation: BinaryOperation::And, lhs, rhs },
+                    ..
+                } if lhs.id == target || rhs.id == target
+            )
+        })
+    }
+
+    /// A guarded allocator: the heap-bounded pointer `p0` narrows to i64, but the size `p1` stays
+    /// i256 — narrowing it would be unsound in the alignment-wrap window — and gains no mask/trap.
+    #[test]
+    fn guarded_allocator_narrows_pointer_not_size() {
+        let mut object = allocator_object(true);
         narrow_guards_in_object(&mut object);
 
         let function = &object.functions[&FunctionId(0)];
-        // The shape is still recognised: the heap-bounded pointer (p0) is narrowed to i64.
-        assert_eq!(function.parameters[0].1, Type::Int(BitWidth::I64));
-        // The size (p1) must stay i256 — narrowing it would be unsound in the wrap window.
-        assert_eq!(function.parameters[1].1, Type::Int(BitWidth::I256));
-        // No early guard / mask was prepended (would have added a literal, a gt, an
-        // if-panic and an and — four statements).
         assert_eq!(
-            function.body.statements.len(),
-            6,
-            "no overflow trap / mask should be injected for the size parameter"
+            function.parameters[0].1,
+            Type::Int(BitWidth::I64),
+            "the heap-bounded pointer parameter should narrow"
+        );
+        assert_eq!(
+            function.parameters[1].1,
+            Type::Int(BitWidth::I256),
+            "the size parameter must stay i256"
         );
         assert!(
-            !body_contains_panic(&function.body.statements),
-            "the size parameter must not gain a spurious overflow trap"
+            !body_masks(&function.body.statements, ValueId(1)),
+            "the size parameter must not be masked/trapped"
         );
     }
 
-    fn body_contains_panic(statements: &[Statement]) -> bool {
-        statements.iter().any(|statement| match statement {
-            Statement::PanicRevert { .. } => true,
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                body_contains_panic(&then_region.statements)
-                    || else_region
-                        .as_ref()
-                        .is_some_and(|region| body_contains_panic(&region.statements))
-            }
-            _ => false,
-        })
+    /// N9: overflow comparisons that are computed but never feed an aborting `if` are not the
+    /// allocator shape, so the pointer parameter must not be narrowed — narrowing it would make
+    /// the call-site truncation trap on wide pointers that EVM accepts.
+    #[test]
+    fn non_aborting_overflow_check_is_not_an_allocator() {
+        let mut object = allocator_object(false);
+        narrow_guards_in_object(&mut object);
+
+        let function = &object.functions[&FunctionId(0)];
+        assert_eq!(
+            function.parameters[0].1,
+            Type::Int(BitWidth::I256),
+            "without an aborting overflow guard the pointer must not be narrowed"
+        );
+        assert_eq!(function.parameters[1].1, Type::Int(BitWidth::I256));
     }
 }

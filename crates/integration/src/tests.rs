@@ -2211,6 +2211,33 @@ fn for_init_block_variable_scope() {
     }
 }
 
+/// PR #1 comment #issuecomment-453: newyork `narrow_function_params` narrowed a
+/// parameter on the strength of a use reached only on a conditional path. A
+/// memory-offset parameter used only inside `if c` was narrowed to i64, so the
+/// call boundary's checked truncation trapped on a `p >= 2^64` argument even when
+/// EVM skips the store (`c == 0`). See `contracts/ParamCondNarrow.yul`:
+/// `store_if(2^64, 0)` must return its else-path value, not trap.
+#[test]
+fn param_conditional_offset_narrowing_spurious_trap() {
+    let mut data = vec![0u8; 160];
+    // c := calldataload(0) stays 0 (every store is skipped). The four `p`
+    // arguments at offsets 32/64/96/128 are 2^64 — bit 64 lands in byte 23 of
+    // each big-endian word, out of range for an i64 offset.
+    for offset in [32usize, 64, 96, 128] {
+        data[offset + 23] = 1;
+    }
+    let mut actions = instantiate_yul("contracts/ParamCondNarrow.yul", "ParamCondNarrow");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Bug (round-3 #1): newyork treats the `calldatacopy` SOURCE offset as a heap
 /// pointer (`narrow_offset_for_pointer`) and narrows the offset param to i64, so
 /// a large source offset traps/mis-copies on PVM instead of zero-filling like

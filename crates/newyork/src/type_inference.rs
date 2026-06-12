@@ -163,6 +163,25 @@ pub struct TypeInference {
     /// offset). `effective = min(min_width, I256)`, so provably-small operands still
     /// narrow — only genuinely-wide ones stay full, keeping the OZ cost negligible.
     full_width_operands: BTreeSet<u32>,
+    /// Values that have at least one *unconditional* use narrowing their `max_width`
+    /// below I256 — a memory offset/length consumed on every path through the function,
+    /// not guarded by an `if`/`switch` branch or a loop body.
+    /// [`Self::narrow_function_params`] narrows a parameter only when it is in this set:
+    /// the call boundary inserts an unconditional checked truncation, which matches EVM
+    /// only when an out-of-range argument would also have trapped in the original. A use
+    /// reached only conditionally (e.g. `if lt(x,100){mstore(x,0)}`) does not justify it —
+    /// EVM skips the store for `x >= 100`, so the boundary truncation would trap spuriously.
+    unconditionally_narrowed: BTreeSet<u32>,
+    /// Values passed as a call argument on an unconditional path. When such a value is
+    /// narrowed only because it flows into a narrowed callee parameter (via [`Self::fn_arg_demand`]
+    /// in [`Self::apply_backward_constraints`]), the callee's own call-boundary checked
+    /// truncation already traps for out-of-range values, so the value is added to
+    /// [`Self::unconditionally_narrowed`] — narrowing it is sound for the same reason.
+    unconditional_call_arg: BTreeSet<u32>,
+    /// Walk state for [`Self::collect_uses_block`]: false while recursing into a
+    /// conditionally-executed region (`if`/`switch` branch, loop body). Gates insertion
+    /// into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_arg`].
+    in_unconditional_context: bool,
     /// Type inference results for subobjects (each subobject has its own namespace).
     pub sub_inferences: Vec<TypeInference>,
 }
@@ -178,6 +197,9 @@ impl TypeInference {
             fn_arg_demand: BTreeMap::new(),
             known_constants: BTreeMap::new(),
             full_width_operands: BTreeSet::new(),
+            unconditionally_narrowed: BTreeSet::new(),
+            unconditional_call_arg: BTreeSet::new(),
+            in_unconditional_context: true,
             sub_inferences: Vec::new(),
         }
     }
@@ -252,6 +274,9 @@ impl TypeInference {
 
     /// Narrows a value's max_width based on use context.
     fn narrow_from_use(&mut self, id: ValueId, max_width: BitWidth) -> bool {
+        if self.in_unconditional_context {
+            self.unconditionally_narrowed.insert(id.0);
+        }
         let mut constraint = self.get(id);
         if constraint.narrow_max_to(max_width) {
             self.constraints.insert(id.0, constraint);
@@ -359,6 +384,12 @@ impl TypeInference {
     }
 
     /// Apply backward constraints based on collected uses.
+    ///
+    /// A value's `max_width` only drops below I256 here when every one of its uses is a
+    /// `FunctionArg` whose narrowed callee-parameter demand (via [`Self::fn_arg_demand`]) is
+    /// below I256 — every other use context demands I256. Such a value flows exclusively into
+    /// narrowed parameters, so an unconditional call to one of them already truncates it (with
+    /// a trap) at the call boundary; that makes it [`Self::unconditionally_narrowed`] too.
     fn apply_backward_constraints(&mut self) {
         for (id, uses) in &self.uses {
             let mut widest_needed = BitWidth::I1;
@@ -380,6 +411,9 @@ impl TypeInference {
                 let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
                 constraint.narrow_max_to(widest_needed);
                 self.constraints.insert(*id, constraint);
+                if self.unconditional_call_arg.contains(id) {
+                    self.unconditionally_narrowed.insert(*id);
+                }
             }
         }
     }
@@ -552,6 +586,10 @@ impl TypeInference {
     /// function body preserves comparison semantics for values within the narrowed
     /// range (e.g., `gt(zext(param_i64), threshold)` is correct when param ≤ 2^64).
     ///
+    /// Narrowing is gated on [`Self::unconditionally_narrowed`]: the demand must come
+    /// from a use reached on every path, since the narrowed signature truncates the
+    /// argument (with a trap) unconditionally at each call site.
+    ///
     /// Returns true if any parameter was narrowed.
     pub fn narrow_function_params(&self, object: &mut Object) -> bool {
         let mut changed = false;
@@ -568,7 +606,9 @@ impl TypeInference {
                 }
 
                 let demand = constraint.max_width;
-                if demand < BitWidth::I256 {
+                if demand < BitWidth::I256
+                    && self.unconditionally_narrowed.contains(&parameter_id.0)
+                {
                     let clamped = demand.max(BitWidth::I32);
                     *parameter_type = Type::Int(clamped);
                     changed = true;
@@ -936,13 +976,71 @@ impl TypeInference {
     /// Collects uses from a block (recursing through nested regions and
     /// `For::condition_statements`) for backward propagation.
     fn collect_uses_block(&mut self, block: &Block) {
-        for_each_statement(&block.statements, &mut |statement| {
-            self.collect_uses_statement(statement);
-        });
+        self.in_unconditional_context = true;
+        self.collect_uses_statements(&block.statements);
     }
 
-    /// Collects uses from a single statement (no recursion — caller is
-    /// responsible for walking nested regions, e.g. via `for_each_statement`).
+    /// Collects uses from a sequence of statements at the current conditional context,
+    /// recursing into each statement's nested regions via [`Self::collect_uses_region`].
+    fn collect_uses_statements(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            self.collect_uses_statement(statement);
+            self.collect_uses_region(statement);
+        }
+    }
+
+    /// Recurses the use-collection walk into a statement's nested regions. Branches of
+    /// `if`/`switch` and loop bodies execute conditionally, so uses collected inside them
+    /// must not mark a value [`Self::unconditionally_narrowed`]; a plain [`Statement::Block`]
+    /// always executes and keeps the parent context.
+    fn collect_uses_region(&mut self, statement: &Statement) {
+        match statement {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                let saved = self.in_unconditional_context;
+                self.in_unconditional_context = false;
+                self.collect_uses_statements(&then_region.statements);
+                if let Some(region) = else_region {
+                    self.collect_uses_statements(&region.statements);
+                }
+                self.in_unconditional_context = saved;
+            }
+            Statement::Switch { cases, default, .. } => {
+                let saved = self.in_unconditional_context;
+                self.in_unconditional_context = false;
+                for case in cases {
+                    self.collect_uses_statements(&case.body.statements);
+                }
+                if let Some(region) = default {
+                    self.collect_uses_statements(&region.statements);
+                }
+                self.in_unconditional_context = saved;
+            }
+            Statement::For {
+                condition_statements,
+                body,
+                post,
+                ..
+            } => {
+                let saved = self.in_unconditional_context;
+                self.in_unconditional_context = false;
+                self.collect_uses_statements(condition_statements);
+                self.collect_uses_statements(&body.statements);
+                self.collect_uses_statements(&post.statements);
+                self.in_unconditional_context = saved;
+            }
+            Statement::Block(region) => {
+                self.collect_uses_statements(&region.statements);
+            }
+            _ => {}
+        }
+    }
+
+    /// Collects uses from a single statement (no recursion — [`Self::collect_uses_region`]
+    /// walks nested regions so the conditional context is tracked).
     fn collect_uses_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::MStore {
@@ -1246,6 +1344,9 @@ impl TypeInference {
             Expression::Call { arguments, .. } => {
                 for argument in arguments {
                     self.record_use(argument.id, UseContext::FunctionArg);
+                    if self.in_unconditional_context {
+                        self.unconditional_call_arg.insert(argument.id.0);
+                    }
                 }
             }
             Expression::Balance { address }

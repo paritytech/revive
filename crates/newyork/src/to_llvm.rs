@@ -838,7 +838,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let b_effective = b_effective.min(b_inferred);
 
         let max_needed = a_effective.max(b_effective);
-
         let target_bits = if max_needed <= 8 {
             8
         } else if max_needed <= 32 {

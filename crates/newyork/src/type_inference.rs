@@ -100,7 +100,11 @@ pub enum UseContext {
     MemoryOffset,
     /// Used as a memory value (256-bit required for EVM compatibility).
     MemoryValue,
-    /// Used as a storage key or value (256-bit required).
+    /// Used as a storage key or value, or as a `keccak256`/mapping hash-input word that
+    /// derives a storage slot (256-bit required). Unlike `FunctionArg`, this demand never
+    /// resolves through `fn_arg_demand`, so a value that is *also* passed to a narrowed
+    /// parameter is not truncated at its definition — truncating a hash input would compute
+    /// the slot over the wrong bits and corrupt storage.
     StorageAccess,
     /// Used in a comparison (keeps narrow type).
     Comparison,
@@ -1331,15 +1335,15 @@ impl TypeInference {
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
             Expression::Keccak256Pair { word0, word1 } => {
-                self.record_use(word0.id, UseContext::FunctionArg);
-                self.record_use(word1.id, UseContext::FunctionArg);
+                self.record_use(word0.id, UseContext::StorageAccess);
+                self.record_use(word1.id, UseContext::StorageAccess);
             }
             Expression::Keccak256Single { word0 } => {
-                self.record_use(word0.id, UseContext::FunctionArg);
+                self.record_use(word0.id, UseContext::StorageAccess);
             }
             Expression::MappingSLoad { key, slot } => {
-                self.record_use(key.id, UseContext::FunctionArg);
-                self.record_use(slot.id, UseContext::FunctionArg);
+                self.record_use(key.id, UseContext::StorageAccess);
+                self.record_use(slot.id, UseContext::StorageAccess);
             }
             Expression::Call { arguments, .. } => {
                 for argument in arguments {
@@ -1958,5 +1962,51 @@ mod tests {
         let joined = c1.join(&c2);
         assert_eq!(joined.min_width, BitWidth::I64);
         assert!(joined.is_signed);
+    }
+
+    /// N3 (#issuecomment-450): `keccak256`/mapping hash-input operands must demand
+    /// `StorageAccess`, not `FunctionArg` (which resolves through `fn_arg_demand`).
+    #[test]
+    fn hash_input_operands_demand_storage_access_not_function_arg() {
+        let word0 = crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I256));
+        let word1 = crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I256));
+        for expression in [
+            Expression::Keccak256Pair {
+                word0: word0.clone(),
+                word1: word1.clone(),
+            },
+            Expression::Keccak256Single {
+                word0: word0.clone(),
+            },
+            Expression::MappingSLoad {
+                key: word0.clone(),
+                slot: word1.clone(),
+            },
+        ] {
+            let mut inference = TypeInference::new();
+            inference.collect_uses_expression(&expression);
+            let uses = inference.uses.get(&0).expect("operand use recorded");
+            assert!(uses.contains(&UseContext::StorageAccess));
+            assert!(!uses.contains(&UseContext::FunctionArg));
+        }
+    }
+
+    /// N3 (#issuecomment-450): a key that derives a storage slot via keccak and is also passed
+    /// to a narrowed parameter must keep full width — narrowing it would hash a truncated key.
+    #[test]
+    fn keccak_key_also_passed_to_narrowed_param_keeps_full_width() {
+        let mut inference = TypeInference::new();
+        let key = ValueId(0);
+
+        inference.collect_uses_expression(&Expression::Keccak256Pair {
+            word0: crate::ir::Value::new(key, Type::Int(BitWidth::I256)),
+            word1: crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I256)),
+        });
+        inference.record_use(key, UseContext::FunctionArg);
+        inference.fn_arg_demand.insert(key.0, BitWidth::I64);
+
+        inference.apply_backward_constraints();
+
+        assert_eq!(inference.get(key).max_width, BitWidth::I256);
     }
 }

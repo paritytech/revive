@@ -3663,6 +3663,21 @@ fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, F
 /// This is a targeted pass designed to run after the mem_opt pass, which creates
 /// `Keccak256Single`/`Keccak256Pair` nodes from `mstore + keccak256` patterns.
 /// When the argument(s) are compile-time constants, the hash is precomputed.
+///
+/// **Known gap (deliberate).** The fused `Keccak256Pair`/`Keccak256Single` helper writes its inputs
+/// back to scratch `heap[0..0x40)`/`[0..0x20)`, and the mem_opt fusion *dead-eliminates the original
+/// `mstore`s on the strength of that write-back* (see the fusion comment in `mem_opt`). Folding the
+/// fused node to a literal removes the helper — and with it the write-back — so the scratch is left
+/// unwritten. A later `mload` from `[0, 0x40)` that mem_opt's forwarding cannot reach (across a
+/// region/call boundary) would then read stale memory instead of the hashed inputs.
+///
+/// This gap is NOT closed because every sound fix is a regression — the missing write means the
+/// fold's current output is already short the `mstore`s, so re-emitting them necessarily adds code
+/// (or disabling the fold falls back to the runtime keccak helper: +2.6 KB / +0.78 % on the OZ
+/// corpus), and there is no mem_opt run after the fold to dead-store-eliminate re-emitted writes. It
+/// is solc-unreachable: solc treats scratch as volatile and never re-reads `[0, 0x40)` as data after
+/// a keccak, so the dropped write-back is always dead in compiler-generated code. Only hand-written
+/// Yul that reads scratch after a constant-operand keccak across a boundary can observe it.
 pub fn fold_constant_keccak(object: &mut Object) {
     fold_keccak_in_block(&mut object.code);
     for function in object.functions.values_mut() {

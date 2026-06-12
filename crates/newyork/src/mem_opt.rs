@@ -620,65 +620,7 @@ impl MemoryOptimizer {
                 Expression::MLoad { offset, region }
             }
 
-            Expression::Keccak256 { offset, length } => {
-                let static_offset = self.try_get_static_offset(&offset);
-                let static_length = self.try_get_static_offset(&length);
-
-                // Fusion soundness: the `Keccak256Pair` / `Keccak256Single`
-                // helper functions write their input back to heap[0..N]
-                // (see `Keccak256OneWord::emit_body` /
-                // `Keccak256TwoWords::emit_body`), so the post-call heap
-                // state matches what EVM's `mstore(...); keccak256(...)`
-                // would have produced. That lets us safely dead-eliminate
-                // the prior mstores — a later `mload` (even one that
-                // mem_opt's forwarding can't reach because of an
-                // intervening clearing event) reads the helper's heap
-                // write and gets the same value EVM would.
-                if static_offset == Some(0) && static_length == Some(2 * BYTE_LENGTH_WORD as u64) {
-                    if let (Some(tracked0), Some(tracked32)) = (
-                        self.memory_state.get(&0),
-                        self.memory_state.get(&(BYTE_LENGTH_WORD as u64)),
-                    ) {
-                        if tracked0.offset == 0 && tracked32.offset == BYTE_LENGTH_WORD as u64 {
-                            let word0 = tracked0.stored_value;
-                            let word1 = tracked32.stored_value;
-                            if let Some(&idx0) = self.pending_stores.get(&0) {
-                                self.dead_store_indices.insert(idx0);
-                                self.statistics.stores_eliminated += 1;
-                            }
-                            if let Some(&idx32) =
-                                self.pending_stores.get(&(BYTE_LENGTH_WORD as u64))
-                            {
-                                self.dead_store_indices.insert(idx32);
-                                self.statistics.stores_eliminated += 1;
-                            }
-                            self.statistics.keccak_pairs_fused += 1;
-                            self.pending_stores.clear();
-                            log::trace!("Fused keccak256(0, 64) into keccak256_pair");
-                            return Expression::Keccak256Pair { word0, word1 };
-                        }
-                    }
-                }
-
-                if static_offset == Some(0) && static_length == Some(BYTE_LENGTH_WORD as u64) {
-                    if let Some(tracked0) = self.memory_state.get(&0) {
-                        if tracked0.offset == 0 {
-                            let word0 = tracked0.stored_value;
-                            if let Some(&idx0) = self.pending_stores.get(&0) {
-                                self.dead_store_indices.insert(idx0);
-                                self.statistics.stores_eliminated += 1;
-                            }
-                            self.statistics.keccak_singles_fused += 1;
-                            self.pending_stores.clear();
-                            log::trace!("Fused keccak256(0, 32) into keccak256_single");
-                            return Expression::Keccak256Single { word0 };
-                        }
-                    }
-                }
-
-                self.pending_stores.clear();
-                Expression::Keccak256 { offset, length }
-            }
+            Expression::Keccak256 { offset, length } => self.try_fuse_keccak256(offset, length),
 
             Expression::Keccak256Pair { word0, word1 } => {
                 self.pending_stores.clear();
@@ -697,6 +639,68 @@ impl MemoryOptimizer {
 
             other => other,
         }
+    }
+
+    /// Fuses `keccak256(0, 0x40)` / `keccak256(0, 0x20)` into a `Keccak256Pair` / `Keccak256Single`
+    /// node when the scratch words are tracked constants, dead-eliminating the staging `mstore`s.
+    /// Falls back to the original `Keccak256` when the pattern does not match.
+    ///
+    /// Soundness: the `Keccak256Pair`/`Keccak256Single` helpers write their inputs back to
+    /// `heap[0..0x40)` / `[0..0x20)` (see `Keccak256OneWord::emit_body` /
+    /// `Keccak256TwoWords::emit_body`), so the post-call heap state matches what EVM's
+    /// `mstore(...); keccak256(...)` would have produced. That is why the prior `mstore`s can be
+    /// dead-eliminated here — a later `mload`, even one mem_opt's forwarding cannot reach (an
+    /// intervening clearing event), reads the helper's write-back and sees the value EVM would.
+    ///
+    /// Caveat: that write-back is lost if the fused node is later constant-folded to a literal (the
+    /// helper disappears). That is a deliberate, solc-unreachable gap — see the `fold_constant_keccak`
+    /// doc comment in `simplify`.
+    fn try_fuse_keccak256(&mut self, offset: Value, length: Value) -> Expression {
+        let static_offset = self.try_get_static_offset(&offset);
+        let static_length = self.try_get_static_offset(&length);
+
+        if static_offset == Some(0) && static_length == Some(2 * BYTE_LENGTH_WORD as u64) {
+            if let (Some(tracked0), Some(tracked32)) = (
+                self.memory_state.get(&0),
+                self.memory_state.get(&(BYTE_LENGTH_WORD as u64)),
+            ) {
+                if tracked0.offset == 0 && tracked32.offset == BYTE_LENGTH_WORD as u64 {
+                    let word0 = tracked0.stored_value;
+                    let word1 = tracked32.stored_value;
+                    if let Some(&idx0) = self.pending_stores.get(&0) {
+                        self.dead_store_indices.insert(idx0);
+                        self.statistics.stores_eliminated += 1;
+                    }
+                    if let Some(&idx32) = self.pending_stores.get(&(BYTE_LENGTH_WORD as u64)) {
+                        self.dead_store_indices.insert(idx32);
+                        self.statistics.stores_eliminated += 1;
+                    }
+                    self.statistics.keccak_pairs_fused += 1;
+                    self.pending_stores.clear();
+                    log::trace!("Fused keccak256(0, 64) into keccak256_pair");
+                    return Expression::Keccak256Pair { word0, word1 };
+                }
+            }
+        }
+
+        if static_offset == Some(0) && static_length == Some(BYTE_LENGTH_WORD as u64) {
+            if let Some(tracked0) = self.memory_state.get(&0) {
+                if tracked0.offset == 0 {
+                    let word0 = tracked0.stored_value;
+                    if let Some(&idx0) = self.pending_stores.get(&0) {
+                        self.dead_store_indices.insert(idx0);
+                        self.statistics.stores_eliminated += 1;
+                    }
+                    self.statistics.keccak_singles_fused += 1;
+                    self.pending_stores.clear();
+                    log::trace!("Fused keccak256(0, 32) into keccak256_single");
+                    return Expression::Keccak256Single { word0 };
+                }
+            }
+        }
+
+        self.pending_stores.clear();
+        Expression::Keccak256 { offset, length }
     }
 
     /// Intersects two memory states: keeps entries present in both with the same stored value ID.

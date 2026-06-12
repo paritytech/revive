@@ -19,7 +19,7 @@ use num::ToPrimitive;
 
 use crate::ir::{
     for_each_statement, BinaryOperation, BitWidth, Block, Expression, Function, MemoryRegion,
-    Object, Region, Statement, Type, UnaryOperation, ValueId,
+    Object, Region, Statement, Type, UnaryOperation, Value, ValueId,
 };
 
 /// Type constraint representing the width bounds for a value.
@@ -1365,6 +1365,22 @@ impl TypeInference {
         }
     }
 
+    /// Widens each output from the corresponding input for a branch with a missing edge —
+    /// an `if` without `else` or a `switch` without `default`.
+    ///
+    /// On that edge codegen routes `inputs` straight through to `outputs` unchanged (the IR
+    /// `If`/`Switch` "defaults to yielding inputs unchanged" contract; see `to_llvm`'s phi
+    /// construction). An output therefore carries an input value that may be wider than every
+    /// region yield (e.g. the `leave`-elimination wrapper's pre-`leave` accumulator). Widening
+    /// only from region yields under-estimates the forward width, and codegen then bare-truncates
+    /// the live value where the output feeds a memory offset or comparison.
+    fn widen_outputs_from_fallthrough_inputs(&mut self, inputs: &[Value], outputs: &[ValueId]) {
+        for (input_val, output) in inputs.iter().zip(outputs.iter()) {
+            let input_constraint = self.get(input_val.id);
+            self.widen(*output, input_constraint.min_width);
+        }
+    }
+
     /// Forward pass: infers types for a statement.
     fn infer_statement_forward(&mut self, statement: &Statement) {
         match statement {
@@ -1410,10 +1426,10 @@ impl TypeInference {
 
             Statement::If {
                 condition,
+                inputs,
                 then_region,
                 else_region,
                 outputs,
-                ..
             } => {
                 self.widen(condition.id, BitWidth::I1);
                 self.infer_region_forward(then_region);
@@ -1427,14 +1443,18 @@ impl TypeInference {
                         self.widen(*output, yield_constraint.min_width);
                     }
                 }
+
+                if else_region.is_none() {
+                    self.widen_outputs_from_fallthrough_inputs(inputs, outputs);
+                }
             }
 
             Statement::Switch {
                 scrutinee,
+                inputs,
                 cases,
                 default,
                 outputs,
-                ..
             } => {
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
@@ -1450,6 +1470,8 @@ impl TypeInference {
                         let yield_constraint = self.get(yield_val.id);
                         self.widen(*output, yield_constraint.min_width);
                     }
+                } else {
+                    self.widen_outputs_from_fallthrough_inputs(inputs, outputs);
                 }
             }
 

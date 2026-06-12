@@ -2238,6 +2238,31 @@ fn param_conditional_offset_narrowing_spurious_trap() {
     run_differential(actions);
 }
 
+/// PR #1 comment #issuecomment-448: newyork forward inference widened an
+/// `if`/`switch` output only from the then/else region yields, never from
+/// `inputs` — but on a missing else/default edge codegen routes `inputs` to
+/// `outputs`. The `leave`-elimination wrapper builds that shape (`else_region`
+/// None, non-empty outputs), so an output carrying the wide pre-`leave` value
+/// was inferred at the narrow fall-through width and truncated. See
+/// `contracts/LeaveWideOutput.yul`: `f(2^200)` leaves with a full-width `ret`
+/// that must survive, not collapse to its low byte (`2^200 mod 256 == 0`).
+#[test]
+fn leave_edge_output_width_inferred_from_inputs() {
+    let mut data = vec![0u8; 32];
+    // v := 2^200 (> 1000): bit 200 is bit 0 of byte 31 - 25 = 6.
+    data[6] = 1;
+    let mut actions = instantiate_yul("contracts/LeaveWideOutput.yul", "LeaveWideOutput");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Bug (round-3 #1): newyork treats the `calldatacopy` SOURCE offset as a heap
 /// pointer (`narrow_offset_for_pointer`) and narrows the offset param to i64, so
 /// a large source offset traps/mis-copies on PVM instead of zero-filling like

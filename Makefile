@@ -5,7 +5,6 @@
 	install-wasm \
 	install-llvm-builder \
 	install-llvm \
-	install-llvm-coverage \
 	install-cargo-llvm-cov \
 	install-revive-runner \
 	format \
@@ -48,13 +47,6 @@ install-llvm-builder:
 install-llvm: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
-
-# install-llvm with -DLLVM_BUILD_INSTRUMENTED_COVERAGE=On. Shares the
-# target-llvm/<env>/ tree with install-llvm; `revive-llvm clean` between
-# variants if needed. `JOBS=N` caps thread count.
-install-llvm-coverage: install-llvm-builder
-	git submodule update --init --recursive --depth 1
-	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-coverage
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features

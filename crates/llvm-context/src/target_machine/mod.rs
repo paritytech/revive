@@ -92,14 +92,20 @@ impl TargetMachine {
 
     /// Runs the optimization passes on `module`.
     ///
-    /// `MergeFunctions` is disabled because it can collapse `@deploy` and `@call` into a single
-    /// function body when their lowered control flow becomes equivalent (e.g. a bare `invalid()`
-    /// in both code sections). The resulting ELF has two exports pointing at the same block,
-    /// which triggers a non-determinism bug in polkavm-linker's reachability consistency check
-    /// (the exports are stored as `Vec<usize>` and compared by order, so equal-but-differently-
-    /// ordered vectors are rejected as inconsistent). Disabling the pass keeps the export
-    /// targets distinct and sidesteps the issue. The size cost is negligible for production
-    /// contracts — their `@deploy`/`@call` bodies diverge well before any merging opportunity.
+    /// The pass builder's `MergeFunctions` insertion is disabled for both the stock and newyork
+    /// pipelines. It can collapse `@deploy` and `@call` into a single function body when their
+    /// lowered control flow becomes equivalent (e.g. a bare `invalid()` in both code sections);
+    /// the resulting ELF then has two exports pointing at the same block, which triggers a
+    /// non-determinism bug in polkavm-linker's reachability consistency check (the exports are
+    /// stored as `Vec<usize>` and compared by order, so equal-but-differently-ordered vectors
+    /// are rejected as inconsistent). Disabling the pass keeps the export targets distinct.
+    ///
+    /// Disabling it on the stock path as well (not only for newyork) is intentional and not a
+    /// size regression: the polkavm-linker performs its own function deduplication/outlining, so
+    /// on the OpenZeppelin corpus dropping LLVM's `MergeFunctions` leaves real contracts slightly
+    /// *smaller* rather than larger (only trivial interface blobs differ, by a few bytes). The
+    /// newyork pipeline still merges where it helps, via the explicit `mergefunc` passes in its
+    /// pass string.
     pub fn run_optimization_passes(
         &self,
         module: &inkwell::module::Module,

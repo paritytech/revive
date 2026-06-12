@@ -3543,10 +3543,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// other functions, we let LLVM decide using its own heuristics (it
     /// already has MinSize/OptimizeForSize from `set_default_attributes`).
     fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
-        // Library/post-link compilations run with the middle end disabled and have
-        // `NoInline`/`OptimizeNone` forced on every function by `set_default_attributes`.
-        // Stacking `AlwaysInline` on top would produce contradictory attributes and
-        // trip the LLVM IR verifier; the hints would be inert there anyway.
+        // Inline hints are a middle-end code-size heuristic; they only apply when the
+        // middle-end optimizer runs. With the middle end disabled (library/post-link and
+        // `-O0` builds) the backend runs `default<O0>`, so we leave inlining to its defaults
+        // rather than pinning `AlwaysInline`/`NoInline` here.
         if !context.optimizer_settings().is_middle_end_enabled() {
             return;
         }

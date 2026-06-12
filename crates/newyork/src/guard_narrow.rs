@@ -445,9 +445,13 @@ fn detect_validator_mask(
             ..
         } = statement
         {
-            if else_region.is_none()
-                && outputs.is_empty()
-                && region_terminates(then_region, noreturn)
+            // The failure branch must REVERT, not merely `leave`: callers of a detected validator
+            // rewrite the argument to `and(arg, MASK)`, which is only sound if an out-of-range
+            // argument aborts the whole call. A `leave` just returns from the validator, so the
+            // caller would proceed with a silently-masked (wrong) value. `region_reverts` excludes
+            // `leave`/`return` (unlike the looser `region_terminates` used for intra-function
+            // guards, where the terminator skips the narrowed uses in the same function).
+            if else_region.is_none() && outputs.is_empty() && region_reverts(then_region, noreturn)
             {
                 if let Some(mask) = iszero_eq_defs.get(&condition.id.0) {
                     return Some(mask.clone());
@@ -1156,5 +1160,101 @@ mod tests {
             "without an aborting overflow guard the pointer must not be narrowed"
         );
         assert_eq!(function.parameters[1].1, Type::Int(BitWidth::I256));
+    }
+
+    /// Builds a single-parameter validator `fn(v) { if iszero(eq(v, and(v, u64max))) { fail } }`.
+    /// `fail` reverts (panics) or merely `leave`s, depending on `reverts`.
+    fn validator_function(reverts: bool) -> Function {
+        let param = ValueId(0);
+        let mask = ValueId(1);
+        let masked = ValueId(2);
+        let eq_check = ValueId(3);
+        let not_check = ValueId(4);
+        let u64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
+
+        let fail = if reverts {
+            Statement::PanicRevert { code: 0x41 }
+        } else {
+            Statement::Leave {
+                return_values: Vec::new(),
+            }
+        };
+
+        let mut function = Function::new(FunctionId(0), "validator".to_string());
+        function.parameters = vec![(param, Type::Int(BitWidth::I256))];
+        function.body = Block {
+            statements: vec![
+                Statement::Let {
+                    bindings: vec![mask],
+                    value: Expression::Literal {
+                        value: u64_max,
+                        value_type: Type::Int(BitWidth::I256),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![masked],
+                    value: Expression::Binary {
+                        operation: BinaryOperation::And,
+                        lhs: Value::int(param),
+                        rhs: Value::int(mask),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![eq_check],
+                    value: Expression::Binary {
+                        operation: BinaryOperation::Eq,
+                        lhs: Value::int(param),
+                        rhs: Value::int(masked),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![not_check],
+                    value: Expression::Unary {
+                        operation: UnaryOperation::IsZero,
+                        operand: Value::int(eq_check),
+                    },
+                },
+                Statement::If {
+                    condition: Value::new(not_check, Type::Int(BitWidth::I1)),
+                    inputs: Vec::new(),
+                    then_region: Region {
+                        statements: vec![fail],
+                        yields: Vec::new(),
+                    },
+                    else_region: None,
+                    outputs: Vec::new(),
+                },
+            ],
+        };
+        function
+    }
+
+    /// N8: a validator is only sound to key argument masking off if its failure branch *reverts*.
+    /// One whose branch merely `leave`s returns control to the caller, so the caller must not mask
+    /// the argument — that validator must not be detected.
+    #[test]
+    fn validator_with_leave_failure_is_not_detected() {
+        let mut functions = BTreeMap::new();
+        functions.insert(FunctionId(0), validator_function(true));
+        functions.insert(FunctionId(1), validator_function(false));
+        let object = Object {
+            name: "test".to_string(),
+            code: Block { statements: vec![] },
+            functions,
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let noreturn = detect_noreturn_functions(&object);
+        let validators = detect_validator_functions(&object, &noreturn);
+
+        assert!(
+            validators.contains_key(&0),
+            "a validator whose failure branch reverts must be detected"
+        );
+        assert!(
+            !validators.contains_key(&1),
+            "a validator whose failure branch only `leave`s must not be detected"
+        );
     }
 }

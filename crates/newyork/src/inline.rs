@@ -604,6 +604,9 @@ fn collect_top_scope_defs(statements: &[Statement]) -> Vec<ValueId> {
             Statement::For { outputs, .. } => {
                 definitions.extend_from_slice(outputs);
             }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => {
+                definitions.push(*result);
+            }
             _ => {}
         }
     }
@@ -680,6 +683,11 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
                 }
             }
             Statement::Block(r) if region_defines_value(r, target) => {
+                return true;
+            }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. }
+                if *result == target =>
+            {
                 return true;
             }
             _ => {}
@@ -1973,7 +1981,61 @@ pub(crate) fn trim_indices<T: Clone>(values: &mut Vec<T>, indices_ascending: &[u
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::{CallKind, CreateKind};
     use num::BigUint;
+
+    /// `collect_top_scope_defs` and `region_defines_value` must recognize the result values of
+    /// `ExternalCall`/`Create` statements as definitions. Omitting them made leave-elimination
+    /// yield promotion fail to locate a yield defined by a call/create result, producing a
+    /// use-before-definition ICE (via the late inliner). Mirrors `Statement::for_each_value_id_def`.
+    #[test]
+    fn def_scans_include_call_and_create_results() {
+        fn val(id: u32) -> Value {
+            Value::new(ValueId::new(id), Type::Int(BitWidth::I256))
+        }
+        let call_result = ValueId::new(100);
+        let create_result = ValueId::new(101);
+
+        let statements = vec![
+            Statement::ExternalCall {
+                kind: CallKind::Call,
+                gas: val(1),
+                address: val(2),
+                value: Some(val(3)),
+                args_offset: val(4),
+                args_length: val(5),
+                ret_offset: val(6),
+                ret_length: val(7),
+                result: call_result,
+            },
+            Statement::Create {
+                kind: CreateKind::Create,
+                value: val(8),
+                offset: val(9),
+                length: val(10),
+                salt: None,
+                result: create_result,
+            },
+        ];
+
+        let defs = collect_top_scope_defs(&statements);
+        assert!(
+            defs.contains(&call_result),
+            "ExternalCall result must be a collected top-scope def"
+        );
+        assert!(
+            defs.contains(&create_result),
+            "Create result must be a collected top-scope def"
+        );
+
+        let region = Region {
+            statements,
+            yields: Vec::new(),
+        };
+        assert!(region_defines_value(&region, call_result));
+        assert!(region_defines_value(&region, create_result));
+        assert!(!region_defines_value(&region, ValueId::new(999)));
+    }
 
     /// Helper to create a simple function with the given number of statements.
     fn make_simple_function(

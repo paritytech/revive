@@ -2678,6 +2678,48 @@ fn branch_calls_allocator_fmp() {
     run_differential(actions);
 }
 
+/// Regression (N16): the callvalue-check hoist must not fire when a no-match path lacks the check.
+/// All cases are non-payable (revert on value) but there is no default, so a no-match selector falls
+/// through and must accept value. Hoisting the cases' `if callvalue() { revert }` above the switch
+/// would make the (sel=99, value=1) call spuriously revert instead of writing 0xff. See
+/// SwitchCvFallthrough.yul.
+#[test]
+fn switch_callvalue_no_match_fallthrough() {
+    let mut actions = instantiate_yul("contracts/SwitchCvFallthrough.yul", "SwitchCvFallthrough");
+    for (sel, value) in [(1u64, 0u128), (2, 0), (1, 1), (99, 0), (99, 1)] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(sel).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
+/// Regression (N20 ICE): hoisting the callvalue check drains each branch's `let cv = callvalue()`
+/// definition. Environment CSE may have rewritten a later `callvalue()` in the branch to reuse that
+/// binding, so the drain must redirect such uses to the hoisted binding or the IR references an
+/// undefined value and the validator panics during compilation. Compiling and running at all
+/// exercises the fix. See SwitchCvCseDangling.yul.
+#[test]
+fn switch_callvalue_cse_dangling() {
+    let mut actions = instantiate_yul("contracts/SwitchCvCseDangling.yul", "SwitchCvCseDangling");
+    for sel in [1u64, 2, 99] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(sel).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

@@ -460,28 +460,15 @@ impl Simplifier {
 
                 let mut hoisted = Vec::new();
                 if !cases.is_empty() {
-                    let all_have_callvalue_check = cases
-                        .iter()
-                        .all(|c| has_callvalue_revert_prefix(&c.body.statements))
-                        && default.as_ref().is_none_or(|d| {
-                            d.statements.is_empty() || has_callvalue_revert_prefix(&d.statements)
-                        });
-
-                    if all_have_callvalue_check {
-                        let first_stmts = &cases[0].body.statements;
-                        if first_stmts.len() >= 2 {
-                            hoisted.push(first_stmts[0].clone());
-                            hoisted.push(first_stmts[1].clone());
-                        }
+                    if callvalue_check_fully_hoistable(&cases, &default) {
+                        let hoisted_cv = callvalue_binding_id(&cases[0].body.statements);
+                        hoisted.push(cases[0].body.statements[0].clone());
+                        hoisted.push(cases[0].body.statements[1].clone());
                         for case in &mut cases {
-                            if has_callvalue_revert_prefix(&case.body.statements) {
-                                case.body.statements.drain(0..2);
-                            }
+                            drain_callvalue_prefix(&mut case.body.statements, hoisted_cv);
                         }
                         if let Some(ref mut d) = default {
-                            if has_callvalue_revert_prefix(&d.statements) {
-                                d.statements.drain(0..2);
-                            }
+                            drain_callvalue_prefix(&mut d.statements, hoisted_cv);
                         }
                     } else {
                         const PARTIAL_HOIST_THRESHOLD: usize = 3;
@@ -1909,6 +1896,81 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
                 .any(|s| matches!(s, Statement::Revert { .. }))
         }
         _ => false,
+    }
+}
+
+/// Whether the leading callvalue-revert check may be hoisted above a switch and dropped from every
+/// branch (replacing N per-branch checks with one). Sound only when:
+///  1. every case AND the default already start with the check. Otherwise the no-match path — a
+///     present default, or, when none, the post-switch fall-through — would gain a spurious
+///     callvalue revert it never performed (e.g. an all-nonpayable dispatch with a payable
+///     fallback). A missing or non-checking default is exactly such a path.
+///  2. every branch reverts with identical data, so the one hoisted revert serves all selectors;
+///     otherwise a matched selector would receive the wrong revert payload. Compared via the
+///     canonical (SSA-renamed, literal-preserving) prefix encoding.
+fn callvalue_check_fully_hoistable(cases: &[SwitchCase], default: &Option<Region>) -> bool {
+    if cases.is_empty() {
+        return false;
+    }
+    let all_branches_check = cases
+        .iter()
+        .all(|c| has_callvalue_revert_prefix(&c.body.statements))
+        && default
+            .as_ref()
+            .is_some_and(|d| has_callvalue_revert_prefix(&d.statements));
+    if !all_branches_check {
+        return false;
+    }
+    let reference = canonical_callvalue_prefix(&cases[0].body.statements);
+    cases
+        .iter()
+        .all(|c| canonical_callvalue_prefix(&c.body.statements) == reference)
+        && default
+            .as_ref()
+            .is_some_and(|d| canonical_callvalue_prefix(&d.statements) == reference)
+}
+
+/// Returns the value id bound by the leading `let vN = callvalue()`.
+///
+/// The caller must have established [`has_callvalue_revert_prefix`] for `statements`.
+fn callvalue_binding_id(statements: &[Statement]) -> ValueId {
+    match &statements[0] {
+        Statement::Let { bindings, .. } => bindings[0],
+        _ => unreachable!("ICE: callvalue prefix guaranteed by has_callvalue_revert_prefix"),
+    }
+}
+
+/// Canonical encoding (SSA ids renamed to first-use order, literal values preserved) of the
+/// two-statement callvalue-revert prefix. Two prefixes with equal encodings revert with identical
+/// data, so hoisting one above a switch in place of all of them is observationally sound.
+///
+/// The caller must have established [`has_callvalue_revert_prefix`] for `statements`.
+fn canonical_callvalue_prefix(statements: &[Statement]) -> Vec<u8> {
+    let mut canon = Canonicalizer::new();
+    let mut buf = Vec::new();
+    canon.encode_statement(&statements[0], &mut buf);
+    canon.encode_statement(&statements[1], &mut buf);
+    buf
+}
+
+/// Drops the leading two-statement callvalue-revert prefix and rewrites any remaining use of its
+/// (now-undefined) callvalue binding to `hoisted_cv`, the binding hoisted above the switch.
+///
+/// Environment CSE may have rewritten a later `callvalue()` in this branch to reuse the prefix's
+/// binding; after the prefix is drained that use would reference an undefined value and trip the
+/// validator unless it is redirected to the hoisted binding. The caller must have established
+/// [`has_callvalue_revert_prefix`] for `statements`.
+fn drain_callvalue_prefix(statements: &mut Vec<Statement>, hoisted_cv: ValueId) {
+    let local_cv = callvalue_binding_id(statements);
+    statements.drain(0..2);
+    if local_cv != hoisted_cv {
+        for statement in statements.iter_mut() {
+            statement.for_each_value_id_mut(&mut |id| {
+                if *id == local_cv {
+                    *id = hoisted_cv;
+                }
+            });
+        }
     }
 }
 

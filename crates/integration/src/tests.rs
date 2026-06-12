@@ -1431,6 +1431,68 @@ fn ext_code_size() {
     .run();
 }
 
+/// Regression guard for the `code_size` import memory-attribute bug: two
+/// `extcodesize` calls for *different* addresses inside one function body must
+/// stay distinct. The buggy `memory(inaccessiblemem: read)` attribute hid the
+/// read of the address spill buffer, so LLVM GVN merged the two syscalls (and
+/// DSE dropped the first address store), making `extcodesize(a) + extcodesize(b)`
+/// evaluate to `2 * extcodesize(a)`. The two deployed contracts have different
+/// sizes, so the correct sum differs from either doubled value.
+#[test]
+fn ext_code_size_two_addresses() {
+    let alice = Address::from(ALICE.0);
+    let own_address = alice.create(0);
+    let baseline_address = alice.create2([0u8; 32], keccak256(Contract::baseline().pvm_runtime));
+
+    let own_code_size = Contract::ext_code_size(Default::default())
+        .pvm_runtime
+        .len();
+    let baseline_code_size = Contract::baseline().pvm_runtime.len();
+    assert_ne!(
+        own_code_size, baseline_code_size,
+        "the two contracts must differ in size for this test to distinguish a+b from 2*a"
+    );
+    let expected_sum = U256::from(own_code_size + baseline_code_size);
+
+    Specs {
+        actions: vec![
+            // Instantiate the test contract (Instantiated(0), address == own_address)
+            instantiate("contracts/ExtCode.sol", "ExtCode").remove(0),
+            // Instantiate the baseline contract
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Solidity {
+                    path: Some("contracts/Baseline.sol".into()),
+                    contract: "Baseline".to_string(),
+                    solc_optimizer: None,
+                    libraries: Default::default(),
+                },
+                data: vec![],
+                salt: OptionalHex::from([0; 32]),
+            },
+            // extcodesize(own) + extcodesize(baseline) in a single call
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: Contract::ext_code_size_sum(own_address, baseline_address).calldata,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(expected_sum.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+        ],
+        ..Default::default()
+    }
+    .run();
+}
+
 #[test]
 fn create2_salt() {
     let salt = U256::from(777);

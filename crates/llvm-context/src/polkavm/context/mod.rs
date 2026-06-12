@@ -64,13 +64,24 @@ pub mod yul_data;
 mod tests;
 
 /// Imported host syscalls whose only externally visible effect is a read of
-/// pallet-revive runtime state. Each returns a scalar — no output buffer
-/// argument and no heap traffic from the caller's view — so we can attach
-/// [`MemoryEffect::ReadInaccessible`] and let LLVM GVN dedupe repeated calls
-/// across heap mstores.
+/// pallet-revive runtime state. Each takes no arguments and returns a scalar —
+/// no input/output buffer and no heap traffic from the caller's view — so we
+/// can attach [`MemoryEffect::ReadInaccessible`] and let LLVM GVN dedupe
+/// repeated calls across heap mstores.
+///
+/// `code_size` is deliberately **not** in this list. Unlike the entries above,
+/// `extcodesize` passes the queried address to the syscall through the
+/// [`crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER`] global (see
+/// [`Context::build_address_argument_store`]), so the call reads caller-accessible
+/// memory. That access lives in LLVM's "other" location, not "inaccessiblemem"
+/// (the address reaches the call as an integer, so it is not "argmem" either).
+/// Tagging it `inaccessiblemem: read` would hide the buffer read, letting GVN
+/// merge two `extcodesize` calls for different addresses — and DSE drop the
+/// first address store — so that `extcodesize(a) + extcodesize(b)` miscompiles
+/// to `2 * extcodesize(a)`. With no attribute the import keeps the inline-asm
+/// `~{memory}` barrier, matching its pre-newyork behaviour.
 const MEMORY_READ_IMPORTS: &[&str] = &[
     revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
-    revive_runtime_api::polkavm_imports::CODE_SIZE,
     revive_runtime_api::polkavm_imports::GAS_LIMIT,
     revive_runtime_api::polkavm_imports::RETURNDATASIZE,
 ];

@@ -129,6 +129,17 @@ pub struct HeapAnalysis {
     /// range proof) must skip the optimization to preserve EVM
     /// semantics. Conservatively starts false; set by inspecting every
     /// `MStore` whose target is the FMP slot.
+    ///
+    /// **Known gap (deliberate).** A dynamic-offset full-word `MStore` does not set this flag,
+    /// even though its offset could wrap (mod 2^256) to the FMP word `[0x40, 0x5f]` and overwrite
+    /// the pointer with an arbitrary value. There is no cheap sound discriminator: the wrapped
+    /// offset is in-bounds (`safe_truncate` only traps offsets `>= heap_size`), and 256-bit wrap
+    /// lets any computed offset reach `0x40`, so it cannot be proven to miss the slot from
+    /// width/range info. Flagging every dynamic full-word store — as the dynamic `mstore8` branch
+    /// does, where it is cheap because byte writes are rare — would disable the FMP optimization
+    /// for essentially every contract (~+9% / +30 KB on the OZ corpus). The gap is
+    /// solc-unreachable: solc's dynamic stores are FMP-relative (`>= 0x80`) and never target
+    /// `0x40`; only hand-written Yul with an offset engineered to equal `0x40` reaches it.
     fmp_could_be_unbounded: bool,
     /// Per-`Let`-binding source expression, used by
     /// `is_trusted_fmp_source` to decide whether an mstore's value
@@ -243,6 +254,9 @@ impl HeapAnalysis {
                     self.memory_accesses.insert(addr, pattern);
                 } else {
                     self.has_dynamic_accesses = true;
+                    // A dynamic full-word store could wrap to the FMP word and corrupt it; we
+                    // deliberately do not set `fmp_could_be_unbounded` here — see the field's doc
+                    // comment for the (cost-driven) rationale and why no cheap sound fix exists.
                 }
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
                     if let Some(addr) = static_offset {
@@ -279,7 +293,10 @@ impl HeapAnalysis {
                     }
                 } else {
                     self.has_dynamic_accesses = true;
-                    // A dynamic-offset byte write could land on the FMP word.
+                    // A dynamic-offset byte write could land on the FMP word. Unlike the dynamic
+                    // full-word `MStore` branch above (which leaves this flag unset for cost
+                    // reasons — see the gap note there), dynamic `mstore8` is rare, so flagging it
+                    // conservatively costs essentially nothing.
                     self.fmp_could_be_unbounded = true;
                 }
             }

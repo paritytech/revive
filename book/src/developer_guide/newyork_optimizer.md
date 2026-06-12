@@ -140,6 +140,28 @@ and readers), the **value bound** (FMP < heap_size, always true), and the
 **stored width** (must be 32 bytes for `mstore(0x40, ...)`, even though only
 the low N bits are non-zero).
 
+#### Known limitation: dynamic full-word stores to the FMP word
+
+The `fmp_could_be_unbounded` analysis flags a static `mstore(0x40, untrusted)` and any
+dynamic-offset `mstore8`, but **not** a dynamic-offset full-word `mstore`. Such a store whose
+i256 offset wraps (mod 2²⁵⁶) to the FMP word `[0x40, 0x5f]` overwrites the free pointer with an
+arbitrary value, which the load-side range proof would then truncate — a miscompile.
+
+This is a deliberate, documented gap rather than a bug fix because there is no cheap sound
+discriminator. A store hits the FMP word iff its offset lands in `[0x40, 0x5f]`, which is
+in-bounds — `safe_truncate_int_to_xlen` only traps offsets `≥ heap_size` — and 256-bit wrap lets
+any computed `add(base, k)` reach `0x40` with an adversarial operand, so the offset cannot be
+proven to miss the slot from width/range information. The only sound recognizer (treat
+`add(fmp, small_const)` as `≥ 0x80` by induction on FMP-boundedness) needs new FMP-derivation
+dataflow, is fragile, and still misses dynamic-index array stores. Conservatively flagging *every*
+dynamic full-word store (as the rare dynamic `mstore8` does, where it is free) disables the FMP
+range proof for essentially every contract — measured at roughly **+9% / +30 KB** on the
+OpenZeppelin corpus.
+
+The gap is unreachable from solc output: solc's dynamic memory stores are all free-pointer-relative
+(`≥ 0x80`) and never target `0x40`. Only hand-written Yul (`resolc --yul`) with an offset
+engineered to equal `0x40` reaches it.
+
 ### Keccak256 fusion and folding
 
 Two complementary optimizations target the common Solidity pattern of hashing values for storage slot computation:

@@ -2720,6 +2720,44 @@ fn switch_callvalue_cse_dangling() {
     run_differential(actions);
 }
 
+/// Regression (N13): the panic-pattern outliner must not collapse a window that contains a
+/// side-effecting call. `inner()` reverts with 0xdeadbeef before the panic revert; dropping it and
+/// emitting PanicRevert would revert with the wrong payload. EVM reverts with 0xdeadbeef; the bug
+/// reverts with the Panic(0x11) data. See PanicOutlineCall.yul.
+#[test]
+fn panic_outline_preserves_call() {
+    let mut actions = instantiate_yul("contracts/PanicOutlineCall.yul", "PanicOutlineCall");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
+/// Regression (N20 ICE): when the panic-pattern outliner truncates a branch's window, a pure
+/// binding it drops may still be referenced by the branch region's yield. The truncate must
+/// zero-rebind such values (mirroring eliminate_dead_code) or compilation fails the SSA validator.
+/// Compiling at all exercises the fix. See PanicOutlineYield.yul.
+#[test]
+fn panic_outline_yield_rescue() {
+    let mut actions = instantiate_yul("contracts/PanicOutlineYield.yul", "PanicOutlineYield");
+    for cond in [0u64, 1] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(cond).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

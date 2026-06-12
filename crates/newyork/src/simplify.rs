@@ -240,7 +240,9 @@ impl Simplifier {
             result.extend(simplified);
         }
 
-        result = outline_panic_patterns(result, &self.constants);
+        // Object code has no yields; a function body's return values are repaired separately by
+        // `reconcile_dangling_return_values`, so no rescue set is needed here.
+        result = outline_panic_patterns(result, &self.constants, &BTreeSet::new());
 
         result = outline_custom_error_patterns(result, &self.constants);
 
@@ -600,15 +602,18 @@ impl Simplifier {
             statements.extend(simplified);
         }
 
-        statements = outline_panic_patterns(statements, &self.constants);
-
-        statements = outline_custom_error_patterns(statements, &self.constants);
-
+        // Resolve yields before outlining so a panic-pattern truncation can rescue any pure binding
+        // they still reference (otherwise the yield would dangle).
         let yields: Vec<Value> = region
             .yields
             .into_iter()
             .map(|v| self.resolve_value(v))
             .collect();
+        let yielded = yields_as_used(&yields);
+
+        statements = outline_panic_patterns(statements, &self.constants, &yielded);
+
+        statements = outline_custom_error_patterns(statements, &self.constants);
 
         self.constants = outer_constants;
         self.copies = outer_copies;
@@ -981,9 +986,15 @@ impl Simplifier {
 /// This function merges the caller's constant map with local Let-literal bindings
 /// to correctly resolve constants defined either in the current scope or in outer scopes
 /// (after copy propagation may have replaced local definitions with outer references).
+/// `extra_used` holds value ids that must stay defined even though they are not referenced by the
+/// statements themselves — an enclosing region's resolved `yields`. A pure binding inside the
+/// collapsed window may define such a value; truncating it would leave the yield dangling and fail
+/// SSA validation, so each is re-bound to zero before the [`Statement::PanicRevert`] (the binding is
+/// dead — the panic diverges — but dominates the yield, mirroring `eliminate_dead_code_in_stmts`).
 fn outline_panic_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
+    extra_used: &BTreeSet<u32>,
 ) -> Vec<Statement> {
     let has_revert = statements
         .iter()
@@ -1019,7 +1030,24 @@ fn outline_panic_patterns(
                 if let Some((panic_start, error_code)) =
                     find_panic_pattern_backwards(&result, &constants)
                 {
+                    let mut rescued: Vec<ValueId> = Vec::new();
+                    for statement in &result[panic_start..] {
+                        statement.for_each_value_id_def(&mut |id| {
+                            if extra_used.contains(&id.0) {
+                                rescued.push(id);
+                            }
+                        });
+                    }
                     result.truncate(panic_start);
+                    for id in rescued {
+                        result.push(Statement::Let {
+                            bindings: vec![id],
+                            value: Expression::Literal {
+                                value: BigUint::zero(),
+                                value_type: Type::Int(BitWidth::I256),
+                            },
+                        });
+                    }
                     result.push(Statement::PanicRevert { code: error_code });
                     continue;
                 }
@@ -1088,33 +1116,12 @@ fn find_panic_pattern_backwards(
                 if is_const_value(offset.id, 0, constants) {
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
-                        if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX {
-                            // Soundness: every `mstore(p, …)` between the
-                            // panic-selector store and the revert writes 32
-                            // bytes at `[p, p + 32)`. If `p < 0x24`, those
-                            // bytes overlap the revert range `[0, 0x24)` and
-                            // EVM will emit them in the revert data. The
-                            // canonical Solidity panic shape has exactly
-                            // two such mstores — `p = 0` (selector) and
-                            // `p = 4` (code). Any other in-range mstore
-                            // (e.g. `mstore(7, garbage)`) corrupts the
-                            // revert payload, so we must NOT collapse the
-                            // sequence into the canonical
-                            // `PanicRevert { code }` form.
-                            let only_safe = statements[j..].iter().all(|s| match s {
-                                Statement::MStore { offset, .. } => {
-                                    is_const_value(offset.id, 0, constants)
-                                        || is_const_value(offset.id, 4, constants)
-                                        || constants
-                                            .get(&offset.id.0)
-                                            .is_some_and(|v| v.to_u64().is_some_and(|o| o >= 0x24))
-                                }
-                                Statement::Let { .. } | Statement::Expression(..) => true,
-                                _ => false,
-                            });
-                            if only_safe {
-                                return Some((j, error_code));
-                            }
+                        if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX
+                            && statements[j..]
+                                .iter()
+                                .all(|s| panic_window_droppable(s, constants))
+                        {
+                            return Some((j, error_code));
                         }
                     }
                 }
@@ -1125,6 +1132,33 @@ fn find_panic_pattern_backwards(
     }
 
     None
+}
+
+/// Whether `statement` may be dropped when collapsing a panic-revert window into a `PanicRevert`.
+///
+/// - An `MStore` writes 32 bytes at `[p, p + 32)`; for `p < 0x24` those overlap the revert range
+///   `[0, 0x24)` that the EVM emits as revert data. The canonical panic shape stores only at `p = 0`
+///   (selector) and `p = 4` (code); any other in-range store (e.g. `mstore(7, …)`) would corrupt the
+///   payload, so it blocks the collapse. Stores at `p >= 0x24` don't escape and are safe.
+/// - A `Let`/`Expression` is droppable only if its value is pure. A side-effecting value — an
+///   internal call that can revert differently / never return / write scratch, or a memory/storage
+///   read — is observable, so dropping it would change behavior. This matches `eliminate_dead_code`,
+///   which never removes effectful statements. A dropped pure binding that an enclosing yield still
+///   needs is zero-rebound by [`outline_panic_patterns`].
+fn panic_window_droppable(statement: &Statement, constants: &BTreeMap<u32, BigUint>) -> bool {
+    match statement {
+        Statement::MStore { offset, .. } => {
+            is_const_value(offset.id, 0, constants)
+                || is_const_value(offset.id, 4, constants)
+                || constants
+                    .get(&offset.id.0)
+                    .is_some_and(|v| v.to_u64().is_some_and(|o| o >= 0x24))
+        }
+        Statement::Let { value, .. } | Statement::Expression(value) => {
+            !expr_has_side_effects(value)
+        }
+        _ => false,
+    }
 }
 
 /// Checks if a ValueId maps to a specific constant value.

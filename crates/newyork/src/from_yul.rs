@@ -53,8 +53,13 @@ pub enum TranslationError {
 pub struct YulTranslator {
     /// SSA builder for tracking variables.
     ssa: SsaBuilder,
-    /// Function name to ID mapping.
-    function_ids: BTreeMap<String, FunctionId>,
+    /// Lexical scope stack of function-name to ID mappings.
+    ///
+    /// One frame per Yul block scope (object code, function bodies, standalone blocks, and
+    /// if/switch/for regions). A name resolves to the nearest enclosing frame that defines it,
+    /// so two functions with the same name in disjoint scopes get distinct IDs (Yul allows this;
+    /// a flat name→ID map would collapse them and let the last body win).
+    function_scopes: Vec<BTreeMap<String, FunctionId>>,
     /// Next function ID to allocate.
     next_function_id: FunctionId,
     /// Collected functions.
@@ -78,7 +83,7 @@ impl YulTranslator {
     pub fn new() -> Self {
         YulTranslator {
             ssa: SsaBuilder::new(),
-            function_ids: BTreeMap::new(),
+            function_scopes: Vec::new(),
             next_function_id: FunctionId::new(0),
             functions: BTreeMap::new(),
             current_return_variable_names: Vec::new(),
@@ -91,7 +96,6 @@ impl YulTranslator {
         &mut self,
         yul_object: &YulObject,
     ) -> std::result::Result<Object, TranslationError> {
-        self.collect_functions(&yul_object.code.block)?;
         let code = self.translate_block(&yul_object.code.block)?;
         let functions = std::mem::take(&mut self.functions);
 
@@ -110,68 +114,54 @@ impl YulTranslator {
         })
     }
 
-    /// First pass: walk the AST and pre-allocate `FunctionId`s and parameter `ValueId`s for
-    /// every Yul function definition (including those nested inside blocks, if/for/switch,
-    /// and other function bodies).
-    /// This lets later passes resolve forward references and reuse parameter IDs across
-    /// recursive translation calls.
-    fn collect_functions(&mut self, block: &YulBlock) -> std::result::Result<(), TranslationError> {
+    /// Enters a new function scope and hoists the block's directly-defined functions into it.
+    ///
+    /// Hoisting (allocating IDs and parameter `ValueId`s for every function defined directly in
+    /// the block before translating any statement) lets forward references and mutual recursion
+    /// within the block resolve, matching Yul's block-level function visibility. Functions nested
+    /// inside sub-blocks/regions are hoisted when those scopes are entered, so they stay invisible
+    /// to siblings and ancestors.
+    fn enter_function_scope(
+        &mut self,
+        block: &YulBlock,
+    ) -> std::result::Result<(), TranslationError> {
+        self.function_scopes.push(BTreeMap::new());
         for statement in &block.statements {
-            match statement {
-                YulStatement::FunctionDefinition(function_definition) => {
-                    let id = self.allocate_function_id(&function_definition.identifier);
-                    let mut function = Function::new(id, function_definition.identifier.clone());
+            if let YulStatement::FunctionDefinition(function_definition) = statement {
+                let id = self.next_function_id.fresh();
+                let mut function = Function::new(id, function_definition.identifier.clone());
 
-                    for _parameter in &function_definition.arguments {
-                        let parameter_id = self.ssa.fresh_id();
-                        function
-                            .parameters
-                            .push((parameter_id, Type::Int(BitWidth::I256)));
-                    }
-                    for _ in &function_definition.result {
-                        function.returns.push(Type::Int(BitWidth::I256));
-                    }
+                for _parameter in &function_definition.arguments {
+                    let parameter_id = self.ssa.fresh_id();
+                    function
+                        .parameters
+                        .push((parameter_id, Type::Int(BitWidth::I256)));
+                }
+                for _ in &function_definition.result {
+                    function.returns.push(Type::Int(BitWidth::I256));
+                }
 
-                    self.functions.insert(id, function);
-
-                    self.collect_functions(&function_definition.body)?;
-                }
-                YulStatement::Block(inner) => self.collect_functions(inner)?,
-                YulStatement::IfConditional(if_conditional) => {
-                    self.collect_functions(&if_conditional.block)?
-                }
-                YulStatement::ForLoop(for_loop) => {
-                    self.collect_functions(&for_loop.initializer)?;
-                    self.collect_functions(&for_loop.body)?;
-                    self.collect_functions(&for_loop.finalizer)?;
-                }
-                YulStatement::Switch(switch) => {
-                    for case in &switch.cases {
-                        self.collect_functions(&case.block)?;
-                    }
-                    if let Some(default) = &switch.default {
-                        self.collect_functions(default)?;
-                    }
-                }
-                _ => {}
+                self.functions.insert(id, function);
+                self.function_scopes
+                    .last_mut()
+                    .expect("ICE: function scope frame just pushed")
+                    .insert(function_definition.identifier.clone(), id);
             }
         }
         Ok(())
     }
 
-    /// Allocates a function ID for a name.
-    fn allocate_function_id(&mut self, name: &str) -> FunctionId {
-        if let Some(&id) = self.function_ids.get(name) {
-            return id;
-        }
-        let id = self.next_function_id.fresh();
-        self.function_ids.insert(name.to_string(), id);
-        id
+    /// Leaves the innermost function scope, dropping the names defined directly in it.
+    fn exit_function_scope(&mut self) {
+        self.function_scopes.pop();
     }
 
-    /// Looks up a function ID by name.
+    /// Looks up a function ID by name, searching innermost scope first.
     fn lookup_function(&self, name: &str) -> Option<FunctionId> {
-        self.function_ids.get(name).copied()
+        self.function_scopes
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get(name).copied())
     }
 
     /// Translates a Yul block to an IR block.
@@ -179,6 +169,7 @@ impl YulTranslator {
         &mut self,
         block: &YulBlock,
     ) -> std::result::Result<Block, TranslationError> {
+        self.enter_function_scope(block)?;
         let mut ir_block = Block::new();
 
         for statement in &block.statements {
@@ -188,6 +179,7 @@ impl YulTranslator {
             }
         }
 
+        self.exit_function_scope();
         Ok(ir_block)
     }
 
@@ -196,6 +188,7 @@ impl YulTranslator {
         &mut self,
         block: &YulBlock,
     ) -> std::result::Result<Region, TranslationError> {
+        self.enter_function_scope(block)?;
         let mut region = Region::new();
 
         for statement in &block.statements {
@@ -205,6 +198,7 @@ impl YulTranslator {
             }
         }
 
+        self.exit_function_scope();
         Ok(region)
     }
 
@@ -1173,6 +1167,10 @@ impl YulTranslator {
         let enclosing_scope = self.ssa.current_scope().clone();
 
         self.ssa.enter_scope();
+        // The initializer block's scope — functions included — spans the condition, body, and
+        // post in Yul. The body and post get their own (nested) frames via `translate_region`;
+        // this frame holds the initializer's own functions until the whole loop is translated.
+        self.enter_function_scope(&for_loop.initializer)?;
         for statement in &for_loop.initializer.statements {
             let initializer_statements = self.translate_statement(statement)?;
             statements.extend(initializer_statements);
@@ -1264,6 +1262,7 @@ impl YulTranslator {
         }
 
         self.ssa.exit_scope();
+        self.exit_function_scope();
 
         for (name, value) in output_values {
             // Only write back variables that exist in the enclosing scope;
@@ -1292,7 +1291,8 @@ impl YulTranslator {
     ///
     /// We save the current scope but keep the SSA counter advanced to ensure globally unique
     /// `ValueId`s. Creating a fresh `SsaBuilder` would restart at ID 0 and collide with the
-    /// parameter IDs already allocated by [`Self::collect_functions`].
+    /// parameter IDs already allocated when this function was hoisted into its enclosing scope
+    /// (see [`Self::enter_function_scope`]).
     fn translate_function_definition(
         &mut self,
         function_definition: &FunctionDefinition,
@@ -1593,9 +1593,75 @@ fn estimate_region_size(region: &Region) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use revive_yul::lexer::Lexer;
 
     #[test]
     fn test_parse_decimal_literal() {
         let _translator = YulTranslator::new();
+    }
+
+    /// Two functions named `f` in disjoint sibling blocks are distinct functions in Yul. They
+    /// must translate to two distinct `FunctionId`s; a flat name→ID map collapsed them into one,
+    /// so the second body overwrote the first and both call sites resolved to it (miscompile).
+    #[test]
+    fn duplicate_sibling_function_names_stay_distinct() {
+        let source = r#"
+object "Test" {
+    code {
+        {
+            function f() -> r { r := 1 }
+            sstore(0, f())
+        }
+        {
+            function f() -> r { r := 2 }
+            sstore(1, f())
+        }
+    }
+}
+"#;
+        let mut lexer = Lexer::new(source.to_owned());
+        let yul_object = YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+        let object = YulTranslator::new()
+            .translate_object(&yul_object)
+            .expect("translation should succeed");
+
+        assert_eq!(
+            object.functions.len(),
+            2,
+            "the two disjoint `f` definitions must not collapse into one FunctionId"
+        );
+
+        // The two call sites must resolve to different functions.
+        let mut called: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        collect_called_function_ids(&object.code.statements, &mut called);
+        assert_eq!(
+            called.len(),
+            2,
+            "the two `f()` calls must resolve to the two distinct functions"
+        );
+    }
+
+    fn collect_called_function_ids(
+        statements: &[Statement],
+        called: &mut std::collections::BTreeSet<u32>,
+    ) {
+        for statement in statements {
+            if let Statement::Block(region) = statement {
+                collect_called_function_ids(&region.statements, called);
+            }
+            if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+                collect_called_in_expression(value, called);
+            }
+        }
+    }
+
+    fn collect_called_in_expression(
+        expression: &Expression,
+        called: &mut std::collections::BTreeSet<u32>,
+    ) {
+        if let Expression::Call { function, .. } = expression {
+            called.insert(function.0);
+        }
     }
 }

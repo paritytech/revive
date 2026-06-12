@@ -2616,24 +2616,39 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Checks if a region is a simple `revert(0, 0)` with no other side effects.
-    /// The region may contain Let bindings (for intermediate zero literals)
-    /// followed by a Revert statement.
+    /// The region may contain `Let` bindings (for intermediate zero literals)
+    /// followed by a `Revert` statement.
+    ///
+    /// The revert's operands must be zero literals bound *within this region*. A `revert(off, len)`
+    /// whose operands come from an enclosing scope cannot be proven empty here — treating it as zero
+    /// would let the callvalue-check outline replace a data-carrying revert with empty `revert(0, 0)`,
+    /// dropping the data.
     fn is_revert_zero_region(region: &crate::ir::Region) -> bool {
+        let mut zero_literal_ids: std::collections::BTreeSet<u32> =
+            std::collections::BTreeSet::new();
         let mut found_revert = false;
         for statement in &region.statements {
             match statement {
                 Statement::Let {
-                    value: Expression::Literal { ref value, .. },
-                    ..
+                    bindings,
+                    value: Expression::Literal { value, .. },
                 } => {
                     if !value.is_zero() {
                         return false;
+                    }
+                    for binding in bindings {
+                        zero_literal_ids.insert(binding.0);
                     }
                 }
                 Statement::Let { .. } => {
                     return false;
                 }
-                Statement::Revert { .. } => {
+                Statement::Revert { offset, length } => {
+                    if !zero_literal_ids.contains(&offset.id.0)
+                        || !zero_literal_ids.contains(&length.id.0)
+                    {
+                        return false;
+                    }
                     found_revert = true;
                 }
                 _ => return false,

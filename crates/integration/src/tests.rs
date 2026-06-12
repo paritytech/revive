@@ -2844,6 +2844,28 @@ fn return_past_heap_const_offset_traps() {
     .run();
 }
 
+/// Regression (N12): the callvalue-check outline must not replace a data-carrying revert with empty
+/// `revert(0,0)`. Here the revert operands come from an enclosing scope (calldata), so the then-region
+/// is not a zero revert. With value sent, the contract reverts returning memory[0x80, 0xa0) = 0xdeadbeef;
+/// the bug would outline it to an empty revert, dropping the data. See CallvalueRevertData.yul.
+#[test]
+fn callvalue_outline_keeps_revert_data() {
+    let mut actions = instantiate_yul("contracts/CallvalueRevertData.yul", "CallvalueRevertData");
+    // selector 3 (data-carrying case), revert offset 0x80, revert length 0x20.
+    let mut data = U256::from(3u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(0x80u64).to_be_bytes::<32>());
+    data.extend_from_slice(&U256::from(0x20u64).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 1,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

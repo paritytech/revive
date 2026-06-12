@@ -2779,6 +2779,23 @@ fn panic_outline_overwritten_selector() {
     run_differential(actions);
 }
 
+/// Regression (N15): the custom-error outliner's reverse scan must keep the latest store per
+/// payload offset (EVM last-write-wins). The argument word is written twice (0xaaaa then 0xbbbb);
+/// the revert must carry 0xbbbb, not the earlier 0xaaaa. See CustomErrorDupArg.yul.
+#[test]
+fn custom_error_duplicate_argument() {
+    let mut actions = instantiate_yul("contracts/CustomErrorDupArg.yul", "CustomErrorDupArg");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

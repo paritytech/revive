@@ -1270,6 +1270,12 @@ fn outline_custom_error_patterns(
 ///   4. mstore(0x44, arg2) — third argument (optional)
 ///
 /// Returns `(start_index, selector, arguments)` if found.
+///
+/// The scan records each payload offset's store and tracks `earliest_idx` (the start of the matched
+/// window). It deliberately does NOT try to keep the latest store per offset: that would be unsound
+/// for overlapping unaligned stores, and it would also skip earlier duplicates so `earliest_idx`
+/// would no longer cover them. Instead the exactly-once check rejects any window with a duplicate
+/// payload-offset store, so a recorded value is only ever used when its offset has a single store.
 fn find_custom_error_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,

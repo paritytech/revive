@@ -41,32 +41,46 @@ pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStat
 }
 
 /// Process a block: detect and replace compound patterns.
+///
+/// Use counts are computed once over the WHOLE block (recursively, including every nested region)
+/// and threaded into each per-list pass. A per-list count is unsound for fusion:
+/// `Statement::Block` is scope-transparent — values defined inside it stay visible to the
+/// enclosing scope (see `validate`) — so a keccak hash defined and `sload`ed inside a block but
+/// also referenced by an ancestor statement looks single-use within the block's list. Fusing it
+/// would delete the keccak definition while the outer reference still points at it, producing a
+/// use-before-definition that the IR validator rejects (a compiler ICE on valid input). The
+/// whole-block count sees the outer use and leaves such hashes alone.
 fn outline_block(block: &mut Block, statistics: &mut CompoundOutliningStatistics) {
+    let use_counts = count_value_uses(&block.statements);
     for statement in &mut block.statements {
-        outline_nested_regions(statement, statistics);
+        outline_nested_regions(statement, &use_counts, statistics);
     }
-    outline_statements(&mut block.statements, statistics);
+    outline_statements(&mut block.statements, &use_counts, statistics);
 }
 
 /// Recurse into nested regions within a statement.
-fn outline_nested_regions(statement: &mut Statement, statistics: &mut CompoundOutliningStatistics) {
+fn outline_nested_regions(
+    statement: &mut Statement,
+    use_counts: &BTreeMap<u32, usize>,
+    statistics: &mut CompoundOutliningStatistics,
+) {
     match statement {
         Statement::If {
             then_region,
             else_region,
             ..
         } => {
-            outline_region(then_region, statistics);
+            outline_region(then_region, use_counts, statistics);
             if let Some(region) = else_region {
-                outline_region(region, statistics);
+                outline_region(region, use_counts, statistics);
             }
         }
         Statement::Switch { cases, default, .. } => {
             for case in cases {
-                outline_region(&mut case.body, statistics);
+                outline_region(&mut case.body, use_counts, statistics);
             }
             if let Some(default_region) = default {
-                outline_region(default_region, statistics);
+                outline_region(default_region, use_counts, statistics);
             }
         }
         Statement::For {
@@ -76,28 +90,36 @@ fn outline_nested_regions(statement: &mut Statement, statistics: &mut CompoundOu
             ..
         } => {
             for statement in condition_statements.iter_mut() {
-                outline_nested_regions(statement, statistics);
+                outline_nested_regions(statement, use_counts, statistics);
             }
-            outline_region(body, statistics);
-            outline_region(post, statistics);
+            outline_region(body, use_counts, statistics);
+            outline_region(post, use_counts, statistics);
         }
         Statement::Block(region) => {
-            outline_region(region, statistics);
+            outline_region(region, use_counts, statistics);
         }
         _ => {}
     }
 }
 
 /// Process a region.
-fn outline_region(region: &mut Region, statistics: &mut CompoundOutliningStatistics) {
+fn outline_region(
+    region: &mut Region,
+    use_counts: &BTreeMap<u32, usize>,
+    statistics: &mut CompoundOutliningStatistics,
+) {
     for statement in &mut region.statements {
-        outline_nested_regions(statement, statistics);
+        outline_nested_regions(statement, use_counts, statistics);
     }
-    outline_statements(&mut region.statements, statistics);
+    outline_statements(&mut region.statements, use_counts, statistics);
 }
 
 /// Count how many times each ValueId is referenced (used) in a statement list,
 /// recursing through nested regions and counting yields.
+///
+/// Call this on the whole enclosing block, not an inner list: fusion deletes a hash's
+/// definition, which is only sound when the hash has no uses anywhere else, and scope-transparent
+/// `Statement::Block`s let inner definitions be used by ancestor statements.
 fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
     let mut counts = BTreeMap::new();
     for statement in statements {
@@ -117,10 +139,9 @@ fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
 ///    where hash has exactly one use (the sstore).
 fn outline_statements(
     statements: &mut Vec<Statement>,
+    use_counts: &BTreeMap<u32, usize>,
     statistics: &mut CompoundOutliningStatistics,
 ) {
-    let use_counts = count_value_uses(statements);
-
     let mut keccak_definitions: BTreeMap<u32, (usize, Value, Value)> = BTreeMap::new();
     for (index, statement) in statements.iter().enumerate() {
         if let Statement::Let {
@@ -211,5 +232,130 @@ fn outline_statements(
 
     for index in indices_to_remove.into_iter().rev() {
         statements.remove(index);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{BitWidth, Type};
+    use num::BigUint;
+
+    fn value(id: u32) -> Value {
+        Value {
+            id: crate::ir::ValueId(id),
+            value_type: Type::Int(BitWidth::I256),
+        }
+    }
+
+    fn literal(id: u32, constant: u32) -> Statement {
+        Statement::Let {
+            bindings: vec![crate::ir::ValueId(id)],
+            value: Expression::Literal {
+                value: BigUint::from(constant),
+                value_type: Type::Int(BitWidth::I256),
+            },
+        }
+    }
+
+    /// A keccak hash defined inside a scope-transparent `Statement::Block` and `sload`ed there,
+    /// but *also* referenced by an ancestor statement, must NOT be fused: deleting its definition
+    /// would dangle the outer reference. Regression for the per-list use-count bug.
+    #[test]
+    fn block_leaked_hash_not_fused() {
+        // word0 = v1, word1 = v2, stored value = v3, hash = v4, loaded value = v5
+        let inner = Region {
+            statements: vec![
+                Statement::Let {
+                    bindings: vec![crate::ir::ValueId(4)],
+                    value: Expression::Keccak256Pair {
+                        word0: value(1),
+                        word1: value(2),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![crate::ir::ValueId(5)],
+                    value: Expression::SLoad {
+                        key: value(4),
+                        static_slot: None,
+                    },
+                },
+            ],
+            yields: vec![],
+        };
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block {
+                statements: vec![
+                    literal(1, 0),
+                    literal(2, 1),
+                    literal(3, 42),
+                    Statement::Block(inner),
+                    // Outer use of the block-defined hash v4 — keeps it live.
+                    Statement::SStore {
+                        key: value(4),
+                        value: value(3),
+                        static_slot: None,
+                    },
+                ],
+            },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = outline_compounds_in_object(&mut object);
+
+        assert_eq!(
+            statistics.mapping_sloads, 0,
+            "hash used outside the block must not be fused"
+        );
+        assert!(
+            crate::validate::validate_object(&object).is_ok(),
+            "outlining must not leave a dangling reference: {:?}",
+            crate::validate::validate_object(&object)
+        );
+    }
+
+    /// Control case: a hash defined and used exactly once (no escaping use) is still fused, so the
+    /// whole-block count does not regress legitimate outlining.
+    #[test]
+    fn single_use_hash_in_block_still_fused() {
+        let inner = Region {
+            statements: vec![
+                Statement::Let {
+                    bindings: vec![crate::ir::ValueId(4)],
+                    value: Expression::Keccak256Pair {
+                        word0: value(1),
+                        word1: value(2),
+                    },
+                },
+                Statement::Let {
+                    bindings: vec![crate::ir::ValueId(5)],
+                    value: Expression::SLoad {
+                        key: value(4),
+                        static_slot: None,
+                    },
+                },
+            ],
+            yields: vec![],
+        };
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block {
+                statements: vec![literal(1, 0), literal(2, 1), Statement::Block(inner)],
+            },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = outline_compounds_in_object(&mut object);
+
+        assert_eq!(
+            statistics.mapping_sloads, 1,
+            "a single-use hash should still be fused into a mapping_sload"
+        );
+        assert!(crate::validate::validate_object(&object).is_ok());
     }
 }

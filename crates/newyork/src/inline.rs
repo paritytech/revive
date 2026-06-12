@@ -700,7 +700,7 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
 /// (created by `wrap_remaining_in_guard`). This function promotes those values
 /// to be additional outputs of the guard If, so they're accessible at the outer scope.
 fn promote_yields_from_guards(
-    statements: &mut [Statement],
+    statements: &mut Vec<Statement>,
     yields: &mut [Value],
     top_defs: &[ValueId],
     next_id: &mut ValueId,
@@ -709,26 +709,90 @@ fn promote_yields_from_guards(
         if top_defs.contains(&yield_val.id) {
             continue;
         }
-        for statement in statements.iter_mut() {
-            if let Statement::If {
-                ref mut then_region,
-                ref mut inputs,
-                ref mut outputs,
-                ..
-            } = statement
-            {
-                if region_defines_value(then_region, yield_val.id) {
-                    then_region.yields.push(*yield_val);
-                    let new_out = fresh_id(next_id);
-                    outputs.push(new_out);
-                    let placeholder = inputs.first().copied().unwrap_or(*yield_val);
-                    inputs.push(placeholder);
-                    yield_val.id = new_out;
-                    break;
-                }
-            }
-        }
+        promote_one_yield(statements, yield_val, next_id);
     }
+}
+
+/// Promotes a single value to be a top-scope output of the guard `If` that defines it,
+/// rewriting `yield_val.id` to that output. No-op if no guard in `statements` defines it.
+///
+/// Promotion recurses through *nested* guards: a value defined two or more `leave`-guards deep is
+/// promoted out of each level in turn, so the value pushed into a region's `yields` is always
+/// defined at that region's top scope (otherwise the yield would reference a value defined inside
+/// a deeper region — a use-before-definition the validator rejects).
+///
+/// Each new output needs a false-edge value (taken when the guard is skipped, i.e. a `leave`
+/// fired). That value is dead — every consumer of a promoted value is itself guarded by the same
+/// `done` flag, so it never runs on the skipped edge — and only has to *dominate* the `If`. We
+/// reuse an existing input when one exists, otherwise insert a zero before the guard, so void
+/// functions (no return accumulators, hence no inputs) still get a dominating placeholder rather
+/// than referencing the not-yet-defined value itself.
+fn promote_one_yield(
+    statements: &mut Vec<Statement>,
+    yield_val: &mut Value,
+    next_id: &mut ValueId,
+) {
+    let target = yield_val.id;
+    let Some(mut if_index) = statements.iter().position(|statement| {
+        matches!(statement, Statement::If { then_region, .. }
+            if region_defines_value(then_region, target))
+    }) else {
+        return;
+    };
+
+    // Make sure `target` is defined at the guard's top scope before yielding it; if it lives in a
+    // deeper nested guard, promote it out of that one first.
+    let promoted = {
+        let Statement::If { then_region, .. } = &mut statements[if_index] else {
+            unreachable!("position matched an If")
+        };
+        if collect_top_scope_defs(&then_region.statements).contains(&target) {
+            *yield_val
+        } else {
+            let mut inner = *yield_val;
+            promote_one_yield(&mut then_region.statements, &mut inner, next_id);
+            inner
+        }
+    };
+
+    // Choose a dominating false-edge placeholder.
+    let existing_input = match &statements[if_index] {
+        Statement::If { inputs, .. } => inputs.first().copied(),
+        _ => unreachable!(),
+    };
+    let placeholder = existing_input.unwrap_or_else(|| {
+        let zero = fresh_id(next_id);
+        statements.insert(
+            if_index,
+            Statement::Let {
+                bindings: vec![zero],
+                value: Expression::Literal {
+                    value: num::BigUint::from(0u32),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+        );
+        if_index += 1;
+        Value {
+            id: zero,
+            value_type: Type::Int(BitWidth::I256),
+        }
+    });
+
+    let Statement::If {
+        then_region,
+        inputs,
+        outputs,
+        ..
+    } = &mut statements[if_index]
+    else {
+        unreachable!()
+    };
+    then_region.yields.push(promoted);
+    let new_out = fresh_id(next_id);
+    outputs.push(new_out);
+    inputs.push(placeholder);
+    yield_val.id = new_out;
 }
 
 /// Transforms a statement that contains Leave in its sub-structure.
@@ -2035,6 +2099,53 @@ mod tests {
         assert!(region_defines_value(&region, call_result));
         assert!(region_defines_value(&region, create_result));
         assert!(!region_defines_value(&region, ValueId::new(999)));
+    }
+
+    /// Leave-elimination yield promotion must not produce a use-before-definition (a validator
+    /// ICE) for two shapes: a value defined inside *nested* guards (sequential `leave`s), and a
+    /// *void* function whose guard has no inputs. Both are single-call so the inliner runs leave
+    /// elimination on them; `translate_yul_object` runs the validator and panics on broken IR.
+    #[test]
+    fn leave_elimination_nested_and_void_no_ice() {
+        use revive_yul::lexer::Lexer;
+        use revive_yul::parser::statement::object::Object as YulObject;
+
+        // `x` is assigned two guard levels deep, after two sequential `leave`s.
+        let nested = r#"
+object "T" {
+    code {
+        function f(cond, a, b) -> out {
+            let x := 1
+            if cond { if a { leave } if b { leave } x := 7 }
+            out := x
+        }
+        sstore(0, f(calldataload(0), calldataload(32), calldataload(64)))
+    }
+    object "T_deployed" { code { stop() } }
+}
+"#;
+        // Void function (no returns, hence the guard has no inputs) with a `leave`.
+        let void = r#"
+object "T" {
+    code {
+        function g(a, b) {
+            let x := 1
+            if a { if b { leave } x := 2 }
+            sstore(0, x)
+        }
+        g(calldataload(0), calldataload(32))
+    }
+    object "T_deployed" { code { stop() } }
+}
+"#;
+
+        for source in [nested, void] {
+            let mut lexer = Lexer::new(source.to_owned());
+            let yul_object =
+                YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+            crate::translate_yul_object(&yul_object, None)
+                .expect("translation should succeed without a validator ICE");
+        }
     }
 
     /// Helper to create a simple function with the given number of statements.

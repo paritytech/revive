@@ -1115,15 +1115,21 @@ impl FmpPropagation {
                     mut post,
                     outputs,
                 } => {
-                    self.propagate_region(&mut body, fmp_value.clone());
-                    condition_statements =
-                        self.propagate_statements(condition_statements, fmp_value.clone());
-                    self.propagate_region(&mut post, fmp_value.clone());
+                    let loop_modifies_fmp = self.region_modifies_fmp(&body.statements)
+                        || self.region_modifies_fmp(&condition_statements)
+                        || self.region_modifies_fmp(&post.statements);
+                    let loop_entry_fmp = if loop_modifies_fmp {
+                        None
+                    } else {
+                        fmp_value.clone()
+                    };
 
-                    if Self::statements_write_fmp(&body.statements)
-                        || Self::statements_write_fmp(&condition_statements)
-                        || Self::statements_write_fmp(&post.statements)
-                    {
+                    self.propagate_region(&mut body, loop_entry_fmp.clone());
+                    condition_statements =
+                        self.propagate_statements(condition_statements, loop_entry_fmp.clone());
+                    self.propagate_region(&mut post, loop_entry_fmp);
+
+                    if loop_modifies_fmp {
                         fmp_value = None;
                     }
 
@@ -1256,6 +1262,41 @@ impl FmpPropagation {
             ) {
                 found = true;
             }
+        });
+        found
+    }
+
+    /// Whether these (recursively walked) statements could change the free-memory pointer: a direct
+    /// write to the FMP word, an `ExternalCall`/`Create` that can mutate arbitrary memory, or a call
+    /// to a function that (transitively) writes FMP.
+    ///
+    /// Used to decide whether a known FMP constant survives a `For` loop's iterations. Unlike
+    /// `If`/`Switch` regions — which execute at most once, so the entry constant always holds — a
+    /// `For` body re-executes. If the loop changes FMP, the pre-loop constant is valid only on
+    /// iteration 1, so propagating it into the body would rewrite a loop-top `mload(0x40)` to that
+    /// pointer and make iterations ≥2 alias iteration 1's allocation. This is the complete check
+    /// (`statements_write_fmp` plus the `fmp_writers` call case that `propagate_statements` also
+    /// honors straight-line), so the loop-entry constant is suppressed for every way the loop can
+    /// move FMP.
+    fn region_modifies_fmp(&self, statements: &[Statement]) -> bool {
+        let mut found = false;
+        for_each_statement(statements, &mut |statement| match statement {
+            Statement::MStore {
+                region: MemoryRegion::FreePointerSlot,
+                ..
+            }
+            | Statement::ExternalCall { .. }
+            | Statement::Create { .. } => found = true,
+            Statement::Let {
+                value: Expression::Call { function, .. },
+                ..
+            }
+            | Statement::Expression(Expression::Call { function, .. })
+                if self.fmp_writers.contains(function) =>
+            {
+                found = true
+            }
+            _ => {}
         });
         found
     }

@@ -2635,6 +2635,27 @@ fn msize_in_for_condition() {
     run_differential(actions);
 }
 
+/// Regression (N18 FMP): a `for` loop whose body bumps the free-memory pointer must re-read
+/// `mload(0x40)` each iteration. FMP propagation used to forward the pre-loop constant into the
+/// body, rewriting the loop-top `mload(0x40)` to iteration 1's pointer so every iteration aliased
+/// the first allocation. With n=3 the three slots must read [1, 2, 3]; the aliasing bug yields
+/// [3, 0, 0]. See ForLoopFmp.yul.
+#[test]
+fn for_loop_fmp_realloc() {
+    let mut actions = instantiate_yul("contracts/ForLoopFmp.yul", "ForLoopFmp");
+    for n in [1u64, 2, 3] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(n).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

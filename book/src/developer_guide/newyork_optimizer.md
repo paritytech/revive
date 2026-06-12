@@ -169,6 +169,21 @@ Two complementary optimizations target the common Solidity pattern of hashing va
 - **Fusion**: Recognizes `mstore` + `keccak256` sequences and fuses them into dedicated IR nodes (`Keccak256Single`, `Keccak256Pair`), eliminating intermediate memory traffic.
 - **Constant folding**: When all keccak256 inputs are compile-time constants, the hash is computed at compile time and replaced with a literal.
 
+#### Known limitation: constant-folding drops the fused-keccak scratch write-back
+
+The fused `Keccak256Pair`/`Keccak256Single` helpers write their inputs back to scratch memory
+(`[0, 0x40)` / `[0, 0x20)`), and fusion *dead-eliminates the original `mstore`s* because that
+write-back reproduces them. Constant-folding the fused node to a literal removes the helper, so the
+scratch is left unwritten — a later `mload` from `[0, 0x40)` that the optimizer cannot forward
+(across a region/call boundary) would read stale memory.
+
+This gap is deliberately left open: it is solc-unreachable (solc treats scratch as volatile and never
+re-reads it as data after a keccak), and every sound fix is a code-size regression because the dropped
+write-back means the current output is already short the stores (disabling the fold falls back to the
+runtime keccak helper, +0.78% on the OZ corpus, with no later mem_opt pass to clean re-emitted
+writes). Only hand-written Yul that reads scratch after a constant-operand keccak across a boundary
+can observe it.
+
 ### Compound outlining (mapping access)
 
 Solidity mapping accesses follow a predictable pattern: hash a key with a storage slot, then load/store the result. The compound outlining pass detects `keccak256_pair(key, slot)` followed by `sload`/`sstore` and fuses them into `MappingSLoad`/`MappingSStore` IR nodes. These are lowered to outlined helper functions (`__revive_mapping_sload`, `__revive_mapping_sstore`) that combine the hash computation with the storage operation, eliminating intermediate values and redundant byte-swaps.

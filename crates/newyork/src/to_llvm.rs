@@ -579,18 +579,38 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// ValueId namespace collisions between outer objects and subobjects.
     /// The heap analysis tracks variable-accessed offsets to prevent mode
     /// mismatches when the solc M3 optimizer turns literals into variables.
-    fn native_memory_mode(&self, offset_llvm: IntValue<'ctx>) -> NativeMemoryMode {
+    ///
+    /// The inline modes (`InlineNative`/`InlineByteSwap`) lower to `*_unchecked` heap GEPs with no
+    /// sbrk/bounds check, so they are only sound for an offset proven to lie within the fixed heap
+    /// (`offset + 32 <= heap_size`). A constant offset past the heap (e.g. `mstore(0xFFFFFFF0, x)`)
+    /// must NOT take an inline path — it would write out of the heap global and corrupt adjacent
+    /// globals — so it falls through to the checked `ByteSwap` path, which traps out-of-gas. The
+    /// `AllNative` path is already bounds-checked via `safe_truncate_int_to_xlen`.
+    fn native_memory_mode(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        offset_llvm: IntValue<'ctx>,
+    ) -> NativeMemoryMode {
         if self.heap_opt.all_native() {
             return NativeMemoryMode::AllNative;
         }
         if let Some(static_val) = Self::try_extract_const_u64(offset_llvm) {
-            if self.heap_opt.can_use_native(static_val) {
-                return NativeMemoryMode::InlineNative;
+            let heap_size = context
+                .heap_size()
+                .get_zero_extended_constant()
+                .unwrap_or(0);
+            let in_range = static_val
+                .checked_add(revive_common::BYTE_LENGTH_WORD as u64)
+                .is_some_and(|end| end <= heap_size);
+            if in_range {
+                if self.heap_opt.can_use_native(static_val) {
+                    return NativeMemoryMode::InlineNative;
+                }
+                if static_val == FREE_MEMORY_POINTER_SLOT && self.heap_opt.fmp_native_safe() {
+                    return NativeMemoryMode::InlineNative;
+                }
+                return NativeMemoryMode::InlineByteSwap;
             }
-            if static_val == FREE_MEMORY_POINTER_SLOT && self.heap_opt.fmp_native_safe() {
-                return NativeMemoryMode::InlineNative;
-            }
-            return NativeMemoryMode::InlineByteSwap;
         }
         NativeMemoryMode::ByteSwap
     }
@@ -4080,7 +4100,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let value_val = self.translate_value(value)?.into_int_value();
                 let value_val = self.ensure_word_type(context, value_val, "mstore_val")?;
 
-                match self.native_memory_mode(offset_val) {
+                match self.native_memory_mode(context, offset_val) {
                     NativeMemoryMode::AllNative => {
                         let offset_xlen = self.truncate_offset_to_xlen(
                             context,
@@ -6221,7 +6241,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 
-                let loaded = match self.native_memory_mode(offset_val) {
+                let loaded = match self.native_memory_mode(context, offset_val) {
                     NativeMemoryMode::AllNative => {
                         let offset_xlen =
                             self.truncate_offset_to_xlen(context, offset_val, "mload_offset_xlen")?;

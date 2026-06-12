@@ -2796,6 +2796,26 @@ fn custom_error_duplicate_argument() {
     run_differential(actions);
 }
 
+/// Regression (N19): a constant memory offset past the heap must trap (out-of-gas), not take the
+/// inline unchecked-GEP path and write out of the fixed heap global. `mstore(0xFFFFFFF0, x)` runs the
+/// EVM out of gas (memory expansion); the bug would silently write out of bounds and fall through to
+/// the sstore. See HugeConstOffsetStore.yul.
+#[test]
+fn store_huge_const_offset_traps() {
+    let mut actions = instantiate_yul("contracts/HugeConstOffsetStore.yul", "HugeConstOffsetStore");
+    let mut data = U256::from(0xABu64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(0x80u64).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Probe: calldataload beyond calldatasize must zero-pad (EVM), not trap/garbage. See CalldataloadOOB.yul.
 #[test]
 fn calldataload_oob() {

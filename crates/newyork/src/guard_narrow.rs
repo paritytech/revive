@@ -291,7 +291,7 @@ fn region_reverts(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -
 /// The body iterates to a fixed point so transitive helpers like
 /// `function trampoline() { panic_error_0x41() }` are recognised once the
 /// leaf `panic_error_0x41` is itself in the set.
-fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32> {
+pub(crate) fn detect_noreturn_functions(object: &Object) -> std::collections::BTreeSet<u32> {
     let mut noreturn = std::collections::BTreeSet::new();
     loop {
         let before = noreturn.len();

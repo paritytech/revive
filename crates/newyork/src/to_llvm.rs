@@ -317,6 +317,35 @@ pub struct LlvmCodegen<'ctx> {
     return_word_fn: Option<inkwell::values::FunctionValue<'ctx>>,
 }
 
+/// Whether `region` aborts on every path (control never falls off its end). Used to confirm a
+/// validator's failure branch diverges, so a post-validator `llvm.assume(arg u<= MASK)` is sound.
+///
+/// A trailing call only aborts when its callee is in `noreturn` — a call to a function that *returns*
+/// (e.g. a failure handler that logs/stores and returns) leaves the argument out-of-range, so the
+/// assume would be false and LLVM would fold dependent comparisons to constants. Intermediate calls to
+/// returning functions are fine: control continues to the region's terminator.
+fn then_region_aborts(
+    region: &crate::ir::Region,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> bool {
+    for statement in &region.statements {
+        match statement {
+            Statement::Revert { .. }
+            | Statement::Return { .. }
+            | Statement::Stop
+            | Statement::Invalid => return true,
+            Statement::Expression(Expression::Call { function, .. })
+                if noreturn.contains(&function.0) =>
+            {
+                return true
+            }
+            Statement::Expression(Expression::Call { .. }) | Statement::Let { .. } => continue,
+            _ => return false,
+        }
+    }
+    false
+}
+
 impl<'ctx> LlvmCodegen<'ctx> {
     /// Creates a new code generator with optimization results.
     pub fn new(
@@ -2818,7 +2847,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Detects a Solidity validator: single-param void function whose body is
     /// `if iszero(eq(v, and(v, M))) { revert/panic }` where `M = 2^N - 1`.
     /// Returns the mask if the body matches.
-    fn extract_validator_mask(function: &Function) -> Option<num::BigUint> {
+    fn extract_validator_mask(
+        function: &Function,
+        noreturn: &std::collections::BTreeSet<u32>,
+    ) -> Option<num::BigUint> {
         use num::Zero;
 
         if function.parameters.len() != 1 || !function.returns.is_empty() {
@@ -2878,7 +2910,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     if else_region.is_some() {
                         return None;
                     }
-                    if !Self::then_region_aborts(then_region) {
+                    if !then_region_aborts(then_region, noreturn) {
                         return None;
                     }
                     let neg_id = iszero_results.get(&condition.id.0)?;
@@ -2954,26 +2986,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .build_call(assume_decl, &[cmp.into()], "validator_assume")
             .map_err(|e| CodegenError::Llvm(e.to_string()))?;
         Ok(())
-    }
-
-    fn then_region_aborts(region: &crate::ir::Region) -> bool {
-        for statement in &region.statements {
-            match statement {
-                Statement::Revert { .. } | Statement::Return { .. } => return true,
-                Statement::Stop | Statement::Invalid => return true,
-                Statement::Expression(Expression::Call { .. }) => continue,
-                Statement::Let { .. } => continue,
-                _ => return false,
-            }
-        }
-        matches!(
-            region.statements.last(),
-            Some(Statement::Revert { .. })
-                | Some(Statement::Return { .. })
-                | Some(Statement::Stop)
-                | Some(Statement::Invalid)
-                | Some(Statement::Expression(Expression::Call { .. }))
-        )
     }
 
     /// Find callvalue ValueIds that are ONLY used as conditions in
@@ -3435,8 +3447,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.push_function_scope();
 
         self.validator_masks.clear();
+        let noreturn = crate::guard_narrow::detect_noreturn_functions(object);
         for (func_id, function) in &object.functions {
-            if let Some(mask) = Self::extract_validator_mask(function) {
+            if let Some(mask) = Self::extract_validator_mask(function, &noreturn) {
                 self.validator_masks.insert(func_id.0, mask);
             }
         }
@@ -7049,5 +7062,68 @@ impl Default for LlvmCodegen<'_> {
             TypeInference::default(),
             BTreeMap::new(),
         )
+    }
+}
+
+#[cfg(test)]
+mod then_region_aborts_tests {
+    use super::then_region_aborts;
+    use crate::ir::{Expression, FunctionId, Region, Statement, Value, ValueId};
+    use std::collections::BTreeSet;
+
+    fn region(statements: Vec<Statement>) -> Region {
+        Region {
+            statements,
+            yields: vec![],
+        }
+    }
+
+    fn call(function: u32) -> Statement {
+        Statement::Expression(Expression::Call {
+            function: FunctionId(function),
+            arguments: vec![],
+        })
+    }
+
+    fn revert() -> Statement {
+        Statement::Revert {
+            offset: Value::int(ValueId(0)),
+            length: Value::int(ValueId(0)),
+        }
+    }
+
+    #[test]
+    fn explicit_terminator_aborts() {
+        let noreturn = BTreeSet::new();
+        assert!(then_region_aborts(&region(vec![revert()]), &noreturn));
+        assert!(then_region_aborts(
+            &region(vec![Statement::Invalid]),
+            &noreturn
+        ));
+    }
+
+    #[test]
+    fn trailing_call_aborts_only_when_noreturn() {
+        // A call to a function NOT proven noreturn does not abort: a failure handler that returns
+        // leaves the validator argument unconstrained, so no assume may be emitted.
+        let none: BTreeSet<u32> = BTreeSet::new();
+        assert!(!then_region_aborts(&region(vec![call(7)]), &none));
+
+        // The same call to a noreturn function does abort.
+        let noreturn: BTreeSet<u32> = [7u32].into_iter().collect();
+        assert!(then_region_aborts(&region(vec![call(7)]), &noreturn));
+    }
+
+    #[test]
+    fn returning_call_after_lets_does_not_abort() {
+        let none: BTreeSet<u32> = BTreeSet::new();
+        let stmts = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::CallValue,
+            },
+            call(7),
+        ];
+        assert!(!then_region_aborts(&region(stmts), &none));
     }
 }

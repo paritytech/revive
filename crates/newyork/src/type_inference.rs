@@ -186,6 +186,13 @@ pub struct TypeInference {
     /// conditionally-executed region (`if`/`switch` branch, loop body). Gates insertion
     /// into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_arg`].
     in_unconditional_context: bool,
+    /// When set, a `FreePointerSlot` `mload` (the FMP at 0x40) forward-infers to I256 instead
+    /// of I32. The I32 width is only sound when the FMP holds a Solidity-allocator pointer
+    /// (`< heap_size`); when `heap_opt` finds an FMP write that isn't provably sbrk-bounded,
+    /// codegen loads the full FMP word (no range proof), so inference must keep the load — and
+    /// every value derived from it — full width or a comparison/offset would truncate it.
+    /// `heap_opt` runs after inference, so the pipeline re-infers with this flag set when it holds.
+    fmp_could_be_unbounded: bool,
     /// Type inference results for subobjects (each subobject has its own namespace).
     pub sub_inferences: Vec<TypeInference>,
 }
@@ -204,8 +211,16 @@ impl TypeInference {
             unconditionally_narrowed: BTreeSet::new(),
             unconditional_call_arg: BTreeSet::new(),
             in_unconditional_context: true,
+            fmp_could_be_unbounded: false,
             sub_inferences: Vec::new(),
         }
+    }
+
+    /// Forces `FreePointerSlot` `mload` results (and everything derived from them) to full width.
+    /// Set by the pipeline when `heap_opt` reports the FMP word may hold a non-bounded value, before
+    /// re-inferring — see the `fmp_could_be_unbounded` field.
+    pub fn set_fmp_could_be_unbounded(&mut self, value: bool) {
+        self.fmp_could_be_unbounded = value;
     }
 
     /// Gets the constraint for a value, creating a default if none exists.
@@ -362,6 +377,7 @@ impl TypeInference {
 
         for subobject in &object.subobjects {
             let mut sub_inference = TypeInference::new();
+            sub_inference.fmp_could_be_unbounded = self.fmp_could_be_unbounded;
             sub_inference.infer_object_tree(subobject);
             self.sub_inferences.push(sub_inference);
         }
@@ -1774,7 +1790,7 @@ impl TypeInference {
 
             Expression::MLoad { offset, region } => {
                 self.widen(offset.id, BitWidth::I64);
-                if *region == MemoryRegion::FreePointerSlot {
+                if *region == MemoryRegion::FreePointerSlot && !self.fmp_could_be_unbounded {
                     BitWidth::I32
                 } else {
                     BitWidth::I256
@@ -1971,16 +1987,11 @@ mod tests {
         let word0 = crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I256));
         let word1 = crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I256));
         for expression in [
-            Expression::Keccak256Pair {
-                word0: word0.clone(),
-                word1: word1.clone(),
-            },
-            Expression::Keccak256Single {
-                word0: word0.clone(),
-            },
+            Expression::Keccak256Pair { word0, word1 },
+            Expression::Keccak256Single { word0 },
             Expression::MappingSLoad {
-                key: word0.clone(),
-                slot: word1.clone(),
+                key: word0,
+                slot: word1,
             },
         ] {
             let mut inference = TypeInference::new();

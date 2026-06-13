@@ -2263,6 +2263,29 @@ fn leave_edge_output_width_inferred_from_inputs() {
     run_differential(actions);
 }
 
+/// PR #1 comment #issuecomment-451 (N4): newyork forward inference gave a
+/// `FreePointerSlot` `mload` width I32 unconditionally. When a non-sbrk-bounded
+/// write taints 0x40 (`fmp_could_be_unbounded`), codegen loads the full FMP word
+/// but inference still said I32, so `gt(v, 0xffffffff)` truncated the live value
+/// to 32 bits. See `contracts/FmpUnboundedCompare.yul`: with `v = 2^40` the
+/// comparison must hold (result `1`), not collapse to `0`.
+#[test]
+fn fmp_unbounded_mload_compare_full_width() {
+    let mut data = vec![0u8; 32];
+    // taint := 2^40 (> 2^32): bit 40 is bit 0 of byte 31 - 5 = 26.
+    data[26] = 1;
+    let mut actions = instantiate_yul("contracts/FmpUnboundedCompare.yul", "FmpUnboundedCompare");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Bug (round-3 #1): newyork treats the `calldatacopy` SOURCE offset as a heap
 /// pointer (`narrow_offset_for_pointer`) and narrows the offset param to i64, so
 /// a large source offset traps/mis-copies on PVM instead of zero-filling like

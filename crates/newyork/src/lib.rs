@@ -152,6 +152,7 @@ pub fn translate_yul_object(
     let type_info = run_late_inline_loop(&mut ir_object, &mut inline_results, type_info);
 
     let heap_opt = ir_object.analyze_heap();
+    let (type_info, heap_opt) = reinfer_for_unbounded_fmp(&mut ir_object, type_info, heap_opt);
 
     if let Err(errors) = validate::validate_object(&ir_object) {
         let details = errors
@@ -224,6 +225,33 @@ fn run_late_inline_loop(
     // estimates that `inline_functions` last set internally.
     inline::estimate_function_sizes(ir_object);
     type_info
+}
+
+/// Re-infers types with `FreePointerSlot` `mload` widths forced to I256 when `heap_opt` reports the
+/// FMP word may hold a non-bounded value.
+///
+/// `heap_opt` runs after the type-narrowing fixed point, so the first inference assumed the sound-
+/// only-when-bounded I32 FMP width. When the FMP could be unbounded, codegen loads the full FMP word
+/// (no `FMP < heap_size` range proof); the I32 forward width would then let a downstream comparison
+/// or offset bare-truncate the live value. Re-inferring with the flag set keeps the load — and every
+/// value derived from it — full width. The IR is already at its narrowing fixed point, so re-running
+/// `narrow_signatures` only reproduces the same parameter types (it never un-narrows); `heap_opt` is
+/// recomputed in case it shifted. Bounded FMPs (the Solidity allocator, all of OZ) skip this and keep
+/// the I32 width.
+fn reinfer_for_unbounded_fmp(
+    ir_object: &mut ir::Object,
+    type_info: TypeInference,
+    heap_opt: HeapOptResults,
+) -> (TypeInference, HeapOptResults) {
+    if !heap_opt.fmp_could_be_unbounded() {
+        return (type_info, heap_opt);
+    }
+    let mut reinferred = TypeInference::new();
+    reinferred.set_fmp_could_be_unbounded(true);
+    reinferred.infer_object_tree(ir_object);
+    let reinferred = type_inference::narrow_signatures_to_fixed_point(ir_object, reinferred);
+    let heap_opt = ir_object.analyze_heap();
+    (reinferred, heap_opt)
 }
 
 /// Runs the full newyork optimization pipeline on an object and its subobjects.

@@ -206,12 +206,13 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
 
             if use_native_heap {
+                revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.declare(context)?;
+                revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.declare(context)?;
                 revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
                 revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
-            } else {
-                revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
-                revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
             }
+            revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
 
             revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
             revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
